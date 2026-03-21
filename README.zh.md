@@ -154,6 +154,12 @@ make log-helper
 - [ ] gateway 探测与历史健康追踪优化。
 - [ ] 生产级签名/公证分发流程完善。
 
+## 谁在使用
+
+以下是一些真实世界中使用 ClawdHome + OpenClaw 的有趣项目和用例，欢迎 PR 添加你的案例！
+
+- **tensorslab-xhs** - TensorsLab + 小红书营销全自动工作流：支持 craw4ai 热点抓取，自动生成小红书文案 + 1:1 方形 cute 风格配图，自动归档到飞书多维表格，支持每日定时自动生产热点内容。by [@miyakooy](https://github.com/miyakooy)
+
 ## 参与贡献
 
 - 较大改动请先提 issue 讨论。
