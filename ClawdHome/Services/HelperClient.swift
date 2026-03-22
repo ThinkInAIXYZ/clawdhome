@@ -298,6 +298,34 @@ final class HelperClient {
         }
     }
 
+    /// 读取 Xcode/CLT 环境状态
+    func getXcodeEnvStatus() async -> XcodeEnvStatus? {
+        guard let proxy = controlProxy else { return nil }
+        let json: String = await withCheckedContinuation { cont in
+            proxy.getXcodeEnvStatus { cont.resume(returning: $0) }
+        }
+        guard let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(XcodeEnvStatus.self, from: data)
+    }
+
+    /// 触发 Xcode Command Line Tools 安装（系统弹窗）
+    func installXcodeCommandLineTools() async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
+            proxy.installXcodeCommandLineTools { ok, msg in cont.resume(returning: (ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "触发安装失败") }
+    }
+
+    /// 接受 Xcode license（非交互）
+    func acceptXcodeLicense() async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
+            proxy.acceptXcodeLicense { ok, msg in cont.resume(returning: (ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "接受 license 失败") }
+    }
+
     /// 初始化 npm 全局目录（~/.npm-global）并配置 shell 环境
     func setupNpmEnv(username: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
