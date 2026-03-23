@@ -3,17 +3,29 @@ import AppKit
 
 enum ChannelOnboardingFlow: String, Identifiable, CaseIterable {
     case feishu
+    case weixin
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .feishu: return "飞书"
+        case .weixin: return "微信"
+        }
+    }
+
+    var commandArgs: [String] {
+        switch self {
+        case .feishu:
+            return ["-y", "@larksuite/openclaw-lark-tools", "install"]
+        case .weixin:
+            return ["-y", "@tencent-weixin/openclaw-weixin-cli@latest", "install"]
         }
     }
 }
 
 struct FeishuChannelOnboardingSheet: View {
+    let flow: ChannelOnboardingFlow
     let username: String
 
     @Environment(\.dismiss) private var dismiss
@@ -29,9 +41,10 @@ struct FeishuChannelOnboardingSheet: View {
     @State private var outputBuffer = ""
 
     private let commandExecutable = "npx"
-    private let commandArgs = ["-y", "@larksuite/openclaw-lark-tools", "install"]
     private let waitingThreshold: TimeInterval = 8
     private let uiTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    private var commandArgs: [String] { flow.commandArgs }
+    private var logPrefix: String { flow.rawValue }
 
     private var commandSummary: String {
         ([commandExecutable] + commandArgs).joined(separator: " ")
@@ -103,7 +116,7 @@ struct FeishuChannelOnboardingSheet: View {
     }
 
     private var windowTitle: String {
-        "ClawdHome 正在生产 \(username) 虾 · 飞书通道配置 · \(stageTitle)"
+        "ClawdHome 正在生产 \(username) 虾 · \(flow.title)通道配置 · \(stageTitle)"
     }
 
     var body: some View {
@@ -139,7 +152,7 @@ struct FeishuChannelOnboardingSheet: View {
         }
         .onDisappear {
             terminalControl.terminate()
-            appLog("[feishu] ui onboarding window disappeared; terminate active terminal session @\(username)")
+            appLog("[\(logPrefix)] ui onboarding window disappeared; terminate active terminal session @\(username)")
         }
         .background(ChannelOnboardingWindowTitleBinder(title: windowTitle))
         .frame(minWidth: 900, minHeight: 460)
@@ -161,7 +174,7 @@ struct FeishuChannelOnboardingSheet: View {
             if pairingButtonState == .running {
                 Button("中断生成") {
                     terminalControl.sendInterrupt()
-                    appLog("[feishu] ui interactive interrupt from action row @\(username)")
+                    appLog("[\(logPrefix)] ui interactive interrupt from action row @\(username)")
                 }
             }
 
@@ -193,7 +206,7 @@ struct FeishuChannelOnboardingSheet: View {
 
             Button("中断") {
                 terminalControl.sendInterrupt()
-                appLog("[feishu] ui interactive interrupt @\(username)")
+                appLog("[\(logPrefix)] ui interactive interrupt @\(username)")
             }
             .disabled(!isRunning)
 
@@ -209,7 +222,7 @@ struct FeishuChannelOnboardingSheet: View {
     }
 
     private func startInteractiveRun() {
-        appLog("[feishu] ui interactive run start @\(username) cmd=\(commandSummary)")
+        appLog("[\(logPrefix)] ui interactive run start @\(username) cmd=\(commandSummary)")
         exitCode = nil
         statusText = nil
         runStartedAt = Date()
@@ -239,7 +252,7 @@ struct FeishuChannelOnboardingSheet: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         statusText = "命令输出已复制。"
-        appLog("[feishu] ui interactive output copied @\(username) bytes=\(text.utf8.count)")
+        appLog("[\(logPrefix)] ui interactive output copied @\(username) bytes=\(text.utf8.count)")
     }
 
     private func handleCommandExit(_ code: Int32?) {
@@ -247,10 +260,10 @@ struct FeishuChannelOnboardingSheet: View {
         let normalized = code ?? -999
         if normalized == 0 {
             statusText = "命令执行完成。若终端输出了二维码，请直接扫码完成配对。"
-            appLog("[feishu] ui interactive run success @\(username)")
+            appLog("[\(logPrefix)] ui interactive run success @\(username)")
         } else {
             statusText = "命令已退出（exit \(normalized)）。请查看上方终端输出并重试。"
-            appLog("[feishu] ui interactive run failed @\(username) exit=\(normalized)", level: .error)
+            appLog("[\(logPrefix)] ui interactive run failed @\(username) exit=\(normalized)", level: .error)
         }
     }
 }

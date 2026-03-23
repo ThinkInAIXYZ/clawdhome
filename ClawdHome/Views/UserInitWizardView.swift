@@ -104,6 +104,7 @@ private enum MinimaxModel: String, CaseIterable {
 
 private enum WizardChannelType: String {
     case feishu
+    case weixin
 }
 
 private enum WizardXcodeHealthState {
@@ -288,7 +289,7 @@ struct UserInitWizardView: View {
 
     // Step 3: 频道配置
     @State private var selectedChannel: WizardChannelType = .feishu
-    @State private var isFeishuBindingHovered = false
+    @State private var hoveredChannelBinding: WizardChannelType? = nil
 
     // Step 4: 完成
     @State private var isStartingOpenclaw = false
@@ -688,12 +689,26 @@ struct UserInitWizardView: View {
     private var channelBindingList: some View {
         VStack(spacing: 0) {
             channelBindingRow(
+                channel: .feishu,
                 title: "飞书扫码绑定",
                 subtitle: "在独立窗口生成二维码，扫码完成配对。"
             ) {
+                selectedChannel = .feishu
                 openWindow(
                     id: "channel-onboarding",
                     value: "\(ChannelOnboardingFlow.feishu.rawValue):\(user.username)"
+                )
+            }
+            Divider().padding(.leading, 36)
+            channelBindingRow(
+                channel: .weixin,
+                title: "微信扫码绑定",
+                subtitle: "在独立窗口生成二维码，扫码完成微信配对。"
+            ) {
+                selectedChannel = .weixin
+                openWindow(
+                    id: "channel-onboarding",
+                    value: "\(ChannelOnboardingFlow.weixin.rawValue):\(user.username)"
                 )
             }
         }
@@ -701,8 +716,14 @@ struct UserInitWizardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private func channelBindingRow(title: String, subtitle: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func channelBindingRow(
+        channel: WizardChannelType,
+        title: String,
+        subtitle: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        let isHovered = hoveredChannelBinding == channel
+        return Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: "qrcode.viewfinder")
                     .foregroundStyle(Color.accentColor)
@@ -718,18 +739,18 @@ struct UserInitWizardView: View {
                     Image(systemName: "chevron.right")
                         .font(.caption2)
                 }
-                .foregroundStyle(isFeishuBindingHovered ? Color.accentColor : .secondary)
+                .foregroundStyle(isHovered ? Color.accentColor : .secondary)
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isFeishuBindingHovered ? Color.accentColor.opacity(0.10) : Color.clear)
+                    .fill(isHovered ? Color.accentColor.opacity(0.10) : Color.clear)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(
-                        isFeishuBindingHovered
+                        isHovered
                             ? Color.accentColor.opacity(0.45)
                             : Color.secondary.opacity(0.18),
                         lineWidth: 1
@@ -740,7 +761,7 @@ struct UserInitWizardView: View {
         .buttonStyle(.plain)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.14)) {
-                isFeishuBindingHovered = hovering
+                hoveredChannelBinding = hovering ? channel : nil
             }
         }
     }
