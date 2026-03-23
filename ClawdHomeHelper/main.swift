@@ -373,6 +373,14 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         helperLog("用户创建 @\(username) (\(fullName))")
         do {
             try UserManager.createUser(username: username, fullName: fullName, password: password)
+            // 新建虾默认关闭用户级自启：初始化完成后由用户手动启动，避免后台自动拉起。
+            let autostartDisabledPath = ClawdHomeHelperImpl.userAutostartDisabledPath(username: username)
+            try? FileManager.default.createDirectory(
+                atPath: "/var/lib/clawdhome",
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+            FileManager.default.createFile(atPath: autostartDisabledPath, contents: nil)
             reply(true, nil)
         } catch {
             helperLog("用户创建失败 @\(username): \(error.localizedDescription)", level: .error)

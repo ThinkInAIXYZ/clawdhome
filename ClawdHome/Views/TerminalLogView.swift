@@ -83,13 +83,34 @@ struct TerminalLogPanel: View {
     let username: String
 
     @State private var autoScroll = true
+    @State private var searchText = ""
+    @State private var searchRequest = LogSearchRequest()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("命令输出")
+            HStack(spacing: 8) {
+                Text("日志输出")
                     .font(.caption).fontWeight(.medium).foregroundStyle(.secondary)
                 Spacer()
+                TextField("搜索日志", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 180)
+                    .font(.caption)
+                    .onSubmit { issueSearch(.next) }
+                Button {
+                    issueSearch(.previous)
+                } label: {
+                    Image(systemName: "chevron.up")
+                }
+                .buttonStyle(.borderless)
+                .disabled(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button {
+                    issueSearch(.next)
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .disabled(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 Toggle("自动滚动", isOn: $autoScroll)
                     .toggleStyle(.checkbox)
                     .font(.caption)
@@ -97,54 +118,98 @@ struct TerminalLogPanel: View {
             }
             .padding(.horizontal, 8).padding(.vertical, 5)
             Divider()
-            TerminalNSView(username: username, autoScroll: $autoScroll)
+            LogTextNSView(
+                username: username,
+                autoScroll: $autoScroll,
+                searchText: $searchText,
+                searchRequest: $searchRequest
+            )
                 .frame(height: 180)
         }
         .background(Color(nsColor: .textBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.2)))
     }
+
+    private func issueSearch(_ direction: LogSearchDirection) {
+        searchRequest = LogSearchRequest(token: searchRequest.token + 1, direction: direction)
+    }
 }
 
 // MARK: - NSViewRepresentable
 
-private struct TerminalNSView: NSViewRepresentable {
+private enum LogSearchDirection {
+    case next
+    case previous
+}
+
+private struct LogSearchRequest: Equatable {
+    var token: Int = 0
+    var direction: LogSearchDirection = .next
+}
+
+private struct LogTextNSView: NSViewRepresentable {
     let username: String
     @Binding var autoScroll: Bool
+    @Binding var searchText: String
+    @Binding var searchRequest: LogSearchRequest
 
-    func makeCoordinator() -> TerminalFeedCoordinator {
-        TerminalFeedCoordinator(username: username)
+    func makeCoordinator() -> LogFeedCoordinator {
+        LogFeedCoordinator(username: username)
     }
 
-    func makeNSView(context: Context) -> TerminalView {
-        let tv = TerminalView(frame: .zero)
-        tv.terminalDelegate = context.coordinator
-        // 跟随系统外观
-        tv.nativeForegroundColor = NSColor.labelColor
-        tv.nativeBackgroundColor = NSColor.textBackgroundColor
-        tv.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-        context.coordinator.start(terminalView: tv)
-        return tv
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView(frame: .zero)
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = .textBackgroundColor
+        scrollView.autohidesScrollers = true
+
+        let textView = NSTextView(frame: .zero)
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = true
+        textView.backgroundColor = .textBackgroundColor
+        textView.textColor = .labelColor
+        textView.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        textView.textContainerInset = NSSize(width: 6, height: 6)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = true
+        textView.string = ""
+
+        scrollView.documentView = textView
+        context.coordinator.start(scrollView: scrollView, textView: textView)
+        return scrollView
     }
 
-    func updateNSView(_ nsView: TerminalView, context: Context) {
-        context.coordinator.autoScroll = autoScroll
-        // 重新勾选"自动滚动"时立即滚到底部
-        if autoScroll {
-            context.coordinator.scrollToEnd(nsView)
-        }
+    func updateNSView(_ nsView: NSScrollView, context: Context) {
+        context.coordinator.update(autoScroll: autoScroll)
+        context.coordinator.updateSearchText(searchText)
+        context.coordinator.handleSearchRequest(searchRequest)
     }
 }
 
-// MARK: - 协调器：轮询日志文件，增量喂给终端
+// MARK: - 协调器：轮询日志文件，增量写入文本视图
 
-final class TerminalFeedCoordinator: NSObject, TerminalViewDelegate {
+final class LogFeedCoordinator: NSObject {
     let username: String
     var autoScroll = true
 
     private var fileOffset = 0
     private var timer: Timer?
-    private weak var terminalView: TerminalView?
+    private weak var scrollView: NSScrollView?
+    private weak var textView: NSTextView?
+    private var lastSearchToken = 0
+    private var normalizedSearchText = ""
+    private let logAttributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
+        .foregroundColor: NSColor.labelColor
+    ]
 
     init(username: String) {
         self.username = username
@@ -152,66 +217,140 @@ final class TerminalFeedCoordinator: NSObject, TerminalViewDelegate {
 
     deinit { timer?.invalidate() }
 
-    func start(terminalView: TerminalView) {
-        self.terminalView = terminalView
+    func start(scrollView: NSScrollView, textView: NSTextView) {
+        self.scrollView = scrollView
+        self.textView = textView
         // 0.3s 轮询，进度条动画流畅
-        timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
             self?.pollLog()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    func update(autoScroll: Bool) {
+        let wasEnabled = self.autoScroll
+        self.autoScroll = autoScroll
+        if autoScroll && !wasEnabled {
+            scrollToEnd()
+        }
+    }
+
+    func updateSearchText(_ searchText: String) {
+        normalizedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedSearchText.isEmpty {
+            textView?.setSelectedRange(NSRange(location: 0, length: 0))
+        }
+    }
+
+    fileprivate func handleSearchRequest(_ request: LogSearchRequest) {
+        guard request.token != lastSearchToken else { return }
+        lastSearchToken = request.token
+        performSearch(direction: request.direction)
     }
 
     private func pollLog() {
         let path = "/tmp/clawdhome-init-\(username).log"
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+           let size = attrs[.size] as? NSNumber,
+           size.intValue < fileOffset {
+            fileOffset = 0
+            textView?.string = ""
+        }
         guard let fh = FileHandle(forReadingAtPath: path) else { return }
         defer { try? fh.close() }
         try? fh.seek(toOffset: UInt64(fileOffset))
         let data = fh.readDataToEndOfFile()
         guard !data.isEmpty else { return }
         fileOffset += data.count
-        // 终端模拟器需要 CR+LF（\r\n）才能正确换行；日志文件只含 LF（\n），
-        // 直接喂入会导致光标下移但不回行首，输出呈阶梯状偏移。
-        // 将孤立的 \n 替换为 \r\n。
-        var converted = [UInt8]()
-        converted.reserveCapacity(data.count)
-        let raw = [UInt8](data)
-        for (i, byte) in raw.enumerated() {
-            if byte == 0x0A /* LF */ {
-                if i == 0 || raw[i - 1] != 0x0D /* CR */ {
-                    converted.append(0x0D)
-                }
-            }
-            converted.append(byte)
+        let chunk = String(decoding: data, as: UTF8.self)
+        appendLog(chunk)
+    }
+
+    private func appendLog(_ chunk: String) {
+        guard !chunk.isEmpty, let textView else { return }
+        let previousOrigin = autoScroll ? nil : currentScrollOrigin()
+        if let storage = textView.textStorage {
+            storage.append(NSAttributedString(string: chunk, attributes: logAttributes))
+        } else {
+            textView.string += chunk
         }
-        let bytes = ArraySlice(converted)
+        if autoScroll {
+            scrollToEnd()
+        } else if let previousOrigin {
+            restoreScrollOrigin(previousOrigin)
+        }
+    }
+
+    private func scrollToEnd() {
+        guard let textView else { return }
+        let end = NSRange(location: textView.string.utf16.count, length: 0)
+        textView.scrollRangeToVisible(end)
+    }
+
+    private func currentScrollOrigin() -> NSPoint? {
+        scrollView?.contentView.bounds.origin
+    }
+
+    private func restoreScrollOrigin(_ origin: NSPoint) {
+        guard let scrollView, let docView = scrollView.documentView else { return }
+        let maxY = max(0, docView.frame.height - scrollView.contentSize.height)
+        let target = NSPoint(x: max(0, origin.x), y: min(max(0, origin.y), maxY))
+        docView.scroll(target)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
         DispatchQueue.main.async { [weak self] in
-            guard let self, let tv = self.terminalView else { return }
-            tv.feed(byteArray: bytes)
-            if self.autoScroll { self.scrollToEnd(tv) }
+            guard let self,
+                  let scrollView = self.scrollView,
+                  let docView = scrollView.documentView else { return }
+            let maxY = max(0, docView.frame.height - scrollView.contentSize.height)
+            let stabilized = NSPoint(x: max(0, origin.x), y: min(max(0, origin.y), maxY))
+            docView.scroll(stabilized)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
         }
     }
 
-    /// 滚动终端到最底部
-    func scrollToEnd(_ tv: TerminalView) {
-        // SwiftTerm 的 TerminalView 内部有 NSScrollView；通过 NSView 坐标强制滚到底部
-        guard let scrollView = tv.subviews.compactMap({ $0 as? NSScrollView }).first
-                ?? tv.enclosingScrollView,
-              let docView = scrollView.documentView else { return }
-        let bottom = NSPoint(x: 0, y: max(0, docView.frame.height - scrollView.contentSize.height))
-        docView.scroll(bottom)
+    private func performSearch(direction: LogSearchDirection) {
+        guard let textView else { return }
+        let term = normalizedSearchText
+        guard !term.isEmpty else { return }
+
+        let text = textView.string as NSString
+        let fullLength = text.length
+        guard fullLength > 0 else { return }
+
+        let current = textView.selectedRange()
+        let options: NSString.CompareOptions = [.caseInsensitive]
+
+        let result: NSRange
+        switch direction {
+        case .next:
+            let start = min(fullLength, max(0, NSMaxRange(current)))
+            let forwardRange = NSRange(location: start, length: fullLength - start)
+            let forwardResult = text.range(of: term, options: options, range: forwardRange)
+            if forwardResult.location != NSNotFound {
+                result = forwardResult
+            } else {
+                let wrappedRange = NSRange(location: 0, length: start)
+                result = text.range(of: term, options: options, range: wrappedRange)
+            }
+        case .previous:
+            let anchor = max(0, min(fullLength - 1, current.location - 1))
+            let backwardRange = NSRange(location: 0, length: anchor + 1)
+            let backwardResult = text.range(of: term, options: options.union(.backwards), range: backwardRange)
+            if backwardResult.location != NSNotFound {
+                result = backwardResult
+            } else {
+                let wrappedStart = anchor + 1
+                let wrappedLength = fullLength - wrappedStart
+                let wrappedRange = NSRange(location: wrappedStart, length: max(0, wrappedLength))
+                result = text.range(of: term, options: options.union(.backwards), range: wrappedRange)
+            }
+        }
+
+        guard result.location != NSNotFound else { return }
+        textView.setSelectedRange(result)
+        textView.scrollRangeToVisible(result)
     }
-
-    // MARK: - TerminalViewDelegate（只需处理"用户输入"，日志面板是只读的）
-
-    func send(source: TerminalView, data: ArraySlice<UInt8>) {}
-    func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {}
-    func setTerminalTitle(source: TerminalView, title: String) {}
-    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-    func scrolled(source: TerminalView, position: Double) {}
-    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
-    func bell(source: TerminalView) {}
-    func clipboardCopy(source: TerminalView, content: Data) {}
-    func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
-    func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
 }
 
 // MARK: - 交互终端面板（运行 openclaw 向导）

@@ -210,6 +210,9 @@ struct UserDetailView: View {
     @State private var isResetting = false
     @State private var versionChecked = false
     @State private var hasPendingInitWizard = false
+    @State private var isRefreshingStatus = false
+    @State private var refreshStatusNeedsRerun = false
+    @State private var refreshStatusGeneration: UInt64 = 0
     private var isSelf: Bool { user.username == NSUserName() }
 
     /// HTTP probe + launchctl 综合判断是否运行中（任一来源确认即为 true）
@@ -272,7 +275,7 @@ struct UserDetailView: View {
     @State private var showLogoutConfirm = false
     @State private var isLoggingOut = false
     @State private var showFlashFreezeConfirm = false
-    @State private var autostartEnabled = true
+    @State private var autostartEnabled = false
     // 密码
     @State private var showPassword = false
     @State private var logSearchText = ""
@@ -496,11 +499,11 @@ struct UserDetailView: View {
                 .task { await refreshStatus() }
         } else if !user.isAdmin
             && user.clawType == .macosUser
-            && (user.initStep != nil || (hasPendingInitWizard && user.openclawVersion == nil)) {
+            && (user.initStep != nil || hasPendingInitWizard) {
             // 初始化向导
-            UserInitWizardView(user: user) { active in
-                hasPendingInitWizard = active
-                if !active {
+            UserInitWizardView(user: user) { sessionVisible in
+                hasPendingInitWizard = sessionVisible
+                if !sessionVisible {
                     user.initStep = nil
                     Task { await refreshStatus() }
                 }
@@ -529,27 +532,56 @@ struct UserDetailView: View {
 
     @ViewBuilder
     private var statusSection: some View {
-        GroupBox {
-            let readiness = gatewayHub.readinessMap[user.username] ?? (user.isRunning ? .starting : .stopped)
-            let freezeSymbol: String = {
-                switch user.freezeMode {
-                case .pause: "pause.circle"
-                case .flash: "bolt.fill"
-                case .normal, .none: "snowflake"
+        let readiness = gatewayHub.readinessMap[user.username] ?? (user.isRunning ? .starting : .stopped)
+        let freezeSymbol: String = {
+            switch user.freezeMode {
+            case .pause: return "pause.circle"
+            case .flash: return "bolt.fill"
+            case .normal, .none: return "snowflake"
+            }
+        }()
+        let freezeTint: Color = {
+            switch user.freezeMode {
+            case .pause: return .blue
+            case .flash: return .orange
+            case .normal, .none: return .cyan
+            }
+        }()
+
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("运行状态")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    performAction { }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption)
                 }
-            }()
-            let freezeTint: Color = {
-                switch user.freezeMode {
-                case .pause: .blue
-                case .flash: .orange
-                case .normal, .none: .cyan
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .disabled(isLoading || !helperClient.isConnected)
+            }
+
+            Divider().opacity(0.55)
+
+            if let warning = user.freezeWarning {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(warning)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
-            }()
-            VStack(alignment: .leading, spacing: 8) {
-                // Gateway 运行状态
-                HStack(spacing: 12) {
-                    Text("Gateway").foregroundStyle(.secondary)
-                        .frame(width: 72, alignment: .leading)
+                .padding(.bottom, 2)
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], alignment: .leading, spacing: 16) {
+
+                // Gateway 状态
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Gateway").font(.caption).foregroundStyle(.secondary)
                     HStack(spacing: 6) {
                         if isLoading && !versionChecked {
                             ProgressView().scaleEffect(0.7)
@@ -562,30 +594,22 @@ struct UserDetailView: View {
                         }
                         Text(readinessLabel)
                     }
-                }
-                if readiness == .starting, user.isRunning {
-                    Text("服务已启动，正在同步就绪状态…")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 84)
-                }
-                if let warning = user.freezeWarning {
-                    HStack(spacing: 12) {
-                        Text("冻结质检").foregroundStyle(.secondary)
-                            .frame(width: 72, alignment: .leading)
-                        Label(warning, systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                    if readiness == .starting, user.isRunning {
+                        Text("状态同步中…")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
                 // 版本
-                versionRow
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("版本").font(.caption).foregroundStyle(.secondary)
+                    versionRowContent
+                }
 
                 // PID
-                HStack(spacing: 12) {
-                    Text("PID").foregroundStyle(.secondary)
-                        .frame(width: 72, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("PID").font(.caption).foregroundStyle(.secondary)
                     if let pid = user.pid {
                         Text("\(pid)").monospacedDigit()
                     } else if isEffectivelyRunning {
@@ -596,9 +620,8 @@ struct UserDetailView: View {
                 }
 
                 // 启动时间
-                HStack(spacing: 12) {
-                    Text("启动时间").foregroundStyle(.secondary)
-                        .frame(width: 72, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("启动时间").font(.caption).foregroundStyle(.secondary)
                     if let started = user.startedAt {
                         Text(started, style: .relative).foregroundStyle(.secondary)
                     } else {
@@ -607,9 +630,8 @@ struct UserDetailView: View {
                 }
 
                 // CPU / 内存
-                HStack(spacing: 12) {
-                    Text("CPU / 内存").foregroundStyle(.secondary)
-                        .frame(width: 72, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("资源占用").font(.caption).foregroundStyle(.secondary)
                     if let cpu = user.cpuPercent, let mem = user.memRssMB {
                         Text(String(format: "%.1f%%  /  %.0f MB", cpu, mem))
                             .monospacedDigit()
@@ -620,35 +642,37 @@ struct UserDetailView: View {
                     }
                 }
 
-                networkRow
-                StorageRow(snapshot: pool.snapshot, username: user.username)
-                addressRow
-                healthCheckRow
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 4)
-        } label: {
-            HStack {
-                Text("状态")
-                Spacer()
-                Button {
-                    performAction { }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption)
+                // 网络
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("网络流量").font(.caption).foregroundStyle(.secondary)
+                    networkRowContent
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .disabled(isLoading || !helperClient.isConnected)
+
+                // 存储
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("存储").font(.caption).foregroundStyle(.secondary)
+                    StorageRowContent(snapshot: pool.snapshot, username: user.username)
+                }
+
+                // 地址
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("地址").font(.caption).foregroundStyle(.secondary)
+                    addressRowContent
+                }
             }
+            .padding(.vertical, 4)
+
+            Divider().opacity(0.55)
+
+            // 体检
+            healthCheckRowContent
         }
+        .modifier(OverviewCardModifier())
     }
 
     @ViewBuilder
-    private var versionRow: some View {
-        HStack(spacing: 12) {
-            Text("版本").foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
+    private var versionRowContent: some View {
+        HStack(spacing: 8) {
             if let v = user.openclawVersionLabel {
                 Text(v)
                     .foregroundStyle(updater.needsUpdate(user.openclawVersion) ? .orange : .primary)
@@ -659,7 +683,7 @@ struct UserDetailView: View {
                     if !user.isAdmin,
                        updater.needsUpdate(user.openclawVersion),
                        let latest = updater.latestVersion {
-                        Button("↑ v\(latest)") {
+                        Button("↑v\(latest)") {
                             pendingUpgradeVersion = latest
                             showUpgradeConfirm = true
                         }
@@ -668,7 +692,7 @@ struct UserDetailView: View {
                         .disabled(!helperClient.isConnected)
                     }
                     if !user.isAdmin, preUpgradeVersion != nil {
-                        Button("↩ 回退") { showRollbackConfirm = true }
+                        Button("↩回退") { showRollbackConfirm = true }
                             .buttonStyle(.bordered)
                             .controlSize(.mini)
                             .disabled(!helperClient.isConnected)
@@ -681,39 +705,33 @@ struct UserDetailView: View {
     }
 
     @ViewBuilder
-    private var networkRow: some View {
-        HStack(spacing: 12) {
-            Text("网络").foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
-            if let shrimp = pool.snapshot?.shrimps.first(where: { $0.username == user.username }) {
-                let rateIn  = FormatUtils.formatBps(shrimp.netRateInBps)
-                let rateOut = FormatUtils.formatBps(shrimp.netRateOutBps)
-                let totalIn  = FormatUtils.formatTotalBytes(shrimp.netBytesIn)
-                let totalOut = FormatUtils.formatTotalBytes(shrimp.netBytesOut)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("↓ \(rateIn)  ↑ \(rateOut)")
-                        .monospacedDigit()
-                    Text("累计  ↓ \(totalIn)  ↑ \(totalOut)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-            } else if isEffectivelyRunning {
-                ProgressView().scaleEffect(0.6)
-            } else {
-                Text("—").foregroundStyle(.tertiary)
+    private var networkRowContent: some View {
+        if let shrimp = pool.snapshot?.shrimps.first(where: { $0.username == user.username }) {
+            let rateIn = FormatUtils.formatBps(shrimp.netRateInBps)
+            let rateOut = FormatUtils.formatBps(shrimp.netRateOutBps)
+            let totalIn = FormatUtils.formatTotalBytes(shrimp.netBytesIn)
+            let totalOut = FormatUtils.formatTotalBytes(shrimp.netBytesOut)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("↓ \(rateIn)  ↑ \(rateOut)")
+                    .monospacedDigit()
+                Text("累计 ↓ \(totalIn)  ↑ \(totalOut)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
+        } else if isEffectivelyRunning {
+            ProgressView().scaleEffect(0.6)
+        } else {
+            Text("—").foregroundStyle(.tertiary)
         }
     }
 
     @ViewBuilder
-    private var addressRow: some View {
-        HStack(spacing: 12) {
-            Text("地址").foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
-            if isEffectivelyRunning, let urlStr = gatewayURL, !urlStr.isEmpty,
-               gatewayToken(from: urlStr) != nil,
-               let nsURL = URL(string: urlStr) {
+    private var addressRowContent: some View {
+        if isEffectivelyRunning, let urlStr = gatewayURL, !urlStr.isEmpty,
+           gatewayToken(from: urlStr) != nil,
+           let nsURL = URL(string: urlStr) {
+            HStack(spacing: 6) {
                 Button {
                     NSWorkspace.shared.open(nsURL)
                 } label: {
@@ -735,22 +753,22 @@ struct UserDetailView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .help("复制地址")
-            } else if isEffectivelyRunning {
-                HStack(spacing: 6) {
-                    ProgressView().scaleEffect(0.6)
-                    Text("等待地址 Token…").foregroundStyle(.secondary)
-                }
-            } else {
-                Text("—").foregroundStyle(.tertiary)
             }
+        } else if isEffectivelyRunning {
+            HStack(spacing: 6) {
+                ProgressView().scaleEffect(0.6)
+                Text("等待 Token…").font(.caption).foregroundStyle(.secondary)
+            }
+        } else {
+            Text("—").foregroundStyle(.tertiary)
         }
     }
 
     @ViewBuilder
-    private var healthCheckRow: some View {
+    private var healthCheckRowContent: some View {
         HStack(spacing: 12) {
-            Text("体检").foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
+            Text("健康体检").font(.subheadline)
+            Spacer()
             if let check = lastHealthCheck {
                 let issueCount = check.criticalCount + check.warnCount
                 HStack(spacing: 4) {
@@ -769,14 +787,14 @@ struct UserDetailView: View {
                     Text("前").foregroundStyle(.secondary).font(.callout)
                 }
             } else {
-                Text("从未体检").foregroundStyle(.tertiary)
+                Text("从未体检").foregroundStyle(.tertiary).font(.callout)
             }
-            Spacer()
             Button(lastHealthCheck == nil ? "体检" : "重新体检") {
                 showHealthCheck = true
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
+            .padding(.leading, 4)
             .disabled(!helperClient.isConnected)
         }
     }
@@ -785,7 +803,9 @@ struct UserDetailView: View {
 
     @ViewBuilder
     private var quickTransferSection: some View {
-        GroupBox("文件快传") {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("文件快传").font(.headline)
+            Divider().opacity(0.55)
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "tray.and.arrow.down")
@@ -824,9 +844,6 @@ struct UserDetailView: View {
                         Text("拖入文件到这里，或点击选择文件")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Text("Select a File…")
-                            .font(.title3.weight(.medium))
-                            .foregroundStyle(Color.accentColor.opacity(0.9))
                     }
                     .frame(maxWidth: .infinity, minHeight: 120)
                     .background(Color.secondary.opacity(0.04))
@@ -876,17 +893,17 @@ struct UserDetailView: View {
                 }
             }
         }
+        .modifier(OverviewCardModifier())
     }
 
     // MARK: - 配置区
 
     @ViewBuilder
     private var configSection: some View {
-        GroupBox("配置") {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("配置").font(.headline)
+            Divider().opacity(0.55)
             VStack(alignment: .leading, spacing: 10) {
-                Text("核心配置")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 HStack {
                     Text("模型配置").foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
                     if let def = defaultModel {
@@ -1021,14 +1038,17 @@ struct UserDetailView: View {
             .padding(.top, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .modifier(OverviewCardModifier())
     }
 
     // MARK: - 操作区
 
     @ViewBuilder
     private var actionsSection: some View {
-        GroupBox("操作") {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("操作").font(.headline)
+            Divider().opacity(0.55)
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     if user.isFrozen {
                         Button("解冻") {
@@ -1183,6 +1203,7 @@ struct UserDetailView: View {
             }
             .padding(.top, 4)
         }
+        .modifier(OverviewCardModifier())
     }
 
     @ViewBuilder
@@ -1411,11 +1432,29 @@ struct UserDetailView: View {
         }
     }
 
+    @MainActor
     private func refreshStatus() async {
+        if isRefreshingStatus {
+            refreshStatusNeedsRerun = true
+            return
+        }
+        isRefreshingStatus = true
+        refreshStatusGeneration &+= 1
+        let requestID = refreshStatusGeneration
+        defer {
+            isRefreshingStatus = false
+            if refreshStatusNeedsRerun {
+                refreshStatusNeedsRerun = false
+                Task { await refreshStatus() }
+            }
+        }
+
         guard helperClient.isConnected else {
             // Helper 未连接时也要完成检查，避免 ProgressView 永久卡死
             versionChecked = true
-            hasPendingInitWizard = false
+            if user.initStep != nil {
+                hasPendingInitWizard = true
+            }
             isNodeInstalledReady = false
             xcodeEnvStatus = nil
             return
@@ -1442,6 +1481,7 @@ struct UserDetailView: View {
                 }
             }
         }
+        guard requestID == refreshStatusGeneration else { return }
         user.openclawVersion = await versionResult
         let wizardState = await wizardStateResult
         let ensuredPending = await ensureOnboardingWizardSessionIfNeeded(existingState: wizardState)
@@ -1455,6 +1495,7 @@ struct UserDetailView: View {
         async let modelsStatusResult = helperClient.getModelsStatus(username: user.username)
         async let npmRegistryResult = helperClient.getNpmRegistry(username: user.username)
         let (url, modelsStatus, registryURL) = await (urlResult, modelsStatusResult, npmRegistryResult)
+        guard requestID == refreshStatusGeneration else { return }
         gatewayURL = url.isEmpty ? nil : url
         if user.isRunning, gatewayToken(from: url) == nil {
             refreshGatewayURLUntilTokenReady()
@@ -1547,6 +1588,25 @@ struct UserDetailView: View {
                 }
             }()
 
+            // 迁移旧脏状态：active=true 但全 pending，会导致 UI 误判为“正在初始化”。
+            if state.active && !state.isCompleted && !hasRecoverableProgress {
+                var repaired = state
+                repaired.active = false
+                repaired.currentStep = nil
+                repaired.updatedAt = Date()
+                do {
+                    try await helperClient.saveInitState(username: user.username, json: repaired.toJSON())
+                } catch {
+                    actionError = "初始化向导状态修复失败：\(error.localizedDescription)"
+                }
+                user.initStep = nil
+                let readiness = gatewayHub.readinessMap[user.username]
+                return !user.isAdmin
+                    && user.clawType == .macosUser
+                    && user.openclawVersion == nil
+                    && !(user.isRunning || readiness == .starting || readiness == .ready)
+            }
+
             if state.active || hasRecoverableProgress {
                 if let step = inferredStep {
                     user.initStep = step.title
@@ -1558,9 +1618,27 @@ struct UserDetailView: View {
                         repaired.currentStep = inferredStep?.key
                     }
                     repaired.updatedAt = Date()
-                    try? await helperClient.saveInitState(username: user.username, json: repaired.toJSON())
+                    do {
+                        try await helperClient.saveInitState(username: user.username, json: repaired.toJSON())
+                    } catch {
+                        actionError = "初始化向导状态修复失败：\(error.localizedDescription)"
+                    }
                 }
                 return true
+            }
+
+            // 已有未完成会话，但尚未开始（全部 pending）：
+            // 仅在“仍符合 onboarding 条件”时保持在初始化向导 pre-start。
+            if !state.isCompleted {
+                let readiness = gatewayHub.readinessMap[user.username]
+                let shouldKeepOnboarding = !user.isAdmin
+                    && user.clawType == .macosUser
+                    && user.openclawVersion == nil
+                    && !(user.isRunning || readiness == .starting || readiness == .ready)
+                if shouldKeepOnboarding {
+                    user.initStep = nil
+                    return true
+                }
             }
         }
 
@@ -1588,10 +1666,11 @@ struct UserDetailView: View {
         var state = InitWizardState()
         state.schemaVersion = 2
         state.mode = .onboarding
-        state.active = true
-        state.currentStep = InitStep.basicEnvironment.key
+        // 仅创建会话壳，不预置为 running，避免“未实际开始却显示正在初始化”。
+        state.active = false
+        state.currentStep = nil
         state.steps = [
-            InitStep.basicEnvironment.key: "running",
+            InitStep.basicEnvironment.key: "pending",
             InitStep.configureModel.key: "pending",
             InitStep.configureChannel.key: "pending",
             InitStep.finish.key: "pending",
@@ -1601,7 +1680,7 @@ struct UserDetailView: View {
 
         do {
             try await helperClient.saveInitState(username: user.username, json: state.toJSON())
-            user.initStep = InitStep.basicEnvironment.title
+            user.initStep = nil
             return true
         } catch {
             actionError = "初始化向导状态写入失败：\(error.localizedDescription)"
@@ -2160,7 +2239,9 @@ struct UserDetailView: View {
 
     @ViewBuilder
     private var dangerZoneSection: some View {
-        GroupBox {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("危险操作").font(.headline).foregroundStyle(.red)
+            Divider().opacity(0.55)
             VStack(alignment: .leading, spacing: 8) {
                 if user.isAdmin {
                     Text("管理员账号仅支持基础管理，已禁用重置与删除。")
@@ -2190,6 +2271,7 @@ struct UserDetailView: View {
             }
             .padding(.top, 4)
         }
+        .modifier(OverviewCardModifier())
     }
 
     @ViewBuilder
@@ -2262,34 +2344,55 @@ private struct MainContentAlertsModifier: ViewModifier {
     }
 }
 
+struct OverviewCardModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.94))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.accentColor.opacity(0.07), .clear],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                    )
+            )
+    }
+}
+
 // MARK: - 存储空间行
 
-private struct StorageRow: View {
+private struct StorageRowContent: View {
     let snapshot: DashboardSnapshot?
     let username: String
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text("存储").foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
-            if let shrimp = snapshot?.shrimps.first(where: { $0.username == username }) {
-                VStack(alignment: .leading, spacing: 2) {
+        if let shrimp = snapshot?.shrimps.first(where: { $0.username == username }) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(FormatUtils.formatBytes(shrimp.openclawDirBytes))
+                        .monospacedDigit()
+                    Text(".openclaw/").font(.caption2).foregroundStyle(.secondary)
+                }
+                if shrimp.homeDirBytes > 0 {
                     HStack(spacing: 4) {
-                        Text(FormatUtils.formatBytes(shrimp.openclawDirBytes))
-                            .monospacedDigit()
-                        Text(".openclaw/").font(.caption2).foregroundStyle(.secondary)
-                    }
-                    if shrimp.homeDirBytes > 0 {
-                        HStack(spacing: 4) {
-                            Text(FormatUtils.formatBytes(shrimp.homeDirBytes))
-                                .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
-                            Text("家目录").font(.caption2).foregroundStyle(.tertiary)
-                        }
+                        Text(FormatUtils.formatBytes(shrimp.homeDirBytes))
+                            .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+                        Text("家目录").font(.caption2).foregroundStyle(.tertiary)
                     }
                 }
-            } else {
-                Text("—").foregroundStyle(.tertiary)
             }
+        } else {
+            Text("—").foregroundStyle(.tertiary)
         }
     }
 }
