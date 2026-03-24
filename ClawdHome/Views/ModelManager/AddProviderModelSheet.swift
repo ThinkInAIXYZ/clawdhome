@@ -52,11 +52,11 @@ struct AddProviderModelSheet: View {
         VStack(spacing: 0) {
             // ── 标题栏 ──────────────────────────────────────────
             HStack {
-                Text(isEditMode ? "编辑账户" : "添加 Provider 账户")
+                Text(isEditMode ? L10n.k("auto.add_provider_model_sheet.account", fallback: "编辑账户") : L10n.k("auto.add_provider_model_sheet.provider_account", fallback: "添加 Provider 账户"))
                     .font(.headline)
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.escape)
-                Button(isEditMode ? "保存" : "添加") { commit() }
+                Button(L10n.k("auto.add_provider_model_sheet.cancel", fallback: "取消")) { dismiss() }.keyboardShortcut(.escape)
+                Button(isEditMode ? L10n.k("auto.add_provider_model_sheet.save", fallback: "保存") : L10n.k("auto.add_provider_model_sheet.add", fallback: "添加")) { commit() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return)
                     .disabled(accountName.trimmingCharacters(in: .whitespaces).isEmpty
@@ -69,9 +69,9 @@ struct AddProviderModelSheet: View {
 
             // ── 账户名称 ─────────────────────────────────────────
             HStack(spacing: 8) {
-                Text("账户名称").font(.callout).foregroundStyle(.secondary)
+                Text(L10n.k("auto.add_provider_model_sheet.accountname", fallback: "账户名称")).font(.callout).foregroundStyle(.secondary)
                     .frame(width: 64, alignment: .trailing)
-                TextField("如「Anthropic 主账号」", text: $accountName)
+                TextField(L10n.k("auto.add_provider_model_sheet.anthropic", fallback: "如「Anthropic 主账号」"), text: $accountName)
                     .textFieldStyle(.roundedBorder)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
@@ -110,7 +110,7 @@ struct AddProviderModelSheet: View {
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
                                 .foregroundStyle(.secondary).font(.caption)
-                            TextField("搜索型号…", text: $modelSearch)
+                            TextField(L10n.k("auto.add_provider_model_sheet.search", fallback: "搜索型号…"), text: $modelSearch)
                                 .textFieldStyle(.plain).font(.callout)
                             if !modelSearch.isEmpty {
                                 Button { modelSearch = "" } label: {
@@ -121,7 +121,7 @@ struct AddProviderModelSheet: View {
                             }
                             Divider().frame(height: 14)
                             let allSel = group.models.allSatisfy { selectedModelIds.contains($0.id) }
-                            Button(allSel ? "全不选" : "全选") {
+                            Button(allSel ? L10n.k("auto.add_provider_model_sheet.select_none", fallback: "全不选") : L10n.k("auto.add_provider_model_sheet.select_all", fallback: "全选")) {
                                 if allSel { group.models.forEach { selectedModelIds.remove($0.id) } }
                                 else { group.models.forEach { selectedModelIds.insert($0.id) } }
                             }
@@ -154,7 +154,7 @@ struct AddProviderModelSheet: View {
                                 }
                             }
                             if filteredModels.isEmpty {
-                                Text("无匹配型号").font(.caption).foregroundStyle(.secondary)
+                                Text(L10n.k("auto.add_provider_model_sheet.no_matching_models", fallback: "无匹配型号")).font(.caption).foregroundStyle(.secondary)
                                     .frame(maxWidth: .infinity).padding(.vertical, 8)
                                     .listRowBackground(Color.clear)
                             }
@@ -162,9 +162,9 @@ struct AddProviderModelSheet: View {
                         .listStyle(.plain)
                     } else {
                         ContentUnavailableView(
-                            "选择左侧 Provider",
+                            L10n.k("auto.add_provider_model_sheet.select_provider", fallback: "选择左侧 Provider"),
                             systemImage: "sidebar.left",
-                            description: Text("选择一个提供商，然后勾选需要的模型型号")
+                            description: Text(L10n.k("auto.add_provider_model_sheet.select_models", fallback: "选择一个提供商，然后勾选需要的模型型号"))
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -216,7 +216,7 @@ struct AddProviderModelSheet: View {
                 Text(credentialLabel).font(.callout).fontWeight(.medium)
                 Spacer()
                 if isEditMode && existingConfigured && credentialInput.isEmpty {
-                    Label("已配置", systemImage: "checkmark.circle.fill")
+                    Label(L10n.k("auto.add_provider_model_sheet.configuration", fallback: "已配置"), systemImage: "checkmark.circle.fill")
                         .font(.caption2).foregroundStyle(.green)
                 }
             }
@@ -226,15 +226,15 @@ struct AddProviderModelSheet: View {
                     .textFieldStyle(.roundedBorder).font(.callout)
             } else {
                 SecureField(
-                    isEditMode && existingConfigured ? "输入新值可更换，留空保持不变" : credentialPlaceholder,
+                    isEditMode && existingConfigured ? L10n.k("auto.add_provider_model_sheet.input", fallback: "输入新值可更换，留空保持不变") : credentialPlaceholder,
                     text: $credentialInput
                 )
                 .textFieldStyle(.roundedBorder).font(.callout)
             }
 
             Text(isEditMode && existingConfigured
-                 ? "留空则保持现有凭据不变"
-                 : "凭据存储在本机配置文件，点击「同步凭据」可写入虾的 openclaw 配置")
+                 ? L10n.k("auto.add_provider_model_sheet.leave_blank_to_keep_current_credentials", fallback: "留空则保持现有凭据不变")
+                 : L10n.k("auto.add_provider_model_sheet.configurationfile_sync_openclaw_configuration", fallback: "凭据存储在本机配置文件，点击「同步凭据」可写入虾的 openclaw 配置"))
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16).padding(.vertical, 10)

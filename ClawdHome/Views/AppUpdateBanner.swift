@@ -18,7 +18,7 @@ struct AppUpdateBanner: View {
                         .foregroundStyle(.orange)
                         .font(.system(size: 15))
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("有新版本")
+                        Text(L10n.k("auto.app_update_banner.new_version_available", fallback: "有新版本"))
                             .font(.caption)
                             .fontWeight(.medium)
                         Text("v\(updater.appLatestVersion ?? "")")
@@ -59,7 +59,7 @@ struct AppUpdateSheet: View {
                     .resizable()
                     .frame(width: 52, height: 52)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("ClawdHome 有新版本")
+                    Text(L10n.k("auto.app_update_banner.clawdhome_version", fallback: "ClawdHome 有新版本"))
                         .font(.headline)
                     HStack(spacing: 6) {
                         Text("v\(updater.currentAppVersion)")
@@ -83,7 +83,7 @@ struct AppUpdateSheet: View {
 
             // 更新说明
             if let notes = updater.appReleaseNotes {
-                Text("更新内容")
+                Text(L10n.k("auto.app_update_banner.release_notes", fallback: "更新内容"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 6)
@@ -113,7 +113,7 @@ struct AppUpdateSheet: View {
                             let speed = updater.appDownloadSpeed > 0
                                 ? " · \(UpdateChecker.formatSpeed(updater.appDownloadSpeed))"
                                 : ""
-                            Text("正在下载 \(pct)\(size)\(speed)")
+                            Text(L10n.f("views.app_update_banner.text_ee19e45e", fallback: "正在下载 %@%@%@", String(describing: pct), String(describing: size), String(describing: speed)))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -127,10 +127,10 @@ struct AppUpdateSheet: View {
                                     .font(.system(size: 14))
                             }
                             .buttonStyle(.plain)
-                            .help("取消下载")
+                            .help(L10n.k("auto.app_update_banner.cancel_download", fallback: "取消下载"))
                         }
                     } else {
-                        Text("即将打开安装程序...")
+                        Text(L10n.k("auto.app_update_banner.open", fallback: "即将打开安装程序..."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
@@ -154,9 +154,9 @@ struct AppUpdateSheet: View {
 
                 HStack {
                     Spacer()
-                    Button("稍后再说") { dismiss() }
+                    Button(L10n.k("auto.app_update_banner.later", fallback: "稍后再说")) { dismiss() }
                         .keyboardShortcut(.cancelAction)
-                    Button(updater.appUpdateError != nil ? "重试" : "立即更新") {
+                    Button(updater.appUpdateError != nil ? L10n.k("views.app_update_banner.retry", fallback: "重试") : L10n.k("views.app_update_banner.update_now", fallback: "立即更新")) {
                         Task { await updater.downloadAndInstall() }
                     }
                     .keyboardShortcut(.defaultAction)

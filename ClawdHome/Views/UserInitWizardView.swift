@@ -22,10 +22,10 @@ enum InitStep: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .basicEnvironment: return "基础环境"
-        case .configureModel:   return "模型配置"
-        case .configureChannel: return "频道配置"
-        case .finish:           return "完成"
+        case .basicEnvironment: return L10n.k("wizard.step.basic_environment", fallback: "基础环境")
+        case .configureModel:   return L10n.k("wizard.step.configure_model", fallback: "模型配置")
+        case .configureChannel: return L10n.k("wizard.step.configure_channel", fallback: "频道配置")
+        case .finish:           return L10n.k("wizard.step.finish", fallback: "完成")
         }
     }
 
@@ -134,7 +134,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .kimiCoding: return "Kimi for Coding"
-        case .minimax:    return "MiniMax M2.5 系列"
+        case .minimax:    return L10n.k("wizard.provider.minimax.subtitle", fallback: "MiniMax M2.5 系列")
         }
     }
 
@@ -155,7 +155,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
     var apiKeyPlaceholder: String {
         switch self {
         case .kimiCoding: return "sk-..."
-        case .minimax:    return "粘贴 MiniMax API Key"
+        case .minimax:    return L10n.k("wizard.provider.minimax.api_key.placeholder", fallback: "粘贴 MiniMax API Key")
         }
     }
 
@@ -168,8 +168,8 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
 
     var consoleLinkTitle: String {
         switch self {
-        case .kimiCoding: return "Kimi Code 控制台"
-        case .minimax:    return "MiniMax 控制台"
+        case .kimiCoding: return L10n.k("wizard.provider.kimi.console", fallback: "Kimi Code 控制台")
+        case .minimax:    return L10n.k("wizard.provider.minimax.console", fallback: "MiniMax 控制台")
         }
     }
 }
@@ -327,9 +327,9 @@ struct UserInitWizardView: View {
             // ── 顶部标题栏 ───────────────────────────────────────
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("初始化 · \(user.username)")
+                    Text(L10n.f("wizard.title", fallback: "初始化 · %@", user.username))
                         .font(.headline)
-                    Text("正在配置生存空间")
+                    Text(L10n.k("wizard.subtitle.configuring", fallback: "正在配置生存空间"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -386,7 +386,7 @@ struct UserInitWizardView: View {
                 HStack(spacing: 6) {
                     Image(systemName: showTerminal ? "chevron.down" : "chevron.right")
                         .imageScale(.small)
-                    Text("日志输出")
+                    Text(L10n.k("wizard.log_output", fallback: "日志输出"))
                         .font(.caption).fontWeight(.medium)
                     Spacer()
                     if !showTerminal && ((currentStep == .basicEnvironment) || isApplyingModel || isStartingOpenclaw) {
@@ -477,49 +477,51 @@ struct UserInitWizardView: View {
     private var preStartPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("基础环境初始化")
+                Text(L10n.k("wizard.base_env.title", fallback: "基础环境初始化"))
                     .font(.title3).fontWeight(.semibold)
-                Text("安装 Node.js / npm 环境与 openclaw 核心组件。")
+                Text(L10n.k("wizard.base_env.subtitle", fallback: "安装 Node.js / npm 环境与 openclaw 核心组件。"))
                     .font(.callout).foregroundStyle(.secondary)
             }
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("关于权限", systemImage: "info.circle")
+                    Label(L10n.k("wizard.base_env.about_permissions", fallback: "关于权限"), systemImage: "info.circle")
                         .font(.subheadline).fontWeight(.medium)
-                    Text("安装阶段会自动处理 Node.js / npm 环境 / openclaw。\n\n这些细节统一归为「基础环境初始化」。")
+                    Text(L10n.k("wizard.base_env.permission_desc", fallback: "安装阶段会自动处理 Node.js / npm 环境 / openclaw。\n\n这些细节统一归为「基础环境初始化」。"))
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 2)
             }
 
-            GroupBox("OpenClaw 版本") {
+            GroupBox(L10n.k("wizard.openclaw_version.group", fallback: "OpenClaw 版本")) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Picker("OpenClaw 版本", selection: $selectedOpenclawVersionPreset) {
+                    Picker(L10n.k("wizard.openclaw_version.picker", fallback: "OpenClaw 版本"), selection: $selectedOpenclawVersionPreset) {
                         Text("latest").tag(OpenclawVersionPreset.latest)
-                        Text("指定版本").tag(OpenclawVersionPreset.custom)
+                        Text(L10n.k("wizard.openclaw_version.custom", fallback: "指定版本")).tag(OpenclawVersionPreset.custom)
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
 
                     if selectedOpenclawVersionPreset == .custom {
-                        TextField("例如：0.5.2 / next / beta", text: $customOpenclawVersion)
+                        TextField(L10n.k("wizard.openclaw_version.custom_placeholder", fallback: "例如：0.5.2 / next / beta"), text: $customOpenclawVersion)
                             .textFieldStyle(.roundedBorder)
                     }
 
-                    Text("初始化将安装版本：\(openclawVersionLabelForUI)")
+                    Text(L10n.f("wizard.openclaw_version.install_target", fallback: "初始化将安装版本：%@", openclawVersionLabelForUI))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
             if isHydratingState {
-                Label("正在恢复初始化状态…", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                Label(L10n.k("wizard.resume_state.loading", fallback: "正在恢复初始化状态…"), systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                     .font(.callout).foregroundStyle(.secondary)
             }
 
-            Button(hasPartialProgress ? "从当前进度继续" : "开始初始化") {
+            Button(hasPartialProgress
+                   ? L10n.k("wizard.action.resume_from_progress", fallback: "从当前进度继续")
+                   : L10n.k("wizard.action.start", fallback: "开始初始化")) {
                 initiated = true
                 Task {
                     if hasPartialProgress { await resumePendingStep() }
@@ -534,14 +536,16 @@ struct UserInitWizardView: View {
     private var runningPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("基础环境初始化")
+                Text(L10n.k("wizard.base_env.running.title", fallback: "基础环境初始化"))
                     .font(.title3).fontWeight(.semibold)
-                Text("正在安装依赖，请稍候。此阶段无需重复点击继续。")
+                Text(L10n.k("wizard.base_env.running.subtitle", fallback: "正在安装依赖，请稍候。此阶段无需重复点击继续。"))
                     .font(.callout).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 12) {
-                Button(isCancelling ? "正在终止…" : "终止初始化") {
+                Button(isCancelling
+                       ? L10n.k("wizard.action.terminating", fallback: "正在终止…")
+                       : L10n.k("wizard.action.terminate", fallback: "终止初始化")) {
                     isCancelling = true
                     Task {
                         await helperClient.cancelInit(username: user.username)
@@ -558,9 +562,9 @@ struct UserInitWizardView: View {
     private var modelConfigPanel: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("选择 AI Provider")
+                Text(L10n.k("views.user_init_wizard_view.select_ai_provider", fallback: "选择 AI Provider"))
                     .font(.title3).fontWeight(.semibold)
-                Text("选择一个 Provider 并填入 API Key，即可完成模型配置。")
+                Text(L10n.k("views.user_init_wizard_view.select_provider_api_key_donemodelsconfiguration", fallback: "选择一个 Provider 并填入 API Key，即可完成模型配置。"))
                     .font(.callout).foregroundStyle(.secondary)
             }
 
@@ -580,7 +584,7 @@ struct UserInitWizardView: View {
             }
 
             HStack(spacing: 12) {
-                Button(isApplyingModel ? "保存中…" : "保存并继续") {
+                Button(isApplyingModel ? L10n.k("views.user_init_wizard_view.save", fallback: "保存中…") : L10n.k("views.user_init_wizard_view.savecontinue", fallback: "保存并继续")) {
                     Task { await applyModelConfig() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -664,13 +668,13 @@ struct UserInitWizardView: View {
                         Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.bordered)
-                    .help(isShowingApiKey ? "隐藏" : "显示")
+                    .help(isShowingApiKey ? L10n.k("views.user_init_wizard_view.hide", fallback: "隐藏") : L10n.k("views.user_init_wizard_view.show", fallback: "显示"))
                 }
             }
 
             if provider == .minimax {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("模型").font(.subheadline).fontWeight(.medium)
+                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型")).font(.subheadline).fontWeight(.medium)
                     VStack(spacing: 0) {
                         ForEach(MinimaxModel.allCases, id: \.self) { model in
                             minimaxModelRow(model)
@@ -711,18 +715,18 @@ struct UserInitWizardView: View {
     private var channelConfigPanel: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("绑定频道")
+                Text(L10n.k("views.user_init_wizard_view.channel", fallback: "绑定频道"))
                     .font(.title3).fontWeight(.semibold)
-                Text("选择要接入的沟通渠道，完成配对后虾即可收发消息。")
+                Text(L10n.k("views.user_init_wizard_view.select_done", fallback: "选择要接入的沟通渠道，完成配对后虾即可收发消息。"))
                     .font(.callout).foregroundStyle(.secondary)
             }
 
             channelBindingList
 
             HStack(spacing: 12) {
-                Button("上一步") { Task { await moveBackToModelStep() } }
+                Button(L10n.k("views.user_init_wizard_view.back", fallback: "上一步")) { Task { await moveBackToModelStep() } }
                     .buttonStyle(.bordered).foregroundStyle(.secondary)
-                Button("已完成，继续") { Task { await markChannelStepDone() } }
+                Button(L10n.k("views.user_init_wizard_view.done_continue", fallback: "已完成，继续")) { Task { await markChannelStepDone() } }
                     .buttonStyle(.borderedProminent)
             }
         }
@@ -733,8 +737,8 @@ struct UserInitWizardView: View {
         VStack(spacing: 8) {
             channelBindingRow(
                 channel: .feishu,
-                title: "飞书扫码绑定",
-                subtitle: "在独立窗口生成二维码，扫码完成配对。"
+                title: L10n.k("views.user_init_wizard_view.feishu", fallback: "飞书扫码绑定"),
+                subtitle: L10n.k("views.user_init_wizard_view.done", fallback: "在独立窗口生成二维码，扫码完成配对。")
             ) {
                 selectedChannel = .feishu
                 openWindow(
@@ -744,8 +748,8 @@ struct UserInitWizardView: View {
             }
             channelBindingRow(
                 channel: .weixin,
-                title: "微信扫码绑定",
-                subtitle: "在独立窗口生成二维码，扫码完成微信配对。"
+                title: L10n.k("views.user_init_wizard_view.wechat", fallback: "微信扫码绑定"),
+                subtitle: L10n.k("views.user_init_wizard_view.donewechat", fallback: "在独立窗口生成二维码，扫码完成微信配对。")
             ) {
                 selectedChannel = .weixin
                 openWindow(
@@ -776,7 +780,7 @@ struct UserInitWizardView: View {
                 }
                 Spacer()
                 HStack(spacing: 4) {
-                    Text("点击打开")
+                    Text(L10n.k("views.user_init_wizard_view.open", fallback: "点击打开"))
                         .font(.caption)
                     Image(systemName: "chevron.right")
                         .font(.caption2)
@@ -813,22 +817,22 @@ struct UserInitWizardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
-                    Text("初始化完成").font(.title3).fontWeight(.semibold)
+                    Text(L10n.k("views.user_init_wizard_view.initialization_completed", fallback: "初始化完成")).font(.title3).fontWeight(.semibold)
                 }
-                Text("基础环境、模型、频道配置步骤已完成。")
+                Text(L10n.k("views.user_init_wizard_view.models_channelconfigurationdone", fallback: "基础环境、模型、频道配置步骤已完成。"))
                     .font(.callout).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 12) {
-                Button("上一步") { Task { await moveBackToChannelStep() } }
+                Button(L10n.k("views.user_init_wizard_view.back", fallback: "上一步")) { Task { await moveBackToChannelStep() } }
                     .buttonStyle(.bordered).foregroundStyle(.secondary).disabled(isStartingOpenclaw)
 
-                Button(isStartingOpenclaw ? "启动中…" : "立即启动 OpenClaw") {
+                Button(isStartingOpenclaw ? L10n.k("views.user_detail_view.start", fallback: "启动中…") : L10n.k("views.user_init_wizard_view.start_openclaw", fallback: "立即启动 OpenClaw")) {
                     Task { await finishAndStartOpenclaw() }
                 }
                 .buttonStyle(.borderedProminent).disabled(isStartingOpenclaw)
 
-                Button("稍后启动") { Task { await completeWizardOnly() } }
+                Button(L10n.k("views.user_init_wizard_view.start", fallback: "稍后启动")) { Task { await completeWizardOnly() } }
                     .buttonStyle(.bordered).foregroundStyle(.secondary).disabled(isStartingOpenclaw)
             }
 
@@ -839,7 +843,7 @@ struct UserInitWizardView: View {
     @ViewBuilder
     private var finishProgressPanel: some View {
         if !finishProgressMessages.isEmpty {
-            GroupBox("当前进度") {
+            GroupBox(L10n.k("views.user_init_wizard_view.current_progress", fallback: "当前进度")) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(finishProgressMessages.enumerated()), id: \.offset) { _, line in
                         Text(line).font(.caption).foregroundStyle(.secondary)
@@ -856,9 +860,9 @@ struct UserInitWizardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                    Text("步骤失败").font(.title3).fontWeight(.semibold)
+                    Text(L10n.k("views.user_init_wizard_view.step_failed", fallback: "步骤失败")).font(.title3).fontWeight(.semibold)
                 }
-                Text("请查看日志输出了解详情，然后重试或重新开始。")
+                Text(L10n.k("views.user_init_wizard_view.check_log_output_details_then_retry_restart", fallback: "请查看日志输出了解详情，然后重试或重新开始。"))
                     .font(.callout).foregroundStyle(.secondary)
             }
             if let message = latestFailureMessage {
@@ -870,9 +874,9 @@ struct UserInitWizardView: View {
                 xcodeQuickFixPanel
             }
             HStack(spacing: 12) {
-                Button("重试失败步骤") { Task { await retryFromFailure() } }
+                Button(L10n.k("views.user_init_wizard_view.retry_failed_step", fallback: "重试失败步骤")) { Task { await retryFromFailure() } }
                     .buttonStyle(.borderedProminent)
-                Button("重新开始") { resetWizard() }
+                Button(L10n.k("views.user_init_wizard_view.restart", fallback: "重新开始")) { resetWizard() }
                     .buttonStyle(.bordered).foregroundStyle(.secondary)
             }
         }
@@ -911,47 +915,47 @@ struct UserInitWizardView: View {
                 Image(systemName: iconName)
                     .foregroundStyle(iconColor)
                     .font(.caption)
-                Text("开发环境修复")
+                Text(L10n.k("views.user_init_wizard_view.development_environment_repair", fallback: "开发环境修复"))
                     .font(.subheadline).fontWeight(.medium)
                 Spacer()
                 if isInstallingXcodeCLT || isAcceptingXcodeLicense {
                     ProgressView().scaleEffect(0.6)
                 }
-                Button("刷新状态") { Task { await refreshXcodeEnvStatus() } }
+                Button(L10n.k("views.user_init_wizard_view.refreshstatus", fallback: "刷新状态")) { Task { await refreshXcodeEnvStatus() } }
                     .buttonStyle(.plain)
                     .font(.caption)
                     .foregroundStyle(Color.accentColor)
             }
 
             if let status {
-                Label(status.commandLineToolsInstalled ? "CLT 已安装" : "CLT 未安装",
+                Label(status.commandLineToolsInstalled ? L10n.k("views.user_init_wizard_view.clt", fallback: "CLT 已安装") : L10n.k("views.user_init_wizard_view.clt_not_installed", fallback: "CLT 未安装"),
                       systemImage: status.commandLineToolsInstalled ? "checkmark" : "xmark")
                     .font(.caption)
                     .foregroundStyle(status.commandLineToolsInstalled ? Color.secondary : Color.orange)
-                Label(status.licenseAccepted ? "Xcode license 已接受" : "Xcode license 未接受",
+                Label(status.licenseAccepted ? L10n.k("views.user_init_wizard_view.xcode_license", fallback: "Xcode license 已接受") : L10n.k("views.user_init_wizard_view.xcode_license_not_accepted", fallback: "Xcode license 未接受"),
                       systemImage: status.licenseAccepted ? "checkmark" : "xmark")
                     .font(.caption)
                     .foregroundStyle(status.licenseAccepted ? Color.secondary : Color.orange)
             } else {
-                Text("环境状态读取中…")
+                Text(L10n.k("views.user_init_wizard_view.status", fallback: "环境状态读取中…"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             HStack(spacing: 10) {
-                Button(isInstallingXcodeCLT ? "安装中…" : "安装开发工具") {
+                Button(isInstallingXcodeCLT ? L10n.k("views.user_init_wizard_view.installing_tools", fallback: "安装中…") : L10n.k("views.user_init_wizard_view.install_developer_tools", fallback: "安装开发工具")) {
                     Task { await installXcodeCommandLineToolsFromWizard() }
                 }
                 .buttonStyle(.bordered)
                 .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
 
-                Button(isAcceptingXcodeLicense ? "处理中…" : "同意 Xcode 许可") {
+                Button(isAcceptingXcodeLicense ? L10n.k("views.user_init_wizard_view.processing", fallback: "处理中…") : L10n.k("views.user_init_wizard_view.xcode", fallback: "同意 Xcode 许可")) {
                     Task { await acceptXcodeLicenseFromWizard() }
                 }
                 .buttonStyle(.bordered)
                 .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
 
-                Button("打开软件更新") {
+                Button(L10n.k("views.user_init_wizard_view.open_software_update", fallback: "打开软件更新")) {
                     openSoftwareUpdate()
                 }
                 .buttonStyle(.bordered)
@@ -976,15 +980,15 @@ struct UserInitWizardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.clockwise.circle").foregroundStyle(.orange)
-                    Text("初始化已暂停").font(.title3).fontWeight(.semibold)
+                    Text(L10n.k("views.user_init_wizard_view.initialization_paused", fallback: "初始化已暂停")).font(.title3).fontWeight(.semibold)
                 }
-                Text("检测到步骤未运行但未完成，可继续执行剩余步骤。")
+                Text(L10n.k("views.user_init_wizard_view.resume_detected_pending_steps", fallback: "检测到步骤未运行但未完成，可继续执行剩余步骤。"))
                     .font(.callout).foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
-                Button("继续剩余步骤") { Task { await resumePendingStep() } }
+                Button(L10n.k("views.user_init_wizard_view.continue", fallback: "继续剩余步骤")) { Task { await resumePendingStep() } }
                     .buttonStyle(.borderedProminent)
-                Button("重新初始化") {
+                Button(L10n.k("views.user_init_wizard_view.re_initialize", fallback: "重新初始化")) {
                     isCancelling = true
                     Task {
                         await helperClient.cancelInit(username: user.username)
@@ -1006,7 +1010,7 @@ struct UserInitWizardView: View {
                 HStack(spacing: 6) {
                     Image(systemName: showAdvancedOptions ? "chevron.down" : "chevron.right")
                         .imageScale(.small)
-                    Text("高级选项")
+                    Text(L10n.k("views.user_init_wizard_view.advanced_options", fallback: "高级选项"))
                         .font(.caption).fontWeight(.medium)
                     Spacer()
                 }
@@ -1019,22 +1023,22 @@ struct UserInitWizardView: View {
             if showAdvancedOptions {
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("npm 安装源").font(.subheadline).fontWeight(.medium)
-                        Picker("npm 安装源", selection: $selectedNpmRegistry) {
+                        Text(L10n.k("views.user_init_wizard_view.npm", fallback: "npm 安装源")).font(.subheadline).fontWeight(.medium)
+                        Picker(L10n.k("views.user_init_wizard_view.npm", fallback: "npm 安装源"), selection: $selectedNpmRegistry) {
                             ForEach(NpmRegistryOption.allCases, id: \.self) { option in
                                 Text(option.title).tag(option)
                             }
                         }
                         .pickerStyle(.segmented).labelsHidden()
-                        Text("该设置会写入 @\(user.username) 的 npm 用户配置。")
+                        Text(L10n.k("views.user_init_wizard_view.settings_user_username_npm_userconfiguration", fallback: "该设置会写入 @\(user.username) 的 npm 用户配置。"))
                             .font(.caption).foregroundStyle(.secondary)
                     }
 
                     Divider()
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("维护工具").font(.subheadline).fontWeight(.medium)
-                        Button("命令行维护（高级）") { openMaintenanceTerminal() }
+                        Text(L10n.k("views.user_init_wizard_view.maintenance_tools", fallback: "维护工具")).font(.subheadline).fontWeight(.medium)
+                        Button(L10n.k("views.user_list_view.cli_maintenance_advanced", fallback: "命令行维护（高级）")) { openMaintenanceTerminal() }
                             .buttonStyle(.bordered)
                             .foregroundStyle(.secondary)
                             .controlSize(.small)
@@ -1110,7 +1114,7 @@ struct UserInitWizardView: View {
             do {
                 try await helperClient.saveInitState(username: user.username, json: "{}")
             } catch {
-                appendLog("[state] 重置初始化状态失败：\(error.localizedDescription)\n")
+                appendLog(L10n.k("views.user_init_wizard_view.state_resetstatus_error_localizeddescription", fallback: "[state] 重置初始化状态失败：\(error.localizedDescription)\n"))
             }
         }
     }
@@ -1123,10 +1127,10 @@ struct UserInitWizardView: View {
         defer { isRunningInitFlow = false }
 
         // 在进入长流程前先做 Xcode 预检，避免失败/运行面板来回闪动。
-        appendLog("\n▶ 检查 Xcode 开发环境\n")
+        appendLog(L10n.k("views.user_init_wizard_view.checking_xcode_environment_log", fallback: "\n▶ 检查 Xcode 开发环境\n"))
         do {
             try await ensureXcodeEnvironmentReady()
-            appendLog("✓ Xcode 开发环境已就绪\n")
+            appendLog(L10n.k("views.user_init_wizard_view.xcode_environment_ready_log", fallback: "✓ Xcode 开发环境已就绪\n"))
         } catch {
             let message = error.localizedDescription
             appendLog("❌ \(message)\n")
@@ -1150,12 +1154,12 @@ struct UserInitWizardView: View {
         onSessionActiveChanged?(true)
 
         let autoSteps: [(title: String, run: () async throws -> Void)] = [
-            ("安装 Node.js", { try await conn.installNode(username: user.username, nodeDistURL: nodeDistURL) }),
-            ("配置 npm 目录", { try await conn.setupNpmEnv(username: user.username) }),
-            ("设置 npm 安装源", {
+            (L10n.k("views.user_init_wizard_view.node_js", fallback: "安装 Node.js"), { try await conn.installNode(username: user.username, nodeDistURL: nodeDistURL) }),
+            (L10n.k("views.user_init_wizard_view.configuration_npm_directory", fallback: "配置 npm 目录"), { try await conn.setupNpmEnv(username: user.username) }),
+            (L10n.k("views.user_init_wizard_view.settings_npm", fallback: "设置 npm 安装源"), {
                 try await conn.setNpmRegistry(username: user.username, registry: selectedNpmRegistry.rawValue)
             }),
-            ("安装 openclaw (\(openclawVersionLabelForUI))", {
+            (L10n.k("views.user_init_wizard_view.openclaw_openclawversionlabelforui", fallback: "安装 openclaw (\(openclawVersionLabelForUI))"), {
                 try await conn.installOpenclaw(
                     username: user.username,
                     version: selectedOpenclawVersionForInstall
@@ -1169,8 +1173,8 @@ struct UserInitWizardView: View {
                 try await item.run()
             } catch {
                 let message = error.localizedDescription
-                if message.contains("已有初始化命令正在运行") {
-                    let reason = "检测到已有初始化任务在运行，正在同步当前状态。"
+                if message.contains(L10n.k("views.user_init_wizard_view.run", fallback: "已有初始化命令正在运行")) {
+                    let reason = L10n.k("views.user_init_wizard_view.syncstatus", fallback: "检测到已有初始化任务在运行，正在同步当前状态。")
                     appendLog("[info] \(reason)\n")
                     statuses[InitStep.basicEnvironment.rawValue] = .running
                     user.initStep = InitStep.basicEnvironment.title
@@ -1200,22 +1204,22 @@ struct UserInitWizardView: View {
     private func ensureXcodeEnvironmentReady() async throws {
         guard let status = await helperClient.getXcodeEnvStatus() else {
             xcodeEnvStatus = nil
-            throw HelperError.operationFailed("无法读取 Xcode 开发环境状态，请稍后重试。")
+            throw HelperError.operationFailed(L10n.k("views.user_init_wizard_view.xcode_status_retry", fallback: "无法读取 Xcode 开发环境状态，请稍后重试。"))
         }
         xcodeEnvStatus = status
         xcodeFixMessage = nil
         if !status.commandLineToolsInstalled {
-            throw HelperError.operationFailed("检测到缺少 Xcode Command Line Tools。请先在「开发环境修复」中点击“安装开发工具”，完成后再重试初始化。")
+            throw HelperError.operationFailed(L10n.k("views.user_init_wizard_view.xcode_command_line_tools_done", fallback: "检测到缺少 Xcode Command Line Tools。请先在「开发环境修复」中点击“安装开发工具”，完成后再重试初始化。"))
         }
         if !status.licenseAccepted {
-            throw HelperError.operationFailed("检测到 Xcode license 未接受。请先在「开发环境修复」中点击“同意 Xcode 许可”，完成后再重试初始化。")
+            throw HelperError.operationFailed(L10n.k("views.user_init_wizard_view.xcode_license_not_accepted_open_development_environment_repair", fallback: "检测到 Xcode license 未接受。请先在「开发环境修复」中点击“同意 Xcode 许可”，完成后再重试初始化。"))
         }
         if !status.clangAvailable {
             let details = status.detail.trimmingCharacters(in: .whitespacesAndNewlines)
             if details.isEmpty {
-                throw HelperError.operationFailed("检测到 Xcode 工具链未就绪。请先在「开发环境修复」中完成修复后再重试初始化。")
+                throw HelperError.operationFailed(L10n.k("views.user_init_wizard_view.xcode_toolsready_doneretry", fallback: "检测到 Xcode 工具链未就绪。请先在「开发环境修复」中完成修复后再重试初始化。"))
             }
-            throw HelperError.operationFailed("检测到 Xcode 工具链未就绪：\(details)")
+            throw HelperError.operationFailed(L10n.k("views.user_init_wizard_view.xcode_details", fallback: "检测到 Xcode 工具链未就绪：\(details)"))
         }
     }
 
@@ -1228,7 +1232,7 @@ struct UserInitWizardView: View {
         xcodeFixMessage = nil
         do {
             try await helperClient.installXcodeCommandLineTools()
-            xcodeFixMessage = "已触发系统安装窗口，请按提示完成安装。"
+            xcodeFixMessage = L10n.k("views.user_init_wizard_view.hintdone", fallback: "已触发系统安装窗口，请按提示完成安装。")
         } catch {
             xcodeFixMessage = error.localizedDescription
         }
@@ -1241,7 +1245,7 @@ struct UserInitWizardView: View {
         xcodeFixMessage = nil
         do {
             try await helperClient.acceptXcodeLicense()
-            xcodeFixMessage = "已执行 license 接受，正在刷新状态。"
+            xcodeFixMessage = L10n.k("views.user_init_wizard_view.license_refreshstatus", fallback: "已执行 license 接受，正在刷新状态。")
         } catch {
             xcodeFixMessage = error.localizedDescription
         }
@@ -1254,7 +1258,7 @@ struct UserInitWizardView: View {
             return
         }
         NSWorkspace.shared.open(url)
-        xcodeFixMessage = "已打开“软件更新”。若弹窗未出现，可在系统设置中手动安装 Command Line Tools。"
+        xcodeFixMessage = L10n.k("views.user_init_wizard_view.open_settings_command_line_tools", fallback: "已打开“软件更新”。若弹窗未出现，可在系统设置中手动安装 Command Line Tools。")
     }
 
     private func resumePendingStep() async {
@@ -1514,22 +1518,22 @@ struct UserInitWizardView: View {
         isStartingOpenclaw = true
         defer { isStartingOpenclaw = false }
         finishProgressMessages = []
-        appendFinishProgress("初始化已完成，正在进入概览页…")
+        appendFinishProgress(L10n.k("views.user_init_wizard_view.done_overview", fallback: "初始化已完成，正在进入概览页…"))
 
         // 先退出向导回到概览页，再在后台继续启动流程，避免用户停留在初始化界面。
         gatewayHub.markPendingStart(username: user.username)
         await completeWizardOnly()
-        appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 已切换到概览页，继续后台启动 Gateway。\n")
+        appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_switched_overview_continuing", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 已切换到概览页，继续后台启动 Gateway。\n"))
 
-        appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在启动 Gateway…\n")
+        appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_starting_gateway", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在启动 Gateway…\n"))
 
         do {
             try await helperClient.startGateway(username: user.username)
             user.isRunning = true
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动成功。\n")
+            appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_started_successfully", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动成功。\n"))
         } catch {
             // 启动失败不阻断完成状态，用户可在列表页再次启动
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动失败：\(error.localizedDescription)\n")
+            appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_start_failed", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动失败：\(error.localizedDescription)\n"))
         }
 
         let tokenReadyURL = await waitForGatewayURLWithToken(emitProgress: false)
@@ -1537,7 +1541,7 @@ struct UserInitWizardView: View {
            let url = URL(string: tokenReadyURL),
            !tokenReadyURL.isEmpty {
             NSWorkspace.shared.open(url)
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Web UI 已打开。\n")
+            appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_web_ui_opened", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Web UI 已打开。\n"))
         }
     }
 
@@ -1547,33 +1551,33 @@ struct UserInitWizardView: View {
         emitProgress: Bool = true
     ) async -> String? {
         if emitProgress {
-            appendFinishProgress("正在获取 Web UI Token…")
+            appendFinishProgress(L10n.k("views.user_init_wizard_view.web_ui_token", fallback: "正在获取 Web UI Token…"))
         } else {
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在获取 Web UI Token…\n")
+            appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_fetching_web_ui", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在获取 Web UI Token…\n"))
         }
         for attempt in 1...maxAttempts {
             let urlString = await helperClient.getGatewayURL(username: user.username)
             if gatewayToken(from: urlString) != nil {
                 if emitProgress {
-                    appendFinishProgress("Token 获取成功。")
+                    appendFinishProgress(L10n.k("views.user_init_wizard_view.token", fallback: "Token 获取成功。"))
                 } else {
-                    appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Token 获取成功。\n")
+                    appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_token_acquired_successfully", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Token 获取成功。\n"))
                 }
                 return urlString
             }
             if attempt < maxAttempts {
                 if emitProgress {
-                    appendFinishProgress("Token 暂未就绪（\(attempt)/\(maxAttempts)），继续等待…")
+                    appendFinishProgress(L10n.k("views.user_init_wizard_view.token_attempt_maxattempts_continuewaiting", fallback: "Token 暂未就绪（\(attempt)/\(maxAttempts)），继续等待…"))
                 } else {
-                    appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Token 暂未就绪（\(attempt)/\(maxAttempts)），继续等待…\n")
+                    appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_token_not_ready", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Token 暂未就绪（\(attempt)/\(maxAttempts)），继续等待…\n"))
                 }
                 try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
             }
         }
         if emitProgress {
-            appendFinishProgress("Token 获取超时，未自动打开 Web UI。")
+            appendFinishProgress(L10n.k("views.user_init_wizard_view.token_open_web_ui", fallback: "Token 获取超时，未自动打开 Web UI。"))
         } else {
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Token 获取超时，未自动打开 Web UI。\n")
+            appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_token_request_timed", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Token 获取超时，未自动打开 Web UI。\n"))
         }
         return nil
     }
@@ -1639,7 +1643,7 @@ struct UserInitWizardView: View {
         do {
             try await helperClient.saveInitState(username: user.username, json: state.toJSON())
         } catch {
-            appendLog("[state] 保存初始化状态失败：\(error.localizedDescription)\n")
+            appendLog(L10n.k("views.user_init_wizard_view.state_savestatus_error_localizeddescription", fallback: "[state] 保存初始化状态失败：\(error.localizedDescription)\n"))
         }
     }
 
@@ -1728,7 +1732,7 @@ struct UserInitWizardView: View {
             do {
                 try await helperClient.saveInitState(username: user.username, json: repaired.toJSON())
             } catch {
-                appendLog("[state] 迁移旧初始化状态失败：\(error.localizedDescription)\n")
+                appendLog(L10n.k("views.user_init_wizard_view.state_status_error_localizeddescription", fallback: "[state] 迁移旧初始化状态失败：\(error.localizedDescription)\n"))
             }
         }
 
@@ -1792,7 +1796,7 @@ struct UserInitWizardView: View {
     private func markRunningStepsAsCancelledAndPersist() async {
         var changed = false
         for step in InitStep.allCases where statuses[step.rawValue] == .running {
-            statuses[step.rawValue] = .failed("已终止")
+            statuses[step.rawValue] = .failed(L10n.k("views.user_init_wizard_view.terminated", fallback: "已终止"))
             changed = true
         }
         if changed {
@@ -1812,7 +1816,7 @@ struct UserInitWizardView: View {
     private func openMaintenanceTerminal() {
         let payload = maintenanceWindowRegistry.makePayload(
             username: user.username,
-            title: "初始化向导维护终端",
+            title: L10n.k("views.user_init_wizard_view.setup_wizard_maintenance_terminal", fallback: "初始化向导维护终端"),
             command: ["zsh", "-l"]
         )
         openWindow(id: "maintenance-terminal", value: payload)
@@ -1822,26 +1826,26 @@ struct UserInitWizardView: View {
     private func openWebUI() async {
         finishProgressMessages = []
         if !user.isRunning {
-            appendFinishProgress("Gateway 未运行，正在启动…")
+            appendFinishProgress(L10n.k("views.user_init_wizard_view.gateway_start", fallback: "Gateway 未运行，正在启动…"))
             do {
                 gatewayHub.markPendingStart(username: user.username)
                 try await helperClient.startGateway(username: user.username)
                 user.isRunning = true
-                appendFinishProgress("Gateway 启动成功。")
+                appendFinishProgress(L10n.k("views.user_init_wizard_view.gateway_start_success", fallback: "Gateway 启动成功。"))
             } catch {
-                appendFinishProgress("Gateway 启动失败：\(error.localizedDescription)")
+                appendFinishProgress(L10n.k("views.user_init_wizard_view.gateway_start_error_localizeddescription", fallback: "Gateway 启动失败：\(error.localizedDescription)"))
             }
         } else {
-            appendFinishProgress("Gateway 已运行。")
+            appendFinishProgress(L10n.k("views.user_init_wizard_view.gateway", fallback: "Gateway 已运行。"))
         }
 
         let tokenReadyURL = await waitForGatewayURLWithToken()
         if let tokenReadyURL,
            let url = URL(string: tokenReadyURL),
            !tokenReadyURL.isEmpty {
-            appendFinishProgress("正在打开 Web UI…")
+            appendFinishProgress(L10n.k("views.user_init_wizard_view.open_web_ui", fallback: "正在打开 Web UI…"))
             NSWorkspace.shared.open(url)
-            appendFinishProgress("Web UI 已打开。")
+            appendFinishProgress(L10n.k("views.user_init_wizard_view.web_ui_open", fallback: "Web UI 已打开。"))
         }
     }
 

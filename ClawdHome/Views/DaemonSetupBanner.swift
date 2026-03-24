@@ -14,7 +14,7 @@ struct DaemonSetupBanner: View {
                 .foregroundStyle(.orange)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("ClawdHome 需要安装系统服务才能管理用户")
+                Text(L10n.k("auto.daemon_setup_banner.clawdhome_user", fallback: "ClawdHome 需要安装系统服务才能管理用户"))
                     .fontWeight(.medium)
                 Text(installer.statusDescription)
                     .font(.caption)
@@ -29,12 +29,12 @@ struct DaemonSetupBanner: View {
             Spacer()
 
             if installer.status == .requiresApproval {
-                Button("打开系统设置") {
+                Button(L10n.k("auto.daemon_setup_banner.opensettings", fallback: "打开系统设置")) {
                     SMAppService.openSystemSettingsLoginItems()
                 }
                 .buttonStyle(.bordered)
             } else {
-                Button(isInstalling ? "安装中…" : "安装") {
+                Button(isInstalling ? L10n.k("auto.daemon_setup_banner.text_b2c6913616", fallback: "安装中…") : L10n.k("auto.daemon_setup_banner.install", fallback: "安装")) {
                     Task { await install() }
                 }
                 .buttonStyle(.borderedProminent)

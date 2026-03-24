@@ -13,7 +13,7 @@ actor ModelPingService {
     func ping(modelId: String, apiKey: String) async -> PingResult {
         let start = Date()
         do {
-            let _ = try await sendChat(modelId: modelId, apiKey: apiKey, message: "你好")
+            let _ = try await sendChat(modelId: modelId, apiKey: apiKey, message: L10n.k("services.model_ping_service.you", fallback: "你好"))
             return PingResult(latencyMs: Date().timeIntervalSince(start) * 1000, success: true, errorMessage: nil)
         } catch {
             // Redact API key from error message before surfacing to UI

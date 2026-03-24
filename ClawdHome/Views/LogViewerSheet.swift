@@ -67,7 +67,7 @@ struct GatewayLogViewer: View {
             HStack(spacing: 8) {
                 Picker("", selection: $lineCount) {
                     ForEach(lineOptions, id: \.self) { n in
-                        Text("最近 \(n) 行").tag(n)
+                        Text(L10n.f("views.log_viewer_sheet.text_825ac330", fallback: "最近 %@ 行", String(describing: n))).tag(n)
                     }
                 }
                 .pickerStyle(.menu)
@@ -84,23 +84,23 @@ struct GatewayLogViewer: View {
                     isPaused.toggle()
                     if !isPaused { Task { await loadLog() } }
                 } label: {
-                    Label(isPaused ? "继续" : "暂停",
+                    Label(isPaused ? L10n.k("auto.log_viewer_sheet.continue", fallback: "继续") : L10n.k("auto.log_viewer_sheet.pause", fallback: "暂停"),
                           systemImage: isPaused ? "play.fill" : "pause.fill")
                         .frame(width: 60)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
 
-                Toggle("跟随", isOn: $isFollowing)
+                Toggle(L10n.k("auto.log_viewer_sheet.follow", fallback: "跟随"), isOn: $isFollowing)
                     .toggleStyle(.checkbox)
                     .controlSize(.small)
                     .disabled(isPaused)
                 if externalSearchQuery == nil {
-                    TextField("搜索（空格分词）", text: searchQueryBinding)
+                    TextField(L10n.k("auto.log_viewer_sheet.search_space_separated_terms", fallback: "搜索（空格分词）"), text: searchQueryBinding)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 220)
                 }
-                Button("复制筛选") { copyFilteredLogs() }
+                Button(L10n.k("auto.log_viewer_sheet.copy_filtered", fallback: "复制筛选")) { copyFilteredLogs() }
                     .controlSize(.small)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -113,7 +113,7 @@ struct GatewayLogViewer: View {
     private var pauseBanner: some View {
         HStack {
             Image(systemName: "pause.circle.fill").foregroundStyle(.orange)
-            Text("刷新已暂停，内容已固定，可自由选择复制")
+            Text(L10n.k("auto.log_viewer_sheet.refresh_select", fallback: "刷新已暂停，内容已固定，可自由选择复制"))
                 .font(.caption).foregroundStyle(.secondary)
             Spacer()
         }
@@ -127,7 +127,7 @@ struct GatewayLogViewer: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(filteredLines.isEmpty ? "（日志为空）" : filteredLogText)
+                    Text(filteredLines.isEmpty ? L10n.k("auto.log_viewer_sheet.logs", fallback: "（日志为空）") : filteredLogText)
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(filteredLines.isEmpty ? .tertiary : .primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -168,10 +168,10 @@ struct GatewayLogViewer: View {
             )
         } catch {
             lines = [
-                "读取日志失败：",
+                L10n.k("auto.log_viewer_sheet.logs", fallback: "读取日志失败："),
                 error.localizedDescription,
                 "",
-                "日志路径：",
+                L10n.k("auto.log_viewer_sheet.logs", fallback: "日志路径："),
                 "/Users/\(username)/.openclaw/logs/gateway.log"
             ]
             lastDataSize = -1
@@ -184,10 +184,10 @@ struct GatewayLogViewer: View {
 
         if data.isEmpty {
             lines = [
-                "日志文件为空或不存在：",
+                L10n.k("auto.log_viewer_sheet.logsfile", fallback: "日志文件为空或不存在："),
                 "/Users/\(username)/.openclaw/logs/gateway.log",
                 "",
-                "gateway 启动后才会生成日志。"
+                L10n.k("auto.log_viewer_sheet.gateway_startlogs", fallback: "gateway 启动后才会生成日志。")
             ]
             return
         }
@@ -243,11 +243,11 @@ struct LogViewerSheet: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("日志 — @\(username)").font(.headline)
+                    Text(L10n.f("views.log_viewer_sheet.text_d8b7f1fb", fallback: "日志 — @%@", String(describing: username))).font(.headline)
                     Text(logPath).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("关闭") { dismiss() }
+                Button(L10n.k("auto.log_viewer_sheet.close", fallback: "关闭")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)

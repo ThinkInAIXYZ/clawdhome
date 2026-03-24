@@ -89,10 +89,10 @@ struct TerminalLogPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Text("日志输出")
+                Text(L10n.k("auto.terminal_log_view.logs", fallback: "日志输出"))
                     .font(.caption).fontWeight(.medium).foregroundStyle(.secondary)
                 Spacer()
-                TextField("搜索日志", text: $searchText)
+                TextField(L10n.k("auto.terminal_log_view.searchlogs", fallback: "搜索日志"), text: $searchText)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 180)
                     .font(.caption)
@@ -111,7 +111,7 @@ struct TerminalLogPanel: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Toggle("自动滚动", isOn: $autoScroll)
+                Toggle(L10n.k("auto.terminal_log_view.auto_scroll", fallback: "自动滚动"), isOn: $autoScroll)
                     .toggleStyle(.checkbox)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -362,10 +362,10 @@ struct InteractiveTerminalPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("命令输出")
+                Text(L10n.k("auto.terminal_log_view.command_output", fallback: "命令输出"))
                     .font(.caption).fontWeight(.medium).foregroundStyle(.secondary)
                 Spacer()
-                Label("交互模式", systemImage: "terminal")
+                Label(L10n.k("auto.terminal_log_view.interactive_mode", fallback: "交互模式"), systemImage: "terminal")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 8).padding(.vertical, 5)
@@ -446,7 +446,7 @@ struct LocalProcessNSView: NSViewRepresentable {
 // MARK: - 命令终端面板（执行单条 openclaw 子命令，显示输出）
 
 /// 运行指定 openclaw 子命令并展示输出，支持交互式提示响应
-/// 每次 id 变化会重新创建，实现"重跑命令"效果
+/// 每次 id 变化会重新创建，实现L10n.k("views.terminal_log_view.text_d4eec25c", fallback: "重跑命令")效果
 struct CommandTerminalPanel: View {
     let username: String
     let subcommandArgs: [String]
@@ -506,7 +506,7 @@ struct UserCommandTerminalPanel: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
-                Label("交互模式", systemImage: "keyboard")
+                Label(L10n.k("auto.terminal_log_view.interactive_mode", fallback: "交互模式"), systemImage: "keyboard")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -550,7 +550,7 @@ struct HelperMaintenanceTerminalPanel: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
-                Label("Helper 会话", systemImage: "bolt.horizontal.circle")
+                Label(L10n.k("auto.terminal_log_view.helper_session", fallback: "Helper 会话"), systemImage: "bolt.horizontal.circle")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -669,7 +669,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
         )
         // 首次打开窗口时可能恰逢 XPC 连接未就绪：自动重试一次，减少“点重跑才成功”。
         let finalResult: (Bool, String, String?)
-        if !startResult.0, startResult.2 == "未连接" {
+        if !startResult.0, startResult.2 == L10n.k("services.helper_client.disconnected", fallback: "未连接") {
             helperClient.connect()
             try? await Task.sleep(nanoseconds: 400_000_000)
             finalResult = await helperClient.startMaintenanceTerminalSession(
@@ -681,7 +681,11 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
         }
 
         guard finalResult.0 else {
-            let msg = "命令启动失败：\(finalResult.2 ?? "unknown error")\r\n"
+            let msg = L10n.f(
+                "views.terminal_log_view.command_start_failed",
+                fallback: "命令启动失败：%@\r\n",
+                finalResult.2 ?? "unknown error"
+            )
             await MainActor.run {
                 self.feedToTerminal(msg)
                 self.onOutput?(msg)
@@ -727,7 +731,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
         let (ok, chunk, nextOffset, exited, exitCode, err) = snapshot
         if !ok {
             if let err, !err.isEmpty {
-                feedToTerminal("会话错误：\(err)\r\n")
+                feedToTerminal(L10n.f("views.terminal_log_view.r_n", fallback: "会话错误：%@\\r\\n", String(describing: err)))
             }
             notifyExitOnce(code: -1)
             timer?.invalidate()
@@ -760,7 +764,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
             )
             if !ok, let err {
                 await MainActor.run { [weak self] in
-                    self?.feedToTerminal("\r\n输入失败：\(err)\r\n")
+                    self?.feedToTerminal(L10n.f("views.terminal_log_view.r_n_r_n", fallback: "\\r\\n输入失败：%@\\r\\n", String(describing: err)))
                 }
             }
         }

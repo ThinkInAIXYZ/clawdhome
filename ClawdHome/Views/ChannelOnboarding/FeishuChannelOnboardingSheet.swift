@@ -9,8 +9,8 @@ enum ChannelOnboardingFlow: String, Identifiable, CaseIterable {
 
     var title: String {
         switch self {
-        case .feishu: return "飞书"
-        case .weixin: return "微信"
+        case .feishu: return L10n.k("channel.flow.feishu.title", fallback: "飞书")
+        case .weixin: return L10n.k("channel.flow.weixin.title", fallback: "微信")
         }
     }
 
@@ -60,10 +60,14 @@ struct FeishuChannelOnboardingSheet: View {
     }
 
     private var stageTitle: String {
-        if !showTerminal { return "待开始" }
-        if isRunning { return isWaitingInput ? "运行中（等待输入）" : "运行中" }
-        if exitCode == 0 { return "已完成" }
-        return "已退出"
+        if !showTerminal { return L10n.k("channel.stage.idle", fallback: "待开始") }
+        if isRunning {
+            return isWaitingInput
+                ? L10n.k("channel.stage.running_waiting", fallback: "运行中（等待输入）")
+                : L10n.k("channel.stage.running", fallback: "运行中")
+        }
+        if exitCode == 0 { return L10n.k("channel.stage.done", fallback: "已完成") }
+        return L10n.k("channel.stage.exited", fallback: "已退出")
     }
 
     private enum PairingButtonState {
@@ -82,10 +86,10 @@ struct FeishuChannelOnboardingSheet: View {
 
     private var pairingButtonTitle: String {
         switch pairingButtonState {
-        case .idle: return "生成配对二维码"
-        case .running: return "生成中…"
-        case .succeeded: return "重新生成二维码"
-        case .failed: return "重试生成二维码"
+        case .idle: return L10n.k("channel.pairing.button.generate", fallback: "生成配对二维码")
+        case .running: return L10n.k("channel.pairing.button.generating", fallback: "生成中…")
+        case .succeeded: return L10n.k("channel.pairing.button.regenerate", fallback: "重新生成二维码")
+        case .failed: return L10n.k("channel.pairing.button.retry", fallback: "重试生成二维码")
         }
     }
 
@@ -100,10 +104,13 @@ struct FeishuChannelOnboardingSheet: View {
 
     private var pairingStatusLabelText: String {
         switch pairingButtonState {
-        case .idle: return "未开始"
-        case .running: return isWaitingInput ? "等待扫码/输入" : "命令执行中"
-        case .succeeded: return "已完成，可再次生成"
-        case .failed: return "生成失败，可重试"
+        case .idle: return L10n.k("channel.pairing.status.idle", fallback: "未开始")
+        case .running:
+            return isWaitingInput
+                ? L10n.k("channel.pairing.status.waiting_input", fallback: "等待扫码/输入")
+                : L10n.k("channel.pairing.status.running", fallback: "命令执行中")
+        case .succeeded: return L10n.k("channel.pairing.status.succeeded", fallback: "已完成，可再次生成")
+        case .failed: return L10n.k("channel.pairing.status.failed", fallback: "生成失败，可重试")
         }
     }
 
@@ -116,12 +123,12 @@ struct FeishuChannelOnboardingSheet: View {
     }
 
     private var windowTitle: String {
-        "ClawdHome 正在生产 \(username) 虾 · \(flow.title)通道配置 · \(stageTitle)"
+        L10n.f("channel.window.title", fallback: "ClawdHome 正在生产 %@ 虾 · %@ 通道配置 · %@", username, flow.title, stageTitle)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("请点击按钮生成二维码，扫码配对后给龙虾发消息测试，正常即可关闭窗口。")
+            Text(L10n.k("channel.pairing.hint", fallback: "请点击按钮生成二维码，扫码配对后给龙虾发消息测试，正常即可关闭窗口。"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
             actionRow
@@ -172,13 +179,13 @@ struct FeishuChannelOnboardingSheet: View {
             .disabled(pairingButtonState == .running)
 
             if pairingButtonState == .running {
-                Button("中断生成") {
+                Button(L10n.k("channel.pairing.button.interrupt_generation", fallback: "中断生成")) {
                     terminalControl.sendInterrupt()
                     appLog("[\(logPrefix)] ui interactive interrupt from action row @\(username)")
                 }
             }
 
-            Text("状态：\(pairingStatusLabelText)")
+            Text(L10n.f("channel.pairing.status_label", fallback: "状态：%@", pairingStatusLabelText))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -191,30 +198,32 @@ struct FeishuChannelOnboardingSheet: View {
         HStack(spacing: 10) {
             Label(
                 isRunning
-                ? (isWaitingInput ? "运行中（等待输入）" : "运行中")
-                : "已退出",
+                ? (isWaitingInput
+                   ? L10n.k("channel.stage.running_waiting", fallback: "运行中（等待输入）")
+                   : L10n.k("channel.stage.running", fallback: "运行中"))
+                : L10n.k("channel.stage.exited", fallback: "已退出"),
                 systemImage: isRunning ? (isWaitingInput ? "hourglass" : "play.circle.fill") : "stop.circle"
             )
             .font(.caption)
             .foregroundStyle(isRunning ? .secondary : .secondary)
 
-            Text("耗时 \(elapsedText)")
+            Text(L10n.f("channel.runtime.elapsed", fallback: "耗时 %@", elapsedText))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             Spacer()
 
-            Button("中断") {
+            Button(L10n.k("common.action.interrupt", fallback: "中断")) {
                 terminalControl.sendInterrupt()
                 appLog("[\(logPrefix)] ui interactive interrupt @\(username)")
             }
             .disabled(!isRunning)
 
-            Button("重跑") {
+            Button(L10n.k("common.action.rerun", fallback: "重跑")) {
                 startInteractiveRun()
             }
 
-            Button("复制输出") {
+            Button(L10n.k("common.action.copy_output", fallback: "复制输出")) {
                 copyTerminalOutput()
             }
             .disabled(outputBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -246,12 +255,12 @@ struct FeishuChannelOnboardingSheet: View {
     private func copyTerminalOutput() {
         let text = outputBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
-            statusText = "暂无可复制的命令输出。"
+            statusText = L10n.k("channel.runtime.no_output_to_copy", fallback: "暂无可复制的命令输出。")
             return
         }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        statusText = "命令输出已复制。"
+        statusText = L10n.k("channel.runtime.output_copied", fallback: "命令输出已复制。")
         appLog("[\(logPrefix)] ui interactive output copied @\(username) bytes=\(text.utf8.count)")
     }
 
@@ -259,10 +268,14 @@ struct FeishuChannelOnboardingSheet: View {
         exitCode = code
         let normalized = code ?? -999
         if normalized == 0 {
-            statusText = "命令执行完成。若终端输出了二维码，请直接扫码完成配对。"
+            statusText = L10n.k("channel.runtime.exit.success", fallback: "命令执行完成。若终端输出了二维码，请直接扫码完成配对。")
             appLog("[\(logPrefix)] ui interactive run success @\(username)")
         } else {
-            statusText = "命令已退出（exit \(normalized)）。请查看上方终端输出并重试。"
+            statusText = L10n.f(
+                "channel.runtime.exit.failed",
+                fallback: L10n.k("views.channel_onboarding.feishu_channel_onboarding_sheet.exit_num_retry", fallback: "命令已退出（exit %d）。请查看上方终端输出并重试。"),
+                normalized
+            )
             appLog("[\(logPrefix)] ui interactive run failed @\(username) exit=\(normalized)", level: .error)
         }
     }

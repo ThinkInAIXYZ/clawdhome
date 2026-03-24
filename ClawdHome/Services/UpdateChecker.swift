@@ -54,7 +54,7 @@ final class UpdateChecker {
     private static let appApiURL            = "https://clawdhome.app/api/version.json"
     private let appCacheInterval: TimeInterval = 3600
 
-    // MARK: - 初始化（从缓存恢复，避免启动时显示"加载中"）
+    // MARK: - 初始化（从缓存恢复，避免启动时显示L10n.k("services.update_checker.text_f013ea9d", fallback: "加载中")）
 
     init() {
         // openclaw 缓存
@@ -236,9 +236,9 @@ final class UpdateChecker {
 
         var errorDescription: String? {
             switch self {
-            case .invalidFile: return "下载的文件无效，请稍后重试"
-            case .httpError(let code): return "服务器返回错误 (\(code))，请稍后重试"
-            case .launchInstallerFailed: return "无法打开安装程序，请手动打开下载的 pkg"
+            case .invalidFile: return L10n.k("services.update_checker.file", fallback: "下载的文件无效，请稍后重试")
+            case .httpError(let code): return "\(L10n.k("services.update_checker.server_error_prefix", fallback: "服务器返回错误")) (\(code))，\(L10n.k("services.update_checker.retry_later_suffix", fallback: "请稍后重试"))"
+            case .launchInstallerFailed: return L10n.k("services.update_checker.open_open_pkg", fallback: "无法打开安装程序，请手动打开下载的 pkg")
             }
         }
     }
@@ -254,7 +254,7 @@ final class UpdateChecker {
         users.filter { !$0.isAdmin && needsUpdate($0.openclawVersion) }.count
     }
 
-    /// 逐段比较版本号（支持 "YYYY.M.D" 和 "1.0.180" 两种格式）
+    /// 逐段比较版本号（支持 "YYYY.M.DL10n.k("services.update_checker.text_ed4b80bf", fallback: " 和 ")1.0.180" 两种格式）
     private func compareVersions(_ a: String, _ b: String) -> ComparisonResult {
         let av = a.split(separator: ".").compactMap { Int($0) }
         let bv = b.split(separator: ".").compactMap { Int($0) }

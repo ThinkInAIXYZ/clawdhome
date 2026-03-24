@@ -118,10 +118,10 @@ private struct TextEditSheetView: View {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("编辑：\(state.entry.name)")
+                        Text(L10n.f("views.user_files_view.text_f79700ab", fallback: "编辑：%@", String(describing: state.entry.name)))
                             .font(.headline)
                         if state.entry.size == 0 {
-                            Text("文件内容为空")
+                            Text(L10n.k("auto.user_files_view.file", fallback: "文件内容为空"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -137,9 +137,9 @@ private struct TextEditSheetView: View {
                         Image(systemName: "magnifyingglass")
                     }
                     .keyboardShortcut("f", modifiers: .command)
-                    .help("查找 (⌘F)")
-                    Button("取消") { onCancel() }
-                    Button("保存") {
+                    .help(L10n.k("auto.user_files_view.f", fallback: "查找 (⌘F)"))
+                    Button(L10n.k("auto.user_files_view.cancel", fallback: "取消")) { onCancel() }
+                    Button(L10n.k("auto.user_files_view.save", fallback: "保存")) {
                         isSaving = true
                         Task {
                             await onSave(content)
@@ -193,11 +193,11 @@ private struct TextEditSheetView: View {
             let desc = error.localizedDescription
             // 提取关键信息，去掉冗长前缀
             if let range = desc.range(of: "around ") {
-                jsonError = "JSON 语法错误：\(desc[range.lowerBound...])"
+                jsonError = L10n.f("views.user_files_view.json", fallback: "JSON 语法错误：%@", String(describing: desc[range.lowerBound...]))
             } else if let range = desc.range(of: "line ") {
-                jsonError = "JSON 语法错误：\(desc[range.lowerBound...])"
+                jsonError = L10n.f("views.user_files_view.json", fallback: "JSON 语法错误：%@", String(describing: desc[range.lowerBound...]))
             } else {
-                jsonError = "JSON 语法错误"
+                jsonError = L10n.k("auto.user_files_view.json", fallback: "JSON 语法错误")
             }
         }
     }
@@ -431,11 +431,11 @@ struct UserFilesView: View {
         var label: String {
             switch self {
             case .singleUpload(let name):
-                return "正在上传 \(name)…"
+                return String(format: L10n.k("views.user_files_view.uploading_item", fallback: "正在上传 %@…"), name)
             case .folderUpload(let current, let total, let name):
-                return "正在上传 \(current)/\(total)：\(name)…"
+                return String(format: L10n.k("views.user_files_view.uploading_progress_item", fallback: "正在上传 %d/%d：%@…"), current, total, name)
             case .extracting(let name):
-                return "正在解压 \(name)…"
+                return String(format: L10n.k("views.user_files_view.extracting_item", fallback: "正在解压 %@…"), name)
             }
         }
 
@@ -475,16 +475,16 @@ struct UserFilesView: View {
 
             if !helperClient.isConnected {
                 ContentUnavailableView(
-                    "Helper 未连接",
+                    L10n.k("auto.user_files_view.helper", fallback: "Helper 未连接"),
                     systemImage: "folder.badge.questionmark",
-                    description: Text("请前往「设置 → 诊断」安装或启动 Helper")
+                    description: Text(L10n.k("auto.user_files_view.settings_start_helper", fallback: "请前往「设置 → 诊断」安装或启动 Helper"))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if selectedUser == nil {
                 ContentUnavailableView(
-                    "选择一只虾",
+                    L10n.k("auto.user_files_view.select", fallback: "选择一只虾"),
                     systemImage: "person.crop.circle",
-                    description: Text("在顶部下拉菜单选择要管理文件的虾")
+                    description: Text(L10n.k("auto.user_files_view.selectfile", fallback: "在顶部下拉菜单选择要管理文件的虾"))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -520,11 +520,11 @@ struct UserFilesView: View {
                 }
 
                 if isLoading {
-                    ProgressView("加载中…")
+                    ProgressView(L10n.k("auto.user_files_view.loading", fallback: "加载中…"))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let err = errorMessage {
                     ContentUnavailableView(
-                        "加载失败",
+                        L10n.k("auto.user_files_view.load_failed", fallback: "加载失败"),
                         systemImage: "exclamationmark.triangle",
                         description: Text(err)
                     )
@@ -557,7 +557,7 @@ struct UserFilesView: View {
                 .background(.bar)
             }
         }
-        .navigationTitle("文件")
+        .navigationTitle(L10n.k("auto.user_files_view.files", fallback: "文件"))
         .sheet(item: $textEditState) { state in
             TextEditSheetView(state: state) { savedContent in
                 await saveTextEdit(entry: state.entry, content: savedContent)
@@ -565,30 +565,30 @@ struct UserFilesView: View {
                 textEditState = nil
             }
         }
-        .alert("确认删除", isPresented: $showDeleteConfirm, presenting: selectedEntry) { entry in
-            Button("删除", role: .destructive) { Task { await deleteSelected() } }
-            Button("取消", role: .cancel) {}
+        .alert(L10n.k("auto.user_files_view.delete", fallback: "确认删除"), isPresented: $showDeleteConfirm, presenting: selectedEntry) { entry in
+            Button(L10n.k("auto.user_files_view.delete", fallback: "删除"), role: .destructive) { Task { await deleteSelected() } }
+            Button(L10n.k("auto.user_files_view.cancel", fallback: "取消"), role: .cancel) {}
         } message: { entry in
-            Text("删除「\(entry.name)」？此操作不可撤销。")
+            Text(L10n.f("views.user_files_view.text_f797a8c4", fallback: "删除「%@」？此操作不可撤销。", String(describing: entry.name)))
         }
-        .alert("新建文件夹", isPresented: $showNewFolderAlert) {
-            TextField("文件夹名称", text: $newFolderName)
-            Button("创建") { Task { await createFolder() } }
-            Button("取消", role: .cancel) { newFolderName = "" }
+        .alert(L10n.k("auto.user_files_view.folder", fallback: "新建文件夹"), isPresented: $showNewFolderAlert) {
+            TextField(L10n.k("auto.user_files_view.foldername", fallback: "文件夹名称"), text: $newFolderName)
+            Button(L10n.k("auto.user_files_view.create", fallback: "创建")) { Task { await createFolder() } }
+            Button(L10n.k("auto.user_files_view.cancel", fallback: "取消"), role: .cancel) { newFolderName = "" }
         }
-        .alert("重命名", isPresented: Binding(
+        .alert(L10n.k("auto.user_files_view.rename", fallback: "重命名"), isPresented: Binding(
             get: { renameTarget != nil },
             set: { if !$0 { renameTarget = nil } }
         ), presenting: renameTarget) { target in
-            TextField(target.isDirectory ? "文件夹名称" : "文件名（不含后缀）",
+            TextField(target.isDirectory ? L10n.k("auto.user_files_view.foldername", fallback: "文件夹名称") : L10n.k("auto.user_files_view.file_name_without_extension", fallback: "文件名（不含后缀）"),
                       text: $renameText)
-            Button("重命名") { Task { await commitRename() } }
-            Button("取消", role: .cancel) { renameTarget = nil }
+            Button(L10n.k("auto.user_files_view.rename", fallback: "重命名")) { Task { await commitRename() } }
+            Button(L10n.k("auto.user_files_view.cancel", fallback: "取消"), role: .cancel) { renameTarget = nil }
         } message: { target in
             if renameExt.isEmpty {
-                Text("重命名「\(target.name)」")
+                Text(L10n.f("views.user_files_view.text_07f4232d", fallback: "重命名「%@」", String(describing: target.name)))
             } else {
-                Text("重命名「\(target.name)」（后缀 \(renameExt) 将自动保留）")
+                Text(L10n.f("views.user_files_view.text_1b3c25ab", fallback: "重命名「%@」（后缀 %@ 将自动保留）", String(describing: target.name), String(describing: renameExt)))
             }
         }
         .onChange(of: selectedUser) { _, user in
@@ -619,8 +619,8 @@ struct UserFilesView: View {
         HStack(spacing: 12) {
             // 虾选择器：嵌入详情 Tab 时（preselectedUser != nil）隐藏
             if preselectedUser == nil {
-                Picker("虾", selection: $selectedUser) {
-                    Text("选择虾…").tag(Optional<ManagedUser>.none)
+                Picker(L10n.k("auto.user_files_view.shrimp", fallback: "虾"), selection: $selectedUser) {
+                    Text(L10n.k("auto.user_files_view.select", fallback: "选择虾…")).tag(Optional<ManagedUser>.none)
                     ForEach(users.filter { !$0.isAdmin }) { user in
                         Text(user.username).tag(Optional(user))
                     }
@@ -636,7 +636,7 @@ struct UserFilesView: View {
                 newFolderName = ""
                 showNewFolderAlert = true
             } label: {
-                Label("新建文件夹", systemImage: "folder.badge.plus")
+                Label(L10n.k("auto.user_files_view.folder", fallback: "新建文件夹"), systemImage: "folder.badge.plus")
             }
             .disabled(selectedUser == nil)
 
@@ -645,7 +645,7 @@ struct UserFilesView: View {
                 showHidden.toggle()
                 Task { await loadDirectory() }
             } label: {
-                Label(showHidden ? "隐藏隐藏文件" : "显示隐藏文件",
+                Label(showHidden ? L10n.k("auto.user_files_view.file", fallback: "隐藏隐藏文件") : L10n.k("auto.user_files_view.file", fallback: "显示隐藏文件"),
                       systemImage: showHidden ? "eye.slash" : "eye")
             }
             .disabled(selectedUser == nil)
@@ -654,7 +654,7 @@ struct UserFilesView: View {
             Button {
                 Task { await uploadFile() }
             } label: {
-                Label("上传", systemImage: "arrow.up.doc")
+                Label(L10n.k("auto.user_files_view.upload", fallback: "上传"), systemImage: "arrow.up.doc")
             }
             .disabled(selectedUser == nil)
 
@@ -662,7 +662,7 @@ struct UserFilesView: View {
             Button {
                 Task { await downloadSelected() }
             } label: {
-                Label("下载", systemImage: "arrow.down.doc")
+                Label(L10n.k("auto.user_files_view.download", fallback: "下载"), systemImage: "arrow.down.doc")
             }
             .disabled(selectedEntry == nil || selectedEntry?.isDirectory == true)
 
@@ -670,7 +670,7 @@ struct UserFilesView: View {
             Button {
                 Task { await openTextEditor() }
             } label: {
-                Label("编辑", systemImage: "pencil")
+                Label(L10n.k("auto.user_files_view.edit", fallback: "编辑"), systemImage: "pencil")
             }
             .disabled(!canEditSelected)
 
@@ -678,16 +678,16 @@ struct UserFilesView: View {
             Button {
                 openTerminalAtCurrentPath()
             } label: {
-                Label("终端", systemImage: "apple.terminal")
+                Label(L10n.k("auto.user_files_view.terminal", fallback: "终端"), systemImage: "apple.terminal")
             }
             .disabled(selectedUser == nil)
-            .help("在终端打开当前目录")
+            .help(L10n.k("auto.user_files_view.opendirectory", fallback: "在终端打开当前目录"))
 
             // 删除
             Button {
                 showDeleteConfirm = true
             } label: {
-                Label("删除", systemImage: "trash")
+                Label(L10n.k("auto.user_files_view.delete", fallback: "删除"), systemImage: "trash")
                     .foregroundStyle(selectedEntry != nil ? .red : .secondary)
             }
             .disabled(selectedEntry == nil)
@@ -769,11 +769,11 @@ struct UserFilesView: View {
             Button {
                 copyCurrentPathToPasteboard()
             } label: {
-                Label("复制当前路径", systemImage: "doc.on.doc")
+                Label(L10n.k("auto.user_files_view.copy_current_path", fallback: "复制当前路径"), systemImage: "doc.on.doc")
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
-            .help("复制当前目录路径")
+            .help(L10n.k("auto.user_files_view.directory", fallback: "复制当前目录路径"))
         }
         .font(.subheadline)
     }
@@ -784,7 +784,7 @@ struct UserFilesView: View {
         HStack(spacing: 8) {
             Image(systemName: "arrow.down.doc")
                 .foregroundStyle(.secondary)
-            Text("支持将文件或文件夹直接拖入下方列表上传到当前目录")
+            Text(L10n.k("auto.user_files_view.filefolderdirectory", fallback: "支持将文件或文件夹直接拖入下方列表上传到当前目录"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -796,7 +796,7 @@ struct UserFilesView: View {
 
     private var fileList: some View {
         Table(entries, selection: $selectedEntryIDs) {
-            TableColumn("名称") { entry in
+            TableColumn(L10n.k("auto.user_files_view.name", fallback: "名称")) { entry in
                 HStack(spacing: 6) {
                     Image(systemName: entry.isDirectory ? "folder.fill" : fileIcon(for: entry.name))
                         .foregroundStyle(entry.isDirectory ? .yellow : .secondary)
@@ -810,7 +810,7 @@ struct UserFilesView: View {
             }
             .width(min: 160, ideal: 280)
 
-            TableColumn("大小") { entry in
+            TableColumn(L10n.k("auto.user_files_view.size", fallback: "大小")) { entry in
                 if entry.isDirectory {
                     Text("—").foregroundStyle(.secondary)
                 } else {
@@ -819,7 +819,7 @@ struct UserFilesView: View {
             }
             .width(min: 60, ideal: 80)
 
-            TableColumn("修改时间") { entry in
+            TableColumn(L10n.k("auto.user_files_view.modified_at", fallback: "修改时间")) { entry in
                 if let date = entry.modifiedAt {
                     Text(date.formatted(date: .abbreviated, time: .shortened))
                 } else {
@@ -828,7 +828,7 @@ struct UserFilesView: View {
             }
             .width(min: 120, ideal: 160)
 
-            TableColumn("所有者") { entry in
+            TableColumn(L10n.k("auto.user_files_view.owner", fallback: "所有者")) { entry in
                 if let owner = entry.ownerUsername {
                     let isExpected = owner == selectedUser?.username
                     Text(owner)
@@ -850,22 +850,22 @@ struct UserFilesView: View {
         .contextMenu(forSelectionType: String.self) { ids in
             if ids.isEmpty {
                 Button { Task { await uploadFile() } } label: {
-                    Label("上传文件或文件夹…", systemImage: "arrow.up.doc")
+                    Label(L10n.k("auto.user_files_view.filefolder", fallback: "上传文件或文件夹…"), systemImage: "arrow.up.doc")
                 }
                 Button {
                     newFolderName = ""
                     showNewFolderAlert = true
                 } label: {
-                    Label("新建文件夹…", systemImage: "folder.badge.plus")
+                    Label(L10n.k("auto.user_files_view.folder", fallback: "新建文件夹…"), systemImage: "folder.badge.plus")
                 }
                 Divider()
                 Button { openTerminalAtCurrentPath() } label: {
-                    Label("在终端中打开", systemImage: "apple.terminal")
+                    Label(L10n.k("auto.user_files_view.open", fallback: "在终端中打开"), systemImage: "apple.terminal")
                 }
                 Button {
                     copyCurrentPathToPasteboard()
                 } label: {
-                    Label("复制当前路径", systemImage: "doc.on.doc")
+                    Label(L10n.k("auto.user_files_view.copy_current_path", fallback: "复制当前路径"), systemImage: "doc.on.doc")
                 }
             } else if let id = ids.first,
                       let entry = entries.first(where: { $0.id == id }) {
@@ -874,24 +874,24 @@ struct UserFilesView: View {
                         selectedEntryIDs = [entry.id]
                         navigateInto(entry)
                     } label: {
-                        Label("进入目录", systemImage: "folder.fill")
+                        Label(L10n.k("auto.user_files_view.directory", fallback: "进入目录"), systemImage: "folder.fill")
                     }
                     Divider()
-                    Button("重命名…") {
+                    Button(L10n.k("auto.user_files_view.rename", fallback: "重命名…")) {
                         selectedEntryIDs = [entry.id]
                         beginRename(entry)
                     }
                     Divider()
                     Button { openTerminalAtCurrentPath() } label: {
-                        Label("在终端中打开", systemImage: "apple.terminal")
+                        Label(L10n.k("auto.user_files_view.open", fallback: "在终端中打开"), systemImage: "apple.terminal")
                     }
                     Button {
                         copyEntryPathToPasteboard(entry)
                     } label: {
-                        Label("复制路径", systemImage: "doc.on.doc")
+                        Label(L10n.k("auto.user_files_view.copy_path", fallback: "复制路径"), systemImage: "doc.on.doc")
                     }
                     Divider()
-                    Button("删除…", role: .destructive) {
+                    Button(L10n.k("auto.user_files_view.delete", fallback: "删除…"), role: .destructive) {
                         selectedEntryIDs = [entry.id]
                         showDeleteConfirm = true
                     }
@@ -900,38 +900,38 @@ struct UserFilesView: View {
                         selectedEntryIDs = [entry.id]
                         Task { await openTextEditor() }
                     } label: {
-                        Label("编辑", systemImage: "pencil")
+                        Label(L10n.k("auto.user_files_view.edit", fallback: "编辑"), systemImage: "pencil")
                     }
                     Button {
                         selectedEntryIDs = [entry.id]
                         Task { await downloadSelected() }
                     } label: {
-                        Label("下载", systemImage: "arrow.down.doc")
+                        Label(L10n.k("auto.user_files_view.download", fallback: "下载"), systemImage: "arrow.down.doc")
                     }
                     if isArchive(entry.name) {
                         Button {
                             selectedEntryIDs = [entry.id]
                             Task { await extractSelected() }
                         } label: {
-                            Label("解压到当前目录", systemImage: "archivebox.circle")
+                            Label(L10n.k("auto.user_files_view.directory", fallback: "解压到当前目录"), systemImage: "archivebox.circle")
                         }
                     }
                     Divider()
-                    Button("重命名…") {
+                    Button(L10n.k("auto.user_files_view.rename", fallback: "重命名…")) {
                         selectedEntryIDs = [entry.id]
                         beginRename(entry)
                     }
                     Divider()
                     Button { openTerminalAtCurrentPath() } label: {
-                        Label("在终端中打开", systemImage: "apple.terminal")
+                        Label(L10n.k("auto.user_files_view.open", fallback: "在终端中打开"), systemImage: "apple.terminal")
                     }
                     Button {
                         copyEntryPathToPasteboard(entry)
                     } label: {
-                        Label("复制路径", systemImage: "doc.on.doc")
+                        Label(L10n.k("auto.user_files_view.copy_path", fallback: "复制路径"), systemImage: "doc.on.doc")
                     }
                     Divider()
-                    Button("删除…", role: .destructive) {
+                    Button(L10n.k("auto.user_files_view.delete", fallback: "删除…"), role: .destructive) {
                         selectedEntryIDs = [entry.id]
                         showDeleteConfirm = true
                     }
@@ -955,7 +955,7 @@ struct UserFilesView: View {
                             .stroke(Color.accentColor.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
                     )
                     .overlay(
-                        Label("拖入文件或文件夹上传到当前目录", systemImage: "arrow.down.doc.fill")
+                        Label(L10n.k("auto.user_files_view.filefolderdirectory", fallback: "拖入文件或文件夹上传到当前目录"), systemImage: "arrow.down.doc.fill")
                             .font(.callout.weight(.semibold))
                             .foregroundStyle(Color.accentColor)
                             .padding(.horizontal, 14)
@@ -1114,7 +1114,7 @@ struct UserFilesView: View {
         await loadDirectory()
         if !failures.isEmpty {
             let head = failures.prefix(2).joined(separator: "；")
-            operationError = failures.count > 2 ? "\(head)；等 \(failures.count) 项失败" : head
+            operationError = failures.count > 2 ? L10n.f("views.user_files_view.text_1de5d3a2", fallback: "%@；等 %@ 项失败", String(describing: head), String(describing: failures.count)) : head
         }
     }
 
@@ -1134,7 +1134,7 @@ struct UserFilesView: View {
         defer { if scoped { srcURL.stopAccessingSecurityScopedResource() } }
 
         guard let data = try? Data(contentsOf: srcURL) else {
-            return "无法读取本地文件"
+            return L10n.k("views.user_files_view.localfile", fallback: "无法读取本地文件")
         }
 
         let destRel = currentPath.isEmpty
@@ -1162,7 +1162,7 @@ struct UserFilesView: View {
             includingPropertiesForKeys: [.isDirectoryKey],
             options: []
         ) else {
-            return "无法枚举文件夹内容"
+            return L10n.k("views.user_files_view.folder", fallback: "无法枚举文件夹内容")
         }
 
         // 先收集所有条目以便显示总数
@@ -1178,7 +1178,7 @@ struct UserFilesView: View {
         do {
             try await helperClient.createDirectory(username: user.username, relativePath: baseRel)
         } catch {
-            return "创建目录失败：\(error.localizedDescription)"
+            return String(format: L10n.k("views.user_files_view.create_directory_failed_detail", fallback: "创建目录失败：%@"), error.localizedDescription)
         }
 
         var failedItems: [String] = []
@@ -1204,7 +1204,11 @@ struct UserFilesView: View {
 
         if reloadAfter { await loadDirectory() }
         if !failedItems.isEmpty {
-            return "部分文件上传失败：\(failedItems.prefix(3).joined(separator: ", "))\(failedItems.count > 3 ? " 等 \(failedItems.count) 项" : "")"
+            let preview = failedItems.prefix(3).joined(separator: ", ")
+            if failedItems.count > 3 {
+                return String(format: L10n.k("views.user_files_view.partial_upload_failed_items_count", fallback: "部分文件上传失败：%@ 等 %d 项"), preview, failedItems.count)
+            }
+            return String(format: L10n.k("views.user_files_view.partial_upload_failed_items", fallback: "部分文件上传失败：%@"), preview)
         }
         return nil
     }
@@ -1238,7 +1242,7 @@ struct UserFilesView: View {
         do {
             let data = try await helperClient.readFile(username: user.username, relativePath: entry.path)
             if looksLikeBinary(data) {
-                operationError = "「\(entry.name)」是二进制文件，无法用文本编辑器打开"
+                operationError = L10n.f("views.user_files_view.text_92ed1d85", fallback: "「%@」是二进制文件，无法用文本编辑器打开", String(describing: entry.name))
                 return
             }
             let content = String(data: data, encoding: .utf8)
@@ -1254,7 +1258,7 @@ struct UserFilesView: View {
         guard let user = selectedUser else { return }
         do {
             guard let data = content.data(using: .utf8) else {
-                operationError = "内容编码失败"
+                operationError = L10n.k("auto.user_files_view.failed", fallback: "内容编码失败")
                 return
             }
             try await helperClient.writeFile(username: user.username, relativePath: entry.path, data: data)
@@ -1303,7 +1307,7 @@ struct UserFilesView: View {
         let escaped = fullPath.replacingOccurrences(of: "'", with: "'\\''")
         let payload = maintenanceWindowRegistry.makePayload(
             username: user.username,
-            title: "文件管理终端",
+            title: L10n.k("auto.user_files_view.file", fallback: "文件管理终端"),
             command: ["zsh", "-lc", "cd '\(escaped)' && exec /bin/zsh -l"]
         )
         openWindow(id: "maintenance-terminal", value: payload)

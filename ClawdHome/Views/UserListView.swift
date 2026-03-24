@@ -112,18 +112,18 @@ struct ClawPoolView: View {
                 selectedClaw = nil
             }
         }
-        .navigationTitle("虾塘")
+        .navigationTitle(L10n.k("views.user_list_view.claw_pool", fallback: "虾塘"))
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Picker("视图模式", selection: $isCardView) {
-                    Label("卡片", systemImage: "square.grid.2x2").tag(true)
-                    Label("列表", systemImage: "list.bullet").tag(false)
+                Picker(L10n.k("views.user_list_view.view_mode", fallback: "视图模式"), selection: $isCardView) {
+                    Label(L10n.k("views.user_list_view.cards", fallback: "卡片"), systemImage: "square.grid.2x2").tag(true)
+                    Label(L10n.k("views.user_list_view.list", fallback: "列表"), systemImage: "list.bullet").tag(false)
                 }
                 .pickerStyle(.segmented)
-                .help(isCardView ? "切换到列表视图" : "切换到卡片视图")
+                .help(isCardView ? L10n.k("views.user_list_view.switch_list_view", fallback: "切换到列表视图") : L10n.k("views.user_list_view.switch_card_view", fallback: "切换到卡片视图"))
             }
             ToolbarItem(placement: .primaryAction) {
-                Button { showAddSheet = true } label: { Label("添加", systemImage: "plus") }
+                Button { showAddSheet = true } label: { Label(L10n.k("views.user_list_view.add", fallback: "添加"), systemImage: "plus") }
                     .disabled(isCreatingUser)
             }
         }
@@ -155,7 +155,7 @@ struct ClawPoolView: View {
             }
         }
         .confirmationDialog(
-            "确认速冻",
+            L10n.k("views.user_list_view.confirm_flash_freeze", fallback: "确认速冻"),
             isPresented: Binding(
                 get: { pendingFlashFreezeClawID != nil },
                 set: { newValue in
@@ -164,7 +164,7 @@ struct ClawPoolView: View {
             ),
             titleVisibility: .visible
         ) {
-            Button("速冻", role: .destructive) {
+            Button(L10n.k("models.managed_user.flash_freeze", fallback: "速冻"), role: .destructive) {
                 guard let id = pendingFlashFreezeClawID,
                       let claw = displayedUsers.first(where: { $0.id == id }) else {
                     pendingFlashFreezeClawID = nil
@@ -173,23 +173,23 @@ struct ClawPoolView: View {
                 pendingFlashFreezeClawID = nil
                 Task { await freezeClaw(claw, mode: .flash) }
             }
-            Button("取消", role: .cancel) {
+            Button(L10n.k("views.user_list_view.cancel", fallback: "取消"), role: .cancel) {
                 pendingFlashFreezeClawID = nil
             }
         } message: {
-            Text("将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。")
+            Text(L10n.k("views.user_list_view.userprocess_openclaw_process_start", fallback: "将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。"))
         }
         .alert(
-            "文件快传结果",
+            L10n.k("views.user_list_view.file", fallback: "文件快传结果"),
             isPresented: Binding(
                 get: { quickTransferAlertMessage != nil },
                 set: { show in if !show { quickTransferAlertMessage = nil } }
             )
         ) {
-            Button("复制路径") {
+            Button(L10n.k("views.user_list_view.copy_path", fallback: "复制路径")) {
                 QuickFileTransferService.copyToPasteboard(quickTransferClipboardText)
             }
-            Button("知道了", role: .cancel) {
+            Button(L10n.k("views.user_list_view.got", fallback: "知道了"), role: .cancel) {
                 quickTransferAlertMessage = nil
             }
         } message: {
@@ -219,20 +219,20 @@ struct ClawPoolView: View {
         if claw.openclawVersion != nil {
             if isFrozen {
                 Button { Task { await unfreezeClaw(claw) } } label: {
-                    Label("解除冻结", systemImage: "snowflake.slash")
+                    Label(L10n.k("views.user_list_view.freeze", fallback: "解除冻结"), systemImage: "snowflake.slash")
                 }
                 if claw.hasFreezeWarning, let mode = claw.freezeMode {
                     if mode == .flash {
                         Button(role: .destructive) {
                             pendingFlashFreezeClawID = claw.id
                         } label: {
-                            Label("重新执行\(mode.title)", systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+                            Label(L10n.k("views.user_list_view.mode_title", fallback: "重新执行\(mode.title)"), systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
                         }
                     } else {
                         Button {
                             Task { await freezeClaw(claw, mode: mode) }
                         } label: {
-                            Label("重新执行\(mode.title)", systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+                            Label(L10n.k("views.user_list_view.mode_title", fallback: "重新执行\(mode.title)"), systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
                         }
                     }
                 }
@@ -244,42 +244,42 @@ struct ClawPoolView: View {
                             do {
                                 try await helperClient.startGateway(username: claw.username)
                                 claw.isRunning = true
-                            } catch { quickActionError = "启动失败：\(error.localizedDescription)" }
+                            } catch { quickActionError = String(format: L10n.k("views.user_list_view.start_failed_detail", fallback: "启动失败：%@"), error.localizedDescription) }
                         }
-                    } label: { Label("启动 Gateway", systemImage: "play.fill") }
+                    } label: { Label(L10n.k("views.user_list_view.start_gateway", fallback: "启动 Gateway"), systemImage: "play.fill") }
                 } else {
                     Button {
                         Task {
                             do {
                                 try await helperClient.stopGateway(username: claw.username)
                                 claw.isRunning = false
-                            } catch { quickActionError = "停止失败：\(error.localizedDescription)" }
+                            } catch { quickActionError = String(format: L10n.k("views.user_list_view.stop_failed_detail", fallback: "停止失败：%@"), error.localizedDescription) }
                         }
-                    } label: { Label("停止 Gateway", systemImage: "stop.fill") }
+                    } label: { Label(L10n.k("views.user_list_view.stop_gateway", fallback: "停止 Gateway"), systemImage: "stop.fill") }
 
                     Button {
                         Task {
                             do { try await helperClient.restartGateway(username: claw.username) }
-                            catch { quickActionError = "重启失败：\(error.localizedDescription)" }
+                            catch { quickActionError = String(format: L10n.k("views.user_list_view.restart_failed_detail", fallback: "重启失败：%@"), error.localizedDescription) }
                         }
-                    } label: { Label("重启 Gateway", systemImage: "arrow.clockwise") }
+                    } label: { Label(L10n.k("views.user_list_view.restart_gateway", fallback: "重启 Gateway"), systemImage: "arrow.clockwise") }
                 }
 
                 Divider()
-                Menu("冻结…") {
+                Menu(L10n.k("views.user_list_view.freeze_menu_title", fallback: "冻结…")) {
                     Button {
                         Task { await freezeClaw(claw, mode: .pause) }
-                    } label: { Label("暂停冻结（可恢复）", systemImage: "pause.circle") }
+                    } label: { Label(L10n.k("views.user_list_view.pause_freeze_recoverable", fallback: "暂停冻结（可恢复）"), systemImage: "pause.circle") }
                     Button {
                         Task { await freezeClaw(claw, mode: .normal) }
-                    } label: { Label("普通冻结（停止 Gateway）", systemImage: "snowflake") }
+                    } label: { Label(L10n.k("views.user_list_view.freeze_stop_gateway", fallback: "普通冻结（停止 Gateway）"), systemImage: "snowflake") }
                     Button(role: .destructive) {
                         pendingFlashFreezeClawID = claw.id
-                    } label: { Label("速冻（紧急终止进程）", systemImage: "bolt.fill") }
+                    } label: { Label(L10n.k("views.user_list_view.flash_freeze_emergency_kill", fallback: "速冻（紧急终止进程）"), systemImage: "bolt.fill") }
                 }
             }
             Button { Task { await openWebUI(for: claw) } } label: {
-                Label("打开 Web UI", systemImage: "globe")
+                Label(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"), systemImage: "globe")
             }
             .disabled(claw.isFrozen)
         }
@@ -289,19 +289,19 @@ struct ClawPoolView: View {
     private func sessionMenuItems(for claw: ManagedUser) -> some View {
         Button {
             openWindow(id: "claw-detail", value: claw.username)
-        } label: { Label("在新窗口打开", systemImage: "macwindow.on.rectangle") }
+        } label: { Label(L10n.k("views.user_list_view.open", fallback: "在新窗口打开"), systemImage: "macwindow.on.rectangle") }
 
         Button { openTerminal(for: claw) } label: {
-            Label("打开终端", systemImage: "terminal")
+            Label(L10n.k("views.user_list_view.open_terminal_action", fallback: "打开终端"), systemImage: "terminal")
         }
     }
 
     @ViewBuilder
     private func toolMenuItems(for claw: ManagedUser) -> some View {
-        Button { toolSheet = .log(claw.username)      } label: { Label("查看日志", systemImage: "doc.text")      }
-        Button { toolSheet = .password(claw.username) } label: { Label("查看密码", systemImage: "key")           }
+        Button { toolSheet = .log(claw.username)      } label: { Label(L10n.k("views.user_list_view.logs", fallback: "查看日志"), systemImage: "doc.text")      }
+        Button { toolSheet = .password(claw.username) } label: { Label(L10n.k("views.user_list_view.password", fallback: "查看密码"), systemImage: "key")           }
         Button { cloneClawSourceUser = claw } label: {
-            Label("克隆新虾…", systemImage: "doc.on.doc")
+            Label(L10n.k("views.user_list_view.clone_shrimp", fallback: "克隆新虾…"), systemImage: "doc.on.doc")
         }
         .disabled(claw.openclawVersion == nil)
     }
@@ -314,9 +314,9 @@ struct ClawPoolView: View {
                     do {
                         try await helperClient.logoutUser(username: claw.username)
                         claw.isRunning = false
-                    } catch { quickActionError = "注销失败：\(error.localizedDescription)" }
+                    } catch { quickActionError = String(format: L10n.k("views.user_list_view.logout_failed_detail", fallback: "注销失败：%@"), error.localizedDescription) }
                 }
-            } label: { Label("注销会话", systemImage: "arrow.uturn.left") }
+            } label: { Label(L10n.k("views.user_list_view.session", fallback: "注销会话"), systemImage: "arrow.uturn.left") }
             Divider()
         }
         Button(role: .destructive) {
@@ -324,7 +324,7 @@ struct ClawPoolView: View {
             contextDeleteAdminPassword = ""
             contextDeleteError = nil
             contextMenuUser = claw   // 设置 item，sheet 自动弹出
-        } label: { Label("删除用户…", systemImage: "trash") }
+        } label: { Label(L10n.k("views.user_list_view.deleteuser", fallback: "删除用户…"), systemImage: "trash") }
     }
 
     // MARK: - 列表视图
@@ -337,13 +337,13 @@ struct ClawPoolView: View {
             }
             .width(24)
 
-            TableColumn("名称") { claw in
+            TableColumn(L10n.k("views.user_list_view.name", fallback: "名称")) { claw in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
                         Text(claw.fullName.isEmpty ? claw.username : claw.fullName)
                             .fontWeight(.medium)
                         if claw.isAdmin {
-                            Text("管理员")
+                            Text(L10n.k("views.user_list_view.admin", fallback: "管理员"))
                                 .font(.caption2).fontWeight(.medium)
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 5).padding(.vertical, 1)
@@ -364,19 +364,19 @@ struct ClawPoolView: View {
             }
             .width(min: 100, ideal: 140)
 
-            TableColumn("类型") { claw in
+            TableColumn(L10n.k("views.user_list_view.type", fallback: "类型")) { claw in
                 Text(claw.clawType.displayName).foregroundStyle(.secondary)
             }
             .width(80)
 
-            TableColumn("副标识") { claw in
+            TableColumn(L10n.k("views.user_list_view.secondary_id", fallback: "副标识")) { claw in
                 Text(claw.identifier)
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
             .width(min: 80, ideal: 120)
 
-            TableColumn("版本") { claw in
+            TableColumn(L10n.k("views.user_list_view.version", fallback: "版本")) { claw in
                 if let v = claw.openclawVersionLabel {
                     HStack(spacing: 3) {
                         Text(v).monospacedDigit()
@@ -388,7 +388,7 @@ struct ClawPoolView: View {
                         }
                     }
                     .help(updater.needsUpdate(claw.openclawVersion)
-                          ? "可升级到 v\(updater.latestVersion ?? "")"
+                          ? L10n.k("views.user_list_view.upgrade_v_updater_latestversion", fallback: "可升级到 v\(updater.latestVersion ?? "")")
                           : "")
                 } else {
                     Text("—").foregroundStyle(.tertiary)
@@ -396,12 +396,12 @@ struct ClawPoolView: View {
             }
             .width(110)
 
-            TableColumn("状态") { claw in
+            TableColumn(L10n.k("views.user_list_view.status", fallback: "状态")) { claw in
                 clawStatusView(claw)
             }
             .width(90)
 
-            TableColumn("运行时长") { claw in
+            TableColumn(L10n.k("views.user_list_view.runtime", fallback: "运行时长")) { claw in
                 if let started = claw.startedAt {
                     Text(started, style: .relative).foregroundStyle(.secondary).monospacedDigit()
                 } else {
@@ -410,7 +410,7 @@ struct ClawPoolView: View {
             }
             .width(80)
 
-            TableColumn("资源占用") { claw in
+            TableColumn(L10n.k("views.user_list_view.resource_usage", fallback: "资源占用")) { claw in
                 let hasStorage = claw.openclawDirBytes > 0
                 if claw.cpuPercent != nil || claw.memRssMB != nil || hasStorage {
                     HStack(spacing: 5) {
@@ -443,20 +443,20 @@ struct ClawPoolView: View {
             }
             .width(150)
 
-            TableColumn("操作") { claw in
+            TableColumn(L10n.k("views.user_list_view.actions", fallback: "操作")) { claw in
                 HStack(spacing: 10) {
                     if claw.openclawVersion != nil {
                         Button { Task { await openWebUI(for: claw) } } label: {
                             Image(systemName: "globe").foregroundStyle(Color.accentColor)
                         }
                         .buttonStyle(.plain)
-                        .help("打开 Web UI")
+                        .help(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"))
                     }
                     Button { openTerminal(for: claw) } label: {
                         Image(systemName: "terminal").foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .help("打开终端")
+                    .help(L10n.k("views.user_list_view.open_terminal_action", fallback: "打开终端"))
                 }
             }
             .width(88)
@@ -532,7 +532,7 @@ struct ClawPoolView: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
                     .font(.system(size: 10, weight: .semibold))
-                Text("冻结异常")
+                Text(L10n.k("views.user_list_view.freeze_warning", fallback: "冻结异常"))
                     .foregroundStyle(.orange)
             }
             .help(claw.freezeWarning ?? "")
@@ -588,11 +588,11 @@ struct ClawPoolView: View {
     private func verifyAdminPassword(user: String, password: String) async throws {
         let trimmed = password.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw HelperError.operationFailed("请输入管理员登录密码")
+            throw HelperError.operationFailed(L10n.k("views.user_list_view.inputadminpassword", fallback: "请输入管理员登录密码"))
         }
         try await Task.detached(priority: .userInitiated) {
             let nodes = ["/Local/Default", "/Search"]
-            var lastError = "密码错误或无权限"
+            var lastError = L10n.k("views.user_list_view.password_error_or_no_permission", fallback: "密码错误或无权限")
 
             for node in nodes {
                 let proc = Process()
@@ -612,14 +612,14 @@ struct ClawPoolView: View {
                 if !out.isEmpty { lastError = out }
             }
 
-            throw HelperError.operationFailed("管理员密码校验失败：\(lastError)\n请填写该 macOS 账户的登录密码（不是用户名）")
+            throw HelperError.operationFailed(L10n.k("views.user_list_view.adminpassword_lasterror_macos_accountpassword_username", fallback: "管理员密码校验失败：\(lastError)\n请填写该 macOS 账户的登录密码（不是用户名）"))
         }.value
     }
 
     private func deleteUserViaSysadminctl(username: String, keepHome: Bool, adminPassword: String) async throws {
         let trimmed = adminPassword.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw HelperError.operationFailed("请输入管理员登录密码")
+            throw HelperError.operationFailed(L10n.k("views.user_list_view.inputadminpassword", fallback: "请输入管理员登录密码"))
         }
         let timeoutSeconds: TimeInterval = 30
 
@@ -637,19 +637,19 @@ struct ClawPoolView: View {
                 )
             } catch UserDeleteCommandError.timeout {
                 appLog("[user-delete] command timeout @\(username)", level: .error)
-                throw HelperError.operationFailed("管理员权限校验超时，请重试")
+                throw HelperError.operationFailed(L10n.k("views.user_list_view.admin_privilege_check_timeout", fallback: "管理员权限校验超时，请重试"))
             }
 
             if verify.status != 0 {
                 let verifyOutput = verify.output
                 let normalized = verifyOutput.lowercased()
                 if normalized.contains("incorrect password") || normalized.contains("sorry, try again") {
-                    throw HelperError.operationFailed("管理员密码错误，请重试")
+                    throw HelperError.operationFailed(L10n.k("views.user_list_view.adminpassword", fallback: "管理员密码错误，请重试"))
                 }
                 if !verifyOutput.isEmpty {
-                    throw HelperError.operationFailed("管理员权限校验失败：\(verifyOutput)")
+                    throw HelperError.operationFailed(L10n.k("views.user_list_view.admin_verifyoutput", fallback: "管理员权限校验失败：\(verifyOutput)"))
                 }
-                throw HelperError.operationFailed("管理员权限校验失败")
+                throw HelperError.operationFailed(L10n.k("views.user_list_view.admin_privilege_check_failed", fallback: "管理员权限校验失败"))
             }
 
             var sudoArgs = ["-S", "-p", "", "/usr/sbin/sysadminctl", "-deleteUser", username]
@@ -666,14 +666,14 @@ struct ClawPoolView: View {
                 let output = result.output
                 if output.lowercased().contains("unknown user") { return }
                 if output.isEmpty {
-                    throw HelperError.operationFailed("删除用户失败：sysadminctl exit \(result.status)")
+                    throw HelperError.operationFailed(L10n.k("views.user_list_view.deleteuser_sysadminctl_exit_result_status", fallback: "删除用户失败：sysadminctl exit \(result.status)"))
                 }
-                throw HelperError.operationFailed("删除用户失败：\(output)")
+                throw HelperError.operationFailed(L10n.k("views.user_list_view.deleteuser_output", fallback: "删除用户失败：\(output)"))
             }
 
             if !waitForUserRecordRemoval(username: username, retries: 40, sleepMs: 250) {
                 appLog("[user-delete] record still exists after command @\(username)", level: .warn)
-                throw HelperError.operationFailed("删除用户 \(username) 后校验失败：系统记录仍存在")
+                throw HelperError.operationFailed(L10n.k("views.user_list_view.deleteuser_username", fallback: "删除用户 \(username) 后校验失败：系统记录仍存在"))
             }
             appLog("[user-delete] success @\(username)")
         }.value
@@ -783,7 +783,7 @@ struct ClawPoolView: View {
 
     private func openWebUI(for claw: ManagedUser) async {
         guard !claw.isFrozen else {
-            quickActionError = "@\(claw.username) \(claw.freezeMode?.statusLabel ?? "已冻结")，请先解除冻结再启动 Gateway"
+            quickActionError = L10n.k("views.user_list_view.claw_username_claw_freezemode_statuslabel", fallback: "@\(claw.username) \(claw.freezeMode?.statusLabel ?? "已冻结")，请先解除冻结再启动 Gateway")
             return
         }
         if !claw.isRunning {
@@ -802,7 +802,7 @@ struct ClawPoolView: View {
     private func openTerminal(for claw: ManagedUser) {
         let payload = maintenanceWindowRegistry.makePayload(
             username: claw.username,
-            title: "命令行维护（高级）",
+            title: L10n.k("views.user_list_view.cli_maintenance_advanced", fallback: "命令行维护（高级）"),
             command: ["zsh", "-l"]
         )
         openWindow(id: "maintenance-terminal", value: payload)
@@ -839,7 +839,7 @@ struct ClawPoolView: View {
                 }
                 if !failedPIDs.isEmpty {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
-                    throw HelperError.operationFailed("@\(claw.username) 暂停冻结部分失败，未挂起 PID: \(pidList)")
+                    throw HelperError.operationFailed(L10n.k("views.user_list_view.claw_username_freeze_pid_pidlist", fallback: "@\(claw.username) 暂停冻结部分失败，未挂起 PID: \(pidList)"))
                 }
                 pool.setFrozen(
                     true,
@@ -865,7 +865,7 @@ struct ClawPoolView: View {
                 }
                 if !failedPIDs.isEmpty {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
-                    throw HelperError.operationFailed("@\(claw.username) 速冻部分失败，未终止 PID: \(pidList)")
+                    throw HelperError.operationFailed(L10n.k("views.user_list_view.claw_username_pid_pidlist", fallback: "@\(claw.username) 速冻部分失败，未终止 PID: \(pidList)"))
                 }
                 // 二次 stop，防止状态滞后导致 launchd/job 被重新拉起。
                 try? await helperClient.stopGateway(username: claw.username)
@@ -875,7 +875,7 @@ struct ClawPoolView: View {
                     .filter(ProcessEmergencyFreezeResolver.isOpenclawRelated)
                 if !remaining.isEmpty {
                     let pidList = remaining.prefix(8).map { String($0.pid) }.joined(separator: ",")
-                    throw HelperError.operationFailed("@\(claw.username) 速冻后检测到进程仍在运行（可能被自动拉起），PID: \(pidList)")
+                    throw HelperError.operationFailed(L10n.k("views.user_list_view.claw_username_processes_still_running_after_flash_freeze", fallback: "@\(claw.username) 速冻后检测到进程仍在运行（可能被自动拉起），PID: \(pidList)"))
                 }
             }
             pool.setFrozen(
@@ -887,7 +887,7 @@ struct ClawPoolView: View {
             )
             appLog("freeze success user=\(claw.username) mode=\(mode.statusLabel)")
         } catch {
-            quickActionError = "@\(claw.username) \(mode.title)失败：\(error.localizedDescription)"
+            quickActionError = String(format: L10n.k("views.user_list_view.action_failed_for_user_mode", fallback: "@%@ %@失败：%@"), claw.username, mode.title, error.localizedDescription)
             appLog("freeze failed user=\(claw.username) mode=\(mode.statusLabel) error=\(error.localizedDescription)", level: .error)
         }
     }
@@ -896,7 +896,7 @@ struct ClawPoolView: View {
         quickActionError = nil
         let mode = claw.freezeMode
         let pausedPIDs = claw.pausedProcessPIDs
-        appLog("unfreeze start user=\(claw.username) mode=\(mode?.statusLabel ?? "未知")")
+        appLog("unfreeze start user=\(claw.username) mode=\(mode?.statusLabel ?? L10n.k("views.user_list_view.unknown", fallback: "未知"))")
         do {
             if mode == .pause, !pausedPIDs.isEmpty {
                 var failedPIDs: [Int32] = []
@@ -909,7 +909,7 @@ struct ClawPoolView: View {
                 }
                 if !failedPIDs.isEmpty {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
-                    throw HelperError.operationFailed("@\(claw.username) 解除暂停部分失败，未恢复 PID: \(pidList)")
+                    throw HelperError.operationFailed(L10n.k("views.user_list_view.unpause_partial_failed_pid_list", fallback: "@\(claw.username) 解除暂停部分失败，未恢复 PID: \(pidList)"))
                 }
             }
             if let restoreAutostart = claw.freezePreviousAutostartEnabled {
@@ -918,7 +918,7 @@ struct ClawPoolView: View {
             pool.setFrozen(false, for: claw.username)
             appLog("unfreeze success user=\(claw.username)")
         } catch {
-            quickActionError = "@\(claw.username) 解除冻结失败：\(error.localizedDescription)"
+            quickActionError = String(format: L10n.k("views.user_list_view.unfreeze_failed_for_user", fallback: "@%@ 解除冻结失败：%@"), claw.username, error.localizedDescription)
             appLog("unfreeze failed user=\(claw.username) error=\(error.localizedDescription)", level: .error)
         }
     }
@@ -1009,7 +1009,7 @@ private struct ClawCard: View {
                 // 副标签（版本 / 初始化步骤 / 未初始化）
                 Group {
                     if claw.hasFreezeWarning {
-                        Label("冻结异常", systemImage: "exclamationmark.triangle.fill")
+                        Label(L10n.k("views.user_list_view.freeze_warning", fallback: "冻结异常"), systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                             .help(claw.freezeWarning ?? "")
                     } else if claw.isFrozen {
@@ -1029,7 +1029,7 @@ private struct ClawCard: View {
                             }
                         }
                     } else {
-                        Text("未初始化").foregroundStyle(.tertiary)
+                        Text(L10n.k("views.user_list_view.not_initialized", fallback: "未初始化")).foregroundStyle(.tertiary)
                     }
                 }
                 .font(.caption2)
@@ -1044,7 +1044,7 @@ private struct ClawCard: View {
                                 .foregroundStyle(Color.accentColor)
                         }
                         .buttonStyle(.plain)
-                        .help("打开 Web UI")
+                        .help(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"))
                         .disabled(claw.isFrozen)
                     }
                     Button { onTerminal() } label: {
@@ -1053,7 +1053,7 @@ private struct ClawCard: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .help("打开终端")
+                    .help(L10n.k("views.user_list_view.open_terminal_action", fallback: "打开终端"))
                 }
                 Spacer(minLength: 0)
             }
@@ -1102,7 +1102,7 @@ private struct ClawCard: View {
                                 .stroke(Color.accentColor.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
                         )
                         .overlay(
-                            Label("松手快传", systemImage: "arrow.down.doc.fill")
+                            Label(L10n.k("views.user_list_view.release_quick_transfer", fallback: "松手快传"), systemImage: "arrow.down.doc.fill")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(Color.accentColor)
                                 .padding(.horizontal, 10)
@@ -1125,7 +1125,7 @@ private struct ClawCard: View {
         } isTargeted: { targeted in
             isDropTargeted = targeted
         }
-        .help("可将文件或文件夹拖入该虾卡片，快传到 ~/.openclaw/clawdhome_upload")
+        .help(L10n.k("views.user_list_view.filefolder_openclaw_clawdhome_upload", fallback: "可将文件或文件夹拖入该虾卡片，快传到 ~/.openclaw/clawdhome_upload"))
     }
 
     @Environment(GatewayHub.self) private var gatewayHub
@@ -1192,7 +1192,7 @@ private struct AddClawCard: View {
             VStack(spacing: 8) {
                 Text("🦞")
                     .font(.system(size: 28))
-                Text("领养虾苗")
+                Text(L10n.k("views.user_list_view.adopt_shrimp", fallback: "领养虾苗"))
                     .font(.caption)
                     .foregroundStyle(isHovered ? Color.accentColor : Color.secondary.opacity(0.6))
             }
@@ -1241,10 +1241,10 @@ private struct AddClawSheet: View {
                 .buttonStyle(.plain)
                 .padding(.vertical, 4)
             }
-            .navigationTitle("选择类型")
+            .navigationTitle(L10n.k("user.add.type_select.title", fallback: "选择类型"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(L10n.k("common.action.cancel", fallback: "取消")) { dismiss() }
                 }
             }
             .navigationDestination(for: ClawType.self) { clawType in
@@ -1260,23 +1260,23 @@ private struct AddClawSheet: View {
                         Image(systemName: clawType.icon)
                             .font(.system(size: 40))
                             .foregroundStyle(.tertiary)
-                        Text("\(clawType.displayName) 即将支持")
+                        Text(L10n.f("user.add.type_coming_soon.title", fallback: "%@ 即将支持", clawType.displayName))
                             .font(.title2).fontWeight(.semibold)
                             .foregroundStyle(.secondary)
                             .padding(.top, 8)
-                        Text("敬请期待")
+                        Text(L10n.k("common.coming_soon", fallback: "敬请期待"))
                             .font(.subheadline)
                             .foregroundStyle(.tertiary)
                         Spacer()
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .navigationTitle("添加 \(clawType.displayName)")
+                    .navigationTitle(L10n.f("user.add.type_window.title", fallback: "添加 %@", clawType.displayName))
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("取消") { dismiss() }
+                            Button(L10n.k("common.action.cancel", fallback: "取消")) { dismiss() }
                         }
                         ToolbarItem(placement: .confirmationAction) {
-                            Button("添加") { }.disabled(true)
+                            Button(L10n.k("common.action.add", fallback: "添加")) { }.disabled(true)
                         }
                     }
                 }
@@ -1302,32 +1302,32 @@ private struct AddMacosUserForm: View {
     var body: some View {
         Form {
             Section {
-                TextField("用户名", text: $username)
+                TextField(L10n.k("user.add.form.username", fallback: "用户名"), text: $username)
                     .textContentType(.username)
                 if !username.isEmpty && !usernameValid {
-                    Text("用户名只能包含小写字母、数字和下划线，且须以字母开头")
+                    Text(L10n.k("user.add.form.username.validation", fallback: "用户名只能包含小写字母、数字和下划线，且须以字母开头"))
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
-                TextField("全名（显示用）", text: $fullName)
-                TextField("描述（可选，用于备注用途）", text: $descriptionText)
-            } header: { Text("账户信息") }
+                TextField(L10n.k("user.add.form.full_name", fallback: "全名（显示用）"), text: $fullName)
+                TextField(L10n.k("user.add.form.description", fallback: "描述（可选，用于备注用途）"), text: $descriptionText)
+            } header: { Text(L10n.k("user.add.form.account_info", fallback: "账户信息")) }
 
             Section {
                 HStack(spacing: 6) {
                     Image(systemName: "lock.rotation")
                         .foregroundStyle(.secondary)
-                    Text("密码将自动随机生成并安全存储，可在用户详情中查看")
+                    Text(L10n.k("user.add.form.password_hint", fallback: "密码将自动随机生成并安全存储，可在用户详情中查看"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            } header: { Text("密码") }
+            } header: { Text(L10n.k("user.add.form.password", fallback: "密码")) }
         }
         .formStyle(.grouped)
-        .navigationTitle("添加 macOS 用户")
+        .navigationTitle(L10n.k("user.add.form.title", fallback: "添加 macOS 用户"))
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("创建") {
+                Button(L10n.k("common.action.create", fallback: "创建")) {
                     onConfirm(username, fullName.isEmpty ? username : fullName, descriptionText)
                 }
                 .disabled(!isValid)
@@ -1346,31 +1346,31 @@ private struct AddSSHSampleForm: View {
     var body: some View {
         Form {
             Section {
-                TextField("主机名 / IP", text: $host)
-                TextField("SSH 用户名", text: $sshUser)
-                TextField("端口", text: $port)
-            } header: { Text("连接信息") }
+                TextField(L10n.k("user.add.ssh.host", fallback: "主机名 / IP"), text: $host)
+                TextField(L10n.k("user.add.ssh.username", fallback: "SSH 用户名"), text: $sshUser)
+                TextField(L10n.k("user.add.ssh.port", fallback: "端口"), text: $port)
+            } header: { Text(L10n.k("user.add.ssh.connection_info", fallback: "连接信息")) }
 
             Section {
-                TextField("私钥路径（可选）", text: $identityFile)
-            } header: { Text("认证") }
+                TextField(L10n.k("user.add.ssh.key_path", fallback: "私钥路径（可选）"), text: $identityFile)
+            } header: { Text(L10n.k("user.add.ssh.auth", fallback: "认证")) }
 
             Section {
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "info.circle")
                         .foregroundStyle(.secondary)
-                    Text("SSH 类型的 Claw 即将支持，目前仅作预览展示")
+                    Text(L10n.k("user.add.ssh.preview_hint", fallback: "SSH 类型的 Claw 即将支持，目前仅作预览展示"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("添加 SSH Claw")
+        .navigationTitle(L10n.k("user.add.ssh.title", fallback: "添加 SSH Claw"))
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 // 即将支持，暂时禁用
-                Button("添加") { }.disabled(true)
+                Button(L10n.k("common.action.add", fallback: "添加")) { }.disabled(true)
             }
         }
     }

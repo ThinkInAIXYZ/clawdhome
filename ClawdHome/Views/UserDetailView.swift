@@ -18,30 +18,30 @@ struct QuickFileTransferOutcome {
     var summaryMessage: String {
         var blocks: [String] = []
         if uploadedTopLevelPaths.isEmpty {
-            blocks.append("未检测到可上传项目。")
+            blocks.append(L10n.k("user.detail.auto.text_accbdb5ed1", fallback: "未检测到可上传项目。"))
         } else {
             let shownPaths = uploadedTopLevelPaths.prefix(2).map(Self.displayPath)
-            var uploadedBlock = "已上传 \(uploadedTopLevelPaths.count) 项。"
+            var uploadedBlock = L10n.f("views.user_detail_view.text_7b6b4044", fallback: "已上传 %@ 项。", String(describing: uploadedTopLevelPaths.count))
             if let first = shownPaths.first {
-                uploadedBlock += "\n\n路径：\n\(first)"
+                uploadedBlock += L10n.f("views.user_detail_view.n_n_n", fallback: "\\n\\n路径：\\n%@", String(describing: first))
                 if shownPaths.count > 1 {
                     uploadedBlock += "\n\(shownPaths[1])"
                 }
             }
             if uploadedTopLevelPaths.count > 2 {
-                uploadedBlock += "\n…以及另外 \(uploadedTopLevelPaths.count - 2) 项"
+                uploadedBlock += L10n.f("views.user_detail_view.n", fallback: "\\n…以及另外 %@ 项", String(describing: uploadedTopLevelPaths.count - 2))
             }
             blocks.append(uploadedBlock)
         }
         if !failures.isEmpty {
             let shownFailures = failures.prefix(2).joined(separator: "\n")
-            var failedBlock = "失败 \(failures.count) 项：\n\(shownFailures)"
+            var failedBlock = L10n.f("views.user_detail_view.n_8d3d10", fallback: "失败 %@ 项：\\n%@", String(describing: failures.count), String(describing: shownFailures))
             if failures.count > 2 {
-                failedBlock += "\n…以及另外 \(failures.count - 2) 项"
+                failedBlock += L10n.f("views.user_detail_view.n", fallback: "\\n…以及另外 %@ 项", String(describing: failures.count - 2))
             }
             blocks.append(failedBlock)
         }
-        blocks.append("Tips：已复制到剪贴板，可以贴给你的虾，来处理文件。")
+        blocks.append(L10n.k("user.detail.auto.tips_file", fallback: "Tips：已复制到剪贴板，可以贴给你的虾，来处理文件。"))
         return blocks.joined(separator: "\n\n")
     }
 
@@ -94,7 +94,7 @@ enum QuickFileTransferService {
             return QuickFileTransferOutcome(
                 destinationRootPath: destinationRoot,
                 uploadedTopLevelPaths: [],
-                failures: ["创建目录失败：\(error.localizedDescription)"]
+                failures: [L10n.f("views.user_detail_view.text_e9b3435d", fallback: "创建目录失败：%@", String(describing: error.localizedDescription))]
             )
         }
 
@@ -153,7 +153,7 @@ enum QuickFileTransferService {
             throw NSError(
                 domain: "QuickFileTransferService",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "无法读取文件夹内容"]
+                userInfo: [NSLocalizedDescriptionKey: L10n.k("user.detail.auto.folder", fallback: "无法读取文件夹内容")]
             )
         }
 
@@ -227,19 +227,19 @@ struct UserDetailView: View {
 
     /// 从 GatewayHub readiness 映射得到状态文字
     private var readinessLabel: String {
-        if user.isFrozen { return user.freezeMode?.statusLabel ?? "已冻结" }
+        if user.isFrozen { return user.freezeMode?.statusLabel ?? L10n.k("models.managed_user.freeze", fallback: "已冻结") }
         switch gatewayHub.readinessMap[user.username] {
-        case .ready:    return "运行中"
+        case .ready:    return L10n.k("models.managed_user.running", fallback: "运行中")
         case .starting:
             if user.isRunning,
                let startedAt = user.startedAt,
                Date().timeIntervalSince(startedAt) > 20 {
-                return "状态同步中…"
+                return L10n.k("views.user_detail_view.statussync", fallback: "状态同步中…")
             }
-            return "启动中…"
-        case .zombie:   return "异常（无响应）"
-        case .stopped:  return "未运行"
-        case .none:     return user.isRunning ? "运行中" : "未运行"
+            return L10n.k("views.user_detail_view.start", fallback: "启动中…")
+        case .zombie:   return L10n.k("views.user_detail_view.abnormal_no_response", fallback: "异常（无响应）")
+        case .stopped:  return L10n.k("models.managed_user.not_running", fallback: "未运行")
+        case .none:     return user.isRunning ? L10n.k("models.managed_user.running", fallback: "运行中") : L10n.k("models.managed_user.not_running", fallback: "未运行")
         }
     }
     // 状态：Gateway 地址
@@ -313,15 +313,15 @@ struct UserDetailView: View {
 
     private func tabInfo(_ tab: ClawTab) -> (label: String, icon: String) {
         switch tab {
-        case .overview:  return ("概览", "gauge.with.dots.needle.33percent")
-        case .files:     return ("文件", "folder")
-        case .logs:      return ("日志", "doc.text.magnifyingglass")
-        case .cron:      return ("定时", "clock")
+        case .overview:  return (L10n.k("user.detail.auto.overview", fallback: "概览"), "gauge.with.dots.needle.33percent")
+        case .files:     return (L10n.k("user.detail.auto.files", fallback: "文件"), "folder")
+        case .logs:      return (L10n.k("user.detail.auto.logs", fallback: "日志"), "doc.text.magnifyingglass")
+        case .cron:      return (L10n.k("user.detail.auto.scheduled", fallback: "定时"), "clock")
         case .skills:    return ("Skills", "star.leadinghalf.filled")
-        case .persona:   return ("人格", "person.text.rectangle")
-        case .sessions:  return ("会话", "bubble.left.and.bubble.right")
-        case .memory:    return ("记忆", "brain.head.profile")
-        case .processes: return ("进程", "square.3.layers.3d")
+        case .persona:   return (L10n.k("user.detail.auto.persona", fallback: "人格"), "person.text.rectangle")
+        case .sessions:  return (L10n.k("user.detail.auto.sessions", fallback: "会话"), "bubble.left.and.bubble.right")
+        case .memory:    return (L10n.k("user.detail.auto.memory", fallback: "记忆"), "brain.head.profile")
+        case .processes: return (L10n.k("user.detail.auto.processes", fallback: "进程"), "square.3.layers.3d")
         }
     }
 
@@ -357,7 +357,7 @@ struct UserDetailView: View {
         case .files:     UserFilesView(users: [user], preselectedUser: user)
         case .logs:
             GatewayLogViewer(username: user.username, externalSearchQuery: $logSearchText)
-                .searchable(text: $logSearchText, prompt: "搜索日志（空格分词）")
+                .searchable(text: $logSearchText, prompt: L10n.k("user.detail.auto.search_logs_space_separated_terms", fallback: "搜索日志（空格分词）"))
         case .cron:      CronTabView(username: user.username)
         case .skills:    SkillsTabView(username: user.username)
         case .persona:   PersonaTabView(username: user.username)
@@ -447,31 +447,31 @@ struct UserDetailView: View {
             .interactiveDismissDisabled(isDeleting)
         }
         .confirmationDialog(
-            "确认速冻",
+            L10n.k("user.detail.auto.confirm_flash_freeze", fallback: "确认速冻"),
             isPresented: $showFlashFreezeConfirm,
             titleVisibility: .visible
         ) {
-            Button("速冻", role: .destructive) {
+            Button(L10n.k("user.detail.auto.flash_freeze", fallback: "速冻"), role: .destructive) {
                 showFlashFreezeConfirm = false
                 performAction { try await freezeUser(mode: .flash) }
             }
-            Button("取消", role: .cancel) {
+            Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) {
                 showFlashFreezeConfirm = false
             }
         } message: {
-            Text("将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。")
+            Text(L10n.k("user.detail.auto.userprocess_openclaw_process_start", fallback: "将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。"))
         }
         .alert(
-            "文件快传结果",
+            L10n.k("user.detail.auto.file", fallback: "文件快传结果"),
             isPresented: Binding(
                 get: { quickTransferAlertMessage != nil },
                 set: { show in if !show { quickTransferAlertMessage = nil } }
             )
         ) {
-            Button("复制路径") {
+            Button(L10n.k("user.detail.auto.copy_path", fallback: "复制路径")) {
                 QuickFileTransferService.copyToPasteboard(quickTransferClipboardText)
             }
-            Button("知道了", role: .cancel) {
+            Button(L10n.k("user.detail.auto.got_it", fallback: "知道了"), role: .cancel) {
                 quickTransferAlertMessage = nil
             }
         } message: {
@@ -494,7 +494,7 @@ struct UserDetailView: View {
     private var overviewContent: some View {
         if !versionChecked && user.initStep == nil {
             // 正在检查环境
-            ProgressView("检查环境…")
+            ProgressView(L10n.k("user.detail.auto.text_f522c76d24", fallback: "检查环境…"))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .task { await refreshStatus() }
         } else if !user.isAdmin
@@ -510,9 +510,9 @@ struct UserDetailView: View {
             }
         } else if user.isAdmin && versionChecked && user.openclawVersion == nil {
             ContentUnavailableView(
-                "管理员账号未安装 openclaw",
+                L10n.k("user.detail.auto.adminnot_installed_openclaw", fallback: "管理员账号未安装 openclaw"),
                 systemImage: "shield.lefthalf.filled",
-                description: Text("管理员账号仅支持基础管理，不支持在该账号执行安装或初始化。")
+                description: Text(L10n.k("user.detail.auto.admin_accounts_only_support_basic_management_installation_and", fallback: "管理员账号仅支持基础管理，不支持在该账号执行安装或初始化。"))
             )
         } else {
             ScrollView {
@@ -550,7 +550,7 @@ struct UserDetailView: View {
 
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("运行状态")
+                Text(L10n.k("user.detail.auto.status", fallback: "运行状态"))
                     .font(.headline)
                 Spacer()
                 Button {
@@ -595,7 +595,7 @@ struct UserDetailView: View {
                         Text(readinessLabel)
                     }
                     if readiness == .starting, user.isRunning {
-                        Text("状态同步中…")
+                        Text(L10n.k("user.detail.auto.statussync", fallback: "状态同步中…"))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -603,7 +603,7 @@ struct UserDetailView: View {
 
                 // 版本
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("版本").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("user.detail.auto.version", fallback: "版本")).font(.caption).foregroundStyle(.secondary)
                     versionRowContent
                 }
 
@@ -621,7 +621,7 @@ struct UserDetailView: View {
 
                 // 启动时间
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("启动时间").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("user.detail.auto.start", fallback: "启动时间")).font(.caption).foregroundStyle(.secondary)
                     if let started = user.startedAt {
                         Text(started, style: .relative).foregroundStyle(.secondary)
                     } else {
@@ -631,7 +631,7 @@ struct UserDetailView: View {
 
                 // CPU / 内存
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("资源占用").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("user.detail.auto.resource_usage", fallback: "资源占用")).font(.caption).foregroundStyle(.secondary)
                     if let cpu = user.cpuPercent, let mem = user.memRssMB {
                         Text(String(format: "%.1f%%  /  %.0f MB", cpu, mem))
                             .monospacedDigit()
@@ -644,19 +644,19 @@ struct UserDetailView: View {
 
                 // 网络
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("网络流量").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("user.detail.auto.network", fallback: "网络流量")).font(.caption).foregroundStyle(.secondary)
                     networkRowContent
                 }
 
                 // 存储
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("存储").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("user.detail.auto.storage", fallback: "存储")).font(.caption).foregroundStyle(.secondary)
                     StorageRowContent(snapshot: pool.snapshot, username: user.username)
                 }
 
                 // 地址
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("地址").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("user.detail.auto.address", fallback: "地址")).font(.caption).foregroundStyle(.secondary)
                     addressRowContent
                 }
             }
@@ -677,7 +677,7 @@ struct UserDetailView: View {
                 Text(v)
                     .foregroundStyle(updater.needsUpdate(user.openclawVersion) ? .orange : .primary)
                 if isInstalling || isRollingBack {
-                    Text(isRollingBack ? "回退中…" : "升级中…")
+                    Text(isRollingBack ? L10n.k("user.detail.auto.rollback", fallback: "回退中…") : L10n.k("user.detail.auto.upgrade", fallback: "升级中…"))
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     if !user.isAdmin,
@@ -692,7 +692,7 @@ struct UserDetailView: View {
                         .disabled(!helperClient.isConnected)
                     }
                     if !user.isAdmin, preUpgradeVersion != nil {
-                        Button("↩回退") { showRollbackConfirm = true }
+                        Button(L10n.k("user.detail.auto.rollback", fallback: "↩回退")) { showRollbackConfirm = true }
                             .buttonStyle(.bordered)
                             .controlSize(.mini)
                             .disabled(!helperClient.isConnected)
@@ -714,7 +714,7 @@ struct UserDetailView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("↓ \(rateIn)  ↑ \(rateOut)")
                     .monospacedDigit()
-                Text("累计 ↓ \(totalIn)  ↑ \(totalOut)")
+                Text(L10n.f("views.user_detail_view.text_8559f26d", fallback: "累计 ↓ %@  ↑ %@", String(describing: totalIn), String(describing: totalOut)))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -742,7 +742,7 @@ struct UserDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.accentColor)
-                .help("点击在浏览器中打开")
+                .help(L10n.k("user.detail.auto.open", fallback: "点击在浏览器中打开"))
 
                 Button {
                     NSPasteboard.general.clearContents()
@@ -752,12 +752,12 @@ struct UserDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("复制地址")
+                .help(L10n.k("user.detail.auto.address", fallback: "复制地址"))
             }
         } else if isEffectivelyRunning {
             HStack(spacing: 6) {
                 ProgressView().scaleEffect(0.6)
-                Text("等待 Token…").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.k("user.detail.auto.waiting_token", fallback: "等待 Token…")).font(.caption).foregroundStyle(.secondary)
             }
         } else {
             Text("—").foregroundStyle(.tertiary)
@@ -767,7 +767,7 @@ struct UserDetailView: View {
     @ViewBuilder
     private var healthCheckRowContent: some View {
         HStack(spacing: 12) {
-            Text("健康体检").font(.subheadline)
+            Text(L10n.k("user.detail.auto.health_check", fallback: "健康体检")).font(.subheadline)
             Spacer()
             if let check = lastHealthCheck {
                 let issueCount = check.criticalCount + check.warnCount
@@ -775,21 +775,21 @@ struct UserDetailView: View {
                     if issueCount > 0 {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange).font(.system(size: 11))
-                        Text("\(issueCount) 个问题").foregroundStyle(.orange)
+                        Text(L10n.f("views.user_detail_view.text_7c8c2ef4", fallback: "%@ 个问题", String(describing: issueCount))).foregroundStyle(.orange)
                     } else {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green).font(.system(size: 11))
-                        Text("正常").foregroundStyle(.green)
+                        Text(L10n.k("user.detail.auto.normal", fallback: "正常")).foregroundStyle(.green)
                     }
                     Text("·").foregroundStyle(.tertiary)
                     Text(Date(timeIntervalSince1970: check.checkedAt), style: .relative)
                         .foregroundStyle(.secondary).font(.callout)
-                    Text("前").foregroundStyle(.secondary).font(.callout)
+                    Text(L10n.k("user.detail.auto.ago", fallback: "前")).foregroundStyle(.secondary).font(.callout)
                 }
             } else {
-                Text("从未体检").foregroundStyle(.tertiary).font(.callout)
+                Text(L10n.k("user.detail.auto.health_check", fallback: "从未体检")).foregroundStyle(.tertiary).font(.callout)
             }
-            Button(lastHealthCheck == nil ? "体检" : "重新体检") {
+            Button(lastHealthCheck == nil ? L10n.k("views.user_detail_view.text_258fc51d", fallback: "体检") : L10n.k("views.user_detail_view.text_dced7ba8", fallback: "重新体检")) {
                 showHealthCheck = true
             }
             .buttonStyle(.plain)
@@ -804,13 +804,13 @@ struct UserDetailView: View {
     @ViewBuilder
     private var quickTransferSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("文件快传").font(.headline)
+            Text(L10n.k("user.detail.auto.file", fallback: "文件快传")).font(.headline)
             Divider().opacity(0.55)
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "tray.and.arrow.down")
                         .foregroundStyle(.secondary)
-                    Text("支持拖入文件/文件夹，或点击下方区域选择后上传")
+                    Text(L10n.k("user.detail.auto.file_folder_select", fallback: "支持拖入文件/文件夹，或点击下方区域选择后上传"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -828,7 +828,7 @@ struct UserDetailView: View {
                         let path = QuickFileTransferService.destinationAbsolutePath(username: user.username)
                         QuickFileTransferService.copyToPasteboard(path)
                     } label: {
-                        Label("复制路径", systemImage: "doc.on.doc")
+                        Label(L10n.k("user.detail.auto.copy_path", fallback: "复制路径"), systemImage: "doc.on.doc")
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.accentColor)
@@ -841,7 +841,7 @@ struct UserDetailView: View {
                         Image(systemName: "square.and.arrow.down.on.square")
                             .font(.title3)
                             .foregroundStyle(.secondary)
-                        Text("拖入文件到这里，或点击选择文件")
+                        Text(L10n.k("user.detail.auto.file_selectfile", fallback: "拖入文件到这里，或点击选择文件"))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -881,7 +881,7 @@ struct UserDetailView: View {
 
                 if let last = quickTransferLastPaths.first {
                     HStack(spacing: 8) {
-                        Text("最近上传：")
+                        Text(L10n.k("user.detail.auto.recent_uploads", fallback: "最近上传："))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text(last)
@@ -901,35 +901,35 @@ struct UserDetailView: View {
     @ViewBuilder
     private var configSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("配置").font(.headline)
+            Text(L10n.k("user.detail.auto.configuration", fallback: "配置")).font(.headline)
             Divider().opacity(0.55)
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("模型配置").foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
+                    Text(L10n.k("user.detail.auto.model_configuration", fallback: "模型配置")).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
                     if let def = defaultModel {
                         Text(def)
                             .font(.caption).foregroundStyle(.secondary)
                             .lineLimit(1).truncationMode(.middle)
                         if !fallbackModels.isEmpty {
-                            Text("+ \(fallbackModels.count) 备用")
+                            Text(L10n.f("views.user_detail_view.text_daa9c1c7", fallback: "+ %@ 备用", String(describing: fallbackModels.count)))
                                 .font(.caption).foregroundStyle(.tertiary)
                         }
                     } else {
-                        Text("未配置").foregroundStyle(.tertiary)
+                        Text(L10n.k("user.detail.auto.configuration", fallback: "未配置")).foregroundStyle(.tertiary)
                     }
                     Spacer()
-                    Button("管理") { showModelConfig = true }
+                    Button(L10n.k("user.detail.auto.manage", fallback: "管理")) { showModelConfig = true }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
                         .disabled(!helperClient.isConnected)
                 }
                 Divider()
                 HStack {
-                    Text("频道").foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
+                    Text(L10n.k("user.detail.auto.channel", fallback: "频道")).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
                     Text("Feishu / Weixin")
                         .font(.caption).foregroundStyle(.tertiary)
                     Spacer()
-                    Button("飞书配对") {
+                    Button(L10n.k("user.detail.auto.feishu", fallback: "飞书配对")) {
                         openWindow(
                             id: "channel-onboarding",
                             value: "\(ChannelOnboardingFlow.feishu.rawValue):\(user.username)"
@@ -941,7 +941,7 @@ struct UserDetailView: View {
                     Text("·")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
-                    Button("微信配对") {
+                    Button(L10n.k("user.detail.auto.wechat", fallback: "微信配对")) {
                         openWindow(
                             id: "channel-onboarding",
                             value: "\(ChannelOnboardingFlow.weixin.rawValue):\(user.username)"
@@ -951,7 +951,7 @@ struct UserDetailView: View {
                         .foregroundStyle(Color.accentColor)
                         .disabled(!helperClient.isConnected)
                 }
-                Text("飞书/微信均通过独立流程扫码绑定，支持首次配置和重新绑定。")
+                Text(L10n.k("user.detail.auto.feishu_wechat_configuration", fallback: "飞书/微信均通过独立流程扫码绑定，支持首次配置和重新绑定。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -961,28 +961,28 @@ struct UserDetailView: View {
                 }
 
                 Divider().padding(.top, 2)
-                DisclosureGroup("高级配置", isExpanded: $isAdvancedConfigExpanded) {
+                DisclosureGroup(L10n.k("user.detail.auto.configuration", fallback: "高级配置"), isExpanded: $isAdvancedConfigExpanded) {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Text("描述").foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
-                            TextField("例如：客厅 iMac / 儿童账号", text: $descriptionDraft)
+                            Text(L10n.k("user.detail.auto.description", fallback: "描述")).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
+                            TextField(L10n.k("user.detail.auto.example_imac", fallback: "例如：客厅 iMac / 儿童账号"), text: $descriptionDraft)
                                 .textFieldStyle(.roundedBorder)
-                            Button("保存") { saveDescription() }
+                            Button(L10n.k("user.detail.auto.save", fallback: "保存")) { saveDescription() }
                                 .buttonStyle(.plain)
                                 .foregroundStyle(Color.accentColor)
                                 .disabled(descriptionDraft.trimmingCharacters(in: .whitespacesAndNewlines) == user.profileDescription)
                         }
                         if !user.isAdmin && user.clawType == .macosUser {
                             HStack {
-                                Text("初始化向导").foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
-                                Text("可回到模型/频道步骤重新配置")
+                                Text(L10n.k("user.detail.auto.setup_wizard", fallback: "初始化向导")).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
+                                Text(L10n.k("user.detail.auto.models_channelconfiguration", fallback: "可回到模型/频道步骤重新配置"))
                                     .font(.caption)
                                     .foregroundStyle(.tertiary)
                                 Spacer()
                                 if isReopeningInitWizard {
                                     ProgressView().scaleEffect(0.6)
                                 }
-                                Button("重新进入") {
+                                Button(L10n.k("user.detail.auto.re_enter", fallback: "重新进入")) {
                                     Task { await reopenInitWizardAtModelStep() }
                                 }
                                 .buttonStyle(.plain)
@@ -991,9 +991,9 @@ struct UserDetailView: View {
                             }
                         }
                         HStack {
-                            Text("npm 源").foregroundStyle(.secondary)
+                            Text(L10n.k("user.detail.auto.npm", fallback: "npm 源")).foregroundStyle(.secondary)
                                 .frame(width: 80, alignment: .leading)
-                            Picker("npm 源", selection: $npmRegistryOption) {
+                            Picker(L10n.k("user.detail.auto.npm", fallback: "npm 源"), selection: $npmRegistryOption) {
                                 ForEach(NpmRegistryOption.allCases, id: \.self) { option in
                                     Text(option.title).tag(option)
                                 }
@@ -1008,19 +1008,19 @@ struct UserDetailView: View {
                         .onChange(of: npmRegistryOption) { oldValue, newValue in
                             guard oldValue != newValue, !suppressNpmRegistryOnChange else { return }
                             guard isNodeInstalledReady else {
-                                npmRegistryError = "Node.js 未安装就绪，暂不允许切换 npm 源"
+                                npmRegistryError = L10n.k("user.detail.auto.node_js_not_installed_npm", fallback: "Node.js 未安装就绪，暂不允许切换 npm 源")
                                 setDisplayedNpmRegistry(oldValue)
                                 return
                             }
                             Task { await updateNpmRegistry(to: newValue) }
                         }
                         if !isNodeInstalledReady {
-                            Text("Node.js 未安装就绪，暂不允许切换 npm 源。")
+                            Text(L10n.k("user.detail.auto.node_js_is_not_ready_npm_source_switching", fallback: "Node.js 未安装就绪，暂不允许切换 npm 源。"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         if let customURL = npmRegistryCustomURL, !customURL.isEmpty {
-                            Text("检测到自定义源：\(customURL)。切换后将覆盖为上方选项。")
+                            Text(L10n.f("views.user_detail_view.text_948c087f", fallback: "检测到自定义源：%@。切换后将覆盖为上方选项。", String(describing: customURL)))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -1046,19 +1046,19 @@ struct UserDetailView: View {
     @ViewBuilder
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("操作").font(.headline)
+            Text(L10n.k("user.detail.auto.actions", fallback: "操作")).font(.headline)
             Divider().opacity(0.55)
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     if user.isFrozen {
-                        Button("解冻") {
+                        Button(L10n.k("user.detail.auto.unfreeze", fallback: "解冻")) {
                             performAction {
                                 try await unfreezeUser()
                             }
                         }
                         .buttonStyle(.borderedProminent)
                     } else if user.isRunning {
-                        Button("重启") {
+                        Button(L10n.k("user.detail.auto.restart", fallback: "重启")) {
                             gatewayHub.markPendingStart(username: user.username)
                             performAction {
                                 try await helperClient.restartGateway(username: user.username)
@@ -1066,7 +1066,7 @@ struct UserDetailView: View {
                         }
                         .buttonStyle(.borderedProminent)
 
-                        Button("停止", role: .destructive) {
+                        Button(L10n.k("user.detail.auto.stop", fallback: "停止"), role: .destructive) {
                             gatewayHub.markPendingStopped(username: user.username)
                             performAction {
                                 try await helperClient.stopGateway(username: user.username)
@@ -1074,7 +1074,7 @@ struct UserDetailView: View {
                         }
                         .buttonStyle(.bordered)
                     } else {
-                        Button("启动") {
+                        Button(L10n.k("user.detail.auto.start", fallback: "启动")) {
                             gatewayHub.markPendingStart(username: user.username)
                             performAction {
                                 try await helperClient.startGateway(username: user.username)
@@ -1084,22 +1084,22 @@ struct UserDetailView: View {
                     }
 
                     Button { openTerminal() } label: {
-                        Label("终端", systemImage: "terminal")
+                        Label(L10n.k("user.detail.auto.terminal", fallback: "终端"), systemImage: "terminal")
                     }
                     .buttonStyle(.bordered)
 
                     Menu {
                         Button {
                             performAction { try await freezeUser(mode: .pause) }
-                        } label: { Label("暂停冻结（可恢复）", systemImage: "pause.circle") }
+                        } label: { Label(L10n.k("user.detail.auto.pause_freeze_recoverable", fallback: "暂停冻结（可恢复）"), systemImage: "pause.circle") }
                         Button {
                             performAction { try await freezeUser(mode: .normal) }
-                        } label: { Label("普通冻结（停止 Gateway）", systemImage: "snowflake") }
+                        } label: { Label(L10n.k("user.detail.auto.freeze_stop_gateway", fallback: "普通冻结（停止 Gateway）"), systemImage: "snowflake") }
                         Button(role: .destructive) {
                             showFlashFreezeConfirm = true
-                        } label: { Label("速冻（紧急终止进程）", systemImage: "bolt.fill") }
+                        } label: { Label(L10n.k("user.detail.auto.flash_freeze_emergency_kill", fallback: "速冻（紧急终止进程）"), systemImage: "bolt.fill") }
                     } label: {
-                        Label("冻结…", systemImage: "snowflake")
+                        Label(L10n.k("user.detail.auto.freeze", fallback: "冻结…"), systemImage: "snowflake")
                     }
                     .buttonStyle(.bordered)
 
@@ -1107,16 +1107,16 @@ struct UserDetailView: View {
                 }
                 .disabled(isLoading || !helperClient.isConnected)
 
-                DisclosureGroup("更多操作", isExpanded: $isMoreActionsExpanded) {
+                DisclosureGroup(L10n.k("user.detail.auto.more_actions", fallback: "更多操作"), isExpanded: $isMoreActionsExpanded) {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 10) {
                             Button { showPassword = true } label: {
-                                Label("密码", systemImage: "key")
+                                Label(L10n.k("user.detail.auto.password", fallback: "密码"), systemImage: "key")
                             }
                             .buttonStyle(.bordered)
 
                             if !user.isAdmin {
-                                Button(isLoggingOut ? "注销中…" : "注销") {
+                                Button(isLoggingOut ? L10n.k("user.detail.auto.text_79a96634ec", fallback: "注销中…") : L10n.k("user.detail.auto.log_out", fallback: "注销")) {
                                     showLogoutConfirm = true
                                 }
                                 .buttonStyle(.bordered)
@@ -1127,16 +1127,16 @@ struct UserDetailView: View {
                         }
 
                         if !user.isAdmin {
-                            Toggle(autostartEnabled ? "自启已开" : "自启已关", isOn: $autostartEnabled)
+                            Toggle(autostartEnabled ? L10n.k("user.detail.auto.autostart_on", fallback: "自启已开") : L10n.k("user.detail.auto.autostart_off", fallback: "自启已关"), isOn: $autostartEnabled)
                                 .toggleStyle(.button)
                                 .controlSize(.small)
                                 .tint(autostartEnabled ? .green : .secondary)
-                                .help(autostartEnabled ? "开机自动启动此虾的 Gateway（点击关闭）" : "开机不自动启动此虾的 Gateway（点击开启）")
+                                .help(autostartEnabled ? L10n.k("user.detail.auto.start_gateway_close", fallback: "开机自动启动此虾的 Gateway（点击关闭）") : L10n.k("user.detail.auto.do_not_auto_start_this_shrimp_s_gateway", fallback: "开机不自动启动此虾的 Gateway（点击开启）"))
                                 .onChange(of: autostartEnabled) { _, newValue in
                                     Task { try? await helperClient.setUserAutostart(username: user.username, enabled: newValue) }
                                 }
                         } else {
-                            Text("管理员：基础管理模式")
+                            Text(L10n.k("user.detail.auto.admin", fallback: "管理员：基础管理模式"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -1145,7 +1145,7 @@ struct UserDetailView: View {
                 }
 
                 if !helperClient.isConnected {
-                    Text("Helper 未连接，请先安装 ClawdHome 系统服务")
+                    Text(L10n.k("user.detail.auto.helper_clawdhome", fallback: "Helper 未连接，请先安装 ClawdHome 系统服务"))
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -1177,7 +1177,7 @@ struct UserDetailView: View {
                         HStack(spacing: 6) {
                             Image(systemName: showInstallConsole ? "chevron.down" : "chevron.right")
                                 .imageScale(.small)
-                            Text("命令输出")
+                            Text(L10n.k("user.detail.auto.command_output", fallback: "命令输出"))
                                 .font(.caption).fontWeight(.medium)
                             Spacer()
                             if (isInstalling || isRollingBack) && !showInstallConsole {
@@ -1185,7 +1185,7 @@ struct UserDetailView: View {
                                     .symbolEffect(.pulse, options: .repeating)
                             }
                             if isInstalling || isRollingBack {
-                                Text(isRollingBack ? "回退中…" : "升级中…")
+                                Text(isRollingBack ? L10n.k("user.detail.auto.rollback", fallback: "回退中…") : L10n.k("user.detail.auto.upgrade", fallback: "升级中…"))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -1210,9 +1210,9 @@ struct UserDetailView: View {
     private var modelConfigSheet: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("模型配置").font(.headline)
+                Text(L10n.k("user.detail.auto.model_configuration", fallback: "模型配置")).font(.headline)
                 Spacer()
-                Button("关闭") { showModelConfig = false }
+                Button(L10n.k("user.detail.auto.close", fallback: "关闭")) { showModelConfig = false }
                     .keyboardShortcut(.escape)
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
@@ -1309,7 +1309,7 @@ struct UserDetailView: View {
                 }
                 if !failedPIDs.isEmpty {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
-                    throw HelperError.operationFailed("@\(user.username) 暂停冻结部分失败，未挂起 PID: \(pidList)")
+                    throw HelperError.operationFailed(L10n.f("views.user_detail_view.pid", fallback: "@%@ 暂停冻结部分失败，未挂起 PID: %@", String(describing: user.username), String(describing: pidList)))
                 }
                 pool.setFrozen(
                     true,
@@ -1335,7 +1335,7 @@ struct UserDetailView: View {
                 }
                 if !failedPIDs.isEmpty {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
-                    throw HelperError.operationFailed("@\(user.username) 速冻部分失败，未终止 PID: \(pidList)")
+                    throw HelperError.operationFailed(L10n.f("views.user_detail_view.pid_0cbf36", fallback: "@%@ 速冻部分失败，未终止 PID: %@", String(describing: user.username), String(describing: pidList)))
                 }
                 // 二次 stop，防止状态滞后导致 launchd/job 被重新拉起。
                 try? await helperClient.stopGateway(username: user.username)
@@ -1345,7 +1345,7 @@ struct UserDetailView: View {
                     .filter(ProcessEmergencyFreezeResolver.isOpenclawRelated)
                 if !remaining.isEmpty {
                     let pidList = remaining.prefix(8).map { String($0.pid) }.joined(separator: ",")
-                    throw HelperError.operationFailed("@\(user.username) 速冻后检测到进程仍在运行（可能被自动拉起），PID: \(pidList)")
+                    throw HelperError.operationFailed(L10n.f("views.user_detail_view.pid_414c18", fallback: "@%@ 速冻后检测到进程仍在运行（可能被自动拉起），PID: %@", String(describing: user.username), String(describing: pidList)))
                 }
             }
 
@@ -1365,7 +1365,7 @@ struct UserDetailView: View {
 
     private func unfreezeUser() async throws {
         let mode = user.freezeMode
-        appLog("unfreeze start user=\(user.username) mode=\(mode?.statusLabel ?? "未知")")
+        appLog("unfreeze start user=\(user.username) mode=\(mode?.statusLabel ?? L10n.k("views.user_detail_view.text_1622dc9b", fallback: "未知"))")
         do {
             let pausedPIDs = user.pausedProcessPIDs
             if mode == .pause, !pausedPIDs.isEmpty {
@@ -1379,7 +1379,7 @@ struct UserDetailView: View {
                 }
                 if !failedPIDs.isEmpty {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
-                    throw HelperError.operationFailed("@\(user.username) 解除暂停部分失败，未恢复 PID: \(pidList)")
+                    throw HelperError.operationFailed(L10n.f("views.user_detail_view.pid_e5e7a7", fallback: "@%@ 解除暂停部分失败，未恢复 PID: %@", String(describing: user.username), String(describing: pidList)))
                 }
             }
             if let restoreAutostart = user.freezePreviousAutostartEnabled {
@@ -1396,13 +1396,13 @@ struct UserDetailView: View {
     private var frozenHintText: String {
         switch user.freezeMode {
         case .pause:
-            return "该虾已暂停冻结：openclaw 进程被挂起，解除冻结后会继续执行（内存不会释放）。"
+            return L10n.k("views.user_detail_view.shrimp_paused_freeze_mode_openclaw_processes_suspended_resume", fallback: "该虾已暂停冻结：openclaw 进程被挂起，解除冻结后会继续执行（内存不会释放）。")
         case .flash:
-            return "该虾已速冻：已紧急终止用户空间进程，解除冻结后需手动重新启动服务。"
+            return L10n.k("views.user_detail_view.userprocess_freezestart", fallback: "该虾已速冻：已紧急终止用户空间进程，解除冻结后需手动重新启动服务。")
         case .normal:
-            return "该虾已冻结：Gateway 已停止，解除冻结后可再次启动。"
+            return L10n.k("views.user_detail_view.freeze_gateway_stop_freezestart", fallback: "该虾已冻结：Gateway 已停止，解除冻结后可再次启动。")
         case .none:
-            return "该虾已冻结。"
+            return L10n.k("views.user_detail_view.freeze", fallback: "该虾已冻结。")
         }
     }
 
@@ -1417,16 +1417,16 @@ struct UserDetailView: View {
     @ViewBuilder
     private var freezeModeGuide: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("冻结级别参考：")
+            Text(L10n.k("user.detail.auto.freeze", fallback: "冻结级别参考："))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            Text("暂停冻结：挂起 openclaw 进程，可恢复继续执行（内存不释放）")
+            Text(L10n.k("user.detail.auto.pause_freeze_suspend_openclaw_processes_and_resume_later", fallback: "暂停冻结：挂起 openclaw 进程，可恢复继续执行（内存不释放）"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            Text("普通冻结：停止 Gateway，最稳妥")
+            Text(L10n.k("user.detail.auto.freeze_stop_gateway", fallback: "普通冻结：停止 Gateway，最稳妥"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            Text("速冻：紧急终止用户空间进程（openclaw 优先），用于异常兜底")
+            Text(L10n.k("user.detail.auto.userprocess_openclaw", fallback: "速冻：紧急终止用户空间进程（openclaw 优先），用于异常兜底"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -1597,7 +1597,7 @@ struct UserDetailView: View {
                 do {
                     try await helperClient.saveInitState(username: user.username, json: repaired.toJSON())
                 } catch {
-                    actionError = "初始化向导状态修复失败：\(error.localizedDescription)"
+                    actionError = L10n.f("views.user_detail_view.text_5cce2fbd", fallback: "初始化向导状态修复失败：%@", String(describing: error.localizedDescription))
                 }
                 user.initStep = nil
                 let readiness = gatewayHub.readinessMap[user.username]
@@ -1621,7 +1621,7 @@ struct UserDetailView: View {
                     do {
                         try await helperClient.saveInitState(username: user.username, json: repaired.toJSON())
                     } catch {
-                        actionError = "初始化向导状态修复失败：\(error.localizedDescription)"
+                        actionError = L10n.f("views.user_detail_view.text_5cce2fbd", fallback: "初始化向导状态修复失败：%@", String(describing: error.localizedDescription))
                     }
                 }
                 return true
@@ -1683,7 +1683,7 @@ struct UserDetailView: View {
             user.initStep = nil
             return true
         } catch {
-            actionError = "初始化向导状态写入失败：\(error.localizedDescription)"
+            actionError = L10n.f("views.user_detail_view.text_020b8a41", fallback: "初始化向导状态写入失败：%@", String(describing: error.localizedDescription))
             user.initStep = nil
             return false
         }
@@ -1719,7 +1719,7 @@ struct UserDetailView: View {
             versionChecked = true
             actionError = nil
         } catch {
-            actionError = "重新进入初始化向导失败：\(error.localizedDescription)"
+            actionError = L10n.f("views.user_detail_view.text_ceb875b6", fallback: "重新进入初始化向导失败：%@", String(describing: error.localizedDescription))
         }
     }
 
@@ -1747,11 +1747,11 @@ struct UserDetailView: View {
 
     private func updateNpmRegistry(to option: NpmRegistryOption) async {
         guard helperClient.isConnected else {
-            npmRegistryError = "Helper 未连接，无法切换 npm 源"
+            npmRegistryError = L10n.k("user.detail.auto.helper_npm", fallback: "Helper 未连接，无法切换 npm 源")
             return
         }
         guard isNodeInstalledReady else {
-            npmRegistryError = "Node.js 未安装就绪，暂不允许切换 npm 源"
+            npmRegistryError = L10n.k("user.detail.auto.node_js_not_installed_npm", fallback: "Node.js 未安装就绪，暂不允许切换 npm 源")
             return
         }
         isUpdatingNpmRegistry = true
@@ -1804,42 +1804,42 @@ struct UserDetailView: View {
                 Image(systemName: iconName)
                     .foregroundStyle(iconColor)
                     .font(.system(size: 12))
-                Text("开发环境")
+                Text(L10n.k("user.detail.auto.development_environment", fallback: "开发环境"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
                 if isInstallingXcodeCLT || isAcceptingXcodeLicense {
                     ProgressView().scaleEffect(0.6)
                 }
-                Text(status == nil ? "检查中…" : (healthy ? "环境正常" : "需要修复"))
+                Text(status == nil ? L10n.k("views.user_detail_view.text_d6a22312", fallback: "检查中…") : (healthy ? L10n.k("views.user_detail_view.text_298ac017", fallback: "环境正常") : L10n.k("views.user_detail_view.text_cba971a5", fallback: "需要修复")))
                     .font(.caption2)
                     .foregroundStyle(statusColor)
             }
 
             if let status, !status.isHealthy {
                 VStack(alignment: .leading, spacing: 4) {
-                    Label(status.commandLineToolsInstalled ? "CLT 已安装" : "CLT 未安装", systemImage: status.commandLineToolsInstalled ? "checkmark" : "xmark")
+                    Label(status.commandLineToolsInstalled ? L10n.k("user.detail.auto.clt", fallback: "CLT 已安装") : L10n.k("user.detail.auto.clt_not_installed", fallback: "CLT 未安装"), systemImage: status.commandLineToolsInstalled ? "checkmark" : "xmark")
                         .font(.caption2)
                         .foregroundStyle(status.commandLineToolsInstalled ? Color.secondary : Color.orange)
-                    Label(status.licenseAccepted ? "Xcode license 已接受" : "Xcode license 未接受", systemImage: status.licenseAccepted ? "checkmark" : "xmark")
+                    Label(status.licenseAccepted ? L10n.k("user.detail.auto.xcode_license", fallback: "Xcode license 已接受") : L10n.k("user.detail.auto.xcode_license", fallback: "Xcode license 未接受"), systemImage: status.licenseAccepted ? "checkmark" : "xmark")
                         .font(.caption2)
                         .foregroundStyle(status.licenseAccepted ? Color.secondary : Color.orange)
                     HStack(spacing: 8) {
-                        Button(isInstallingXcodeCLT ? "安装中…" : "安装开发工具") {
+                        Button(isInstallingXcodeCLT ? L10n.k("user.detail.auto.text_b2c6913616", fallback: "安装中…") : L10n.k("user.detail.auto.install_developer_tools", fallback: "安装开发工具")) {
                             Task { await installXcodeCommandLineTools() }
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
                         .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
 
-                        Button(isAcceptingXcodeLicense ? "处理中…" : "同意 Xcode 许可") {
+                        Button(isAcceptingXcodeLicense ? L10n.k("user.detail.auto.processing", fallback: "处理中…") : L10n.k("user.detail.auto.xcode", fallback: "同意 Xcode 许可")) {
                             Task { await acceptXcodeLicense() }
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
                         .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
 
-                        Button("打开软件更新") {
+                        Button(L10n.k("user.detail.auto.open", fallback: "打开软件更新")) {
                             openSoftwareUpdate()
                         }
                         .buttonStyle(.plain)
@@ -1872,7 +1872,7 @@ struct UserDetailView: View {
         xcodeFixMessage = nil
         do {
             try await helperClient.installXcodeCommandLineTools()
-            xcodeFixMessage = "已触发系统安装窗口，请按提示完成安装。"
+            xcodeFixMessage = L10n.k("user.detail.auto.hintdone", fallback: "已触发系统安装窗口，请按提示完成安装。")
         } catch {
             xcodeFixMessage = error.localizedDescription
         }
@@ -1885,7 +1885,7 @@ struct UserDetailView: View {
         xcodeFixMessage = nil
         do {
             try await helperClient.acceptXcodeLicense()
-            xcodeFixMessage = "已执行 license 接受，正在刷新状态。"
+            xcodeFixMessage = L10n.k("user.detail.auto.license_refreshstatus", fallback: "已执行 license 接受，正在刷新状态。")
         } catch {
             xcodeFixMessage = error.localizedDescription
         }
@@ -1898,7 +1898,7 @@ struct UserDetailView: View {
             return
         }
         NSWorkspace.shared.open(url)
-        xcodeFixMessage = "已打开“软件更新”。若未看到安装弹窗，可在系统设置中手动安装 Command Line Tools。"
+        xcodeFixMessage = L10n.k("user.detail.auto.open_settings_command_line_tools", fallback: "已打开“软件更新”。若未看到安装弹窗，可在系统设置中手动安装 Command Line Tools。")
     }
 
     // MARK: - 版本回退持久化
@@ -1972,11 +1972,11 @@ struct UserDetailView: View {
     private func verifyAdminPassword(user: String, password: String) async throws {
         let trimmed = password.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw HelperError.operationFailed("请输入管理员登录密码")
+            throw HelperError.operationFailed(L10n.k("user.detail.auto.inputadminpassword", fallback: "请输入管理员登录密码"))
         }
         try await Task.detached(priority: .userInitiated) {
             let nodes = ["/Local/Default", "/Search"]
-            var lastError = "密码错误或无权限"
+            var lastError = L10n.k("user.detail.auto.password", fallback: "密码错误或无权限")
 
             for node in nodes {
                 let proc = Process()
@@ -1996,14 +1996,14 @@ struct UserDetailView: View {
                 if !out.isEmpty { lastError = out }
             }
 
-            throw HelperError.operationFailed("管理员密码校验失败：\(lastError)\n请填写该 macOS 账户的登录密码（不是用户名）")
+            throw HelperError.operationFailed(L10n.f("views.user_detail_view.n_macos", fallback: "管理员密码校验失败：%@\\n请填写该 macOS 账户的登录密码（不是用户名）", String(describing: lastError)))
         }.value
     }
 
     private func deleteUserViaSysadminctl(username: String, keepHome: Bool, adminPassword: String) async throws {
         let trimmed = adminPassword.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw HelperError.operationFailed("请输入管理员登录密码")
+            throw HelperError.operationFailed(L10n.k("user.detail.auto.inputadminpassword", fallback: "请输入管理员登录密码"))
         }
         let timeoutSeconds: TimeInterval = 30
 
@@ -2021,19 +2021,19 @@ struct UserDetailView: View {
                 )
             } catch UserDeleteCommandError.timeout {
                 appLog("[user-delete] command timeout @\(username)", level: .error)
-                throw HelperError.operationFailed("管理员权限校验超时，请重试")
+                throw HelperError.operationFailed(L10n.k("user.detail.auto.admin", fallback: "管理员权限校验超时，请重试"))
             }
 
             if verify.status != 0 {
                 let verifyOutput = verify.output
                 let normalized = verifyOutput.lowercased()
                 if normalized.contains("incorrect password") || normalized.contains("sorry, try again") {
-                    throw HelperError.operationFailed("管理员密码错误，请重试")
+                    throw HelperError.operationFailed(L10n.k("user.detail.auto.adminpassword", fallback: "管理员密码错误，请重试"))
                 }
                 if !verifyOutput.isEmpty {
-                    throw HelperError.operationFailed("管理员权限校验失败：\(verifyOutput)")
+                    throw HelperError.operationFailed(L10n.f("views.user_detail_view.text_0a32bf3a", fallback: "管理员权限校验失败：%@", String(describing: verifyOutput)))
                 }
-                throw HelperError.operationFailed("管理员权限校验失败")
+                throw HelperError.operationFailed(L10n.k("user.detail.auto.admin", fallback: "管理员权限校验失败"))
             }
 
             var sudoArgs = ["-S", "-p", "", "/usr/sbin/sysadminctl", "-deleteUser", username]
@@ -2051,14 +2051,14 @@ struct UserDetailView: View {
                 let output = result.output
                 if output.lowercased().contains("unknown user") { return }
                 if output.isEmpty {
-                    throw HelperError.operationFailed("删除用户失败：sysadminctl exit \(result.status)")
+                    throw HelperError.operationFailed(L10n.f("views.user_detail_view.sysa_minctl_exit", fallback: "删除用户失败：sysadminctl exit %@", String(describing: result.status)))
                 }
-                throw HelperError.operationFailed("删除用户失败：\(output)")
+                throw HelperError.operationFailed(L10n.f("views.user_detail_view.text_9d82e8aa", fallback: "删除用户失败：%@", String(describing: output)))
             }
 
             if !waitForUserRecordRemoval(username: username, retries: 40, sleepMs: 250) {
                 appLog("[user-delete] record still exists after command @\(username)", level: .warn)
-                throw HelperError.operationFailed("删除用户 \(username) 后校验失败：系统记录仍存在")
+                throw HelperError.operationFailed(L10n.f("views.user_detail_view.text_a1027837", fallback: "删除用户 %@ 后校验失败：系统记录仍存在", String(describing: username)))
             }
             appLog("[user-delete] success @\(username)")
         }.value
@@ -2167,7 +2167,7 @@ struct UserDetailView: View {
     private func openTerminal() {
         let payload = maintenanceWindowRegistry.makePayload(
             username: user.username,
-            title: "命令行维护（高级）",
+            title: L10n.k("user.detail.auto.cli_maintenance_advanced", fallback: "命令行维护（高级）"),
             command: ["zsh", "-l"]
         )
         openWindow(id: "maintenance-terminal", value: payload)
@@ -2240,16 +2240,16 @@ struct UserDetailView: View {
     @ViewBuilder
     private var dangerZoneSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("危险操作").font(.headline).foregroundStyle(.red)
+            Text(L10n.k("user.detail.auto.danger_zone", fallback: "危险操作")).font(.headline).foregroundStyle(.red)
             Divider().opacity(0.55)
             VStack(alignment: .leading, spacing: 8) {
                 if user.isAdmin {
-                    Text("管理员账号仅支持基础管理，已禁用重置与删除。")
+                    Text(L10n.k("user.detail.auto.admin_resetdelete", fallback: "管理员账号仅支持基础管理，已禁用重置与删除。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
                     HStack {
-                        Button(isResetting ? "重置中…" : "重置生存空间", role: .destructive) {
+                        Button(isResetting ? L10n.k("user.detail.auto.reset", fallback: "重置中…") : L10n.k("user.detail.auto.reset", fallback: "重置生存空间"), role: .destructive) {
                             showResetConfirm = true
                         }
                         .buttonStyle(.plain)
@@ -2258,13 +2258,13 @@ struct UserDetailView: View {
                     }
                     Divider()
                     HStack {
-                        Button("删除用户", role: .destructive) {
+                        Button(L10n.k("user.detail.auto.deleteuser", fallback: "删除用户"), role: .destructive) {
                             showDeleteConfirm = true
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(isSelf ? AnyShapeStyle(Color.secondary) : AnyShapeStyle(Color.red))
                         .disabled(isDeleting || !helperClient.isConnected || isSelf)
-                        .help(isSelf ? "无法删除当前登录的管理员账号" : "")
+                        .help(isSelf ? L10n.k("user.detail.auto.deleteadmin", fallback: "无法删除当前登录的管理员账号") : "")
                     }
                     if isDeleting { deleteProgressView }
                 }
@@ -2282,7 +2282,7 @@ struct UserDetailView: View {
             case .deleting:
                 HStack(spacing: 6) {
                     ProgressView().scaleEffect(0.65)
-                    Text("删除账户中…")
+                    Text(L10n.k("user.detail.auto.deleteaccount", fallback: "删除账户中…"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -2291,7 +2291,7 @@ struct UserDetailView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.caption)
-                    Text("已完成")
+                    Text(L10n.k("user.detail.auto.done", fallback: "已完成"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -2317,29 +2317,29 @@ private struct MainContentAlertsModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .alert("回退到 v\(preUpgradeVersion ?? "")?", isPresented: $showRollbackConfirm) {
-                Button("回退", role: .destructive) {
+            .alert(L10n.f("user.detail.alert.rollback.title", fallback: "回退到 v%@?", preUpgradeVersion ?? ""), isPresented: $showRollbackConfirm) {
+                Button(L10n.k("user.detail.auto.rollback", fallback: "回退"), role: .destructive) {
                     Task { await performRollback() }
                 }
-                Button("取消", role: .cancel) { }
+                Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) { }
             } message: {
-                Text("将把 @\(user.username) 的 openclaw 降级到 v\(preUpgradeVersion ?? "")\n\n此操作会短暂停止并重启 Gateway。")
+                Text(L10n.f("user.detail.alert.rollback.message", fallback: "将把 @%@ 的 openclaw 降级到 v%@\n\n此操作会短暂停止并重启 Gateway。", user.username, preUpgradeVersion ?? ""))
             }
-            .alert("注销 @\(user.username) 的登录会话？", isPresented: $showLogoutConfirm) {
-                Button("取消", role: .cancel) { }
-                Button("注销", role: .destructive) {
+            .alert(L10n.f("user.detail.alert.logout.title", fallback: "注销 @%@ 的登录会话？", user.username), isPresented: $showLogoutConfirm) {
+                Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) { }
+                Button(L10n.k("user.detail.auto.log_out", fallback: "注销"), role: .destructive) {
                     Task { await performLogout() }
                 }
             } message: {
-                Text("将停止 Gateway 并退出该用户的登录会话（launchctl bootout）。\n\n用户数据不会被删除，可随时重新启动 Gateway。")
+                Text(L10n.k("user.detail.alert.logout.message", fallback: "将停止 Gateway 并退出该用户的登录会话（launchctl bootout）。\n\n用户数据不会被删除，可随时重新启动 Gateway。"))
             }
-            .alert("重置 @\(user.username) 的生存空间？", isPresented: $showResetConfirm) {
-                Button("取消", role: .cancel) { }
-                Button("重置", role: .destructive) {
+            .alert(L10n.f("user.detail.alert.reset.title", fallback: "重置 @%@ 的生存空间？", user.username), isPresented: $showResetConfirm) {
+                Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) { }
+                Button(L10n.k("user.detail.auto.reset", fallback: "重置"), role: .destructive) {
                     Task { await performReset() }
                 }
             } message: {
-                Text("这将删除：\n• ~/.npm-global（openclaw 及所有 npm 全局包）\n• ~/.openclaw（配置、API Key、会话历史）\n\n建议先备份 /Users/\(user.username)/.openclaw/，其中包含 API Key 和历史记录。\n\n重置后需要重新初始化生存空间。")
+                Text(L10n.f("user.detail.alert.reset.message", fallback: "这将删除：\n• ~/.npm-global（openclaw 及所有 npm 全局包）\n• ~/.openclaw（配置、API Key、会话历史）\n\n建议先备份 /Users/%@/.openclaw/，其中包含 API Key 和历史记录。\n\n重置后需要重新初始化生存空间。", user.username))
             }
     }
 }
@@ -2387,7 +2387,7 @@ private struct StorageRowContent: View {
                     HStack(spacing: 4) {
                         Text(FormatUtils.formatBytes(shrimp.homeDirBytes))
                             .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
-                        Text("家目录").font(.caption2).foregroundStyle(.tertiary)
+                        Text(L10n.k("user.detail.auto.directory", fallback: "家目录")).font(.caption2).foregroundStyle(.tertiary)
                     }
                 }
             }
@@ -2429,9 +2429,9 @@ struct DeleteUserSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             // 标题
             VStack(alignment: .leading, spacing: 3) {
-                Text("删除用户 \"@\(username)\"")
+                Text(L10n.f("views.user_detail_view.text_6e1d141a", fallback: "删除用户 \\\"@%@\\\"", String(describing: username)))
                     .font(.headline)
-                Text("账户将被永久删除，请选择个人文件夹的处理方式：")
+                Text(L10n.k("user.detail.auto.accountdelete_selectfolder", fallback: "账户将被永久删除，请选择个人文件夹的处理方式："))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -2452,10 +2452,10 @@ struct DeleteUserSheet: View {
                     ProgressView()
                         .controlSize(.small)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("删除中，请稍候…")
+                        Text(L10n.k("user.detail.auto.deleting_please_wait", fallback: "删除中，请稍候…"))
                             .font(.caption)
                             .fontWeight(.semibold)
-                        Text("如果系统弹出授权窗口，请点击“允许”。")
+                        Text(L10n.k("user.detail.auto.if_macos_shows_a_permission_prompt_click_allow", fallback: "如果系统弹出授权窗口，请点击“允许”。"))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -2469,14 +2469,14 @@ struct DeleteUserSheet: View {
             VStack(alignment: .leading, spacing: 0) {
                 optionRow(
                     value: .keepHome,
-                    title: "保留个人文件夹",
-                    desc: "/Users/\(username)/ 保持不变"
+                    title: L10n.k("user.detail.auto.folder", fallback: "保留个人文件夹"),
+                    desc: L10n.f("views.user_detail_view.users", fallback: "/Users/%@/ 保持不变", String(describing: username))
                 )
                 Divider().padding(.leading, 28)
                 optionRow(
                     value: .deleteHome,
-                    title: "删除个人文件夹",
-                    desc: "/Users/\(username)/ 及全部内容将被永久删除"
+                    title: L10n.k("user.detail.auto.deletefolder", fallback: "删除个人文件夹"),
+                    desc: L10n.f("views.user_detail_view.users_4c31c5", fallback: "/Users/%@/ 及全部内容将被永久删除", String(describing: username))
                 )
             }
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -2484,8 +2484,8 @@ struct DeleteUserSheet: View {
 
             // 管理员密码
             VStack(alignment: .leading, spacing: 4) {
-                Text("管理员密码").font(.subheadline)
-                Text("账号：\(adminUser)")
+                Text(L10n.k("user.detail.auto.adminpassword", fallback: "管理员密码")).font(.subheadline)
+                Text(L10n.f("views.user_detail_view.text_626047b9", fallback: "账号：%@", String(describing: adminUser)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 8) {
@@ -2493,7 +2493,7 @@ struct DeleteUserSheet: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 18)
                     if showAdminPassword {
-                        TextField("请输入管理员登录密码", text: $adminPassword)
+                        TextField(L10n.k("user.detail.auto.inputadminpassword", fallback: "请输入管理员登录密码"), text: $adminPassword)
                             .textFieldStyle(.roundedBorder)
                             .focused($isAdminPasswordFocused)
                             .onChange(of: isAdminPasswordFocused) { _, focused in
@@ -2508,7 +2508,7 @@ struct DeleteUserSheet: View {
                                 }
                             }
                     } else {
-                        SecureField("请输入管理员登录密码", text: $adminPassword)
+                        SecureField(L10n.k("user.detail.auto.inputadminpassword", fallback: "请输入管理员登录密码"), text: $adminPassword)
                             .textFieldStyle(.roundedBorder)
                             .focused($isAdminPasswordFocused)
                             .onChange(of: isAdminPasswordFocused) { _, focused in
@@ -2531,7 +2531,7 @@ struct DeleteUserSheet: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .help(showAdminPassword ? "隐藏密码" : "显示密码")
+                    .help(showAdminPassword ? L10n.k("user.detail.auto.password", fallback: "隐藏密码") : L10n.k("user.detail.auto.password", fallback: "显示密码"))
                 }
             }
             .disabled(isDeleting)
@@ -2539,10 +2539,10 @@ struct DeleteUserSheet: View {
             // 按钮
             HStack {
                 Spacer()
-                Button("取消", action: onCancel)
+                Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), action: onCancel)
                     .keyboardShortcut(.cancelAction)
                     .disabled(isDeleting)
-                Button("删除用户", role: .destructive, action: onConfirm)
+                Button(L10n.k("user.detail.auto.deleteuser", fallback: "删除用户"), role: .destructive, action: onConfirm)
                     .keyboardShortcut(.defaultAction)
                     .disabled(adminPassword.isEmpty || isDeleting)
             }
@@ -2622,7 +2622,7 @@ struct UserPasswordSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("@\(username) 的登录密码")
+            Text(L10n.f("views.user_detail_view.text_82ba9ab1", fallback: "@%@ 的登录密码", String(describing: username)))
                 .font(.title3)
                 .fontWeight(.semibold)
 
@@ -2647,14 +2647,14 @@ struct UserPasswordSheet: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
-                        .help("复制密码")
+                        .help(L10n.k("user.detail.auto.password", fallback: "复制密码"))
 
                         Button { isRevealed.toggle() } label: {
                             Image(systemName: isRevealed ? "eye.slash" : "eye").font(.caption)
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
-                        .help(isRevealed ? "隐藏密码" : "显示密码")
+                        .help(isRevealed ? L10n.k("user.detail.auto.password", fallback: "隐藏密码") : L10n.k("user.detail.auto.password", fallback: "显示密码"))
                     }
                     .padding(4)
                 }
@@ -2664,16 +2664,16 @@ struct UserPasswordSheet: View {
                         Image(systemName: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("未找到已存储的密码")
+                            Text(L10n.k("user.detail.auto.password", fallback: "未找到已存储的密码"))
                                 .fontWeight(.medium)
-                            Text("该用户可能在密码管理功能上线前创建，点击下方按钮重置密码")
+                            Text(L10n.k("user.detail.auto.userpassword_resetpassword", fallback: "该用户可能在密码管理功能上线前创建，点击下方按钮重置密码"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
                     .padding(4)
                 }
-                Button(isResetting ? "重置中…" : "生成新密码并重置") {
+                Button(isResetting ? L10n.k("user.detail.auto.reset", fallback: "重置中…") : L10n.k("user.detail.auto.passwordreset", fallback: "生成新密码并重置")) {
                     Task { await resetPassword() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -2683,13 +2683,13 @@ struct UserPasswordSheet: View {
                 }
             }
 
-            Text("此密码用于该用户登录图形界面")
+            Text(L10n.k("user.detail.auto.passworduser", fallback: "此密码用于该用户登录图形界面"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             HStack {
                 if storedPassword != nil {
-                    Button(isResetting ? "重置中…" : "重置密码") {
+                    Button(isResetting ? L10n.k("user.detail.auto.reset", fallback: "重置中…") : L10n.k("user.detail.auto.resetpassword", fallback: "重置密码")) {
                         Task { await resetPassword() }
                     }
                     .buttonStyle(.plain)
@@ -2697,7 +2697,7 @@ struct UserPasswordSheet: View {
                     .disabled(isResetting || !helperClient.isConnected)
                 }
                 Spacer()
-                Button("关闭") { dismiss() }
+                Button(L10n.k("user.detail.auto.close", fallback: "关闭")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -2778,11 +2778,11 @@ private struct CronTabView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("定时任务")
+                Text(L10n.k("user.detail.auto.scheduled_tasks", fallback: "定时任务"))
                     .font(.headline)
                 Spacer()
                 Button { runId += 1 } label: {
-                    Label("刷新", systemImage: "arrow.clockwise")
+                    Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
             }
@@ -2799,7 +2799,7 @@ private struct CronTabView: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "info.circle").foregroundStyle(.secondary).font(.caption)
-                Text("使用 \u{2018}openclaw cron add\u{2019} 或 \u{2018}openclaw cron remove\u{2019} 管理定时任务")
+                Text(L10n.k("user.detail.auto.u_2018_openclaw_cron_add_u_2019_u", fallback: "使用 \u{2018}openclaw cron add\u{2019} 或 \u{2018}openclaw cron remove\u{2019} 管理定时任务"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16).padding(.vertical, 7)
@@ -2821,7 +2821,7 @@ private struct SkillsTabView: View {
                     .font(.headline)
                 Spacer()
                 Button { runId += 1 } label: {
-                    Label("刷新", systemImage: "arrow.clockwise")
+                    Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
             }
@@ -2837,7 +2837,7 @@ private struct SkillsTabView: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "info.circle").foregroundStyle(.secondary).font(.caption)
-                Text("使用 \u{2018}openclaw skills install <name>\u{2019} 安装，\u{2018}openclaw skills remove <name>\u{2019} 卸载")
+                Text(L10n.k("user.detail.auto.u_2018_openclaw_skills_install_name_u_2019", fallback: "使用 \u{2018}openclaw skills install <name>\u{2019} 安装，\u{2018}openclaw skills remove <name>\u{2019} 卸载"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
@@ -2861,18 +2861,18 @@ private struct PersonaTabView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("人格 (SOUL.md)")
+                Text(L10n.k("user.detail.auto.soul_md", fallback: "人格 (SOUL.md)"))
                     .font(.headline)
                 Spacer()
                 if isSaving {
                     ProgressView().controlSize(.small)
                 }
                 Button { Task { await load() } } label: {
-                    Label("刷新", systemImage: "arrow.clockwise")
+                    Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
                 .disabled(isLoading || isSaving)
-                Button("保存") { Task { await save() } }
+                Button(L10n.k("user.detail.auto.save", fallback: "保存")) { Task { await save() } }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(isLoading || isSaving)
@@ -2883,7 +2883,7 @@ private struct PersonaTabView: View {
             Divider()
 
             if isLoading {
-                ProgressView("加载中…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView(L10n.k("user.detail.auto.loading", fallback: "加载中…")).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 if let err = errorMessage {
                     HStack(spacing: 6) {
@@ -2902,7 +2902,7 @@ private struct PersonaTabView: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "info.circle").foregroundStyle(.secondary).font(.caption)
-                Text("编辑 SOUL.md 文件，定义 Agent 的人格与语气风格")
+                Text(L10n.k("user.detail.auto.soul_md_file_agent", fallback: "编辑 SOUL.md 文件，定义 Agent 的人格与语气风格"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
@@ -2960,11 +2960,11 @@ private struct ConfigTabView: View {
                     ProgressView().controlSize(.small)
                 }
                 Button { Task { await load() } } label: {
-                    Label("刷新", systemImage: "arrow.clockwise")
+                    Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
                 .disabled(isLoading || isSaving)
-                Button("保存") { Task { await save() } }
+                Button(L10n.k("user.detail.auto.save", fallback: "保存")) { Task { await save() } }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(isLoading || isSaving || jsonError != nil)
@@ -2994,7 +2994,7 @@ private struct ConfigTabView: View {
             }
 
             if isLoading {
-                ProgressView("加载中…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView(L10n.k("user.detail.auto.loading", fallback: "加载中…")).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 TextEditor(text: $content)
                     .font(.system(.body, design: .monospaced))
@@ -3006,7 +3006,7 @@ private struct ConfigTabView: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "info.circle").foregroundStyle(.secondary).font(.caption)
-                Text("编辑 .openclaw/openclaw.json 主配置。JSON 校验错误时保存按钮将禁用。")
+                Text(L10n.k("user.detail.auto.openclaw_openclaw_json_configuration_json_save", fallback: "编辑 .openclaw/openclaw.json 主配置。JSON 校验错误时保存按钮将禁用。"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
@@ -3032,7 +3032,7 @@ private struct ConfigTabView: View {
             }
             validateJSON(content)
         } catch {
-            errorMessage = "读取失败：\(error.localizedDescription)"
+            errorMessage = L10n.f("views.user_detail_view.text_bc49b91a", fallback: "读取失败：%@", String(describing: error.localizedDescription))
         }
     }
 
@@ -3045,7 +3045,7 @@ private struct ConfigTabView: View {
         do {
             try await helperClient.writeFile(username: username, relativePath: relPath, data: data)
         } catch {
-            errorMessage = "保存失败：\(error.localizedDescription)"
+            errorMessage = L10n.f("views.user_detail_view.text_1eacd4c6", fallback: "保存失败：%@", String(describing: error.localizedDescription))
         }
     }
 
@@ -3053,16 +3053,16 @@ private struct ConfigTabView: View {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             jsonError = nil; return
         }
-        guard let data = text.data(using: .utf8) else { jsonError = "编码错误"; return }
+        guard let data = text.data(using: .utf8) else { jsonError = L10n.k("user.detail.auto.encoding_error", fallback: "编码错误"); return }
         do {
             _ = try JSONSerialization.jsonObject(with: data)
             jsonError = nil
         } catch {
             let desc = error.localizedDescription
             if let r = desc.range(of: "line ") {
-                jsonError = "JSON 语法错误：\(desc[r.lowerBound...])"
+                jsonError = L10n.f("views.user_detail_view.json", fallback: "JSON 语法错误：%@", String(describing: desc[r.lowerBound...]))
             } else {
-                jsonError = "JSON 语法错误"
+                jsonError = L10n.k("user.detail.auto.json", fallback: "JSON 语法错误")
             }
         }
     }
@@ -3093,8 +3093,17 @@ private struct ProcessTabView: View {
     @State private var columnWidths = ProcessColumnWidths()
 
     enum ViewMode: String, CaseIterable, Identifiable {
-        case flat = "列表"; case tree = "树状"
+        case flat = "flat"
+        case tree = "tree"
         var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .flat:
+                return L10n.k("user.detail.process.view_mode.flat", fallback: "列表")
+            case .tree:
+                return L10n.k("user.detail.process.view_mode.tree", fallback: "树状")
+            }
+        }
     }
     enum SortField { case pid, name, cpu, mem, uptime }
 
@@ -3172,30 +3181,30 @@ private struct ProcessTabView: View {
         VStack(spacing: 0) {
             // 标题栏
             HStack {
-                Text("进程管理").font(.headline)
+                Text(L10n.k("user.detail.auto.process", fallback: "进程管理")).font(.headline)
                 if searchText.isEmpty {
-                    Text("\(processes.count) 个进程").font(.subheadline).foregroundStyle(.secondary)
+                    Text(L10n.f("views.user_detail_view.text_f40c2690", fallback: "%@ 个进程", String(describing: processes.count))).font(.subheadline).foregroundStyle(.secondary)
                 } else {
                     Text("\(filtered.count) / \(processes.count)").font(.subheadline).foregroundStyle(.secondary)
                 }
                 if !selectedTargets.isEmpty {
-                    Text("已选 \(selectedTargets.count)")
+                    Text(L10n.f("views.user_detail_view.text_6ffeae31", fallback: "已选 %@", String(describing: selectedTargets.count)))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Picker("", selection: $viewMode) {
-                    ForEach(ViewMode.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(ViewMode.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented).fixedSize()
-                Text("⌘/Ctrl 多选")
+                Text(L10n.k("user.detail.auto.ctrl", fallback: "⌘/Ctrl 多选"))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 HStack(spacing: 4) {
                     if isActive {
                         Image(systemName: "circle.fill").font(.system(size: 6)).foregroundStyle(.green)
                     }
-                    Text(isActive ? "实时" : "已暂停").font(.caption).foregroundStyle(.secondary)
+                    Text(isActive ? L10n.k("user.detail.auto.live", fallback: "实时") : L10n.k("user.detail.auto.paused", fallback: "已暂停")).font(.caption).foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 7)
@@ -3203,11 +3212,11 @@ private struct ProcessTabView: View {
 
             if !selectedTargets.isEmpty {
                 HStack(spacing: 8) {
-                    Text("已选 \(selectedTargets.count) 个进程")
+                    Text(L10n.f("views.user_detail_view.text_5a560471", fallback: "已选 %@ 个进程", String(describing: selectedTargets.count)))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("终止已选 (\(selectedTargets.count))") {
+                    Button(L10n.f("views.user_detail_view.text_e80c7665", fallback: "终止已选 (%@)", String(describing: selectedTargets.count))) {
                         killTargets = selectedTargets
                     }
                     .buttonStyle(.bordered)
@@ -3216,7 +3225,7 @@ private struct ProcessTabView: View {
                     Button(role: .destructive) {
                         Task { await doKill(selectedTargets, signal: 9) }
                     } label: {
-                        Text("强制结束已选 (\(selectedTargets.count))")
+                        Text(L10n.f("views.user_detail_view.text_6151cab2", fallback: "强制结束已选 (%@)", String(describing: selectedTargets.count)))
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -3231,7 +3240,7 @@ private struct ProcessTabView: View {
             // 搜索框
             HStack {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("搜索进程名或命令行…", text: $searchText)
+                TextField(L10n.k("user.detail.auto.searchprocess", fallback: "搜索进程名或命令行…"), text: $searchText)
                     .textFieldStyle(.plain)
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: {
@@ -3259,10 +3268,10 @@ private struct ProcessTabView: View {
 
             // 列表内容
             if isLoading {
-                ProgressView("加载中…")
+                ProgressView(L10n.k("user.detail.auto.loading", fallback: "加载中…"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filtered.isEmpty && isActive {
-                Text(searchText.isEmpty ? "暂无进程" : "无匹配进程").foregroundStyle(.tertiary)
+                Text(searchText.isEmpty ? L10n.k("user.detail.auto.process", fallback: "暂无进程") : L10n.k("user.detail.auto.process", fallback: "无匹配进程")).foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if viewMode == .flat {
                 List(sorted, selection: $selectedPIDs) { proc in
@@ -3325,7 +3334,7 @@ private struct ProcessTabView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 if let t = lastUpdatedAt {
-                    Text("更新于 \(Self.statusTimeFormatter.string(from: t))")
+                    Text(L10n.f("views.user_detail_view.text_08170b91", fallback: "更新于 %@", String(describing: Self.statusTimeFormatter.string(from: t))))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -3356,14 +3365,14 @@ private struct ProcessTabView: View {
             titleVisibility: .visible
         ) {
             if !killTargets.isEmpty {
-                Button("发送 SIGTERM", role: .destructive) { Task { await doKill(killTargets, signal: 15) } }
-                Button("取消", role: .cancel) { killTargets = [] }
+                Button(L10n.k("user.detail.auto.sigterm", fallback: "发送 SIGTERM"), role: .destructive) { Task { await doKill(killTargets, signal: 15) } }
+                Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) { killTargets = [] }
             }
         }
-        .alert("操作失败", isPresented: Binding(
+        .alert(L10n.k("user.detail.auto.operation_failed", fallback: "操作失败"), isPresented: Binding(
             get: { killError != nil }, set: { if !$0 { killError = nil } }
         )) {
-            Button("确定", role: .cancel) { killError = nil }
+            Button(L10n.k("user.detail.auto.ok", fallback: "确定"), role: .cancel) { killError = nil }
         } message: { Text(killError ?? "") }
         .sheet(item: $detailTarget) { proc in
             ProcessDetailSheet(base: proc)
@@ -3375,16 +3384,20 @@ private struct ProcessTabView: View {
         let targets = contextualKillTargets(for: proc)
         let count = targets.count
         Button { detailTarget = proc } label: {
-            Label("查看详情", systemImage: "info.circle")
+            Label(L10n.k("views.user_detail_view.view_details", fallback: "查看详情"), systemImage: "info.circle")
         }
         Divider()
         Button { killTargets = targets } label: {
-            Label(count > 1 ? "终止选中进程 (\(count), SIGTERM)" : "终止进程 (SIGTERM)",
+            Label(count > 1
+                  ? String(format: L10n.k("views.user_detail_view.kill_selected_sigterm", fallback: "终止选中进程 (%d, SIGTERM)"), count)
+                  : L10n.k("views.user_detail_view.process_sigterm", fallback: "终止进程 (SIGTERM)"),
                   systemImage: "stop.circle")
         }
         .disabled(targets.isEmpty)
         Button(role: .destructive) { Task { await doKill(targets, signal: 9) } } label: {
-            Label(count > 1 ? "强制结束选中进程 (\(count), SIGKILL)" : "强制结束 (SIGKILL)",
+            Label(count > 1
+                  ? String(format: L10n.k("views.user_detail_view.force_kill_selected_sigkill", fallback: "强制结束选中进程 (%d, SIGKILL)"), count)
+                  : L10n.k("views.user_detail_view.sigkill", fallback: "强制结束 (SIGKILL)"),
                   systemImage: "xmark.circle.fill")
         }
         .disabled(targets.isEmpty)
@@ -3392,9 +3405,9 @@ private struct ProcessTabView: View {
 
     private var killDialogTitle: String {
         if killTargets.count == 1, let first = killTargets.first {
-            return "终止进程 \(first.name)（PID \(first.pid)）？"
+            return String(format: L10n.k("views.user_detail_view.kill_process_confirmation", fallback: "终止进程 %@（PID %d）？"), first.name, first.pid)
         }
-        return "终止已选中的 \(killTargets.count) 个进程？"
+        return String(format: L10n.k("views.user_detail_view.kill_selected_process_count", fallback: "终止已选中的 %d 个进程？"), killTargets.count)
     }
 
     private func contextualKillTargets(for proc: ProcessEntry) -> [ProcessEntry] {
@@ -3438,14 +3451,14 @@ private struct ProcessTabView: View {
         }
         killError = failures.count == 1
             ? failures[0]
-            : "以下进程操作失败：\n" + failures.joined(separator: "\n")
+            : L10n.k("views.user_detail_view.process", fallback: "以下进程操作失败：\n") + failures.joined(separator: "\n")
     }
 
     private var statusText: String {
-        if isLoading { return "正在加载进程基础信息…" }
-        if portsLoading { return "基础信息已就绪，正在补充端口信息…" }
-        if processes.isEmpty { return "暂无进程数据" }
-        return "进程与端口数据已就绪（\(processes.count)）"
+        if isLoading { return L10n.k("views.user_detail_view.loading_process_base_info", fallback: "正在加载进程基础信息…") }
+        if portsLoading { return L10n.k("views.user_detail_view.port", fallback: "基础信息已就绪，正在补充端口信息…") }
+        if processes.isEmpty { return L10n.k("views.user_detail_view.no_process_data", fallback: "暂无进程数据") }
+        return String(format: L10n.k("views.user_detail_view.process_port_ready_count", fallback: "进程与端口数据已就绪（%d）"), processes.count)
     }
 }
 
@@ -3467,13 +3480,13 @@ private struct ProcessDetailSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("进程详情 · PID \(base.pid)").font(.headline)
+                Text(L10n.f("views.user_detail_view.pid_fabd0d", fallback: "进程详情 · PID %@", String(describing: base.pid))).font(.headline)
                 Spacer()
-                Button("关闭") { dismiss() }
+                Button(L10n.k("user.detail.auto.close", fallback: "关闭")) { dismiss() }
             }
 
             if isLoading {
-                ProgressView("正在读取详情…")
+                ProgressView(L10n.k("user.detail.auto.text_1087df4607", fallback: "正在读取详情…"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else if let loadError {
                 Text(loadError)
@@ -3482,27 +3495,27 @@ private struct ProcessDetailSheet: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
-                        detailRow("进程名", value: resolved.name)
-                        detailRow("命令行", value: resolved.cmdline)
-                        detailRow("父进程 PID", value: "\(resolved.ppid)")
-                        detailRow("状态", value: resolved.stateLabel)
+                        detailRow(L10n.k("user.detail.auto.process", fallback: "进程名"), value: resolved.name)
+                        detailRow(L10n.k("user.detail.auto.command_line", fallback: "命令行"), value: resolved.cmdline)
+                        detailRow(L10n.k("user.detail.auto.process_pid", fallback: "父进程 PID"), value: "\(resolved.ppid)")
+                        detailRow(L10n.k("user.detail.auto.status", fallback: "状态"), value: resolved.stateLabel)
                         detailRow("CPU", value: String(format: "%.1f%%", resolved.cpuPercent))
-                        detailRow("内存", value: resolved.memLabel)
-                        detailRow("运行时长", value: resolved.uptimeLabel)
-                        detailRow("启动时间", value: formatTime(resolved.startTime))
-                        detailRow("监听端口", value: resolved.listeningPorts.isEmpty ? "—" : resolved.listeningPorts.joined(separator: ", "))
+                        detailRow(L10n.k("user.detail.auto.memory", fallback: "内存"), value: resolved.memLabel)
+                        detailRow(L10n.k("user.detail.auto.runtime", fallback: "运行时长"), value: resolved.uptimeLabel)
+                        detailRow(L10n.k("user.detail.auto.start", fallback: "启动时间"), value: formatTime(resolved.startTime))
+                        detailRow(L10n.k("user.detail.auto.port", fallback: "监听端口"), value: resolved.listeningPorts.isEmpty ? "—" : resolved.listeningPorts.joined(separator: ", "))
                         Divider().padding(.vertical, 2)
-                        detailRow("可执行文件", value: resolved.executablePath ?? "—")
-                        detailRow("文件存在", value: resolved.executableExists ? "是" : "否")
-                        detailRow("文件大小", value: resolved.executableFileSizeBytes.map(FormatUtils.formatBytes) ?? "—")
-                        detailRow("创建时间", value: formatTime(resolved.executableCreatedAt))
-                        detailRow("修改时间", value: formatTime(resolved.executableModifiedAt))
-                        detailRow("访问时间", value: formatTime(resolved.executableAccessedAt))
-                        detailRow("元数据变更", value: formatTime(resolved.executableMetadataChangedAt))
+                        detailRow(L10n.k("user.detail.auto.file", fallback: "可执行文件"), value: resolved.executablePath ?? "—")
+                        detailRow(L10n.k("user.detail.auto.file", fallback: "文件存在"), value: resolved.executableExists ? L10n.k("user.detail.auto.yes", fallback: "是") : L10n.k("user.detail.auto.no", fallback: "否"))
+                        detailRow(L10n.k("user.detail.auto.file", fallback: "文件大小"), value: resolved.executableFileSizeBytes.map(FormatUtils.formatBytes) ?? "—")
+                        detailRow(L10n.k("user.detail.auto.created_at", fallback: "创建时间"), value: formatTime(resolved.executableCreatedAt))
+                        detailRow(L10n.k("user.detail.auto.modified_at", fallback: "修改时间"), value: formatTime(resolved.executableModifiedAt))
+                        detailRow(L10n.k("user.detail.auto.accessed_at", fallback: "访问时间"), value: formatTime(resolved.executableAccessedAt))
+                        detailRow(L10n.k("user.detail.auto.metadata_changed", fallback: "元数据变更"), value: formatTime(resolved.executableMetadataChangedAt))
                         detailRow("inode", value: resolved.executableInode.map(String.init) ?? "—")
-                        detailRow("硬链接数", value: resolved.executableLinkCount.map(String.init) ?? "—")
-                        detailRow("属主", value: resolved.executableOwner ?? "—")
-                        detailRow("权限", value: resolved.executablePermissions ?? "—")
+                        detailRow(L10n.k("user.detail.auto.hard_link_count", fallback: "硬链接数"), value: resolved.executableLinkCount.map(String.init) ?? "—")
+                        detailRow(L10n.k("user.detail.auto.owner", fallback: "属主"), value: resolved.executableOwner ?? "—")
+                        detailRow(L10n.k("user.detail.auto.permissions", fallback: "权限"), value: resolved.executablePermissions ?? "—")
                     }
                     .textSelection(.enabled)
                 }
@@ -3515,7 +3528,7 @@ private struct ProcessDetailSheet: View {
             detail = fetched
             isLoading = false
             if fetched == nil {
-                loadError = "进程可能已退出，无法读取详情。"
+                loadError = L10n.k("user.detail.auto.the_process_may_have_exited_details_are_unavailable", fallback: "进程可能已退出，无法读取详情。")
             }
         }
     }
@@ -3592,10 +3605,10 @@ private struct ProcessColumnHeader: View {
             commandCol(right: $widths.cpu)
             cpuCol(right: $widths.mem) { onSort(.cpu) }
             memCol(right: $widths.state) { onSort(.mem) }
-            resizableText("状态", width: $widths.state, min: 40, max: 120, rightWidth: $widths.uptime, rightMin: 48, rightMax: 160)
+            resizableText(L10n.k("user.detail.auto.status", fallback: "状态"), width: $widths.state, min: 40, max: 120, rightWidth: $widths.uptime, rightMin: 48, rightMax: 160)
             uptimeCol(right: $widths.ports) { onSort(.uptime) }
-            resizableText("端口", width: $widths.ports, min: 90, max: 360, rightWidth: $widths.purpose, rightMin: 100, rightMax: 420)
-            resizableText("说明", width: $widths.purpose, min: 100, max: 420)
+            resizableText(L10n.k("user.detail.auto.port", fallback: "端口"), width: $widths.ports, min: 90, max: 360, rightWidth: $widths.purpose, rightMin: 100, rightMax: 420)
+            resizableText(L10n.k("user.detail.auto.description", fallback: "说明"), width: $widths.purpose, min: 100, max: 420)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -3610,10 +3623,10 @@ private struct ProcessColumnHeader: View {
     }
     @ViewBuilder private func nameCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
         if viewMode == .flat {
-            sortBtn("进程名", field: .name, width: $widths.name, min: 96, max: 320, align: .leading,
+            sortBtn(L10n.k("user.detail.auto.process", fallback: "进程名"), field: .name, width: $widths.name, min: 96, max: 320, align: .leading,
                     rightWidth: right, rightMin: 220, rightMax: 900, action: action)
         } else {
-            resizableText("进程名", width: $widths.name, min: 96, max: 320,
+            resizableText(L10n.k("user.detail.auto.process", fallback: "进程名"), width: $widths.name, min: 96, max: 320,
                           rightWidth: right, rightMin: 220, rightMax: 900)
         }
     }
@@ -3626,11 +3639,11 @@ private struct ProcessColumnHeader: View {
                 rightWidth: right, rightMin: 54, rightMax: 160, action: action)
     }
     @ViewBuilder private func memCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
-        sortBtn("内存", field: .mem, width: $widths.mem, min: 54, max: 160, align: .trailing,
+        sortBtn(L10n.k("user.detail.auto.memory", fallback: "内存"), field: .mem, width: $widths.mem, min: 54, max: 160, align: .trailing,
                 rightWidth: right, rightMin: 40, rightMax: 120, action: action)
     }
     @ViewBuilder private func uptimeCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
-        sortBtn("时长", field: .uptime, width: $widths.uptime, min: 48, max: 160, align: .trailing,
+        sortBtn(L10n.k("user.detail.auto.duration", fallback: "时长"), field: .uptime, width: $widths.uptime, min: 48, max: 160, align: .trailing,
                 rightWidth: right, rightMin: 90, rightMax: 360, action: action)
     }
 
@@ -3689,7 +3702,7 @@ private struct ProcessRow: View {
 
     private var stateText: String {
         if freezeMode == .pause, pausedPIDSet.contains(proc.pid) {
-            return "已暂停(冻结)"
+            return L10n.k("views.user_detail_view.pause_freeze_state", fallback: "已暂停(冻结)")
         }
         return proc.stateLabel
     }
@@ -3876,7 +3889,7 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
     var apiKeyPlaceholder: String {
         switch self {
         case .kimiCoding: return "sk-..."
-        case .minimax: return "粘贴 MiniMax API Key"
+        case .minimax: return L10n.k("views.user_detail_view.minimax_api_key", fallback: "粘贴 MiniMax API Key")
         }
     }
 
@@ -3889,8 +3902,8 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
 
     var consoleTitle: String {
         switch self {
-        case .kimiCoding: return "Kimi Code 控制台"
-        case .minimax: return "MiniMax 控制台"
+        case .kimiCoding: return L10n.k("views.user_detail_view.kimi_code", fallback: "Kimi Code 控制台")
+        case .minimax: return L10n.k("views.user_detail_view.minimax", fallback: "MiniMax 控制台")
         }
     }
 }
@@ -3974,14 +3987,14 @@ private struct KimiMinimaxModelConfigPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("直接配置模型与 API Key（当前支持 Kimi / MiniMax）")
+            Text(L10n.k("user.detail.auto.configurationmodels_api_key_kimi_minimax", fallback: "直接配置模型与 API Key（当前支持 Kimi / MiniMax）"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
             if isLoading {
                 HStack(spacing: 8) {
                     ProgressView().scaleEffect(0.7)
-                    Text("读取当前配置…")
+                    Text(L10n.k("user.detail.auto.configuration", fallback: "读取当前配置…"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -4027,16 +4040,16 @@ private struct KimiMinimaxModelConfigPanel: View {
                             Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
                         }
                         .buttonStyle(.bordered)
-                        .help(isShowingApiKey ? "隐藏" : "显示")
+                        .help(isShowingApiKey ? L10n.k("user.detail.auto.hide", fallback: "隐藏") : L10n.k("user.detail.auto.show", fallback: "显示"))
                     }
                 }
 
                 if selectedProvider == .minimax {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("MiniMax 模型")
+                        Text(L10n.k("user.detail.auto.minimax_models", fallback: "MiniMax 模型"))
                             .font(.subheadline)
                             .fontWeight(.medium)
-                        Picker("模型", selection: $selectedMinimaxModel) {
+                        Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedMinimaxModel) {
                             ForEach(DirectMinimaxModel.allCases) { model in
                                 Text(model.providerName).tag(model)
                             }
@@ -4048,7 +4061,7 @@ private struct KimiMinimaxModelConfigPanel: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Kimi 当前固定模型")
+                        Text(L10n.k("user.detail.auto.kimi_models", fallback: "Kimi 当前固定模型"))
                             .font(.subheadline)
                             .fontWeight(.medium)
                         Text("kimi-coding/k2p5")
@@ -4070,7 +4083,7 @@ private struct KimiMinimaxModelConfigPanel: View {
                 }
 
                 HStack {
-                    Button("重新读取") {
+                    Button(L10n.k("user.detail.auto.reload", fallback: "重新读取")) {
                         Task { await loadCurrentState() }
                     }
                     .buttonStyle(.bordered)
@@ -4078,7 +4091,7 @@ private struct KimiMinimaxModelConfigPanel: View {
 
                     Spacer()
 
-                    Button(isSaving ? "保存中…" : "保存并应用") {
+                    Button(isSaving ? L10n.k("user.detail.auto.save", fallback: "保存中…") : L10n.k("user.detail.auto.save", fallback: "保存并应用")) {
                         Task { await applyConfig() }
                     }
                     .buttonStyle(.borderedProminent)
@@ -4126,7 +4139,7 @@ private struct KimiMinimaxModelConfigPanel: View {
         let apiKey = (providerKeys[selectedProvider.rawValue] ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !apiKey.isEmpty else {
-            saveError = "请先输入 API Key"
+            saveError = L10n.k("user.detail.auto.input_api_key", fallback: "请先输入 API Key")
             return
         }
 
@@ -4142,7 +4155,7 @@ private struct KimiMinimaxModelConfigPanel: View {
             case .minimax:
                 try await applyMinimaxConfig(apiKey: apiKey)
             }
-            saveMessage = "配置已应用"
+            saveMessage = L10n.k("user.detail.auto.configuration", fallback: "配置已应用")
             onApplied?()
         } catch {
             saveError = error.localizedDescription

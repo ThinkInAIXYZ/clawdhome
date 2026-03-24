@@ -28,7 +28,7 @@ struct CLIConfigStep: View {
     // MARK: - 初始状态（未打开过终端）
     private var initialView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("配置 openclaw", systemImage: "terminal")
+            Label(L10n.k("views.cliconfig_step.configuration_openclaw", fallback: "配置 openclaw"), systemImage: "terminal")
                 .font(.subheadline).fontWeight(.semibold)
                 .foregroundStyle(.secondary)
 
@@ -37,11 +37,11 @@ struct CLIConfigStep: View {
                     terminalOpened = true
                 }
             } label: {
-                Label("在终端配置（推荐）", systemImage: "apple.terminal")
+                Label(L10n.k("views.cliconfig_step.configuration", fallback: "在终端配置（推荐）"), systemImage: "apple.terminal")
             }
             .buttonStyle(.borderedProminent)
 
-            Button("在此配置（实验性）") {
+            Button(L10n.k("views.cliconfig_step.configuration_2525b2", fallback: "在此配置（实验性）")) {
                 showUIFallback = true
             }
             .buttonStyle(.plain)
@@ -56,17 +56,17 @@ struct CLIConfigStep: View {
             HStack(spacing: 8) {
                 Image(systemName: "apple.terminal")
                     .foregroundStyle(.secondary)
-                Text("终端已打开，在终端完成配置后回到此处。")
+                Text(L10n.k("views.cliconfig_step.done_configuration", fallback: "终端已打开，在终端完成配置后回到此处。"))
                     .font(.callout).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 10) {
-                Button("已完成配置") {
+                Button(L10n.k("views.cliconfig_step.done_configuration_4880fd", fallback: "已完成配置")) {
                     onDone?()
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button("重新打开终端") {
+                Button(L10n.k("views.cliconfig_step.reopen_terminal", fallback: "重新打开终端")) {
                     openTerminal()
                 }
                 .buttonStyle(.bordered)
@@ -74,7 +74,7 @@ struct CLIConfigStep: View {
 
             Divider()
 
-            Button("改用界面配置 ⚠️ 实验性") {
+            Button(L10n.k("views.cliconfig_step.configuration_5e18b6", fallback: "改用界面配置 ⚠️ 实验性")) {
                 showUIFallback = true
             }
             .buttonStyle(.plain)
@@ -86,7 +86,7 @@ struct CLIConfigStep: View {
     // MARK: - UI 回退（ModelConfigWizard + 警告）
     private var uiFallbackView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("界面配置功能尚不成熟，建议使用终端配置",
+            Label(L10n.k("views.cliconfig_step.configuration_configuration", fallback: "界面配置功能尚不成熟，建议使用终端配置"),
                   systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(.orange)
@@ -95,7 +95,7 @@ struct CLIConfigStep: View {
                 onDone?()
             }
 
-            Button("返回终端入口") {
+            Button(L10n.k("views.cliconfig_step.back_to_terminal_entry", fallback: "返回终端入口")) {
                 showUIFallback = false
             }
             .buttonStyle(.plain)
@@ -107,22 +107,28 @@ struct CLIConfigStep: View {
     // MARK: - 打开 Terminal.app
     @discardableResult
     private func openTerminal() -> Bool {
+        let terminalTitle = L10n.f("views.cliconfig_step.terminal_title", fallback: "=== ClawdHome: 配置用户 %@ ===", user.username)
+        let passwordHint = L10n.f("views.cliconfig_step.password_hint", fallback: "提示：接下来请输入 %@ 的 Mac 登录密码", NSUserName())
+        let successLine = L10n.k("views.cliconfig_step.terminal_success", fallback: "配置完成。请返回 ClawdHome 点击「已完成配置」。")
+        let failedLine = L10n.k("views.cliconfig_step.terminal_failed", fallback: "配置出现错误（退出码 $_exit），请检查输出并重试。")
+        let closeHint = L10n.k("views.cliconfig_step.terminal_close_hint", fallback: "按 Return 键关闭此窗口...")
+
         let script = """
             #!/bin/bash
             clear
-            echo "=== ClawdHome: 配置用户 \(user.username) ==="
+            echo "\(terminalTitle)"
             echo
-            echo "提示：接下来请输入 \(NSUserName()) 的 Mac 登录密码"
+            echo "\(passwordHint)"
             echo
             \(terminalCommand)
             _exit=$?
             echo
             if [ $_exit -eq 0 ]; then
-                echo "配置完成。请返回 ClawdHome 点击「已完成配置」。"
+                echo "\(successLine)"
             else
-                echo "配置出现错误（退出码 $_exit），请检查输出并重试。"
+                echo "\(failedLine)"
             fi
-            read -rp "按 Return 键关闭此窗口..."
+            read -rp "\(closeHint)"
             """
         let tmpURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("clawd-config-\(user.username).command")

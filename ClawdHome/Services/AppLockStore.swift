@@ -117,7 +117,7 @@ final class AppLockStore {
         do {
             let success = try await context.evaluatePolicy(
                 .deviceOwnerAuthenticationWithBiometrics,
-                localizedReason: "解锁 ClawdHome"
+                localizedReason: L10n.k("services.app_lock_store.unlock_clawdhome", fallback: "解锁 ClawdHome")
             )
             if success { isLocked = false }
         } catch {
@@ -140,7 +140,7 @@ final class AppLockStore {
         return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
 
-    /// 区分"密码错误"和"Keychain 被拒绝"
+    /// 区分L10n.k("services.app_lock_store.password_incorrect", fallback: "密码错误")和L10n.k("services.app_lock_store.keychain", fallback: "Keychain 被拒绝")
     private func verifyFull(_ password: String) -> UnlockResult {
         guard let stored = loadHash() else {
             // loadHash 返回 nil：可能是 Keychain 被拒绝，也可能条目不存在

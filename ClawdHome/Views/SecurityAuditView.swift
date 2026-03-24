@@ -16,10 +16,10 @@ struct SecurityAuditView: View {
                 .tabItem { Label("Gateway", systemImage: "server.rack") }
 
             CommandLogTab(users: pool.users.filter { !$0.isAdmin })
-                .tabItem { Label("指令记录", systemImage: "message") }
+                .tabItem { Label(L10n.k("auto.security_audit_view.command_history", fallback: "指令记录"), systemImage: "message") }
 
             ConfigAuditTab(users: pool.users.filter { !$0.isAdmin })
-                .tabItem { Label("配置变更", systemImage: "doc.badge.gearshape") }
+                .tabItem { Label(L10n.k("auto.security_audit_view.configuration", fallback: "配置变更"), systemImage: "doc.badge.gearshape") }
         }
         .frame(minWidth: 720, minHeight: 480)
     }
@@ -39,7 +39,7 @@ private struct LogPanel<Entry: Identifiable, Row: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("搜索…", text: searchText).textFieldStyle(.plain)
+                TextField(L10n.k("auto.security_audit_view.search", fallback: "搜索…"), text: searchText).textFieldStyle(.plain)
                 Spacer()
                 if let copyText {
                     Button {
@@ -47,13 +47,13 @@ private struct LogPanel<Entry: Identifiable, Row: View>: View {
                     } label: {
                         Image(systemName: "doc.on.doc")
                     }
-                    .help("复制筛选结果")
+                    .help(L10n.k("auto.security_audit_view.copy_filtered_results", fallback: "复制筛选结果"))
                     .disabled(entries.isEmpty)
                 }
                 Button(action: onRefresh) {
                     Image(systemName: "arrow.clockwise")
                 }
-                .help("刷新").disabled(isLoading)
+                .help(L10n.k("auto.security_audit_view.refresh", fallback: "刷新")).disabled(isLoading)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(.bar)
@@ -63,8 +63,8 @@ private struct LogPanel<Entry: Identifiable, Row: View>: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if entries.isEmpty {
                 ContentUnavailableView(
-                    "暂无日志", systemImage: "doc.text",
-                    description: Text("日志文件为空或尚未产生记录")
+                    L10n.k("auto.security_audit_view.logs", fallback: "暂无日志"), systemImage: "doc.text",
+                    description: Text(L10n.k("auto.security_audit_view.logsfile", fallback: "日志文件为空或尚未产生记录"))
                 )
             } else {
                 List(entries) { entry in
@@ -95,8 +95,8 @@ private struct UserPickerFrame<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Picker("用户", selection: $selectedUser) {
-                    Text("选择用户…").tag(Optional<ManagedUser>.none)
+                Picker(L10n.k("auto.security_audit_view.user", fallback: "用户"), selection: $selectedUser) {
+                    Text(L10n.k("auto.security_audit_view.selectuser", fallback: "选择用户…")).tag(Optional<ManagedUser>.none)
                     ForEach(users) { u in
                         Text("🧑 \(u.username)").tag(Optional(u))
                     }
@@ -111,7 +111,7 @@ private struct UserPickerFrame<Content: View>: View {
             if selectedUser != nil {
                 content()
             } else {
-                ContentUnavailableView("请选择用户", systemImage: "person")
+                ContentUnavailableView(L10n.k("auto.security_audit_view.selectuser", fallback: "请选择用户"), systemImage: "person")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -300,7 +300,7 @@ private struct ConfigAuditRow: View {
                 Text(path).foregroundStyle(.secondary).padding(.leading, 64)
             }
             if !entry.suspicious.isEmpty {
-                Text("⚠ \(entry.suspicious.joined(separator: "、"))")
+                Text("⚠ \(entry.suspicious.joined(separator: ", "))")
                     .foregroundStyle(.orange).padding(.leading, 64)
             }
         }

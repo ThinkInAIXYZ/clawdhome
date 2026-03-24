@@ -19,7 +19,7 @@ struct DashboardView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
-                        Text("Helper 未连接，数据无法获取。请前往「设置 → 诊断」查看详情。")
+                        Text(L10n.k("dashboard.helper_disconnected_hint", fallback: "Helper 未连接，数据无法获取。请前往「设置 → 诊断」查看详情。"))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -29,7 +29,7 @@ struct DashboardView: View {
                 }
 
                 // ClawdHome 概览
-                DashboardSection(title: "ClawdHome 概览", icon: "desktopcomputer") {
+                DashboardSection(title: L10n.k("dashboard.section.clawdhome_overview", fallback: "ClawdHome 概览"), icon: "desktopcomputer") {
                     MachineStatsGrid(
                         stats: pool.snapshot?.machine,
                         history: pool.machineHistory,
@@ -41,7 +41,7 @@ struct DashboardView: View {
                 Divider()
 
                 // 虾塘概览
-                DashboardSection(title: "虾塘概览", icon: "network") {
+                DashboardSection(title: L10n.k("dashboard.section.shrimp_pool_overview", fallback: "虾塘概览"), icon: "network") {
                     ShrimpNetworkSection(
                         shrimps: pool.snapshot?.shrimps ?? [],
                         total: pool.snapshot?.totalShrimpCount ?? 0,
@@ -52,13 +52,13 @@ struct DashboardView: View {
                 Divider()
 
                 // 资产概览
-                DashboardSection(title: "资产概览", icon: "shippingbox") {
+                DashboardSection(title: L10n.k("dashboard.section.asset_overview", fallback: "资产概览"), icon: "shippingbox") {
                     AssetOverviewSection(shrimps: pool.snapshot?.shrimps ?? [])
                 }
             }
             .padding(20)
         }
-        .navigationTitle("仪表盘")
+        .navigationTitle(L10n.k("dashboard.title", fallback: "仪表盘"))
         // 触发 HTTP 探活（视图本地逻辑）
         .onChange(of: pool.snapshotVersion) { _, _ in
             guard let s = pool.snapshot else { return }
@@ -152,7 +152,7 @@ struct MachineStatsGrid: View {
             ))
         }
         result.append(CardData(
-            title: "内存",
+            title: L10n.k("common.resource.memory", fallback: "内存"),
             value: stats.map { String(format: "%.0f/%.0f GB",
                 $0.memUsedMB / 1024, $0.memTotalMB / 1024) } ?? "—",
             icon: "memorychip", color: .purple,
@@ -160,7 +160,7 @@ struct MachineStatsGrid: View {
             range: 0...100
         ))
         result.append(CardData(
-            title: "网络",
+            title: L10n.k("common.resource.network", fallback: "网络"),
             value: "↓ \(FormatUtils.formatBps(currentNetIn))",
             value2: "↑ \(FormatUtils.formatBps(currentNetOut))",
             cumulativeIn: FormatUtils.formatTotalBytes(totalNetIn),
@@ -170,7 +170,7 @@ struct MachineStatsGrid: View {
             range: netRange
         ))
         result.append(CardData(
-            title: "磁盘",
+            title: L10n.k("common.resource.disk", fallback: "磁盘"),
             value: stats.map { String(format: "%.0f/%.0f GB",
                 $0.diskUsedGB, $0.diskTotalGB) } ?? "—",
             icon: "internaldrive", color: .green,
@@ -179,7 +179,7 @@ struct MachineStatsGrid: View {
         ))
         if let temp = stats?.cpuTempCelsius {
             result.append(CardData(
-                title: "温度",
+                title: L10n.k("common.resource.temperature", fallback: "温度"),
                 value: String(format: "%.0f°C", temp),
                 icon: "thermometer.medium", color: .orange,
                 samples: history.compactMap { $0.cpuTempCelsius },
@@ -270,7 +270,7 @@ private struct ExpandedChartCard: View {
                     Divider().frame(height: 36).padding(.horizontal, 6)
                     VStack(alignment: .trailing, spacing: 2) {
                         HStack(spacing: 3) {
-                            Text("累计").font(.caption2).foregroundStyle(.tertiary)
+                            Text(L10n.k("dashboard.cumulative", fallback: "累计")).font(.caption2).foregroundStyle(.tertiary)
                         }
                         Text("↓ \(ci)").font(.caption).monospacedDigit().foregroundStyle(.secondary)
                         Text("↑ \(co)").font(.caption).monospacedDigit().foregroundStyle(.secondary)
@@ -408,10 +408,10 @@ struct GatewayStatusDot: View {
 
     private var dotLabel: String {
         switch readiness {
-        case .stopped:  "已停止"
-        case .starting: "启动中…"
-        case .ready:    "就绪"
-        case .zombie:   "异常：进程存活但 HTTP 服务无响应，建议重启"
+        case .stopped:  L10n.k("dashboard.gateway_status.stopped", fallback: "已停止")
+        case .starting: L10n.k("dashboard.gateway_status.starting", fallback: "启动中…")
+        case .ready:    L10n.k("dashboard.gateway_status.ready", fallback: "就绪")
+        case .zombie:   L10n.k("dashboard.gateway_status.zombie", fallback: "异常：进程存活但 HTTP 服务无响应，建议重启")
         }
     }
 }
@@ -463,16 +463,16 @@ struct ShrimpNetworkSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if shrimps.isEmpty {
-                Text("暂无虾")
+                Text(L10n.k("dashboard.no_shrimps", fallback: "暂无虾"))
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
             } else {
                 HStack(spacing: 8) {
-                    ShrimpStatusPill(title: "运行", value: "\(running)/\(total)", tint: running > 0 ? .green : .secondary)
-                    ShrimpStatusPill(title: "就绪", value: "\(readyCount)", tint: .green)
-                    ShrimpStatusPill(title: "启动中", value: "\(startingCount)", tint: .yellow)
-                    ShrimpStatusPill(title: "异常", value: "\(zombieCount)", tint: zombieCount > 0 ? .red : .secondary)
+                    ShrimpStatusPill(title: L10n.k("dashboard.shrimp_status.running", fallback: "运行"), value: "\(running)/\(total)", tint: running > 0 ? .green : .secondary)
+                    ShrimpStatusPill(title: L10n.k("dashboard.shrimp_status.ready", fallback: "就绪"), value: "\(readyCount)", tint: .green)
+                    ShrimpStatusPill(title: L10n.k("dashboard.shrimp_status.starting", fallback: "启动中"), value: "\(startingCount)", tint: .yellow)
+                    ShrimpStatusPill(title: L10n.k("dashboard.shrimp_status.anomaly", fallback: "异常"), value: "\(zombieCount)", tint: zombieCount > 0 ? .red : .secondary)
                 }
                 .font(.caption)
 
@@ -482,23 +482,23 @@ struct ShrimpNetworkSection: View {
                     GridItem(.flexible(), spacing: 8)
                 ], spacing: 8) {
                     ShrimpOverviewCard(
-                        title: "CPU 汇总",
+                        title: L10n.k("dashboard.card.cpu_summary", fallback: "CPU 汇总"),
                         value: cpuLabel,
-                        subtitle: "活跃 \(activeShrimps.count) 只虾",
+                        subtitle: L10n.f("dashboard.card.active_shrimps", fallback: "活跃 %d 只虾", activeShrimps.count),
                         icon: "cpu",
                         tint: .blue
                     )
                     ShrimpOverviewCard(
-                        title: "内存汇总",
+                        title: L10n.k("dashboard.card.memory_summary", fallback: "内存汇总"),
                         value: memLabel,
-                        subtitle: "进程物理内存",
+                        subtitle: L10n.k("dashboard.card.process_memory", fallback: "进程物理内存"),
                         icon: "memorychip",
                         tint: .purple
                     )
                     ShrimpOverviewCard(
-                        title: "存储占用",
+                        title: L10n.k("dashboard.card.storage_usage", fallback: "存储占用"),
                         value: FormatUtils.formatBytes(totalStorage),
-                        subtitle: "平均 \(avgStorageLabel)",
+                        subtitle: L10n.f("dashboard.card.avg_storage", fallback: "平均 %@", avgStorageLabel),
                         icon: "internaldrive",
                         tint: .green
                     )
@@ -506,7 +506,7 @@ struct ShrimpNetworkSection: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
-                        Label("实时流量", systemImage: "arrow.up.arrow.down")
+                        Label(L10n.k("dashboard.realtime_traffic", fallback: "实时流量"), systemImage: "arrow.up.arrow.down")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text("↓ \(FormatUtils.formatBps(currentNetInBps))")
@@ -515,7 +515,7 @@ struct ShrimpNetworkSection: View {
                             .font(.system(.caption, design: .monospaced))
                     }
                     HStack(spacing: 8) {
-                        Label("累计流量", systemImage: "sum")
+                        Label(L10n.k("dashboard.total_traffic", fallback: "累计流量"), systemImage: "sum")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text("↓ \(FormatUtils.formatTotalBytes(totalNetIn))")
@@ -523,7 +523,7 @@ struct ShrimpNetworkSection: View {
                         Text("↑ \(FormatUtils.formatTotalBytes(totalNetOut))")
                             .font(.system(.caption, design: .monospaced))
                         Spacer()
-                        Text("技能 \(totalSkills)")
+                        Text(L10n.f("dashboard.skills_count", fallback: "技能 %d", totalSkills))
                             .font(.system(.caption, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
@@ -533,7 +533,7 @@ struct ShrimpNetworkSection: View {
 
                 if !topStorageShrimps.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Label("存储 Top 3", systemImage: "externaldrive")
+                        Label(L10n.k("dashboard.storage_top3", fallback: "存储 Top 3"), systemImage: "externaldrive")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         ForEach(topStorageShrimps, id: \.username) { shrimp in
@@ -552,7 +552,7 @@ struct ShrimpNetworkSection: View {
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
                 }
 
-                Text("详细资源与连接明细已在「虾塘」中完整提供，仪表盘仅保留汇总。")
+                Text(L10n.k("dashboard.summary_hint", fallback: "详细资源与连接明细已在「虾塘」中完整提供，仪表盘仅保留汇总。"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -623,32 +623,32 @@ struct AssetOverviewSection: View {
             // 存储概览
             HStack(spacing: 8) {
                 Label(FormatUtils.formatBytes(totalOpenclawBytes), systemImage: "internaldrive")
-                Text("数据总量（\(shrimps.count) 只虾 .openclaw/）")
+                Text(L10n.f("dashboard.asset.total_data", fallback: "数据总量（%d 只虾 .openclaw/）", shrimps.count))
                     .foregroundStyle(.secondary)
             }
             if totalHomeBytes > 0 {
                 HStack(spacing: 8) {
                     Label(FormatUtils.formatBytes(totalHomeBytes), systemImage: "house")
-                    Text("家目录总量（含所有用户文件）")
+                    Text(L10n.k("dashboard.asset.total_home", fallback: "家目录总量（含所有用户文件）"))
                         .foregroundStyle(.secondary)
                 }
             }
             HStack(spacing: 8) {
                 Label(FormatUtils.formatBytes(totalMemBytes), systemImage: "brain.head.profile")
-                Text("记忆总量（\(shrimps.count) 只虾合计）")
+                Text(L10n.f("dashboard.asset.total_memory", fallback: "记忆总量（%d 只虾合计）", shrimps.count))
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 8) {
-                Label("\(totalSkills) 个", systemImage: "sparkles")
-                Text("技能总数（用户自定义）")
+                Label(L10n.f("dashboard.asset.skills_items", fallback: "%d 个", totalSkills), systemImage: "sparkles")
+                Text(L10n.k("dashboard.asset.skills_total", fallback: "技能总数（用户自定义）"))
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 8) {
                 Label("—", systemImage: "bitcoinsign.circle")
-                Text("Token 消耗（待接入）")
+                Text(L10n.k("dashboard.asset.token_coming_soon", fallback: "Token 消耗（待接入）"))
                     .foregroundStyle(.tertiary)
             }
-            .help("即将支持")
+            .help(L10n.k("common.coming_soon", fallback: "即将支持"))
         }
     }
 }

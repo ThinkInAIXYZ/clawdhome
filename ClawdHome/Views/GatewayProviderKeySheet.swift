@@ -25,11 +25,11 @@ struct GatewayProviderKeySheet: View {
         VStack(spacing: 0) {
             // 标题栏
             HStack {
-                Text(isConfigured ? "更换 \(config.displayName) \(config.inputLabel)" : "设置 \(config.displayName) \(config.inputLabel)")
+                Text(isConfigured ? L10n.f("views.gateway_provider_key_sheet.text_5c729a38", fallback: "更换 %@ %@", String(describing: config.displayName), String(describing: config.inputLabel)) : L10n.f("views.gateway_provider_key_sheet.text_6e01889b", fallback: "设置 %@ %@", String(describing: config.displayName), String(describing: config.inputLabel)))
                     .font(.headline)
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.escape)
-                Button(isSaving ? "保存中…" : "保存") {
+                Button(L10n.k("auto.gateway_provider_key_sheet.cancel", fallback: "取消")) { dismiss() }.keyboardShortcut(.escape)
+                Button(isSaving ? L10n.k("auto.gateway_provider_key_sheet.save", fallback: "保存中…") : L10n.k("auto.gateway_provider_key_sheet.save", fallback: "保存")) {
                     Task { await save() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -46,7 +46,7 @@ struct GatewayProviderKeySheet: View {
                     Image(systemName: isConfigured ? "checkmark.circle.fill" : "circle.dashed")
                         .foregroundStyle(isConfigured ? .green : .secondary)
                         .font(.system(size: 12))
-                    Text(isConfigured ? "当前已配置（内容已脱敏）" : "尚未配置")
+                    Text(isConfigured ? L10n.k("auto.gateway_provider_key_sheet.configured_masked", fallback: "当前已配置（内容已脱敏）") : L10n.k("auto.gateway_provider_key_sheet.configuration", fallback: "尚未配置"))
                         .font(.caption)
                         .foregroundStyle(isConfigured ? .green : .secondary)
                 }
@@ -67,7 +67,7 @@ struct GatewayProviderKeySheet: View {
                             .font(.system(.body, design: .monospaced))
                     }
 
-                    Text("配置路径：\(config.configPath)")
+                    Text(L10n.f("views.gateway_provider_key_sheet.text_36d50759", fallback: "配置路径：%@", String(describing: config.configPath)))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -86,14 +86,14 @@ struct GatewayProviderKeySheet: View {
                 if isConfigured {
                     Divider()
                     HStack {
-                        Button("清除配置", role: .destructive) {
+                        Button(L10n.k("auto.gateway_provider_key_sheet.configuration", fallback: "清除配置"), role: .destructive) {
                             showClearConfirm = true
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.red)
                         .font(.callout)
                         Spacer()
-                        Text("清除后 \(config.displayName) 将不可用")
+                        Text(L10n.f("views.gateway_provider_key_sheet.text_2a198b32", fallback: "清除后 %@ 将不可用", String(describing: config.displayName)))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -104,13 +104,13 @@ struct GatewayProviderKeySheet: View {
             .padding(20)
         }
         .frame(width: 420, height: isConfigured ? 300 : 260)
-        .alert("清除 \(config.displayName) \(config.inputLabel)？", isPresented: $showClearConfirm) {
-            Button("取消", role: .cancel) { }
-            Button("清除", role: .destructive) {
+        .alert(L10n.f("views.gateway_provider_key_sheet.text_80c5f498", fallback: "清除 %@ %@？", String(describing: config.displayName), String(describing: config.inputLabel)), isPresented: $showClearConfirm) {
+            Button(L10n.k("auto.gateway_provider_key_sheet.cancel", fallback: "取消"), role: .cancel) { }
+            Button(L10n.k("auto.gateway_provider_key_sheet.clear", fallback: "清除"), role: .destructive) {
                 Task { await clear() }
             }
         } message: {
-            Text("清除后该 Provider 将无法使用，需要重新配置才能恢复。")
+            Text(L10n.k("auto.gateway_provider_key_sheet.provider_configuration", fallback: "清除后该 Provider 将无法使用，需要重新配置才能恢复。"))
         }
     }
 

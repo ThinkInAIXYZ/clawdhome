@@ -44,10 +44,10 @@ struct FallbackManagerSheet: View {
         VStack(spacing: 0) {
             // ── 标题栏 ──────────────────────────────────────────
             HStack {
-                Text("备用模型").font(.headline)
+                Text(L10n.k("auto.fallback_manager_sheet.models", fallback: "备用模型")).font(.headline)
                 Spacer()
                 if isBusy { ProgressView().scaleEffect(0.7) }
-                Button("完成") { dismiss() }.keyboardShortcut(.return)
+                Button(L10n.k("auto.fallback_manager_sheet.done", fallback: "完成")) { dismiss() }.keyboardShortcut(.return)
             }
             .padding()
 
@@ -68,16 +68,16 @@ struct FallbackManagerSheet: View {
             // ── 当前备用列表（上半区，可拖序 + 删除）──────────────
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    Text("当前备用（\(fallbacks.count) 个）").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.f("views.fallback_manager_sheet.text_47189925", fallback: "当前备用（%@ 个）", String(describing: fallbacks.count))).font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     if !fallbacks.isEmpty {
-                        Text("拖动可排序").font(.caption2).foregroundStyle(.tertiary)
+                        Text(L10n.k("auto.fallback_manager_sheet.drag_to_reorder", fallback: "拖动可排序")).font(.caption2).foregroundStyle(.tertiary)
                     }
                 }
                 .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
 
                 if fallbacks.isEmpty {
-                    Text("暂无备用模型").font(.callout).foregroundStyle(.tertiary)
+                    Text(L10n.k("auto.fallback_manager_sheet.models", fallback: "暂无备用模型")).font(.callout).foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity).padding(.vertical, 12)
                 } else {
                     List {
@@ -118,7 +118,7 @@ struct FallbackManagerSheet: View {
             // ── 从模型池快速添加（下半区）──────────────────────────
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary).font(.caption)
-                TextField(modelStore.hasTemplate ? "搜索模型池…" : "搜索内置模型…", text: $searchText)
+                TextField(modelStore.hasTemplate ? L10n.k("auto.fallback_manager_sheet.searchmodels", fallback: "搜索模型池…") : L10n.k("auto.fallback_manager_sheet.searchmodels", fallback: "搜索内置模型…"), text: $searchText)
                     .textFieldStyle(.plain)
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: {
@@ -129,7 +129,7 @@ struct FallbackManagerSheet: View {
                 if modelStore.hasTemplate {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.caption2).foregroundStyle(Color.accentColor)
-                        .help("来自全局模型池")
+                        .help(L10n.k("auto.fallback_manager_sheet.models", fallback: "来自全局模型池"))
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
@@ -151,7 +151,7 @@ struct FallbackManagerSheet: View {
                                 }
                                 Spacer()
                                 if isAdded {
-                                    Text("已添加").font(.caption2).foregroundStyle(.secondary)
+                                    Text(L10n.k("auto.fallback_manager_sheet.added", fallback: "已添加")).font(.caption2).foregroundStyle(.secondary)
                                 } else {
                                     Button {
                                         Task { await quickAdd(model.id) }
@@ -168,7 +168,7 @@ struct FallbackManagerSheet: View {
                     }
                 }
                 if filteredGroups.isEmpty {
-                    Text("无匹配模型").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("auto.fallback_manager_sheet.models", fallback: "无匹配模型")).font(.caption).foregroundStyle(.secondary)
                         .listRowBackground(Color.clear)
                 }
             }

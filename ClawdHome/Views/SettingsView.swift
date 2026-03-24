@@ -10,19 +10,19 @@ struct SettingsView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             GeneralSettingsTab()
-                .tabItem { Label("通用", systemImage: "gearshape") }
+                .tabItem { Label(L10n.k("views.settings_view.text_aa05fd09", fallback: "通用"), systemImage: "gearshape") }
                 .tag(0)
 
             AppLogTab()
-                .tabItem { Label("App 日志", systemImage: "app.badge") }
+                .tabItem { Label(L10n.k("views.settings_view.app", fallback: "App 日志"), systemImage: "app.badge") }
                 .tag(1)
 
             HelperLogTab()
-                .tabItem { Label("Helper 日志", systemImage: "terminal") }
+                .tabItem { Label(L10n.k("views.settings_view.helper", fallback: "Helper 日志"), systemImage: "terminal") }
                 .tag(2)
 
             AboutTab()
-                .tabItem { Label("关于", systemImage: "info.circle") }
+                .tabItem { Label(L10n.k("views.settings_view.about", fallback: "关于"), systemImage: "info.circle") }
                 .tag(3)
         }
         .padding(16)
@@ -36,30 +36,49 @@ private struct GeneralSettingsTab: View {
     @Environment(HelperClient.self) private var helperClient
     @State private var gatewayAutostart = true
     @AppStorage("clawPoolShowCurrentAdmin") private var showCurrentAdminInPool = false
+    @AppStorage("appLanguage") private var appLanguageRaw = AppLanguage.system.rawValue
+
+    private var appLanguageBinding: Binding<AppLanguage> {
+        Binding(
+            get: { AppLanguage(rawValue: appLanguageRaw) ?? .system },
+            set: { appLanguageRaw = $0.rawValue }
+        )
+    }
 
     var body: some View {
         Form {
-            Section("Gateway") {
-                Toggle("开机自动启动所有虾的 Gateway", isOn: $gatewayAutostart)
-                    .onChange(of: gatewayAutostart) { _, newValue in
-                        Task { try? await helperClient.setGatewayAutostart(enabled: newValue) }
-                    }
-                Text("Mac 开机后，Helper 会自动为所有已初始化的虾启动 Gateway，无需登录管理员账户。")
+            Section(L10n.k("views.settings_view.language", fallback: "语言")) {
+                Picker(L10n.k("views.settings_view.language_4c0678", fallback: "显示语言"), selection: appLanguageBinding) {
+                    Text(L10n.k("views.settings_view.follow_system", fallback: "跟随系统")).tag(AppLanguage.system)
+                    Text("English").tag(AppLanguage.english)
+                    Text(L10n.k("views.settings_view.simplified_chinese", fallback: "简体中文")).tag(AppLanguage.chineseSimplified)
+                }
+                Text(L10n.k("views.settings_view.text_6f04bbdd", fallback: "切换后会立即作用到所有窗口。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("虾塘显示") {
-                Toggle("显示当前管理员账户（不推荐）", isOn: $showCurrentAdminInPool)
+            Section("Gateway") {
+                Toggle(L10n.k("views.settings_view.autostart_all_gateway_on_boot", fallback: "开机自动启动所有虾的 Gateway"), isOn: $gatewayAutostart)
+                    .onChange(of: gatewayAutostart) { _, newValue in
+                        Task { try? await helperClient.setGatewayAutostart(enabled: newValue) }
+                    }
+                Text(L10n.k("views.settings_view.mac_helper_gateway_account", fallback: "Mac 开机后，Helper 会自动为所有已初始化的虾启动 Gateway，无需登录管理员账户。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(L10n.k("views.settings_view.text_ffa993d5", fallback: "虾塘显示")) {
+                Toggle(L10n.k("views.settings_view.current_account", fallback: "显示当前管理员账户（不推荐）"), isOn: $showCurrentAdminInPool)
                 if showCurrentAdminInPool {
-                    Label("风险提示：管理员账户权限高，误操作会影响系统级配置。", systemImage: "exclamationmark.triangle.fill")
+                    Label(L10n.k("views.settings_view.account_configuration", fallback: "风险提示：管理员账户权限高，误操作会影响系统级配置。"), systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(.orange)
-                    Text("安全保障：ClawdHome 已对管理员账户禁用部分高风险动作（如重置/删除），但仍建议日常只使用标准用户账户。")
+                    Text(L10n.k("views.settings_view.clawdhome_account_delete_account", fallback: "安全保障：ClawdHome 已对管理员账户禁用部分高风险动作（如重置/删除），但仍建议日常只使用标准用户账户。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("默认隐藏管理员账户，仅展示标准用户。需要排障时可临时开启。")
+                    Text(L10n.k("views.settings_view.account", fallback: "默认隐藏管理员账户，仅展示标准用户。需要排障时可临时开启。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -67,8 +86,8 @@ private struct GeneralSettingsTab: View {
 
             AppLockSection()
 
-            Section("关于") {
-                LabeledContent("版本", value: "ClawdHome 1.0")
+            Section(L10n.k("views.settings_view.about", fallback: "关于")) {
+                LabeledContent(L10n.k("views.settings_view.text_fe2df04a", fallback: "版本"), value: "ClawdHome 1.0")
                 LabeledContent("Helper", value: "/Library/PrivilegedHelperTools/ai.clawdhome.mac.helper")
             }
         }
@@ -90,35 +109,35 @@ private struct AppLockSection: View {
     @State private var showChangePassword = false
 
     var body: some View {
-        Section("隐私与安全") {
+        Section(L10n.k("views.settings_view.privacy_security", fallback: "隐私与安全")) {
             if lockStore.isEnabled {
-                LabeledContent("App 锁定") {
+                LabeledContent(L10n.k("views.settings_view.app_lock", fallback: "App 锁定")) {
                     HStack(spacing: 8) {
-                        Text("已启用").foregroundStyle(.secondary)
-                        Button("更改密码") { showChangePassword = true }
+                        Text(L10n.k("views.settings_view.enabled", fallback: "已启用")).foregroundStyle(.secondary)
+                        Button(L10n.k("views.settings_view.change_password", fallback: "更改密码")) { showChangePassword = true }
                             .buttonStyle(.borderless)
-                        Button("关闭锁定") { showDisableLock = true }
+                        Button(L10n.k("views.settings_view.disable_lock", fallback: "关闭锁定")) { showDisableLock = true }
                             .buttonStyle(.borderless)
                             .foregroundStyle(.red)
                     }
                 }
 
                 if lockStore.isBiometricAvailable {
-                    Toggle("使用 Touch ID 解锁", isOn: Binding(
+                    Toggle(L10n.k("views.settings_view.touch_id_unlock", fallback: "使用 Touch ID 解锁"), isOn: Binding(
                         get: { lockStore.isBiometricEnabled },
                         set: { lockStore.setBiometricEnabled($0) }
                     ))
                 }
 
-                Text("启用锁定后，每次开机或系统屏幕锁定后需输入管理密码才能使用 ClawdHome。")
+                Text(L10n.k("views.settings_view.admin_password_clawdhome", fallback: "启用锁定后，每次开机或系统屏幕锁定后需输入管理密码才能使用 ClawdHome。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                LabeledContent("App 锁定") {
-                    Button("设置密码…") { showSetPassword = true }
+                LabeledContent(L10n.k("views.settings_view.app_lock", fallback: "App 锁定")) {
+                    Button(L10n.k("views.settings_view.settings", fallback: "设置密码…")) { showSetPassword = true }
                         .buttonStyle(.borderless)
                 }
-                Text("设置管理密码后，App 启动及系统锁屏后将需要验证身份。")
+                Text(L10n.k("views.settings_view.settings_admin_password_app", fallback: "设置管理密码后，App 启动及系统锁屏后将需要验证身份。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -151,17 +170,19 @@ private struct SetPasswordSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text(mode == .set ? "设置管理密码" : "更改管理密码")
+            Text(mode == .set
+                 ? L10n.k("settings.lock.set_password", fallback: "设置管理密码")
+                 : L10n.k("settings.lock.change_password", fallback: "更改管理密码"))
                 .font(.headline)
 
             VStack(alignment: .leading, spacing: 12) {
                 if mode == .change {
-                    SecureField("当前密码", text: $oldPassword)
+                    SecureField(L10n.k("views.settings_view.current_password", fallback: "当前密码"), text: $oldPassword)
                         .textFieldStyle(.roundedBorder)
                 }
-                SecureField("新密码（至少 6 位）", text: $newPassword)
+                SecureField(L10n.k("views.settings_view.new_password_min_6", fallback: "新密码（至少 6 位）"), text: $newPassword)
                     .textFieldStyle(.roundedBorder)
-                SecureField("确认新密码", text: $confirmPassword)
+                SecureField(L10n.k("views.settings_view.confirm_new_password", fallback: "确认新密码"), text: $confirmPassword)
                     .textFieldStyle(.roundedBorder)
             }
 
@@ -170,9 +191,11 @@ private struct SetPasswordSheet: View {
             }
 
             HStack {
-                Button("取消") { dismiss() }
+                Button(L10n.k("views.settings_view.cancel", fallback: "取消")) { dismiss() }
                 Spacer()
-                Button(mode == .set ? "启用锁定" : "确认更改") { commit() }
+                Button(mode == .set
+                       ? L10n.k("settings.lock.enable", fallback: "启用锁定")
+                       : L10n.k("settings.lock.confirm_change", fallback: "确认更改")) { commit() }
                     .buttonStyle(.borderedProminent)
                     .disabled(newPassword.count < 6 || newPassword != confirmPassword)
             }
@@ -183,16 +206,16 @@ private struct SetPasswordSheet: View {
 
     private func commit() {
         guard newPassword == confirmPassword else {
-            error = "两次输入的密码不一致"; return
+            error = L10n.k("settings.lock.error.password_mismatch", fallback: "两次输入的密码不一致"); return
         }
         guard newPassword.count >= 6 else {
-            error = "密码至少需要 6 位"; return
+            error = L10n.k("settings.lock.error.password_too_short", fallback: "密码至少需要 6 位"); return
         }
         if mode == .change {
             switch lockStore.changePassword(old: oldPassword, new: newPassword) {
             case .success: break
-            case .wrongPassword:  error = "当前密码错误"; return
-            case .keychainDenied: error = "Keychain 访问被拒绝，请在系统弹窗中允许"; return
+            case .wrongPassword:  error = L10n.k("settings.lock.error.current_password_incorrect", fallback: "当前密码错误"); return
+            case .keychainDenied: error = L10n.k("settings.lock.error.keychain_denied", fallback: "Keychain 访问被拒绝，请在系统弹窗中允许"); return
             }
         } else {
             lockStore.setPassword(newPassword)
@@ -212,11 +235,11 @@ private struct DisableLockSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("关闭 App 锁定").font(.headline)
-            Text("请输入当前管理密码以确认关闭。")
+            Text(L10n.k("views.settings_view.app_lock_a79063", fallback: "关闭 App 锁定")).font(.headline)
+            Text(L10n.k("views.settings_view.current_admin_password_confirm", fallback: "请输入当前管理密码以确认关闭。"))
                 .font(.subheadline).foregroundStyle(.secondary)
 
-            SecureField("当前密码", text: $password)
+            SecureField(L10n.k("views.settings_view.current_password", fallback: "当前密码"), text: $password)
                 .textFieldStyle(.roundedBorder)
 
             if let err = error {
@@ -224,13 +247,13 @@ private struct DisableLockSheet: View {
             }
 
             HStack {
-                Button("取消") { dismiss() }
+                Button(L10n.k("views.settings_view.cancel", fallback: "取消")) { dismiss() }
                 Spacer()
-                Button("关闭锁定") {
+                Button(L10n.k("views.settings_view.disable_lock", fallback: "关闭锁定")) {
                     switch lockStore.disableLock(password: password) {
                     case .success:        dismiss()
-                    case .wrongPassword:  error = "密码错误"
-                    case .keychainDenied: error = "Keychain 访问被拒绝，请在系统弹窗中允许"
+                    case .wrongPassword:  error = L10n.k("settings.lock.error.password_incorrect", fallback: "密码错误")
+                    case .keychainDenied: error = L10n.k("settings.lock.error.keychain_denied", fallback: "Keychain 访问被拒绝，请在系统弹窗中允许")
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -246,17 +269,33 @@ private struct DisableLockSheet: View {
 // MARK: - App 日志查看器
 
 private struct AppLogTab: View {
+    private enum LogLevelFilter: String, CaseIterable, Identifiable {
+        case all
+        case info = "INFO"
+        case warn = "WARN"
+        case error = "ERROR"
+
+        var id: String { rawValue }
+        var levelValue: String? { self == .all ? nil : rawValue }
+        var title: String {
+            switch self {
+            case .all: return L10n.k("common.filter.all", fallback: "全部")
+            case .info: return "INFO"
+            case .warn: return "WARN"
+            case .error: return "ERROR"
+            }
+        }
+    }
+
     @State private var appLogger = AppLogger.shared
     @State private var isFollowing = true
-    @State private var levelFilter = "全部"
+    @State private var levelFilter: LogLevelFilter = .all
     @State private var searchQuery = ""
-
-    private let filterOptions = ["全部", "INFO", "WARN", "ERROR"]
 
     private var filteredLines: [AppLogger.LogLine] {
         var lines = appLogger.lines
-        if levelFilter != "全部" {
-            lines = lines.filter { $0.level.rawValue == levelFilter }
+        if let level = levelFilter.levelValue {
+            lines = lines.filter { $0.level.rawValue == level }
         }
         lines = lines.filter { LogSearchMatcher.matches(text: $0.formatted, query: searchQuery) }
         return lines
@@ -269,23 +308,25 @@ private struct AppLogTab: View {
         VStack(alignment: .leading, spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    Text("App 内存日志（最近 500 条）")
+                    Text(L10n.k("settings.app_log.header", fallback: "App 内存日志（最近 500 条）"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Picker(selection: $levelFilter) {
-                        ForEach(filterOptions, id: \.self) { Text($0) }
+                        ForEach(LogLevelFilter.allCases) { level in
+                            Text(level.title).tag(level)
+                        }
                     } label: { EmptyView() }
                     .pickerStyle(.segmented)
                     .frame(width: 240)
-                    Toggle("自动滚动", isOn: $isFollowing)
+                    Toggle(L10n.k("common.toggle.auto_scroll", fallback: "自动滚动"), isOn: $isFollowing)
                         .toggleStyle(.switch)
                         .controlSize(.small)
-                    TextField("搜索（空格分词）", text: $searchQuery)
+                    TextField(L10n.k("common.search.by_space", fallback: "搜索（空格分词）"), text: $searchQuery)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 220)
-                    Button("复制筛选") { copyFilteredLogs() }
+                    Button(L10n.k("common.action.copy_filtered", fallback: "复制筛选")) { copyFilteredLogs() }
                         .controlSize(.small)
-                    Button("清空") { appLogger.clear() }
+                    Button(L10n.k("common.action.clear", fallback: "清空")) { appLogger.clear() }
                         .controlSize(.small)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -295,7 +336,9 @@ private struct AppLogTab: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(filteredLines.isEmpty ? "（暂无日志）" : filteredLogText)
+                        Text(filteredLines.isEmpty
+                             ? L10n.k("settings.app_log.empty", fallback: "（暂无日志）")
+                             : filteredLogText)
                             .foregroundStyle(filteredLines.isEmpty ? .tertiary : .primary)
                     }
                     .font(.system(.caption2, design: .monospaced))
@@ -331,7 +374,7 @@ struct HelperLogTab: View {
     @State private var logLines: [ParsedLogLine] = []
     @State private var isFollowing = true
     @State private var timer: Timer?
-    @State private var levelFilter = "全部"
+    @State private var levelFilter: LogLevelFilter = .all
     @State private var selectedChannel: LogChannel = .all
     @State private var debugLoggingEnabled = false
     @State private var suppressDebugToggleCallback = false
@@ -357,12 +400,40 @@ struct HelperLogTab: View {
         let channel: String?
     }
 
-    private enum LogChannel: String, CaseIterable, Identifiable {
-        case all = "全部"
-        case primary = "主日志"
-        case fileIO = "文件IO"
-        case diagnostics = "诊断"
+    private enum LogLevelFilter: String, CaseIterable, Identifiable {
+        case all
+        case debug = "DEBUG"
+        case info = "INFO"
+        case warn = "WARN"
+        case error = "ERROR"
+
         var id: String { rawValue }
+        var levelValue: String? { self == .all ? nil : rawValue }
+        var title: String {
+            switch self {
+            case .all: return L10n.k("common.filter.all", fallback: "全部")
+            case .debug: return "DEBUG"
+            case .info: return "INFO"
+            case .warn: return "WARN"
+            case .error: return "ERROR"
+            }
+        }
+    }
+
+    private enum LogChannel: String, CaseIterable, Identifiable {
+        case all
+        case primary
+        case fileIO
+        case diagnostics
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .all: return L10n.k("common.filter.all", fallback: "全部")
+            case .primary: return L10n.k("settings.helper_log.channel.primary", fallback: "主日志")
+            case .fileIO: return L10n.k("settings.helper_log.channel.file_io", fallback: "文件IO")
+            case .diagnostics: return L10n.k("settings.helper_log.channel.diagnostics", fallback: "诊断")
+            }
+        }
         var channelKey: String? {
             switch self {
             case .all: return nil
@@ -375,12 +446,11 @@ struct HelperLogTab: View {
 
     private let logPath = "/tmp/clawdhome-helper.log"
     private let maxRenderedLines = 400
-    private let filterOptions = ["全部", "DEBUG", "INFO", "WARN", "ERROR"]
 
     private var filteredLines: [ParsedLogLine] {
         var lines = logLines
-        if levelFilter != "全部" {
-            lines = lines.filter { $0.level == levelFilter }
+        if let level = levelFilter.levelValue {
+            lines = lines.filter { $0.level == level }
         }
         if let key = selectedChannel.channelKey {
             lines = lines.filter { $0.channel == key }
@@ -401,17 +471,19 @@ struct HelperLogTab: View {
                         .foregroundStyle(.secondary)
                     Picker(selection: $selectedChannel) {
                         ForEach(LogChannel.allCases) { channel in
-                            Text(channel.rawValue).tag(channel)
+                            Text(channel.title).tag(channel)
                         }
                     } label: { EmptyView() }
                     .pickerStyle(.segmented)
                     .frame(width: 280)
                     Picker(selection: $levelFilter) {
-                        ForEach(filterOptions, id: \.self) { Text($0) }
+                        ForEach(LogLevelFilter.allCases) { level in
+                            Text(level.title).tag(level)
+                        }
                     } label: { EmptyView() }
                     .pickerStyle(.segmented)
                     .frame(width: 300)
-                    Toggle("DEBUG 日志", isOn: $debugLoggingEnabled)
+                    Toggle(L10n.k("settings.helper_log.toggle.debug_log", fallback: "DEBUG 日志"), isOn: $debugLoggingEnabled)
                         .toggleStyle(.switch)
                         .controlSize(.small)
                         .onChange(of: debugLoggingEnabled) { oldValue, newValue in
@@ -428,18 +500,18 @@ struct HelperLogTab: View {
                                 }
                             }
                         }
-                    Toggle("自动滚动", isOn: $isFollowing)
+                    Toggle(L10n.k("common.toggle.auto_scroll", fallback: "自动滚动"), isOn: $isFollowing)
                         .toggleStyle(.switch)
                         .controlSize(.small)
-                    Toggle("暂停刷新", isOn: $isPaused)
+                    Toggle(L10n.k("settings.helper_log.toggle.pause_refresh", fallback: "暂停刷新"), isOn: $isPaused)
                         .toggleStyle(.switch)
                         .controlSize(.small)
-                    TextField("搜索（空格分词）", text: $searchQuery)
+                    TextField(L10n.k("common.search.by_space", fallback: "搜索（空格分词）"), text: $searchQuery)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 220)
-                    Button("复制筛选") { copyFilteredLogs() }
+                    Button(L10n.k("common.action.copy_filtered", fallback: "复制筛选")) { copyFilteredLogs() }
                         .controlSize(.small)
-                    Button("清空") {
+                    Button(L10n.k("common.action.clear", fallback: "清空")) {
                         try? "".write(toFile: logPath, atomically: true, encoding: .utf8)
                         for idx in 1...3 {
                             try? FileManager.default.removeItem(atPath: "\(logPath).\(idx)")
@@ -458,7 +530,9 @@ struct HelperLogTab: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(filteredLines.isEmpty ? "（日志为空）" : filteredLogText)
+                        Text(filteredLines.isEmpty
+                             ? L10n.k("settings.helper_log.empty", fallback: "（日志为空）")
+                             : filteredLogText)
                             .foregroundStyle(filteredLines.isEmpty ? .tertiary : .primary)
                     }
                     .font(.system(.caption2, design: .monospaced))
@@ -653,23 +727,23 @@ private struct AboutTab: View {
 
             Divider()
 
-            GroupBox("XPC 连接") {
+            GroupBox(L10n.k("views.settings_view.xpc_connection", fallback: "XPC 连接")) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Circle()
                             .fill(helperClient.isConnected ? Color.green : Color.red)
                             .frame(width: 10, height: 10)
-                        Text(helperClient.isConnected ? "已连接" : "未连接")
+                        Text(helperClient.isConnected ? L10n.k("views.settings_view.connected", fallback: "已连接") : L10n.k("views.settings_view.disconnected", fallback: "未连接"))
                         Spacer()
                         if !helperClient.isConnected {
-                            Text("请运行 sudo scripts/install-helper-dev.sh")
+                            Text(L10n.k("views.settings_view.run_install_helper_dev_sh", fallback: "请运行 sudo scripts/install-helper-dev.sh"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
                     if helperClient.isConnected {
-                        LabeledContent("Helper 版本", value: helperVersion)
-                        LabeledContent("App 版本", value: appVersion)
+                        LabeledContent(L10n.k("views.settings_view.helper_version", fallback: "Helper 版本"), value: helperVersion)
+                        LabeledContent(L10n.k("views.settings_view.app_version", fallback: "App 版本"), value: appVersion)
                     }
                 }
                 .padding(4)
@@ -688,7 +762,7 @@ private struct AboutTab: View {
             Link(destination: URL(string: "https://ClawdHome.app/docs")!) {
                 HStack(spacing: 4) {
                     Image(systemName: "doc.text")
-                    Text("文档")
+                    Text(L10n.k("views.settings_view.docs", fallback: "文档"))
                     Image(systemName: "arrow.up.right")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -700,7 +774,7 @@ private struct AboutTab: View {
         }
         .task {
             if helperClient.isConnected {
-                helperVersion = (try? await helperClient.getVersion()) ?? "未知"
+                helperVersion = (try? await helperClient.getVersion()) ?? L10n.k("common.unknown", fallback: "未知")
             }
         }
     }

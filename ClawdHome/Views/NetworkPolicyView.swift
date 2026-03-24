@@ -36,18 +36,18 @@ struct NetworkPolicyView: View {
 
             if !helperClient.isConnected {
                 ContentUnavailableView(
-                    "Helper 未连接",
+                    L10n.k("auto.network_policy_view.helper", fallback: "Helper 未连接"),
                     systemImage: "network.slash",
-                    description: Text("请前往「设置 → 诊断」安装或启动 Helper")
+                    description: Text(L10n.k("auto.network_policy_view.settings_start_helper", fallback: "请前往「设置 → 诊断」安装或启动 Helper"))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filtered.isEmpty {
                 ContentUnavailableView(
-                    connections.isEmpty ? "暂无活跃连接" : "无匹配结果",
+                    connections.isEmpty ? L10n.k("auto.network_policy_view.no", fallback: "暂无活跃连接") : L10n.k("auto.network_policy_view.no_matching_results", fallback: "无匹配结果"),
                     systemImage: "network",
                     description: Text(connections.isEmpty
-                        ? "Gateway 空闲时无 TCP 连接，发起请求后会出现。"
-                        : "尝试清除筛选条件。")
+                        ? L10n.k("auto.network_policy_view.gateway_has_no_tcp_connections_when_idle_connections", fallback: "Gateway 空闲时无 TCP 连接，发起请求后会出现。")
+                        : L10n.k("auto.network_policy_view.text_757335e7e2", fallback: "尝试清除筛选条件。"))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -55,7 +55,7 @@ struct NetworkPolicyView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .navigationTitle("网络管理")
+        .navigationTitle(L10n.k("auto.network_policy_view.network", fallback: "网络管理"))
         .task {
             pollTask = Task {
                 while !Task.isCancelled {
@@ -74,8 +74,8 @@ struct NetworkPolicyView: View {
 
     private var filterBar: some View {
         HStack(spacing: 8) {
-            Picker("虾", selection: $filterUsername) {
-                Text("全部虾").tag("")
+            Picker(L10n.k("auto.network_policy_view.shrimp", fallback: "虾"), selection: $filterUsername) {
+                Text(L10n.k("auto.network_policy_view.all_shrimps", fallback: "全部虾")).tag("")
                 ForEach(usernames, id: \.self) { u in
                     Text("@\(u)").tag(u)
                 }
@@ -88,7 +88,7 @@ struct NetworkPolicyView: View {
             // 搜索框
             HStack(spacing: 4) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("搜索地址/进程", text: $searchText)
+                TextField(L10n.k("auto.network_policy_view.searchaddress_process", fallback: "搜索地址/进程"), text: $searchText)
                     .textFieldStyle(.plain)
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: {
@@ -108,9 +108,9 @@ struct NetworkPolicyView: View {
             }
             .toggleStyle(.button)
             .controlSize(.small)
-            .help("显示本地回环连接（127.x.x.x / ::1）")
+            .help(L10n.k("auto.network_policy_view.local_127_x_x_x_1", fallback: "显示本地回环连接（127.x.x.x / ::1）"))
 
-            Text("\(filtered.count) 条")
+            Text(L10n.f("views.network_policy_view.text_413b5432", fallback: "%@ 条", String(describing: filtered.count)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -121,20 +121,20 @@ struct NetworkPolicyView: View {
 
     private var connectionTable: some View {
         Table(filtered) {
-            TableColumn("虾") { c in
+            TableColumn(L10n.k("auto.network_policy_view.shrimp", fallback: "虾")) { c in
                 Text("@\(c.username)")
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
             .width(80)
 
-            TableColumn("进程") { c in
+            TableColumn(L10n.k("auto.network_policy_view.processes", fallback: "进程")) { c in
                 Text(c.processName)
                     .font(.system(.caption2, design: .monospaced))
             }
             .width(100)
 
-            TableColumn("远端地址") { c in
+            TableColumn(L10n.k("auto.network_policy_view.address", fallback: "远端地址")) { c in
                 VStack(alignment: .leading, spacing: 1) {
                     Text(c.remoteAddr)
                         .font(.system(.caption2, design: .monospaced))
@@ -147,26 +147,26 @@ struct NetworkPolicyView: View {
             }
             .width(min: 140, ideal: 200)
 
-            TableColumn("状态") { c in
+            TableColumn(L10n.k("auto.network_policy_view.status", fallback: "状态")) { c in
                 stateTag(c.state)
             }
             .width(110)
 
-            TableColumn("↓ 速率") { c in
+            TableColumn(L10n.k("auto.network_policy_view.text_890bba7fe6", fallback: "↓ 速率")) { c in
                 Text(FormatUtils.formatBps(c.rateIn))
                     .font(.system(.caption2, design: .monospaced))
                     .foregroundStyle(c.rateIn > 0 ? .primary : .secondary)
             }
             .width(75)
 
-            TableColumn("↑ 速率") { c in
+            TableColumn(L10n.k("auto.network_policy_view.text_497ca0f2fe", fallback: "↑ 速率")) { c in
                 Text(FormatUtils.formatBps(c.rateOut))
                     .font(.system(.caption2, design: .monospaced))
                     .foregroundStyle(c.rateOut > 0 ? .primary : .secondary)
             }
             .width(75)
 
-            TableColumn("累计收/发") { c in
+            TableColumn(L10n.k("auto.network_policy_view.text_a8addf6f21", fallback: "累计收/发")) { c in
                 let rx = UInt64(max(0, c.bytesIn))
                 let tx = UInt64(max(0, c.bytesOut))
                 HStack(spacing: 4) {

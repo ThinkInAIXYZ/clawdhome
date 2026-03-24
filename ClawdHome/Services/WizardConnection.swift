@@ -31,7 +31,7 @@ final class WizardConnection {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.installNode(username: username, nodeDistURL: nodeDistURL) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.wizard_connection.unknown_error", fallback: "未知错误")) }
     }
 
     func setupNpmEnv(username: String) async throws {
@@ -39,7 +39,7 @@ final class WizardConnection {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.setupNpmEnv(username: username) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.wizard_connection.unknown_error", fallback: "未知错误")) }
     }
 
     func setNpmRegistry(username: String, registry: String) async throws {
@@ -49,7 +49,7 @@ final class WizardConnection {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.wizard_connection.unknown_error", fallback: "未知错误")) }
     }
 
     func installOpenclaw(username: String, version: String? = nil) async throws {
@@ -59,7 +59,7 @@ final class WizardConnection {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.wizard_connection.unknown_error", fallback: "未知错误")) }
     }
 
     func cancelInit(username: String) async {

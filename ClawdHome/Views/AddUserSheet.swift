@@ -23,44 +23,44 @@ struct AddUserSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("添加用户")
+            Text(L10n.k("user.add.sheet.title", fallback: "添加用户"))
                 .font(.title2)
                 .fontWeight(.semibold)
                 .padding(.bottom, 16)
 
             Form {
                 Section {
-                    TextField("用户名", text: $username)
+                    TextField(L10n.k("user.add.form.username", fallback: "用户名"), text: $username)
                         .textContentType(.username)
                     if !username.isEmpty && !usernameValid {
-                        Text("用户名只能包含小写字母、数字和下划线，且须以字母开头")
+                        Text(L10n.k("user.add.form.username.validation", fallback: "用户名只能包含小写字母、数字和下划线，且须以字母开头"))
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
-                    TextField("全名（显示用）", text: $fullName)
+                    TextField(L10n.k("user.add.form.full_name", fallback: "全名（显示用）"), text: $fullName)
                 } header: {
-                    Text("账户信息")
+                    Text(L10n.k("user.add.form.account_info", fallback: "账户信息"))
                 }
 
                 Section {
-                    SecureField("密码", text: $password)
-                    SecureField("确认密码", text: $confirmPassword)
+                    SecureField(L10n.k("user.add.form.password", fallback: "密码"), text: $password)
+                    SecureField(L10n.k("user.add.form.confirm_password", fallback: "确认密码"), text: $confirmPassword)
                     if !confirmPassword.isEmpty && password != confirmPassword {
-                        Text("两次输入的密码不一致")
+                        Text(L10n.k("user.add.form.password.mismatch", fallback: "两次输入的密码不一致"))
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
                 } header: {
-                    Text("设置密码")
+                    Text(L10n.k("user.add.form.set_password", fallback: "设置密码"))
                 }
             }
             .formStyle(.grouped)
 
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(L10n.k("common.action.cancel", fallback: "取消")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("创建") {
+                Button(L10n.k("common.action.create", fallback: "创建")) {
                     onConfirm(username, fullName.isEmpty ? username : fullName, password)
                     dismiss()
                 }

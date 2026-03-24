@@ -88,10 +88,10 @@ struct ModelConfigWizard: View {
     @ViewBuilder
     private var titleBar: some View {
         HStack {
-            Text("模型配置")
+            Text(L10n.k("auto.model_config_wizard.model_configuration", fallback: "模型配置"))
                 .font(.headline)
             Spacer()
-            Button("完成") { dismiss() }
+            Button(L10n.k("auto.model_config_wizard.done", fallback: "完成")) { dismiss() }
                 .keyboardShortcut(.escape)
         }
         .padding(.horizontal, 20)
@@ -104,10 +104,10 @@ struct ModelConfigWizard: View {
     @ViewBuilder
     private var embeddedHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label("配置模型", systemImage: "cpu")
+            Label(L10n.k("auto.model_config_wizard.configurationmodels", fallback: "配置模型"), systemImage: "cpu")
                 .font(.subheadline).fontWeight(.semibold)
                 .foregroundStyle(.secondary)
-            Text("添加要使用的 AI 模型，最后添加的自动成为主模型。")
+            Text(L10n.k("auto.model_config_wizard.ai_models_models", fallback: "添加要使用的 AI 模型，最后添加的自动成为主模型。"))
                 .font(.caption).foregroundStyle(.tertiary)
         }
     }
@@ -115,13 +115,13 @@ struct ModelConfigWizard: View {
     @ViewBuilder
     private var embeddedFooter: some View {
         HStack(spacing: 12) {
-            Button("完成配置") {
+            Button(L10n.k("auto.model_config_wizard.doneconfiguration", fallback: "完成配置")) {
                 onDone?()
             }
             .buttonStyle(.borderedProminent)
             .disabled(currentDefault == nil)
 
-            Button("跳过配置") {
+            Button(L10n.k("auto.model_config_wizard.configuration", fallback: "跳过配置")) {
                 onDone?()
             }
             .buttonStyle(.bordered)
@@ -136,16 +136,16 @@ struct ModelConfigWizard: View {
         if isLoadingStatus {
             HStack {
                 ProgressView().scaleEffect(0.7)
-                Text("加载中…").font(.callout).foregroundStyle(.secondary)
+                Text(L10n.k("auto.model_config_wizard.loading", fallback: "加载中…")).font(.callout).foregroundStyle(.secondary)
             }
             .padding(.vertical, 8)
         } else if modelPool.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "cpu")
                     .font(.largeTitle).foregroundStyle(.tertiary)
-                Text("还没有配置模型")
+                Text(L10n.k("auto.model_config_wizard.configurationmodels", fallback: "还没有配置模型"))
                     .font(.callout).foregroundStyle(.secondary)
-                Text("点击下方「添加模型」开始配置")
+                Text(L10n.k("auto.model_config_wizard.modelsconfiguration", fallback: "点击下方「添加模型」开始配置"))
                     .font(.caption).foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity)
@@ -191,7 +191,7 @@ struct ModelConfigWizard: View {
 
             Spacer()
 
-            Text(isPrimary ? "主模型" : "备用 \(index)")
+            Text(isPrimary ? L10n.k("auto.model_config_wizard.models", fallback: "主模型") : "备用 \(index)")
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -207,7 +207,7 @@ struct ModelConfigWizard: View {
             Button {
                 showAddModel = true
             } label: {
-                Label("添加模型", systemImage: "plus.circle")
+                Label(L10n.k("auto.model_config_wizard.models", fallback: "添加模型"), systemImage: "plus.circle")
             }
             .buttonStyle(.borderedProminent)
 
@@ -215,7 +215,7 @@ struct ModelConfigWizard: View {
                 Button {
                     showFallbackManager = true
                 } label: {
-                    Label("管理备用顺序", systemImage: "arrow.up.arrow.down")
+                    Label(L10n.k("auto.model_config_wizard.manage_fallback_order", fallback: "管理备用顺序"), systemImage: "arrow.up.arrow.down")
                 }
                 .buttonStyle(.bordered)
             }
@@ -229,7 +229,7 @@ struct ModelConfigWizard: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .help("刷新")
+            .help(L10n.k("auto.model_config_wizard.refresh", fallback: "刷新"))
         }
     }
 
@@ -343,17 +343,17 @@ struct ModelAddSheet: View {
     @ViewBuilder
     private var addSheetTitleBar: some View {
         HStack {
-            Text("添加模型")
+            Text(L10n.k("auto.model_config_wizard.models", fallback: "添加模型"))
                 .font(.headline)
             Spacer()
             switch step {
             case .selectModel, .providerSetup:
-                Button("取消") { dismiss() }
+                Button(L10n.k("auto.model_config_wizard.cancel", fallback: "取消")) { dismiss() }
                     .keyboardShortcut(.escape)
             case .executing:
                 EmptyView()
             case .result:
-                Button("完成") {
+                Button(L10n.k("auto.model_config_wizard.done", fallback: "完成")) {
                     onComplete?()
                     dismiss()
                 }
@@ -375,7 +375,7 @@ struct ModelAddSheet: View {
                     .font(.system(.body, design: .monospaced))
             } else {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("搜索模型…", text: $filter)
+                TextField(L10n.k("auto.model_config_wizard.searchmodels", fallback: "搜索模型…"), text: $filter)
                     .textFieldStyle(.plain)
                 if !filter.isEmpty {
                     Button { filter = "" } label: {
@@ -383,7 +383,7 @@ struct ModelAddSheet: View {
                     }.buttonStyle(.plain)
                 }
             }
-            Button(useCustom ? "从清单选" : "手动输入") {
+            Button(useCustom ? L10n.k("auto.model_config_wizard.choose_from_list", fallback: "从清单选") : L10n.k("auto.model_config_wizard.input", fallback: "手动输入")) {
                 useCustom.toggle()
                 filter = ""; customModel = ""; selectedModel = ""
             }
@@ -406,7 +406,7 @@ struct ModelAddSheet: View {
                     .lineLimit(1).truncationMode(.middle)
             }
             Spacer()
-            Button("下一步") {
+            Button(L10n.k("auto.model_config_wizard.next", fallback: "下一步")) {
                 Task { await checkProvider() }
             }
             .buttonStyle(.borderedProminent)
@@ -418,15 +418,15 @@ struct ModelAddSheet: View {
     @ViewBuilder
     private var customModelGuidance: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("格式：provider/model-id")
+            Text(L10n.k("auto.model_config_wizard.format_provider_model_id", fallback: "格式：provider/model-id"))
                 .font(.caption).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 3) {
-                guidanceExample("anthropic/claude-opus-4-6", note: "直连 Provider")
-                guidanceExample("openrouter/deepseek/deepseek-r1", note: "经 OpenRouter 转发")
-                guidanceExample("groq/llama-3.3-70b-versatile", note: "OpenAI 兼容 API")
-                guidanceExample("ollama/qwen3:32b", note: "本地 Ollama")
+                guidanceExample("anthropic/claude-opus-4-6", note: L10n.k("auto.model_config_wizard.provider", fallback: "直连 Provider"))
+                guidanceExample("openrouter/deepseek/deepseek-r1", note: L10n.k("auto.model_config_wizard.openrouter", fallback: "经 OpenRouter 转发"))
+                guidanceExample("groq/llama-3.3-70b-versatile", note: L10n.k("auto.model_config_wizard.openai_api", fallback: "OpenAI 兼容 API"))
+                guidanceExample("ollama/qwen3:32b", note: L10n.k("auto.model_config_wizard.local_ollama", fallback: "本地 Ollama"))
             }
-            Text("未知 provider 将进入 OpenAI 兼容配置，需填写 Base URL 和 API Key。")
+            Text(L10n.k("auto.model_config_wizard.unknown_provider_openai_configuration_base_url_api_key", fallback: "未知 provider 将进入 OpenAI 兼容配置，需填写 Base URL 和 API Key。"))
                 .font(.caption2).foregroundStyle(.tertiary)
         }
         .padding(10)
@@ -472,7 +472,7 @@ struct ModelAddSheet: View {
                             }
                             Spacer()
                             if isExisting {
-                                Text("已添加").font(.caption2).foregroundStyle(.tertiary)
+                                Text(L10n.k("auto.model_config_wizard.added", fallback: "已添加")).font(.caption2).foregroundStyle(.tertiary)
                             } else if isSelected {
                                 Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
                             }
@@ -487,7 +487,7 @@ struct ModelAddSheet: View {
                     }
                 }
                 if groups.isEmpty {
-                    Text("无匹配模型").font(.caption).foregroundStyle(.secondary).padding()
+                    Text(L10n.k("auto.model_config_wizard.models", fallback: "无匹配模型")).font(.caption).foregroundStyle(.secondary).padding()
                 }
             }
         }
@@ -503,7 +503,7 @@ struct ModelAddSheet: View {
         if isCheckingProvider {
             HStack {
                 ProgressView().scaleEffect(0.7)
-                Text("检查 Provider 配置…").font(.callout).foregroundStyle(.secondary)
+                Text(L10n.k("auto.model_config_wizard.provider_configuration", fallback: "检查 Provider 配置…")).font(.callout).foregroundStyle(.secondary)
             }
         } else if providerReady && !isCustomProvider {
             providerReadyView
@@ -518,19 +518,19 @@ struct ModelAddSheet: View {
     private var providerReadyView: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            Text("Provider 已配置").font(.callout)
+            Text(L10n.k("auto.model_config_wizard.provider_configured", fallback: "Provider 已配置")).font(.callout)
         }
-        Text("即将添加 \(chosenModel) 为主模型。")
+        Text(L10n.f("views.model_config_wizard.text_200224ab", fallback: "即将添加 %@ 为主模型。", String(describing: chosenModel)))
             .font(.caption).foregroundStyle(.secondary)
         if let old = currentDefault {
-            Text("当前主模型 \(old) 将变为第一备用。")
+            Text(L10n.f("views.model_config_wizard.text_e15076fd", fallback: "当前主模型 %@ 将变为第一备用。", String(describing: old)))
                 .font(.caption).foregroundStyle(.tertiary)
         }
         HStack {
-            Button("返回") { step = .selectModel }
+            Button(L10n.k("auto.model_config_wizard.back", fallback: "返回")) { step = .selectModel }
                 .buttonStyle(.bordered)
             Spacer()
-            Button("执行") {
+            Button(L10n.k("auto.model_config_wizard.execute", fallback: "执行")) {
                 // Provider 已配置，直接执行模型切换命令
                 buildAndExecute(providerCommands: [])
             }
@@ -541,14 +541,14 @@ struct ModelAddSheet: View {
     @ViewBuilder
     private func providerInputForm(_ config: ProviderKeyConfig) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("\(config.displayName) 配置", systemImage: isCustomProvider ? "link" : "key.fill")
+            Label(L10n.f("views.model_config_wizard.text_1dc29306", fallback: "%@ 配置", String(describing: config.displayName)), systemImage: isCustomProvider ? "link" : "key.fill")
                 .font(.subheadline).fontWeight(.semibold)
                 .foregroundStyle(.secondary)
 
             if providerReady && isCustomProvider {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
-                    Text("已配置，可直接添加或修改配置后添加").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("auto.model_config_wizard.configuration_configuration", fallback: "已配置，可直接添加或修改配置后添加")).font(.caption).foregroundStyle(.secondary)
                 }
             }
 
@@ -583,25 +583,25 @@ struct ModelAddSheet: View {
             }
         }
 
-        Text("添加 \(chosenModel) 为主模型。")
+        Text(L10n.f("views.model_config_wizard.text_c7e02018", fallback: "添加 %@ 为主模型。", String(describing: chosenModel)))
             .font(.caption).foregroundStyle(.secondary)
         if let old = currentDefault {
-            Text("当前主模型 \(old) 将变为第一备用。")
+            Text(L10n.f("views.model_config_wizard.text_e15076fd", fallback: "当前主模型 %@ 将变为第一备用。", String(describing: old)))
                 .font(.caption).foregroundStyle(.tertiary)
         }
 
         HStack {
-            Button("返回") { step = .selectModel }
+            Button(L10n.k("auto.model_config_wizard.back", fallback: "返回")) { step = .selectModel }
                 .buttonStyle(.bordered)
             Spacer()
             if providerReady && isCustomProvider {
                 // Custom provider already configured — can skip or update
-                Button("直接添加") {
+                Button(L10n.k("auto.model_config_wizard.add_directly", fallback: "直接添加")) {
                     buildAndExecute(providerCommands: [])
                 }
                 .buttonStyle(.bordered)
             }
-            Button("应用配置") {
+            Button(L10n.k("auto.model_config_wizard.configuration", fallback: "应用配置")) {
                 // 所有 provider 字段合并为单条 JSON-object 命令
                 // 分字段写入会因 provider 对象不完整而导致 Zod 验证失败
                 let provCmds = providerConfig.map { buildProviderJSONCommand(config: $0) } ?? []
@@ -625,7 +625,7 @@ struct ModelAddSheet: View {
         if executionDone {
             HStack {
                 Spacer()
-                Button("完成") {
+                Button(L10n.k("auto.model_config_wizard.done", fallback: "完成")) {
                     onComplete?()
                     dismiss()
                 }
@@ -728,7 +728,7 @@ struct ModelAddSheet: View {
             let apiPath = "models.providers.\(provider).api"
             providerConfig = ProviderKeyConfig(
                 id: provider,
-                displayName: "\(provider)（OpenAI 兼容）",
+                displayName: L10n.f("views.model_config_wizard.openai", fallback: "%@（OpenAI 兼容）", String(describing: provider)),
                 configPath: apiKeyPath,
                 placeholder: "sk-...",
                 isUrlConfig: false,
@@ -866,7 +866,7 @@ struct ModelAddSheet: View {
         return String(key.prefix(4)) + "…" + String(key.suffix(4))
     }
 
-    /// "应用配置"按钮禁用条件
+    /// L10n.k("views.model_config_wizard.configuration", fallback: "应用配置")按钮禁用条件
     private var applyDisabled: Bool {
         let keyVal = apiKeyInput.trimmingCharacters(in: .whitespaces)
         if isCustomProvider {
@@ -921,7 +921,7 @@ struct ModelEditSheet: View {
             HStack {
                 Text(label).font(.headline)
                 Spacer()
-                Button("关闭") { dismiss() }
+                Button(L10n.k("auto.model_config_wizard.close", fallback: "关闭")) { dismiss() }
                     .keyboardShortcut(.escape)
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
@@ -937,11 +937,11 @@ struct ModelEditSheet: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Text(isPrimary ? "当前为主模型" : "当前为备用模型")
+                Text(isPrimary ? L10n.k("auto.model_config_wizard.models", fallback: "当前为主模型") : L10n.k("auto.model_config_wizard.models", fallback: "当前为备用模型"))
                     .font(.caption).foregroundStyle(.tertiary)
 
                 if isBusy {
-                    HStack { ProgressView().scaleEffect(0.7); Text("处理中…").font(.caption) }
+                    HStack { ProgressView().scaleEffect(0.7); Text(L10n.k("auto.model_config_wizard.processing", fallback: "处理中…")).font(.caption) }
                 }
 
                 if let err = errorMsg {
@@ -957,14 +957,14 @@ struct ModelEditSheet: View {
                 Divider()
 
                 if !isPrimary {
-                    Button("设为主模型") {
+                    Button(L10n.k("auto.model_config_wizard.models", fallback: "设为主模型")) {
                         Task { await promoteToDefault() }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(isBusy)
                 }
 
-                Button("移除模型") {
+                Button(L10n.k("auto.model_config_wizard.models", fallback: "移除模型")) {
                     Task { await removeModel() }
                 }
                 .buttonStyle(.bordered)
@@ -997,7 +997,7 @@ struct ModelEditSheet: View {
         )
         guard ok2 else { errorMsg = out2; isBusy = false; return }
 
-        successMsg = "已设为主模型"
+        successMsg = L10n.k("views.model_config_wizard.models", fallback: "已设为主模型")
         isBusy = false
         onComplete?()
         try? await Task.sleep(for: .milliseconds(600))
@@ -1042,7 +1042,7 @@ struct ModelEditSheet: View {
             if !ok { errorMsg = out; isBusy = false; return }
         }
 
-        successMsg = "已移除"
+        successMsg = L10n.k("views.model_config_wizard.removed", fallback: "已移除")
         isBusy = false
         onComplete?()
         try? await Task.sleep(for: .milliseconds(600))

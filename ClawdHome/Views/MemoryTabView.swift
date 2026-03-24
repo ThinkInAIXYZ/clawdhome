@@ -30,7 +30,7 @@ struct MemoryTabView: View {
                 // 搜索框
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary).font(.caption)
-                    TextField("搜索记忆内容", text: $searchText)
+                    TextField(L10n.k("auto.memory_tab_view.search", fallback: "搜索记忆内容"), text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.subheadline)
                     if !searchText.isEmpty {
@@ -90,7 +90,7 @@ struct MemoryTabView: View {
         } else if mdFiles.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "brain.head.profile").foregroundStyle(.tertiary).font(.title2)
-                Text("暂无记忆文件").foregroundStyle(.tertiary).font(.subheadline)
+                Text(L10n.k("auto.memory_tab_view.file", fallback: "暂无记忆文件")).foregroundStyle(.tertiary).font(.subheadline)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -105,9 +105,9 @@ struct MemoryTabView: View {
     @ViewBuilder
     private var searchResultPanel: some View {
         if isSearching {
-            ProgressView("搜索中…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            ProgressView(L10n.k("auto.memory_tab_view.search", fallback: "搜索中…")).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if searchResults.isEmpty {
-            Text("无匹配结果").foregroundStyle(.tertiary).font(.subheadline)
+            Text(L10n.k("auto.memory_tab_view.no_matching_results", fallback: "无匹配结果")).foregroundStyle(.tertiary).font(.subheadline)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             List(searchResults, selection: Binding(
@@ -144,7 +144,7 @@ struct MemoryTabView: View {
                     .padding(16)
                 }
             } else {
-                Text("选择一条搜索结果").foregroundStyle(.tertiary)
+                Text(L10n.k("auto.memory_tab_view.selectsearch", fallback: "选择一条搜索结果")).foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         } else {
@@ -169,7 +169,7 @@ struct MemoryTabView: View {
                         ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         ScrollView {
-                            Text(fileContent.isEmpty ? "（空文件）" : fileContent)
+                            Text(fileContent.isEmpty ? L10n.k("auto.memory_tab_view.file", fallback: "（空文件）") : fileContent)
                                 .font(.system(.body, design: .monospaced))
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -180,8 +180,8 @@ struct MemoryTabView: View {
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "brain.head.profile").foregroundStyle(.tertiary).font(.largeTitle)
-                    Text("选择文件查看记忆内容").foregroundStyle(.tertiary)
-                    Text("或在上方搜索框搜索关键词").font(.caption).foregroundStyle(.quaternary)
+                    Text(L10n.k("auto.memory_tab_view.selectfile", fallback: "选择文件查看记忆内容")).foregroundStyle(.tertiary)
+                    Text(L10n.k("auto.memory_tab_view.searchsearch", fallback: "或在上方搜索框搜索关键词")).font(.caption).foregroundStyle(.quaternary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }

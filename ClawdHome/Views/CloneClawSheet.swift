@@ -12,7 +12,7 @@ struct CloneClawSheet: View {
     @State private var targetFullName = ""
     @State private var scanResult: CloneScanResult?
     @State private var selectedItemIDs: Set<String> = []
-    @State private var progressText = "正在分析可克隆数据与大小，请稍候…"
+    @State private var progressText = L10n.k("auto.clone_claw_sheet.analyzing_clonable_data_and_size_please_wait", fallback: "正在分析可克隆数据与大小，请稍候…")
     @State private var isScanning = true
     @State private var isCloning = false
     @State private var scanError: String?
@@ -47,26 +47,26 @@ struct CloneClawSheet: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("克隆新虾")
+            Text(L10n.k("auto.clone_claw_sheet.clone_shrimp", fallback: "克隆新虾"))
                 .font(.title3).fontWeight(.semibold)
-            Text("来源：@\(sourceUsername)")
+            Text(L10n.f("views.clone_claw_sheet.text_f0485c5e", fallback: "来源：@%@", String(describing: sourceUsername)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
 
     private var inputSection: some View {
-        GroupBox("目标用户") {
+        GroupBox(L10n.k("auto.clone_claw_sheet.user", fallback: "目标用户")) {
             VStack(alignment: .leading, spacing: 8) {
-                TextField("目标用户名（必填）", text: $targetUsername)
+                TextField(L10n.k("auto.clone_claw_sheet.target_username_required", fallback: "目标用户名（必填）"), text: $targetUsername)
                     .textContentType(.username)
                     .disabled(isCloning)
                 if !targetUsername.isEmpty && !isUsernameValid {
-                    Text("用户名只能包含小写字母、数字和下划线，且须以字母或下划线开头")
+                    Text(L10n.k("auto.clone_claw_sheet.username", fallback: "用户名只能包含小写字母、数字和下划线，且须以字母或下划线开头"))
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
-                TextField("显示名（可选）", text: $targetFullName)
+                TextField(L10n.k("auto.clone_claw_sheet.display_name_optional", fallback: "显示名（可选）"), text: $targetFullName)
                     .disabled(isCloning)
             }
             .padding(.top, 4)
@@ -75,12 +75,12 @@ struct CloneClawSheet: View {
 
     @ViewBuilder
     private var scanSection: some View {
-        GroupBox("可克隆数据（默认全选）") {
+        GroupBox(L10n.k("auto.clone_claw_sheet.select_all", fallback: "可克隆数据（默认全选）")) {
             if isScanning {
                 VStack(alignment: .leading, spacing: 8) {
                     ProgressView()
                     Text(progressText).font(.subheadline)
-                    Text("会扫描环境目录与配置文件体积，用于勾选和预估复制量。")
+                    Text(L10n.k("auto.clone_claw_sheet.scans_environment_directories_and_config_sizes_for_selection", fallback: "会扫描环境目录与配置文件体积，用于勾选和预估复制量。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -101,7 +101,7 @@ struct CloneClawSheet: View {
                 }
                 .frame(maxHeight: 230)
             } else {
-                Text("暂无扫描结果")
+                Text(L10n.k("auto.clone_claw_sheet.no_scan_results", fallback: "暂无扫描结果"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
@@ -143,10 +143,10 @@ struct CloneClawSheet: View {
     }
 
     private var excludedSection: some View {
-        GroupBox("固定排除（不可勾选）") {
+        GroupBox(L10n.k("auto.clone_claw_sheet.always_excluded_cannot_be_selected", fallback: "固定排除（不可勾选）")) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("• channel 配置")
-                Text("• 个性偏好")
+                Text(L10n.k("auto.clone_claw_sheet.channel_configuration", fallback: "• channel 配置"))
+                Text(L10n.k("auto.clone_claw_sheet.text_4340251220", fallback: "• 个性偏好"))
                 Text("• memory / sessions / logs")
             }
             .font(.caption)
@@ -157,7 +157,7 @@ struct CloneClawSheet: View {
 
     private var footerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("预计复制总量：\(FormatUtils.formatBytes(selectedSize))")
+            Text(L10n.f("views.clone_claw_sheet.text_70867500", fallback: "预计复制总量：%@", String(describing: FormatUtils.formatBytes(selectedSize))))
                 .font(.subheadline)
                 .monospacedDigit()
 
@@ -173,11 +173,11 @@ struct CloneClawSheet: View {
             }
 
             HStack {
-                Button("取消") { dismiss() }
+                Button(L10n.k("auto.clone_claw_sheet.cancel", fallback: "取消")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .disabled(isCloning)
                 Spacer()
-                Button(isCloning ? "克隆中…" : "开始克隆") {
+                Button(isCloning ? L10n.k("auto.clone_claw_sheet.text_4699ebd9fe", fallback: "克隆中…") : L10n.k("auto.clone_claw_sheet.start_cloning", fallback: "开始克隆")) {
                     Task { await runClone() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -191,14 +191,14 @@ struct CloneClawSheet: View {
         isScanning = true
         scanError = nil
         warnings = []
-        progressText = "正在分析可克隆数据与大小，请稍候…"
+        progressText = L10n.k("auto.clone_claw_sheet.analyzing_clonable_data_and_size_please_wait", fallback: "正在分析可克隆数据与大小，请稍候…")
         do {
             let result = try await helperClient.scanCloneClaw(username: sourceUsername)
             scanResult = result
             selectedItemIDs = CloneClawSelection.defaultSelectedIDs(items: result.items)
             warnings = result.warnings
         } catch {
-            scanError = "扫描失败：\(error.localizedDescription)"
+            scanError = L10n.f("views.clone_claw_sheet.text_985cdafc", fallback: "扫描失败：%@", String(describing: error.localizedDescription))
         }
         isScanning = false
     }
@@ -227,7 +227,7 @@ struct CloneClawSheet: View {
             }
             dismiss()
         } catch {
-            cloneError = "克隆失败：\(error.localizedDescription)"
+            cloneError = L10n.f("views.clone_claw_sheet.text_c6c6eeb2", fallback: "克隆失败：%@", String(describing: error.localizedDescription))
         }
         isCloning = false
     }

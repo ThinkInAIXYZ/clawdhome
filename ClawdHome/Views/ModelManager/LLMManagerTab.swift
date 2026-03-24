@@ -19,13 +19,13 @@ struct LLMManagerTab: View {
             // 顶部工具栏
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("全局模型池").font(.headline)
-                    Text("配置各提供商账户可用模型，虾可快速选用为主备模型")
+                    Text(L10n.k("views.model_manager.llmmanager_tab.global_model_pool", fallback: "全局模型池")).font(.headline)
+                    Text(L10n.k("views.model_manager.llmmanager_tab.configuration_account", fallback: "配置各提供商账户可用模型，虾可快速选用为主备模型"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button { showAddSheet = true } label: {
-                    Label("添加账户", systemImage: "plus")
+                    Label(L10n.k("views.model_manager.llmmanager_tab.account", fallback: "添加账户"), systemImage: "plus")
                 }
                 .buttonStyle(.bordered)
             }
@@ -33,15 +33,15 @@ struct LLMManagerTab: View {
 
             Divider()
 
-            if modelStore.providers.isEmpty {
-                ContentUnavailableView {
-                    Label("尚未配置模型", systemImage: "cpu")
-                } description: {
-                    Text("点击「添加账户」，选择 Provider 和模型型号。\n同一 Provider 可添加多个账户（如主账号、备用账号）。")
-                } actions: {
-                    Button("添加账户") { showAddSheet = true }
-                        .buttonStyle(.borderedProminent)
-                }
+                if modelStore.providers.isEmpty {
+                    ContentUnavailableView {
+                        Label(L10n.k("views.model_manager.llmmanager_tab.configuration", fallback: "尚未配置模型"), systemImage: "cpu")
+                    } description: {
+                        Text(L10n.k("models.llm_manager.empty.desc", fallback: "点击「添加账户」，选择 Provider 和模型型号。\n同一 Provider 可添加多个账户（如主账号、备用账号）。"))
+                    } actions: {
+                        Button(L10n.k("views.model_manager.llmmanager_tab.account", fallback: "添加账户")) { showAddSheet = true }
+                            .buttonStyle(.borderedProminent)
+                    }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
@@ -60,18 +60,18 @@ struct LLMManagerTab: View {
         .sheet(item: $editingProvider) { provider in
             AddProviderModelSheet(editing: provider)
         }
-        .alert("删除「\(deleteTarget?.name ?? "")」？",
+        .alert(L10n.f("views.model_manager.llmmanager_tab.delete_confirm", fallback: "删除「%@」？", deleteTarget?.name ?? ""),
                isPresented: Binding(
                    get: { deleteConfirmId != nil },
                    set: { if !$0 { deleteConfirmId = nil } }
                )) {
-            Button("删除", role: .destructive) {
+            Button(L10n.k("views.model_manager.llmmanager_tab.delete", fallback: "删除"), role: .destructive) {
                 if let id = deleteConfirmId { modelStore.removeProvider(id: id) }
                 deleteConfirmId = nil
             }
-            Button("取消", role: .cancel) { deleteConfirmId = nil }
+            Button(L10n.k("views.model_manager.llmmanager_tab.cancel", fallback: "取消"), role: .cancel) { deleteConfirmId = nil }
         } message: {
-            Text("将从全局模型池中移除该账户下所有模型型号。")
+            Text(L10n.k("views.model_manager.llmmanager_tab.global_model_pool_account", fallback: "将从全局模型池中移除该账户下所有模型型号。"))
         }
     }
 
@@ -105,26 +105,26 @@ struct LLMManagerTab: View {
                     Text(provider.providerDisplayName)
                         .font(.caption2).foregroundStyle(.secondary)
                 }
-                Text("· \(provider.modelIds.count) 个型号")
+                Text(L10n.f("views.model_manager.llmmanager_tab.text_498748aa", fallback: "· %@ 个型号", String(describing: provider.modelIds.count)))
                     .font(.caption).foregroundStyle(.secondary)
                 // 凭据状态
                 let hasKey = AccountKeychain.hasCredential(for: provider.id)
                 Image(systemName: hasKey ? "key.fill" : "key")
                     .font(.caption2)
                     .foregroundStyle(hasKey ? Color.accentColor : Color.secondary.opacity(0.4))
-                    .help(hasKey ? "凭据已配置" : "尚未配置凭据")
+                    .help(hasKey ? L10n.k("views.model_manager.llmmanager_tab.credential_configuration", fallback: "凭据已配置") : L10n.k("views.model_manager.llmmanager_tab.configuration_credential", fallback: "尚未配置凭据"))
                 Spacer()
                 Button { editingProvider = provider } label: {
                     Image(systemName: "pencil").font(.caption)
                 }
                 .buttonStyle(.plain).foregroundStyle(Color.accentColor)
-                .help("编辑型号")
+                .help(L10n.k("views.model_manager.llmmanager_tab.edit_models", fallback: "编辑型号"))
 
                 Button { deleteConfirmId = provider.id } label: {
                     Image(systemName: "trash").font(.caption)
                 }
                 .buttonStyle(.plain).foregroundStyle(.red)
-                .help("移除该账户")
+                .help(L10n.k("views.model_manager.llmmanager_tab.account_78fbf7", fallback: "移除该账户"))
             }
         }
     }

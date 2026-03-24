@@ -45,7 +45,7 @@ struct CommandOutputPanel: View {
 
             // 输出区（深色 terminal 风格）
             ScrollView {
-                Text(output.isEmpty ? (isRunning ? "运行中…" : "（无输出）") : output)
+                Text(output.isEmpty ? (isRunning ? L10n.k("auto.command_output_panel.text_513a35f0ce", fallback: "运行中…") : L10n.k("auto.command_output_panel.no_output", fallback: "（无输出）")) : output)
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(isRunning || output.isEmpty
                                      ? Color.secondary

@@ -21,7 +21,7 @@ struct ConfigEditorSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("配置 — @\(user.username)")
+            Text(L10n.f("views.config_editor_sheet.text_873f12d4", fallback: "配置 — @%@", String(describing: user.username)))
                 .font(.title2)
                 .fontWeight(.semibold)
                 .padding(.bottom, 16)
@@ -30,7 +30,7 @@ struct ConfigEditorSheet: View {
                 Section {
                     SecureField("Anthropic API Key（sk-ant-…）", text: $apiKey)
                         .textContentType(.password)
-                    Text("用于访问 Claude API。留空则保持现有值不变。")
+                    Text(L10n.k("views.config_editor_sheet.claude_api", fallback: "用于访问 Claude API。留空则保持现有值不变。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } header: {
@@ -38,16 +38,16 @@ struct ConfigEditorSheet: View {
                 }
 
                 Section {
-                    Picker("运行模式", selection: $gatewayMode) {
+                    Picker(L10n.k("views.config_editor_sheet.text_44c4aaa1", fallback: "运行模式"), selection: $gatewayMode) {
                         ForEach(gatewayModes, id: \.self) { mode in
                             Text(mode).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
                 } header: {
-                    Text("Gateway 模式")
+                    Text(L10n.k("views.config_editor_sheet.gateway", fallback: "Gateway 模式"))
                 } footer: {
-                    Text("local：在本机运行（推荐家庭使用）")
+                    Text(L10n.k("views.config_editor_sheet.local", fallback: "local：在本机运行（推荐家庭使用）"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -62,7 +62,7 @@ struct ConfigEditorSheet: View {
             }
 
             if saveSuccess {
-                Label("配置已保存", systemImage: "checkmark.circle.fill")
+                Label(L10n.k("views.config_editor_sheet.configuration_save", fallback: "配置已保存"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.caption)
                     .padding(.top, 4)
@@ -70,9 +70,9 @@ struct ConfigEditorSheet: View {
 
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(L10n.k("views.config_editor_sheet.cancel", fallback: "取消")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button(isSaving ? "保存中…" : "保存") {
+                Button(isSaving ? L10n.k("views.config_editor_sheet.save", fallback: "保存中…") : L10n.k("views.config_editor_sheet.save_be5fbb", fallback: "保存")) {
                     Task { await save() }
                 }
                 .keyboardShortcut(.defaultAction)
