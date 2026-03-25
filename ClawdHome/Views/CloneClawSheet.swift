@@ -147,7 +147,7 @@ struct CloneClawSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.k("auto.clone_claw_sheet.channel_configuration", fallback: "• channel 配置"))
                 Text(L10n.k("auto.clone_claw_sheet.text_4340251220", fallback: "• 个性偏好"))
-                Text("• memory / sessions / logs")
+                Text(L10n.k("auto.clone_claw_sheet.memory_sessions_logs", fallback: "• 记忆 / 会话 / 日志"))
             }
             .font(.caption)
             .foregroundStyle(.secondary)

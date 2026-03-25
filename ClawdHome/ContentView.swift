@@ -48,7 +48,7 @@ struct ContentView: View {
                             .tag(NavDestination.models)
                         Label(L10n.k("auto.content_view.network", fallback: "网络"), systemImage: "network")
                             .tag(NavDestination.network)
-                        Label("AI Lab", systemImage: "flask.fill")
+                        Label(L10n.k("auto.content_view.ai_lab", fallback: "AI 实验室"), systemImage: "flask.fill")
                             .tag(NavDestination.aiLab)
                     }
                     Section(L10n.k("auto.content_view.system", fallback: "系统")) {

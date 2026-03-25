@@ -111,6 +111,12 @@ import Foundation
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
+    /// 修复普通用户 Homebrew 安装权限（安装到 ~/.brew，并写入环境变量）
+    func repairHomebrewPermission(
+        username: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
     /// 设置指定用户 npm 安装源（写入用户级 ~/.npmrc）
     func setNpmRegistry(
         username: String,

@@ -260,6 +260,7 @@ struct UserDetailView: View {
     @State private var xcodeEnvStatus: XcodeEnvStatus? = nil
     @State private var isInstallingXcodeCLT = false
     @State private var isAcceptingXcodeLicense = false
+    @State private var isRepairingHomebrewPermission = false
     @State private var xcodeFixMessage: String? = nil
     @State private var isReopeningInitWizard = false
     @State private var suppressNpmRegistryOnChange = false
@@ -926,7 +927,7 @@ struct UserDetailView: View {
                 Divider()
                 HStack {
                     Text(L10n.k("user.detail.auto.channel", fallback: "频道")).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
-                    Text("Feishu / Weixin")
+                    Text(L10n.k("user.detail.auto.feishu_weixin", fallback: "飞书 / 微信"))
                         .font(.caption).foregroundStyle(.tertiary)
                     Spacer()
                     Button(L10n.k("user.detail.auto.feishu", fallback: "飞书配对")) {
@@ -1808,7 +1809,7 @@ struct UserDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                if isInstallingXcodeCLT || isAcceptingXcodeLicense {
+                if isInstallingXcodeCLT || isAcceptingXcodeLicense || isRepairingHomebrewPermission {
                     ProgressView().scaleEffect(0.6)
                 }
                 Text(status == nil ? L10n.k("views.user_detail_view.text_d6a22312", fallback: "检查中…") : (healthy ? L10n.k("views.user_detail_view.text_298ac017", fallback: "环境正常") : L10n.k("views.user_detail_view.text_cba971a5", fallback: "需要修复")))
@@ -1830,21 +1831,28 @@ struct UserDetailView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
-                        .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+                        .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense || isRepairingHomebrewPermission)
 
                         Button(isAcceptingXcodeLicense ? L10n.k("user.detail.auto.processing", fallback: "处理中…") : L10n.k("user.detail.auto.xcode", fallback: "同意 Xcode 许可")) {
                             Task { await acceptXcodeLicense() }
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
-                        .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+                        .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense || isRepairingHomebrewPermission)
+
+                        Button(isRepairingHomebrewPermission ? L10n.k("user.detail.auto.processing", fallback: "处理中…") : L10n.k("user.detail.auto.repair_homebrew_permission", fallback: "修复 Homebrew 权限")) {
+                            Task { await repairHomebrewPermission() }
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense || isRepairingHomebrewPermission)
 
                         Button(L10n.k("user.detail.auto.open", fallback: "打开软件更新")) {
                             openSoftwareUpdate()
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
-                        .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+                        .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense || isRepairingHomebrewPermission)
                     }
                     if let message = xcodeFixMessage, !message.isEmpty {
                         Text(message)
@@ -1891,6 +1899,19 @@ struct UserDetailView: View {
         }
         xcodeEnvStatus = await helperClient.getXcodeEnvStatus()
         isAcceptingXcodeLicense = false
+    }
+
+    private func repairHomebrewPermission() async {
+        isRepairingHomebrewPermission = true
+        xcodeFixMessage = nil
+        do {
+            try await helperClient.repairHomebrewPermission(username: user.username)
+            xcodeFixMessage = L10n.k("user.detail.auto.repair_homebrew_permission_done", fallback: "Homebrew 权限修复完成：已安装/更新 ~/.brew，并写入 ~/.zprofile 环境变量。")
+        } catch {
+            xcodeFixMessage = error.localizedDescription
+        }
+        xcodeEnvStatus = await helperClient.getXcodeEnvStatus()
+        isRepairingHomebrewPermission = false
     }
 
     private func openSoftwareUpdate() {
@@ -2817,7 +2838,7 @@ private struct SkillsTabView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Skills")
+                Text(L10n.k("user.detail.auto.skills_title", fallback: "技能"))
                     .font(.headline)
                 Spacer()
                 Button { runId += 1 } label: {
