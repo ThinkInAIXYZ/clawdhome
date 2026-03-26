@@ -28,7 +28,7 @@ help:
 	@echo "  release          一键发布：读取 release-notes/ + changelog + tag + pkg + GitHub Release"
 	@echo "  release-dry-run  预览发布流程（不执行）"
 	@echo "  test-release-scripts  校验 release/changelog 脚本"
-	@echo "  install-hooks    安装 git commit-msg hook"
+	@echo "  install-hooks    安装 git commit-msg / pre-commit hooks"
 	@echo "  run-release      直接运行 build/export 里的 Release 包（无需安装）"
 	@echo "  install-pkg      安装最新 pkg 到 /Applications（需要 sudo）"
 	@echo "  log-helper       实时跟踪 Helper 日志（/tmp/clawdhome-helper.log）"
@@ -144,8 +144,10 @@ clean:
 
 install-hooks:
 	@cp scripts/hooks/commit-msg .git/hooks/commit-msg
+	@cp scripts/hooks/pre-commit .git/hooks/pre-commit
 	@chmod +x .git/hooks/commit-msg
-	@echo "✅ commit-msg hook 已安装"
+	@chmod +x .git/hooks/pre-commit
+	@echo "✅ git hooks 已安装（commit-msg, pre-commit）"
 
 # ── i18n ──────────────────────────────────────────────────────────────────────
 

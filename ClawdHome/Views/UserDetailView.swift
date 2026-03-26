@@ -176,7 +176,7 @@ enum QuickFileTransferService {
 // MARK: - 详情窗口 Tab
 
 private enum ClawTab: String, Hashable {
-    case overview, files, logs, processes, cron, skills, persona, sessions, memory
+    case overview, files, logs, processes, cron, skills, characterDef, sessions, memory
 }
 
 private enum DetailXcodeHealthState {
@@ -310,7 +310,7 @@ struct UserDetailView: View {
 
     // MARK: - Tab 容器
 
-    private let allTabs: [ClawTab] = [.overview, .files, .processes, .logs, .cron, .skills, .persona, .sessions, .memory]
+    private let allTabs: [ClawTab] = [.overview, .characterDef, .files, .processes, .logs, .cron, .skills, .sessions, .memory]
 
     private func tabInfo(_ tab: ClawTab) -> (label: String, icon: String) {
         switch tab {
@@ -319,7 +319,7 @@ struct UserDetailView: View {
         case .logs:      return (L10n.k("user.detail.auto.logs", fallback: "日志"), "doc.text.magnifyingglass")
         case .cron:      return (L10n.k("user.detail.auto.scheduled", fallback: "定时"), "clock")
         case .skills:    return ("Skills", "star.leadinghalf.filled")
-        case .persona:   return (L10n.k("user.detail.auto.persona", fallback: "人格"), "person.text.rectangle")
+        case .characterDef: return (L10n.k("user.detail.auto.character_def", fallback: "角色定义"), "theatermasks")
         case .sessions:  return (L10n.k("user.detail.auto.sessions", fallback: "会话"), "bubble.left.and.bubble.right")
         case .memory:    return (L10n.k("user.detail.auto.memory", fallback: "记忆"), "brain.head.profile")
         case .processes: return (L10n.k("user.detail.auto.processes", fallback: "进程"), "square.3.layers.3d")
@@ -361,7 +361,7 @@ struct UserDetailView: View {
                 .searchable(text: $logSearchText, prompt: L10n.k("user.detail.auto.search_logs_space_separated_terms", fallback: "搜索日志（空格分词）"))
         case .cron:      CronTabView(username: user.username)
         case .skills:    SkillsTabView(username: user.username)
-        case .persona:   PersonaTabView(username: user.username)
+        case .characterDef: CharacterDefTabView(username: user.username)
         case .sessions:  SessionsTabView(username: user.username)
         case .memory:    MemoryTabView(username: user.username)
         case .processes:
@@ -2864,97 +2864,6 @@ private struct SkillsTabView: View {
             .padding(.horizontal, 16).padding(.vertical, 10)
         }
         .onAppear { runId += 1 }
-    }
-}
-
-// MARK: - 人格 Tab
-
-private struct PersonaTabView: View {
-    let username: String
-    @Environment(HelperClient.self) private var helperClient
-    @State private var content: String = ""
-    @State private var isLoading = false
-    @State private var isSaving = false
-    @State private var errorMessage: String?
-
-    private let relPath = ".openclaw/workspace/SOUL.md"
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(L10n.k("user.detail.auto.soul_md", fallback: "人格 (SOUL.md)"))
-                    .font(.headline)
-                Spacer()
-                if isSaving {
-                    ProgressView().controlSize(.small)
-                }
-                Button { Task { await load() } } label: {
-                    Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.plain).foregroundStyle(.secondary)
-                .disabled(isLoading || isSaving)
-                Button(L10n.k("user.detail.auto.save", fallback: "保存")) { Task { await save() } }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(isLoading || isSaving)
-            }
-            .padding(.horizontal, 16).padding(.vertical, 10)
-            .background(.bar)
-
-            Divider()
-
-            if isLoading {
-                ProgressView(L10n.k("user.detail.auto.loading", fallback: "加载中…")).frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                if let err = errorMessage {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                        Text(err).font(.caption).foregroundStyle(.orange)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 6)
-                }
-                TextEditor(text: $content)
-                    .font(.system(.body, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-            }
-
-            Divider()
-
-            HStack(spacing: 8) {
-                Image(systemName: "info.circle").foregroundStyle(.secondary).font(.caption)
-                Text(L10n.k("user.detail.auto.soul_md_file_agent", fallback: "编辑 SOUL.md 文件，定义 Agent 的人格与语气风格"))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 16).padding(.vertical, 10)
-        }
-        .task { await load() }
-    }
-
-    private func load() async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
-        do {
-            let data = try await helperClient.readFile(username: username, relativePath: relPath)
-            content = String(data: data, encoding: .utf8) ?? ""
-        } catch {
-            // 文件不存在时提供模板
-            content = "# SOUL.md\n\nYou are a helpful assistant.\n"
-            errorMessage = nil  // 不存在不报错，直接用模板
-        }
-    }
-
-    private func save() async {
-        isSaving = true
-        errorMessage = nil
-        defer { isSaving = false }
-        guard let data = content.data(using: .utf8) else { return }
-        do {
-            try await helperClient.writeFile(username: username, relativePath: relPath, data: data)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
     }
 }
 

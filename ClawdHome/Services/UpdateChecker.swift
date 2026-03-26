@@ -43,8 +43,11 @@ final class UpdateChecker {
     var appTotalBytes: Int64 = 0
     /// 下载速率（字节/秒）
     var appDownloadSpeed: Double = 0
+    /// 已启动安装器，等待安装完成后自动拉起新版 App
+    var isAwaitingAppRelaunch: Bool = false
     /// 当前下载任务（用于取消）
     private var currentDownloadSession: URLSession?
+    private var relaunchMonitorTask: Task<Void, Never>?
 
     private static let udKeyAppLastChecked  = "appUpdate.lastChecked"
     private static let udKeyAppVersion      = "appUpdate.version"
@@ -173,6 +176,8 @@ final class UpdateChecker {
 
     func downloadAndInstall() async {
         guard let downloadURL = appDownloadURL else { return }
+        relaunchMonitorTask?.cancel()
+        isAwaitingAppRelaunch = false
         appUpdateError = nil
         appUpdateProgress = 0.0
         appDownloadedBytes = 0
@@ -205,16 +210,18 @@ final class UpdateChecker {
             guard NSWorkspace.shared.open(dest) else {
                 throw UpdateError.launchInstallerFailed
             }
-            // 安装器已启动，短暂延迟后退出当前 App，避免升级过程被旧进程占用。
-            try? await Task.sleep(for: .milliseconds(500))
             appUpdateProgress = nil
-            NSApp.terminate(nil)
+            hideAppForUpgrade()
+            isAwaitingAppRelaunch = true
+            startInstalledAppMonitor(expectedVersion: version)
         } catch is CancellationError {
             appUpdateError = nil
             appUpdateProgress = nil
+            isAwaitingAppRelaunch = false
         } catch {
             appUpdateError = error.localizedDescription
             appUpdateProgress = nil
+            isAwaitingAppRelaunch = false
         }
         currentDownloadSession = nil
     }
@@ -227,6 +234,68 @@ final class UpdateChecker {
         appDownloadedBytes = 0
         appTotalBytes = 0
         appDownloadSpeed = 0
+    }
+
+    private func hideAppForUpgrade() {
+        for window in NSApp.windows {
+            window.orderOut(nil)
+        }
+        NSApp.hide(nil)
+    }
+
+    private func startInstalledAppMonitor(expectedVersion: String) {
+        relaunchMonitorTask?.cancel()
+        relaunchMonitorTask = Task { [weak self] in
+            guard let self else { return }
+            let deadline = Date().addingTimeInterval(20 * 60)
+
+            while !Task.isCancelled, Date() < deadline {
+                try? await Task.sleep(for: .seconds(2))
+
+                guard let installedVersion = self.installedBundleVersion() else { continue }
+                guard self.compareVersions(installedVersion, expectedVersion) != .orderedAscending else { continue }
+
+                // 让安装器完成最后的 bundle 写入和签名校验，再拉起新版。
+                try? await Task.sleep(for: .seconds(1))
+                self.relaunchInstalledApp()
+                return
+            }
+
+            if !Task.isCancelled {
+                self.isAwaitingAppRelaunch = false
+                self.appUpdateError = L10n.k(
+                    "services.update_checker.install_complete_reopen_manually",
+                    fallback: "安装器已启动，但未检测到新版自动打开。请完成安装后手动重新打开 ClawdHome。"
+                )
+                NSApp.unhide(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
+    }
+
+    private func installedBundleVersion() -> String? {
+        guard let info = NSDictionary(contentsOf: Bundle.main.bundleURL.appendingPathComponent("Contents/Info.plist")) else {
+            return nil
+        }
+        return info["CFBundleShortVersionString"] as? String
+    }
+
+    private func relaunchInstalledApp() {
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { [weak self] _, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let error {
+                    self.isAwaitingAppRelaunch = false
+                    self.appUpdateError = error.localizedDescription
+                    NSApp.unhide(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                    return
+                }
+                NSApp.terminate(nil)
+            }
+        }
     }
 
     enum UpdateError: LocalizedError {

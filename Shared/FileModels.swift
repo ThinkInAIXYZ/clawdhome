@@ -134,3 +134,14 @@ private func fallbackSessionIdFromKey(_ key: String) -> String? {
     guard tail.rangeOfCharacter(from: .decimalDigits) != nil else { return nil }
     return tail
 }
+
+// MARK: - 角色定义 Git 历史
+
+/// git commit 记录（角色文件历史追踪）
+struct PersonaCommit: Codable, Identifiable {
+    let hash: String      // 7 位短哈希，作为唯一 ID
+    let message: String   // commit message
+    let timestamp: Date   // 提交时间
+
+    var id: String { hash }
+}

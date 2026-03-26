@@ -14,6 +14,8 @@ final class HelperClient {
     private var fileConnection: NSXPCConnection?
     /// 进程管理专用连接，避免与文件管理/控制操作互相阻塞
     private var processConnection: NSXPCConnection?
+    /// 角色定义只读操作专用连接（git log/diff 可能耗时，独立连接避免阻塞文件写入队列）
+    private var personaReadConnection: NSXPCConnection?
     private(set) var isConnected: Bool = false
 
     // MARK: - 私有：创建 XPC 连接
@@ -37,6 +39,7 @@ final class HelperClient {
         installConnection = makeConnection()
         fileConnection = makeConnection()
         processConnection = makeConnection()
+        personaReadConnection = makeConnection()
         isConnected = true
     }
 
@@ -46,6 +49,7 @@ final class HelperClient {
         installConnection?.invalidate(); installConnection = nil
         fileConnection?.invalidate(); fileConnection = nil
         processConnection?.invalidate(); processConnection = nil
+        personaReadConnection?.invalidate(); personaReadConnection = nil
         isConnected = false
     }
 
@@ -69,6 +73,10 @@ final class HelperClient {
 
     private var processProxy: (any ClawdHomeHelperProtocol)? {
         processConnection?.remoteObjectProxy as? any ClawdHomeHelperProtocol
+    }
+
+    private var personaReadProxy: (any ClawdHomeHelperProtocol)? {
+        personaReadConnection?.remoteObjectProxy as? any ClawdHomeHelperProtocol
     }
 
     // MARK: - 用户管理
@@ -1079,6 +1087,66 @@ final class HelperClient {
             proxy.killProcess(pid: pid, signal: signal) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
+    // MARK: - 角色定义 Git 管理
+
+    /// 初始化 workspace git repo（幂等，Tab 出现时自动调用）
+    func initPersonaGitRepo(username: String) async throws {
+        guard let proxy = fileProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = await withCheckedContinuation { cont in
+            proxy.initPersonaGitRepo(username: username) { ok, e in cont.resume(returning: (ok, e)) }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.git_init_failed", fallback: "git 初始化失败")) }
+    }
+
+    /// 提交单个角色文件（writeFile 成功后调用）
+    func commitPersonaFile(username: String, filename: String, message: String) async throws {
+        guard let proxy = fileProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = await withCheckedContinuation { cont in
+            proxy.commitPersonaFile(username: username, filename: filename, message: message) { ok, e in
+                cont.resume(returning: (ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.git_commit_failed", fallback: "git 提交失败")) }
+    }
+
+    /// 获取角色文件 git 历史（走独立只读连接，避免阻塞写操作队列）
+    func getPersonaFileHistory(username: String, filename: String) async throws -> [PersonaCommit] {
+        guard let proxy = personaReadProxy else { throw HelperError.notConnected }
+        let (json, err): (String?, String?) = await withCheckedContinuation { cont in
+            proxy.getPersonaFileHistory(username: username, filename: filename) { j, e in
+                cont.resume(returning: (j, e))
+            }
+        }
+        if let err { throw HelperError.operationFailed(err) }
+        guard let json, let data = json.data(using: .utf8) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode([PersonaCommit].self, from: data)) ?? []
+    }
+
+    /// 获取某 commit 的 diff（走独立只读连接）
+    func getPersonaFileDiff(username: String, filename: String, commitHash: String) async throws -> String {
+        guard let proxy = personaReadProxy else { throw HelperError.notConnected }
+        let (diff, err): (String?, String?) = await withCheckedContinuation { cont in
+            proxy.getPersonaFileDiff(username: username, filename: filename, commitHash: commitHash) { d, e in
+                cont.resume(returning: (d, e))
+            }
+        }
+        if let err { throw HelperError.operationFailed(err) }
+        return diff ?? ""
+    }
+
+    /// 将文件回滚到指定 commit（走文件写操作连接）
+    func restorePersonaFileToCommit(username: String, filename: String, commitHash: String) async throws {
+        guard let proxy = fileProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = await withCheckedContinuation { cont in
+            proxy.restorePersonaFileToCommit(username: username, filename: filename, commitHash: commitHash) { ok, e in
+                cont.resume(returning: (ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.restore_failed", fallback: "回滚失败")) }
     }
 }
 
