@@ -170,6 +170,9 @@ struct ContentView: View {
                 for: NSNotification.Name("com.apple.screenIsLocked")
             )
         ) { _ in lockStore.lock() }
+        .onReceive(NotificationCenter.default.publisher(for: .roleMarketAdoptionStarted)) { _ in
+            navSelection = .clawPool
+        }
         .overlay {
             if lockStore.isLocked {
                 AppLockScreen()
