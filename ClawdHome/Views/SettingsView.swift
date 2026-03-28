@@ -707,7 +707,10 @@ private struct AboutTab: View {
     @State private var helperVersion = "—"
 
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        let info = Bundle.main.infoDictionary
+        let shortVersion = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let buildVersion = info?["CFBundleVersion"] as? String ?? ""
+        return buildVersion.isEmpty ? shortVersion : "\(shortVersion) (\(buildVersion))"
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
