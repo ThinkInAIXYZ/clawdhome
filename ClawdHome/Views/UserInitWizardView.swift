@@ -426,6 +426,7 @@ struct UserInitWizardView: View {
 
     // Step 3: 模型配置
     @State private var selectedWizardProvider: WizardProvider = .kimiCoding
+    @State private var providerSearchText = ""
     @State private var wizardApiKey = ""
     @State private var isShowingApiKey = false
     @State private var minimaxApiKey = ""  // 保留用于持久化反序列化兼容
@@ -648,16 +649,6 @@ struct UserInitWizardView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
 
-            GroupBox {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label(L10n.k("wizard.base_env.about_permissions", fallback: "关于权限"), systemImage: "info.circle")
-                        .font(.subheadline).fontWeight(.medium)
-                    Text(L10n.k("wizard.base_env.permission_desc", fallback: "安装阶段会自动处理 Node.js / npm 环境 / openclaw。\n\n这些细节统一归为「基础环境初始化」。"))
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 2)
-            }
 
             GroupBox(L10n.k("wizard.openclaw_version.group", fallback: "OpenClaw 版本")) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -673,9 +664,6 @@ struct UserInitWizardView: View {
                             .textFieldStyle(.roundedBorder)
                     }
 
-                    Text(L10n.f("wizard.openclaw_version.install_target", fallback: "初始化将安装版本：%@", openclawVersionLabelForUI))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -791,17 +779,54 @@ struct UserInitWizardView: View {
 
     private var modelConfigPanel: some View {
         VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.k("views.user_init_wizard_view.select_ai_provider", fallback: "选择 AI Provider"))
-                    .font(.title3).fontWeight(.semibold)
-                Text(L10n.k("views.user_init_wizard_view.select_provider_api_key_donemodelsconfiguration", fallback: "选择一个 Provider 并填入 API Key，即可完成模型配置。"))
-                    .font(.callout).foregroundStyle(.secondary)
-            }
+            Text(L10n.k("views.user_init_wizard_view.select_ai_provider", fallback: "选择 AI Provider"))
+                .font(.title3).fontWeight(.semibold)
 
-            VStack(spacing: 6) {
-                ForEach(WizardProvider.allCases) { provider in
-                    providerSelectRow(provider)
+            VStack(spacing: 10) {
+                // 搜索框
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField(L10n.k("wizard.provider.search", fallback: "搜索 Provider..."), text: $providerSearchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                    if !providerSearchText.isEmpty {
+                        Button { providerSearchText = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
+                )
+
+                // 供选择的列表，限制高度默认展示3个，支持内滚
+                ScrollView {
+                    VStack(spacing: 6) {
+                        let filteredProviders = WizardProvider.allCases.filter {
+                            providerSearchText.isEmpty ||
+                            $0.displayName.localizedCaseInsensitiveContains(providerSearchText) ||
+                            $0.subtitle.localizedCaseInsensitiveContains(providerSearchText)
+                        }
+                        if filteredProviders.isEmpty {
+                            Text(L10n.k("wizard.provider.no_results", fallback: "未找到匹配项"))
+                                .font(.callout).foregroundStyle(.secondary)
+                                .padding(.vertical, 20)
+                        } else {
+                            ForEach(filteredProviders) { provider in
+                                providerSelectRow(provider)
+                            }
+                        }
+                    }
+                    .padding(.trailing, 4) // 给滚动条留出空间
+                }
+                .frame(height: 160) // 约等于 3 个选项的高度 (每行约46 + 间距)
             }
 
             Divider()
