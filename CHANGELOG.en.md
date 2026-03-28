@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0] - 2026-03-29
+
+### Features
+- Added Role Market for browsing and adopting preconfigured role setups
+- Direct model configuration without requiring a preset
+- Redesigned onboarding experience with support for cloning from existing Shrimps
+- Gateway watchdog: automatically monitors and recovers crashed gateway instances
+
+### Improvements & Fixes
+- Polished onboarding and user management interaction details
+- Improved in-app banner notifications
+- Safer handling of user directory ownership and permissions
+- Refined quick-transfer copy
+
+
 ## [1.2.0] - 2026-03-26
 
 ### Features
