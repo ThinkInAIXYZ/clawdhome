@@ -34,3 +34,20 @@ ClawdHomeHelper/GeneratedVersion.swift
 scripts/switch-namespace.local.sh
 .githooks/pre-commit
 .gstack/
+.build-version
+.build-version.lock
+
+# Apple 签名 / 公证密钥材料（不提交）
+*.p12
+*.p8
+*.cer
+*.crt
+*.csr
+*.der
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+*.developerprofile
+*.keychain
+*.keychain-db

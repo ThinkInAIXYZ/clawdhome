@@ -29,6 +29,8 @@ cd "$REPO_ROOT"
 WEBSITE_DIR="${WEBSITE_DIR:-$REPO_ROOT/../clawdhome_website}"
 API_VERSION_JSON="$WEBSITE_DIR/api/version.json"
 NOTES_DIR="${NOTES_DIR:-$REPO_ROOT/release-notes}"
+INFO_PLIST="$REPO_ROOT/ClawdHome/Info.plist"
+PLIST_BUDDY="/usr/libexec/PlistBuddy"
 
 DRY_RUN=false
 SKIP_PUSH=false
@@ -45,6 +47,13 @@ log()  { echo "▶ $*"; }
 ok()   { echo "✅ $*"; }
 warn() { echo "⚠️  $*"; }
 fail() { echo "❌ $*" >&2; exit 1; }
+
+set_plist_value() {
+  local key="$1"
+  local value="$2"
+  "$PLIST_BUDDY" -c "Set :$key $value" "$INFO_PLIST" >/dev/null 2>&1 || \
+    "$PLIST_BUDDY" -c "Add :$key string $value" "$INFO_PLIST" >/dev/null 2>&1
+}
 
 render_changelog_preview() {
   local lang="$1"
@@ -112,13 +121,14 @@ if [ "$DRY_RUN" = true ]; then
   render_changelog_preview en "$EN_NOTES_FILE"
   echo ""
   log "将执行的操作："
-  echo "  1. 更新 CHANGELOG.zh.md / CHANGELOG.en.md"
-  echo "  2. git commit -m \"chore(release): v${NEXT_VERSION}\""
-  echo "  3. git tag -a v${NEXT_VERSION}"
-  echo "  4. xcodebuild + pkgbuild → dist/ClawdHome-${NEXT_VERSION}.pkg"
-  echo "  5. 同步 version.json（含中英文 release notes）"
-  echo "  6. git push && git push --tags"
-  echo "  7. gh release create v${NEXT_VERSION}"
+  echo "  1. 更新 ClawdHome/Info.plist -> ${NEXT_VERSION}"
+  echo "  2. 更新 CHANGELOG.zh.md / CHANGELOG.en.md"
+  echo "  3. git commit -m \"chore(release): v${NEXT_VERSION}\""
+  echo "  4. git tag -a v${NEXT_VERSION}"
+  echo "  5. xcodebuild + pkgbuild/productsign${NOTARIZE:+ + notarize} → dist/ClawdHome-${NEXT_VERSION}.pkg"
+  echo "  6. 同步 version.json（含中英文 release notes）"
+  echo "  7. git push && git push --tags"
+  echo "  8. gh release create v${NEXT_VERSION}"
   exit 0
 fi
 
@@ -136,10 +146,14 @@ GITHUB_RELEASE_NOTES=$(bash "$SCRIPT_DIR/release_notes.sh" --github --version "$
 API_RELEASE_NOTES_ZH=$(bash "$SCRIPT_DIR/release_notes.sh" --api zh --version "$NEXT_VERSION" --notes-dir "$NOTES_DIR")
 API_RELEASE_NOTES_EN=$(bash "$SCRIPT_DIR/release_notes.sh" --api en --version "$NEXT_VERSION" --notes-dir "$NOTES_DIR")
 
+# 统一 release 版本：正式发布时将 Info.plist 对齐到即将发布的 semver
+log "更新 Info.plist 版本：${NEXT_VERSION}"
+set_plist_value "CFBundleShortVersionString" "$NEXT_VERSION"
+
 # ── Step 3：commit + tag ──────────────────────────────────────────────────────
 
 log "提交 release commit..."
-git add CHANGELOG.zh.md CHANGELOG.en.md "$ZH_NOTES_FILE" "$EN_NOTES_FILE"
+git add "$INFO_PLIST" CHANGELOG.zh.md CHANGELOG.en.md "$ZH_NOTES_FILE" "$EN_NOTES_FILE"
 git commit -m "chore(release): v${NEXT_VERSION}"
 
 log "打 tag v${NEXT_VERSION}..."
@@ -155,8 +169,7 @@ rollback() {
   if [ "$NEED_ROLLBACK" = true ]; then
     warn "发布失败，正在回滚..."
     git tag -d "v${NEXT_VERSION}" 2>/dev/null || true
-    git reset --soft HEAD~1 2>/dev/null || true
-    git restore --staged CHANGELOG.zh.md CHANGELOG.en.md "$ZH_NOTES_FILE" "$EN_NOTES_FILE" 2>/dev/null || true
+    git reset --hard HEAD~1 2>/dev/null || true
     warn "已回滚：删除 tag v${NEXT_VERSION}，撤销 release commit"
   fi
 }
@@ -165,7 +178,7 @@ trap rollback EXIT
 # ── Step 4：构建打包 ──────────────────────────────────────────────────────────
 
 log "构建打包..."
-bash "$SCRIPT_DIR/build-pkg.sh" --no-sync-api-version
+RELEASE_VERSION="$NEXT_VERSION" bash "$SCRIPT_DIR/build-pkg.sh" --no-sync-api-version
 
 PKG=$(ls -t dist/ClawdHome-*.pkg 2>/dev/null | head -1)
 [ -n "$PKG" ] || fail "未找到 dist/ClawdHome-*.pkg"
