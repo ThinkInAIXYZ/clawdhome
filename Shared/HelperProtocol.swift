@@ -4,6 +4,26 @@
 
 import Foundation
 
+enum ManagedUserFilter {
+    static let minimumStandardUID = 500
+    private static let systemAccounts: Set<String> = ["nobody", "root", "daemon", "Guest"]
+    private static let usersDirectorySkipEntries: Set<String> = ["Shared", ".localized"]
+
+    static func isExcludedUsername(_ username: String) -> Bool {
+        username.hasPrefix("_") || systemAccounts.contains(username)
+    }
+
+    static func isEligibleManagedUser(username: String, uid: Int, adminNames: Set<String>) -> Bool {
+        uid >= minimumStandardUID
+            && !adminNames.contains(username)
+            && !isExcludedUsername(username)
+    }
+
+    static func shouldConsiderUsersDirectoryEntry(_ name: String) -> Bool {
+        !name.hasPrefix(".") && !usersDirectorySkipEntries.contains(name)
+    }
+}
+
 /// Helper 对外暴露的操作接口（ClawdHome.app 调用）
 @objc protocol ClawdHomeHelperProtocol: NSObjectProtocol {
     /// 获取 Helper 版本号，用于连通性验证
@@ -172,6 +192,18 @@ import Foundation
     func cloneClaw(
         requestJSON: String,
         withReply reply: @escaping (Bool, String, String?) -> Void
+    )
+
+    /// 终止正在进行的克隆任务（按目标用户名）
+    func cancelCloneClaw(
+        targetUsername: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 查询克隆任务当前阶段状态（按目标用户名）
+    func getCloneClawStatus(
+        targetUsername: String,
+        withReply reply: @escaping (String?) -> Void
     )
 
     /// 保存指定用户的向导初始化进度（JSON 字符串）到 /var/lib/clawdhome/<username>-init.json

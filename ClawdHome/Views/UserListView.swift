@@ -2,6 +2,7 @@
 // 文件名保留，struct 名为 ClawPoolView
 
 import Darwin
+import AppKit
 import SwiftUI
 
 struct ClawPoolView: View {
@@ -15,7 +16,6 @@ struct ClawPoolView: View {
     @Environment(MaintenanceWindowRegistry.self) private var maintenanceWindowRegistry
     @State private var selectedClaw: ManagedUser.ID?
     @State private var showAddSheet = false
-    @State private var createUserError: String?
     @State private var isCreatingUser = false
     @AppStorage("clawPoolIsCardView") private var isCardView = true
     @AppStorage("clawPoolShowCurrentAdmin") private var showCurrentAdmin = false
@@ -26,7 +26,6 @@ struct ClawPoolView: View {
 
     // MARK: 右键菜单 — 工具 sheet（枚举合并避免类型检查超时）
     @State private var toolSheet: ToolSheet?
-    @State private var cloneClawSourceUser: ManagedUser?
 
     // MARK: 右键菜单 — 删除流程（item: 绑定，避免 isPresented+可选值 时序 bug）
     @State private var contextMenuUser: ManagedUser?
@@ -67,9 +66,6 @@ struct ClawPoolView: View {
     var body: some View {
         baseContent
             .sheet(item: $toolSheet, content: toolSheetContent)
-            .sheet(item: $cloneClawSourceUser) { claw in
-                CloneClawSheet(sourceUsername: claw.username)
-            }
             .sheet(item: $contextMenuUser) { claw in
                 DeleteUserSheet(
                     username: claw.username,
@@ -140,30 +136,61 @@ struct ClawPoolView: View {
         }
         .sheet(isPresented: $showAddSheet) {
             AddClawSheet(
+                existingUsers: pool.users.map {
+                    UserAdoptionExistingUser(username: $0.username, fullName: $0.fullName)
+                },
+                isCreatingUser: isCreatingUser,
                 onGoToRoleMarket: {
                     showAddSheet = false
                     onGoToRoleMarket()
                 },
                 onCreateMacosUser: { username, fullName, description in
-                Task {
+                    let normalized = try UserAdoptionInputValidator.validate(
+                        username: username,
+                        fullName: fullName,
+                        existingUsers: pool.users.map {
+                            UserAdoptionExistingUser(username: $0.username, fullName: $0.fullName)
+                        }
+                    )
+
                     isCreatingUser = true
-                    createUserError = nil
+                    defer { isCreatingUser = false }
+
+                    let password = try UserPasswordStore.generateAndSave(for: normalized.username)
                     do {
-                        let password = try UserPasswordStore.generateAndSave(for: username)
                         try await helperClient.createUser(
-                            username: username, fullName: fullName, password: password)
-                        pool.loadUsers()
-                        pool.setDescription(description, for: username)
-                        // 新用户创建后立即打开详情窗口，稳定进入初始化向导；
-                        // 不依赖异步 loadUsers 完成后的选中态时序。
-                        openWindow(id: "claw-detail", value: username)
-                    } catch { createUserError = error.localizedDescription }
-                    isCreatingUser = false
+                            username: normalized.username,
+                            fullName: normalized.fullName,
+                            password: password
+                        )
+                    } catch {
+                        throw mapCreateMacOSUserError(
+                            error,
+                            username: normalized.username,
+                            fullName: normalized.fullName
+                        )
+                    }
+
+                    // 新建同名账号时，清理可能遗留的初始化进度，避免向导误跳步骤。
+                    try? await helperClient.saveInitState(username: normalized.username, json: "{}")
+
+                    try? await helperClient.createDirectory(
+                        username: normalized.username,
+                        relativePath: ".openclaw/workspace"
+                    )
+
+                    pool.loadUsers()
+                    let trimmedDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
+                    pool.setDescription(trimmedDescription, for: normalized.username)
+                    pool.markNeedsOnboarding(username: normalized.username)
+                    // 新用户创建后立即打开详情窗口，稳定进入初始化向导；
+                    // 不依赖异步 loadUsers 完成后的选中态时序。
+                    openWindow(id: "claw-detail", value: normalized.username)
                 }
-            })
+            )
         }
         .overlay(alignment: .bottom) {
-            if let err = createUserError ?? quickActionError {
+            if let err = quickActionError {
                 Text(err).font(.caption).foregroundStyle(.red)
                     .padding(8)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -211,6 +238,23 @@ struct ClawPoolView: View {
         } message: {
             Text(quickTransferAlertMessage ?? "")
         }
+    }
+
+    private func mapCreateMacOSUserError(_ error: Error, username: String, fullName: String) -> Error {
+        let rawMessage = error.localizedDescription
+        let lowercased = rawMessage.lowercased()
+        let hasDirectoryConflict = lowercased.contains("edspermissionerror")
+            || lowercased.contains("ds error: -14120")
+            || lowercased.contains("/users/\(username.lowercased())")
+        if hasDirectoryConflict {
+            return UserAdoptionValidationError.duplicateUsername(username)
+        }
+        let hasFullNameConflict = lowercased.contains(fullName.lowercased())
+            && lowercased.contains("recordname")
+        if hasFullNameConflict {
+            return UserAdoptionValidationError.duplicateFullName(fullName)
+        }
+        return error
     }
 
     // MARK: - 右键菜单内容
@@ -316,10 +360,14 @@ struct ClawPoolView: View {
     private func toolMenuItems(for claw: ManagedUser) -> some View {
         Button { toolSheet = .log(claw.username)      } label: { Label(L10n.k("views.user_list_view.logs", fallback: "查看日志"), systemImage: "doc.text")      }
         Button { toolSheet = .password(claw.username) } label: { Label(L10n.k("views.user_list_view.password", fallback: "查看密码"), systemImage: "key")           }
-        Button { cloneClawSourceUser = claw } label: {
-            Label(L10n.k("views.user_list_view.clone_shrimp", fallback: "克隆新虾…"), systemImage: "doc.on.doc")
+        if NSEvent.modifierFlags.contains(.control) {
+            Button {
+                openWindow(id: "clone-claw", value: claw.username)
+            } label: {
+                Label(L10n.k("views.user_list_view.clone_shrimp", fallback: "克隆新虾…"), systemImage: "doc.on.doc")
+            }
+            .disabled(claw.openclawVersion == nil)
         }
-        .disabled(claw.openclawVersion == nil)
     }
 
     @ViewBuilder
@@ -1256,10 +1304,12 @@ private struct AddClawCard: View {
 
 /// 顶层 sheet：两个大按钮选择领养路径
 private struct AddClawSheet: View {
+    let existingUsers: [UserAdoptionExistingUser]
+    let isCreatingUser: Bool
     /// 用户点击"去角色中心领养"
     let onGoToRoleMarket: () -> Void
     /// macOS 用户创建回调 (username, fullName, description)
-    let onCreateMacosUser: (String, String, String) -> Void
+    let onCreateMacosUser: (String, String, String) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var showDirectCreate = false
@@ -1354,26 +1404,35 @@ private struct AddClawSheet: View {
         .frame(minHeight: 400)
         .sheet(isPresented: $showDirectCreate) {
             NavigationStack {
-                AddMacosUserForm { username, fullName, description in
-                    onCreateMacosUser(username, fullName, description)
+                AddMacosUserForm(
+                    existingUsers: existingUsers,
+                    isSubmitting: isCreatingUser
+                ) { username, fullName, description in
+                    try await onCreateMacosUser(username, fullName, description)
+                    showDirectCreate = false
                     dismiss()
                 }
             }
             .frame(width: 440, height: 420)
+            .interactiveDismissDisabled(isCreatingUser)
         }
     }
 }
 
 /// macOS 标准用户创建表单
 private struct AddMacosUserForm: View {
-    let onConfirm: (String, String, String) -> Void
+    let existingUsers: [UserAdoptionExistingUser]
+    let isSubmitting: Bool
+    let onConfirm: (String, String, String) async throws -> Void
 
+    @Environment(\.dismiss) private var dismiss
     @State private var username = ""
     @State private var fullName = ""
     @State private var descriptionText = ""
+    @State private var submitError: String? = nil
 
     private var usernameValid: Bool {
-        username.range(of: #"^[a-z_][a-z0-9_]{0,31}$"#, options: .regularExpression) != nil
+        username.range(of: #"^[a-z][a-z0-9_]{0,31}$"#, options: .regularExpression) != nil
     }
     private var isValid: Bool { usernameValid }
 
@@ -1382,13 +1441,16 @@ private struct AddMacosUserForm: View {
             Section {
                 TextField(L10n.k("user.add.form.username", fallback: "用户名"), text: $username)
                     .textContentType(.username)
+                    .disabled(isSubmitting)
                 if !username.isEmpty && !usernameValid {
                     Text(L10n.k("user.add.form.username.validation", fallback: "用户名只能包含小写字母、数字和下划线，且须以字母开头"))
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
                 TextField(L10n.k("user.add.form.full_name", fallback: "全名（显示用）"), text: $fullName)
+                    .disabled(isSubmitting)
                 TextField(L10n.k("user.add.form.description", fallback: "描述（可选，用于备注用途）"), text: $descriptionText)
+                    .disabled(isSubmitting)
             } header: { Text(L10n.k("user.add.form.account_info", fallback: "账户信息")) }
 
             Section {
@@ -1400,15 +1462,47 @@ private struct AddMacosUserForm: View {
                         .foregroundStyle(.secondary)
                 }
             } header: { Text(L10n.k("user.add.form.password", fallback: "密码")) }
+
+            if let submitError {
+                Section {
+                    Text(submitError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
         }
         .formStyle(.grouped)
         .navigationTitle(L10n.k("user.add.form.title", fallback: "添加 macOS 用户"))
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(L10n.k("common.action.create", fallback: "创建")) {
-                    onConfirm(username, fullName.isEmpty ? username : fullName, descriptionText)
+            ToolbarItem(placement: .cancellationAction) {
+                Button(L10n.k("common.action.cancel", fallback: "取消")) {
+                    dismiss()
                 }
-                .disabled(!isValid)
+                .disabled(isSubmitting)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(isSubmitting ? L10n.k("views.user_list_view.processing", fallback: "创建中…") : L10n.k("common.action.create", fallback: "创建")) {
+                    submitError = nil
+                    Task {
+                        do {
+                            let normalized = try UserAdoptionInputValidator.validate(
+                                username: username,
+                                fullName: fullName,
+                                existingUsers: existingUsers
+                            )
+                            try await onConfirm(
+                                normalized.username,
+                                normalized.fullName,
+                                descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            )
+                        } catch {
+                            await MainActor.run {
+                                submitError = error.localizedDescription
+                            }
+                        }
+                    }
+                }
+                .disabled(!isValid || isSubmitting)
             }
         }
     }

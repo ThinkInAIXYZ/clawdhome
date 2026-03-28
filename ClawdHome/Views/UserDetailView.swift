@@ -213,6 +213,9 @@ struct UserDetailView: View {
     @State private var isRefreshingStatus = false
     @State private var refreshStatusNeedsRerun = false
     @State private var refreshStatusGeneration: UInt64 = 0
+    @State private var forceOnboardingAtEntry = false
+    @State private var shouldTemporarilyPinTopmost = false
+    @State private var topmostPulseTask: Task<Void, Never>? = nil
     private var isSelf: Bool { user.username == NSUserName() }
 
     /// HTTP probe + launchctl 综合判断是否运行中（任一来源确认即为 true）
@@ -276,6 +279,8 @@ struct UserDetailView: View {
     @State private var showLogoutConfirm = false
     @State private var isLoggingOut = false
     @State private var showFlashFreezeConfirm = false
+    @State private var showPauseFreezeConfirm = false
+    @State private var showNormalFreezeConfirm = false
     @State private var autostartEnabled = false
     // 密码
     @State private var showPassword = false
@@ -296,11 +301,22 @@ struct UserDetailView: View {
         tabbedContent
         .navigationTitle(user.fullName.isEmpty ? user.username : user.fullName)
         .navigationSubtitle("@\(user.username)")
-        .background(UserDetailWindowLevelBinder(elevated: shouldPinWindowTopmost))
+        .background(UserDetailWindowLevelBinder(elevated: shouldTemporarilyPinTopmost))
         .onAppear {
             descriptionDraft = user.profileDescription
+            if pool.consumeNeedsOnboarding(username: user.username) {
+                forceOnboardingAtEntry = true
+                versionChecked = false
+            }
+            if shouldPinWindowTopmost {
+                triggerTopmostPulse()
+            }
         }
         .onChange(of: user.username) { _, _ in
+            forceOnboardingAtEntry = false
+            if pool.consumeNeedsOnboarding(username: user.username) {
+                forceOnboardingAtEntry = true
+            }
             versionChecked = false
             descriptionDraft = user.profileDescription
             logSearchText = ""
@@ -309,8 +325,26 @@ struct UserDetailView: View {
             gatewayURL = nil
         }
         .onDisappear {
+            topmostPulseTask?.cancel()
+            topmostPulseTask = nil
+            shouldTemporarilyPinTopmost = false
             gatewayURLTokenPollTask?.cancel()
             gatewayURLTokenPollTask = nil
+        }
+        .onChange(of: shouldPinWindowTopmost) { _, newValue in
+            guard newValue else { return }
+            triggerTopmostPulse()
+        }
+    }
+
+    private func triggerTopmostPulse() {
+        topmostPulseTask?.cancel()
+        shouldTemporarilyPinTopmost = true
+        topmostPulseTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            shouldTemporarilyPinTopmost = false
+            topmostPulseTask = nil
         }
     }
 
@@ -364,7 +398,6 @@ struct UserDetailView: View {
         case .files:     UserFilesView(users: [user], preselectedUser: user)
         case .logs:
             GatewayLogViewer(username: user.username, externalSearchQuery: $logSearchText)
-                .searchable(text: $logSearchText, prompt: L10n.k("user.detail.auto.search_logs_space_separated_terms", fallback: "搜索日志（空格分词）"))
         case .cron:      CronTabView(username: user.username)
         case .skills:    SkillsTabView(username: user.username)
         case .characterDef: CharacterDefTabView(username: user.username)
@@ -387,6 +420,14 @@ struct UserDetailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task { await refreshStatus() }
+        .onChange(of: helperClient.isConnected) { _, connected in
+            if connected {
+                Task { await refreshStatus() }
+            } else {
+                // 连接丢失时保持“待判定”状态，避免误落到概览页。
+                versionChecked = false
+            }
+        }
         .modifier(GatewayProbeModifier(
             username: user.username,
             uid: user.macUID ?? 0,
@@ -411,6 +452,8 @@ struct UserDetailView: View {
                 Task { await gatewayHub.disconnect(username: user.username) }
                 gatewayURLTokenPollTask?.cancel()
                 gatewayURLTokenPollTask = nil
+                // 探测状态从启动态回落后重判一次初始化路由，避免卡在概览。
+                Task { await refreshStatus() }
             }
             if newReadiness == .ready || newReadiness == .starting {
                 refreshGatewayURLUntilTokenReady()
@@ -465,6 +508,36 @@ struct UserDetailView: View {
                 }
             )
             .interactiveDismissDisabled(isDeleting)
+        }
+        .confirmationDialog(
+            L10n.k("user.detail.auto.confirm_pause_freeze", fallback: "确认暂停冻结"),
+            isPresented: $showPauseFreezeConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.k("user.detail.auto.pause_freeze", fallback: "暂停冻结")) {
+                showPauseFreezeConfirm = false
+                performAction { try await freezeUser(mode: .pause) }
+            }
+            Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) {
+                showPauseFreezeConfirm = false
+            }
+        } message: {
+            Text(L10n.k("user.detail.auto.pause_freeze_suspend_openclaw_processes_and_resume_later", fallback: "暂停冻结：挂起 openclaw 进程，可恢复继续执行（内存不释放）"))
+        }
+        .confirmationDialog(
+            L10n.k("user.detail.auto.confirm_normal_freeze", fallback: "确认普通冻结"),
+            isPresented: $showNormalFreezeConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.k("user.detail.auto.normal_freeze", fallback: "普通冻结")) {
+                showNormalFreezeConfirm = false
+                performAction { try await freezeUser(mode: .normal) }
+            }
+            Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) {
+                showNormalFreezeConfirm = false
+            }
+        } message: {
+            Text(L10n.k("user.detail.auto.freeze_stop_gateway", fallback: "普通冻结：停止 Gateway，最稳妥"))
         }
         .confirmationDialog(
             L10n.k("user.detail.auto.confirm_flash_freeze", fallback: "确认速冻"),
@@ -525,6 +598,7 @@ struct UserDetailView: View {
                 hasPendingInitWizard = sessionVisible
                 if !sessionVisible {
                     user.initStep = nil
+                    forceOnboardingAtEntry = false
                     Task { await refreshStatus() }
                 }
             }
@@ -1094,7 +1168,7 @@ struct UserDetailView: View {
                         }
                         .buttonStyle(.bordered)
                     } else {
-                        Button(L10n.k("user.detail.auto.start", fallback: "启动")) {
+                        Button(L10n.k("user.detail.auto.start_action", fallback: "启动")) {
                             gatewayHub.markPendingStart(username: user.username)
                             performAction {
                                 try await helperClient.startGateway(username: user.username)
@@ -1110,10 +1184,10 @@ struct UserDetailView: View {
 
                     Menu {
                         Button {
-                            performAction { try await freezeUser(mode: .pause) }
+                            showPauseFreezeConfirm = true
                         } label: { Label(L10n.k("user.detail.auto.pause_freeze_recoverable", fallback: "暂停冻结（可恢复）"), systemImage: "pause.circle") }
                         Button {
-                            performAction { try await freezeUser(mode: .normal) }
+                            showNormalFreezeConfirm = true
                         } label: { Label(L10n.k("user.detail.auto.freeze_stop_gateway", fallback: "普通冻结（停止 Gateway）"), systemImage: "snowflake") }
                         Button(role: .destructive) {
                             showFlashFreezeConfirm = true
@@ -1179,8 +1253,6 @@ struct UserDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
-                } else {
-                    freezeModeGuide
                 }
 
                 if let err = actionError {
@@ -1434,26 +1506,11 @@ struct UserDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private var freezeModeGuide: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(L10n.k("user.detail.auto.freeze", fallback: "冻结级别参考："))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(L10n.k("user.detail.auto.pause_freeze_suspend_openclaw_processes_and_resume_later", fallback: "暂停冻结：挂起 openclaw 进程，可恢复继续执行（内存不释放）"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(L10n.k("user.detail.auto.freeze_stop_gateway", fallback: "普通冻结：停止 Gateway，最稳妥"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(L10n.k("user.detail.auto.userprocess_openclaw", fallback: "速冻：紧急终止用户空间进程（openclaw 优先），用于异常兜底"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-    }
-
     @MainActor
     private func refreshStatus() async {
+        if !forceOnboardingAtEntry, pool.consumeNeedsOnboarding(username: user.username) {
+            forceOnboardingAtEntry = true
+        }
         if isRefreshingStatus {
             refreshStatusNeedsRerun = true
             return
@@ -1470,11 +1527,8 @@ struct UserDetailView: View {
         }
 
         guard helperClient.isConnected else {
-            // Helper 未连接时也要完成检查，避免 ProgressView 永久卡死
-            versionChecked = true
-            if user.initStep != nil {
-                hasPendingInitWizard = true
-            }
+            // Helper 未连接时不要把状态标记为“已判定”，避免误落到概览。
+            versionChecked = false
             isNodeInstalledReady = false
             xcodeEnvStatus = nil
             return
@@ -1504,7 +1558,10 @@ struct UserDetailView: View {
         guard requestID == refreshStatusGeneration else { return }
         user.openclawVersion = await versionResult
         let wizardState = await wizardStateResult
-        let ensuredPending = await ensureOnboardingWizardSessionIfNeeded(existingState: wizardState)
+        let ensuredPending = await ensureOnboardingWizardSessionIfNeeded(
+            existingState: wizardState,
+            forceOnboarding: forceOnboardingAtEntry
+        )
         hasPendingInitWizard = ensuredPending
         versionChecked = true
         isNodeInstalledReady = await nodeInstalledResult
@@ -1582,7 +1639,14 @@ struct UserDetailView: View {
 
     /// 会话路由优先使用 active；若历史状态存在可恢复进度（failed/running），也保持进入向导。
     /// 当首次安装且没有可恢复会话时，自动创建 onboarding 会话。
-    private func ensureOnboardingWizardSessionIfNeeded(existingState: InitWizardState?) async -> Bool {
+    private func ensureOnboardingWizardSessionIfNeeded(
+        existingState: InitWizardState?,
+        forceOnboarding: Bool
+    ) async -> Bool {
+        let shouldForceOnboarding = forceOnboarding
+            && !user.isAdmin
+            && user.clawType == .macosUser
+
         if let state = existingState {
             let inferredStep: InitStep? = {
                 if let step = InitStep.from(key: state.currentStep) {
@@ -1650,11 +1714,9 @@ struct UserDetailView: View {
             // 已有未完成会话，但尚未开始（全部 pending）：
             // 仅在“仍符合 onboarding 条件”时保持在初始化向导 pre-start。
             if !state.isCompleted {
-                let readiness = gatewayHub.readinessMap[user.username]
-                let shouldKeepOnboarding = !user.isAdmin
+                let shouldKeepOnboarding = shouldForceOnboarding || (!user.isAdmin
                     && user.clawType == .macosUser
-                    && user.openclawVersion == nil
-                    && !(user.isRunning || readiness == .starting || readiness == .ready)
+                    && user.openclawVersion == nil)
                 if shouldKeepOnboarding {
                     user.initStep = nil
                     return true
@@ -1672,12 +1734,12 @@ struct UserDetailView: View {
             user.initStep = nil
             return false
         }
-        guard user.openclawVersion == nil else {
+        guard shouldForceOnboarding || user.openclawVersion == nil else {
             user.initStep = nil
             return false
         }
         let readiness = gatewayHub.readinessMap[user.username]
-        if user.isRunning || readiness == .starting || readiness == .ready {
+        if !shouldForceOnboarding && (user.isRunning || readiness == .starting || readiness == .ready) {
             // Gateway 已运行/启动中时，说明该用户不是“未初始化”状态，不应自动回流到初始化向导。
             user.initStep = nil
             return false
@@ -1691,6 +1753,7 @@ struct UserDetailView: View {
         state.currentStep = nil
         state.steps = [
             InitStep.basicEnvironment.key: "pending",
+            InitStep.injectRole.key: "pending",
             InitStep.configureModel.key: "pending",
             InitStep.configureChannel.key: "pending",
             InitStep.finish.key: "pending",
@@ -1705,7 +1768,7 @@ struct UserDetailView: View {
         } catch {
             actionError = L10n.f("views.user_detail_view.text_020b8a41", fallback: "初始化向导状态写入失败：%@", String(describing: error.localizedDescription))
             user.initStep = nil
-            return false
+            return shouldForceOnboarding
         }
     }
 
@@ -1723,6 +1786,7 @@ struct UserDetailView: View {
         state.currentStep = InitStep.configureModel.key
         state.steps = [
             InitStep.basicEnvironment.key: "done",
+            InitStep.injectRole.key: "done",
             InitStep.configureModel.key: "running",
             InitStep.configureChannel.key: "pending",
             InitStep.finish.key: "pending",
@@ -3886,9 +3950,9 @@ private struct ResizeGrip: View {
 }
 
 private enum DirectProviderChoice: String, CaseIterable, Identifiable {
+    case qiniu = "qiniu"
     case kimiCoding = "kimi-coding"
     case minimax = "minimax"
-    case qiniu = "qiniu"
     case zai = "zai"
 
     var id: String { rawValue }
@@ -4017,10 +4081,10 @@ private enum DirectMinimaxModel: String, CaseIterable, Identifiable {
 }
 
 private enum DirectQiniuModel: String, CaseIterable, Identifiable {
-    case deepseekV32 = "qiniu/deepseek-v3.2-251201"
     case glm5 = "qiniu/z-ai/glm-5"
     case kimiK25 = "qiniu/moonshotai/kimi-k2.5"
     case minimaxM25 = "qiniu/minimax/minimax-m2.5"
+    case deepseekV32 = "qiniu/deepseek-v3.2-251201"
 
     var id: String { rawValue }
 
@@ -4098,10 +4162,11 @@ private struct KimiMinimaxModelConfigPanel: View {
     var onApplied: (() -> Void)? = nil
 
     @Environment(HelperClient.self) private var helperClient
+    @Environment(GatewayHub.self) private var gatewayHub
 
     @State private var isLoading = true
     @State private var isSaving = false
-    @State private var selectedProvider: DirectProviderChoice = .kimiCoding
+    @State private var selectedProvider: DirectProviderChoice = .qiniu
     @State private var selectedMinimaxModel: DirectMinimaxModel = .m27
     @State private var selectedQiniuModel: DirectQiniuModel = .deepseekV32
     @State private var selectedZAIModel: DirectZAIModel = .glm5
@@ -4354,6 +4419,8 @@ private struct KimiMinimaxModelConfigPanel: View {
             case .zai:
                 try await applyZAIConfig(apiKey: apiKey)
             }
+            gatewayHub.markPendingStart(username: user.username)
+            try await helperClient.restartGateway(username: user.username)
             saveMessage = L10n.k("user.detail.auto.configuration", fallback: "配置已应用")
             onApplied?()
         } catch {

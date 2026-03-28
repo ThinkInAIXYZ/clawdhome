@@ -22,6 +22,8 @@ final class ShrimpPool {
     private(set) var machineHistory: [MachineStats] = []
     /// 网络速率历史（最多保留 300 秒）— 跨视图切换持久化
     private(set) var netRateHistory: [(inBps: Double, outBps: Double)] = []
+    /// 新创建用户的一次性“强制进入初始化向导”标记（按用户名小写保存）
+    private var forceOnboardingUsernames: Set<String> = []
 
     private static let kHistoryMax = 300
 
@@ -151,6 +153,17 @@ final class ShrimpPool {
             pausedPIDs: pausedPIDs,
             previousAutostartEnabled: previousAutostartEnabled
         )
+    }
+
+    func markNeedsOnboarding(username: String) {
+        forceOnboardingUsernames.insert(username.lowercased())
+    }
+
+    func consumeNeedsOnboarding(username: String) -> Bool {
+        let key = username.lowercased()
+        guard forceOnboardingUsernames.contains(key) else { return false }
+        forceOnboardingUsernames.remove(key)
+        return true
     }
 
     /// 控制仪表盘可见状态：

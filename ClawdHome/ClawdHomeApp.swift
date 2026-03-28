@@ -117,6 +117,18 @@ struct ClawdHomeApp: App {
         .windowStyle(.titleBar)
         .windowResizability(.automatic)
         .defaultSize(width: 860, height: 560)
+
+        WindowGroup(id: "clone-claw", for: String.self) { $sourceUsername in
+            if let username = sourceUsername {
+                CloneClawSheet(sourceUsername: username)
+                    .environment(helperClient)
+                    .environment(shrimpPool)
+                    .environment(\.locale, appLanguage.locale)
+            }
+        }
+        .windowStyle(.titleBar)
+        .windowResizability(.automatic)
+        .defaultSize(width: 640, height: 560)
     }
 
     /// 首次连接，断开后每 5 秒自动重试
@@ -204,6 +216,7 @@ struct MaintenanceTerminalWindowRequest: Codable {
 
 extension Notification.Name {
     static let maintenanceTerminalWindowClosed = Notification.Name("MaintenanceTerminalWindowClosed")
+    static let channelOnboardingAutoDetected = Notification.Name("ChannelOnboardingAutoDetected")
 }
 
 // MARK: - 维护终端快捷命令
@@ -511,14 +524,16 @@ private struct WindowTitleBinder: NSViewRepresentable {
 
 private struct ChannelOnboardingWindow: View {
     let payload: String?
+    @Environment(ShrimpPool.self) private var pool
 
     var body: some View {
         if let payload, let req = ChannelOnboardingRequest(payload: payload) {
+            let displayName = pool.users.first(where: { $0.username == req.username })?.fullName ?? ""
             switch req.flow {
             case .feishu:
-                FeishuChannelOnboardingSheet(flow: .feishu, username: req.username)
+                FeishuChannelOnboardingSheet(flow: .feishu, displayName: displayName, username: req.username)
             case .weixin:
-                FeishuChannelOnboardingSheet(flow: .weixin, username: req.username)
+                FeishuChannelOnboardingSheet(flow: .weixin, displayName: displayName, username: req.username)
             }
         } else {
             ContentUnavailableView(

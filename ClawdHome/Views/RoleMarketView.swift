@@ -316,6 +316,9 @@ struct RoleMarketView: View {
                         throw mapAwakeningCreateError(error, username: normalizedUsername, fullName: normalizedFullName)
                     }
 
+                    // 新建同名账号时，清理可能遗留的初始化进度，避免向导误跳步骤。
+                    try? await helperClient.saveInitState(username: normalizedUsername, json: "{}")
+
                     // 把在市场配置的 DNA 提前落盘
                     let workspaceDir = ".openclaw/workspace"
                     try? await helperClient.createDirectory(username: normalizedUsername, relativePath: workspaceDir)
@@ -331,6 +334,7 @@ struct RoleMarketView: View {
 
                     pool.loadUsers()
                     pool.setDescription(description, for: normalizedUsername)
+                    pool.markNeedsOnboarding(username: normalizedUsername)
                     NotificationCenter.default.post(name: .roleMarketAdoptionStarted, object: nil)
                     openWindow(id: "claw-detail", value: normalizedUsername)
                 }

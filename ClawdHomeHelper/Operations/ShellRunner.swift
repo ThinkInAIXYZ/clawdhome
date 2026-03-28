@@ -2,6 +2,7 @@
 // 同步执行外部命令的工具函数，Helper 内部使用
 
 import Foundation
+import Darwin
 
 // MARK: - 可取消进程注册（供 cancelInit XPC 使用）
 
@@ -28,19 +29,72 @@ func unregisterDownloadTask(logPath: String) {
 /// 取消指定日志路径对应的受管进程和下载任务
 /// logPath 为空时终止所有受管进程（兜底）
 func terminateManagedProcess(logPath: String = "") {
+    let processesToTerminate: [Process]
+    let downloadsToCancel: [URLSessionDownloadTask]
+
     _managedProcessLock.lock()
     if logPath.isEmpty {
-        _managedProcesses.values.forEach { $0.terminate() }
+        processesToTerminate = Array(_managedProcesses.values)
         _managedProcesses.removeAll()
-        _managedDownloadTasks.values.forEach { $0.cancel() }
+        downloadsToCancel = Array(_managedDownloadTasks.values)
         _managedDownloadTasks.removeAll()
     } else {
-        _managedProcesses[logPath]?.terminate()
+        processesToTerminate = _managedProcesses[logPath].map { [$0] } ?? []
         _managedProcesses.removeValue(forKey: logPath)
-        _managedDownloadTasks[logPath]?.cancel()
+        downloadsToCancel = _managedDownloadTasks[logPath].map { [$0] } ?? []
         _managedDownloadTasks.removeValue(forKey: logPath)
     }
     _managedProcessLock.unlock()
+
+    // 先取消下载任务，再终止进程树，确保“终止初始化”能真正停住 sudo/npm 及其子进程。
+    downloadsToCancel.forEach { $0.cancel() }
+    processesToTerminate.forEach { terminateProcessTree($0.processIdentifier) }
+}
+
+private func terminateProcessTree(_ rootPID: Int32) {
+    guard rootPID > 0 else { return }
+    let descendants = collectDescendantPIDs(of: rootPID)
+    for pid in descendants.reversed() {
+        _ = kill(pid, SIGTERM)
+    }
+    _ = kill(rootPID, SIGTERM)
+
+    // 给进程一点时间优雅退出；超时后强制 SIGKILL。
+    usleep(350_000)
+    for pid in descendants.reversed() {
+        _ = kill(pid, SIGKILL)
+    }
+    _ = kill(rootPID, SIGKILL)
+}
+
+/// 暴露给其它模块（如 XPC cancelInit）用于按 PID 终止整棵进程树。
+func terminateProcessTreeByPID(_ rootPID: Int32) {
+    terminateProcessTree(rootPID)
+}
+
+private func collectDescendantPIDs(of rootPID: Int32) -> [Int32] {
+    var result: [Int32] = []
+    var queue: [Int32] = [rootPID]
+
+    while !queue.isEmpty {
+        let current = queue.removeFirst()
+        let childPIDs = directChildPIDs(of: current)
+        if childPIDs.isEmpty { continue }
+        result.append(contentsOf: childPIDs)
+        queue.append(contentsOf: childPIDs)
+    }
+    return result
+}
+
+private func directChildPIDs(of parentPID: Int32) -> [Int32] {
+    let output = (try? run("/usr/bin/pgrep", args: ["-P", "\(parentPID)"])) ?? ""
+    if output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        return []
+    }
+    return output
+        .split(whereSeparator: \.isNewline)
+        .compactMap { Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        .filter { $0 > 0 }
 }
 
 /// 同步运行外部命令，返回 stdout 字符串

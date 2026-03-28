@@ -470,7 +470,7 @@ final class DashboardCollector {
     // MARK: - 工具
 
     /// 扫描本机标准用户并查询各自的 gateway 运行状态
-    /// 排除管理员账户（admin 组成员）和系统账户（UID < 500）
+    /// 排除管理员账户、系统保留账户和 _ 开头服务账户
     /// 每 5 秒由 userRefreshTimer 调用，与 XPC 热路径完全解耦
     static func fetchManagedUsers() -> [(username: String, uid: uid_t, isRunning: Bool)] {
         // 收集 admin 组成员名单
@@ -487,13 +487,16 @@ final class DashboardCollector {
         guard let contents = try? FileManager.default.contentsOfDirectory(atPath: usersDir) else {
             return []
         }
-        let skip: Set<String> = ["Shared", ".localized", "nobody", "Guest"]
         return contents.compactMap { name -> (String, uid_t, Bool)? in
-            guard !name.hasPrefix("."), !skip.contains(name) else { return nil }
-            guard !adminNames.contains(name) else { return nil }   // 跳过管理员
+            guard ManagedUserFilter.shouldConsiderUsersDirectoryEntry(name) else { return nil }
             guard let pw = getpwnam(name) else { return nil }
             let uid = pw.pointee.pw_uid
-            guard uid >= 500 else { return nil }                   // 跳过系统账户
+            let signedUID = Int32(bitPattern: uid)
+            guard ManagedUserFilter.isEligibleManagedUser(
+                username: name,
+                uid: Int(signedUID),
+                adminNames: adminNames
+            ) else { return nil }
             let (running, _) = GatewayManager.status(username: name, uid: Int(uid))
             return (name, uid, running)
         }

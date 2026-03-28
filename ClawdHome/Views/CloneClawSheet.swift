@@ -15,9 +15,12 @@ struct CloneClawSheet: View {
     @State private var progressText = L10n.k("auto.clone_claw_sheet.analyzing_clonable_data_and_size_please_wait", fallback: "正在分析可克隆数据与大小，请稍候…")
     @State private var isScanning = true
     @State private var isCloning = false
+    @State private var isCancellingClone = false
     @State private var scanError: String?
     @State private var cloneError: String?
     @State private var warnings: [String] = []
+    @State private var cloneStatusText: String?
+    @State private var cloneStatusPollingTask: Task<Void, Never>?
 
     private var isUsernameValid: Bool {
         targetUsername.range(of: #"^[a-z_][a-z0-9_]{0,31}$"#, options: .regularExpression) != nil
@@ -33,16 +36,19 @@ struct CloneClawSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             headerSection
             inputSection
             scanSection
-            excludedSection
             footerSection
         }
-        .padding(16)
-        .frame(width: 620, height: 620)
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .frame(width: 620, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task { await runScan() }
+        .onDisappear { stopCloneStatusPolling() }
     }
 
     private var headerSection: some View {
@@ -142,19 +148,6 @@ struct CloneClawSheet: View {
         }
     }
 
-    private var excludedSection: some View {
-        GroupBox(L10n.k("auto.clone_claw_sheet.always_excluded_cannot_be_selected", fallback: "固定排除（不可勾选）")) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.k("auto.clone_claw_sheet.channel_configuration", fallback: "• channel 配置"))
-                Text(L10n.k("auto.clone_claw_sheet.text_4340251220", fallback: "• 个性偏好"))
-                Text(L10n.k("auto.clone_claw_sheet.memory_sessions_logs", fallback: "• 记忆 / 会话 / 日志"))
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(.top, 2)
-        }
-    }
-
     private var footerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.f("views.clone_claw_sheet.text_70867500", fallback: "预计复制总量：%@", String(describing: FormatUtils.formatBytes(selectedSize))))
@@ -166,6 +159,11 @@ struct CloneClawSheet: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
+            if let cloneStatusText, isCloning {
+                Text("当前状态：\(cloneStatusText)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             if let cloneError {
                 Text(cloneError)
                     .font(.caption)
@@ -173,16 +171,24 @@ struct CloneClawSheet: View {
             }
 
             HStack {
-                Button(L10n.k("auto.clone_claw_sheet.cancel", fallback: "取消")) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                    .disabled(isCloning)
+                if isCloning {
+                    Button(isCancellingClone
+                           ? L10n.k("views.clone_claw_sheet.cancelling", fallback: "终止中…")
+                           : L10n.k("views.clone_claw_sheet.cancel_clone", fallback: "终止克隆")) {
+                        Task { await requestCancelClone() }
+                    }
+                    .disabled(isCancellingClone)
+                } else {
+                    Button(L10n.k("auto.clone_claw_sheet.cancel", fallback: "取消")) { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                }
                 Spacer()
                 Button(isCloning ? L10n.k("auto.clone_claw_sheet.text_4699ebd9fe", fallback: "克隆中…") : L10n.k("auto.clone_claw_sheet.start_cloning", fallback: "开始克隆")) {
                     Task { await runClone() }
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(!canSubmit)
+                .disabled(!canSubmit || isCancellingClone)
             }
         }
     }
@@ -207,6 +213,8 @@ struct CloneClawSheet: View {
         guard let scanResult else { return }
         isCloning = true
         cloneError = nil
+        cloneStatusText = nil
+        startCloneStatusPolling()
         do {
             let password = try UserPasswordStore.generateAndSave(for: targetUsername)
             let selectedIDs = scanResult.items
@@ -229,6 +237,39 @@ struct CloneClawSheet: View {
         } catch {
             cloneError = L10n.f("views.clone_claw_sheet.text_c6c6eeb2", fallback: "克隆失败：%@", String(describing: error.localizedDescription))
         }
+        stopCloneStatusPolling()
         isCloning = false
+    }
+
+    private func requestCancelClone() async {
+        guard isCloning else { return }
+        isCancellingClone = true
+        do {
+            try await helperClient.cancelCloneClaw(targetUsername: targetUsername)
+            cloneError = L10n.k("views.clone_claw_sheet.cancel_requested", fallback: "已请求终止克隆，正在停止…")
+        } catch {
+            cloneError = L10n.f("views.clone_claw_sheet.cancel_failed", fallback: "终止克隆失败：%@", String(describing: error.localizedDescription))
+        }
+        isCancellingClone = false
+    }
+
+    private func startCloneStatusPolling() {
+        stopCloneStatusPolling()
+        let username = targetUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !username.isEmpty else { return }
+
+        cloneStatusPollingTask = Task {
+            while !Task.isCancelled {
+                if let status = await helperClient.getCloneClawStatus(targetUsername: username) {
+                    await MainActor.run { cloneStatusText = status }
+                }
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+        }
+    }
+
+    private func stopCloneStatusPolling() {
+        cloneStatusPollingTask?.cancel()
+        cloneStatusPollingTask = nil
     }
 }

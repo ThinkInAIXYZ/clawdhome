@@ -5,8 +5,10 @@ enum CloneDataItemKind: String, Codable, Sendable, Hashable {
     case envDirectory
     case shellProfiles
     case openclawConfig
+    // 兼容旧版 helper 返回值：新版本不再使用这两类克隆项
     case secrets
     case authProfiles
+    case roleData
 }
 
 /// 克隆扫描结果中的单项数据

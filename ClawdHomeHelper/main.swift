@@ -253,8 +253,13 @@ private func managedGatewayUsers() -> [(username: String, uid: Int)] {
     defer { endpwent() }
     while let pw = getpwent() {
         let uid = pw.pointee.pw_uid
+        let signedUID = Int32(bitPattern: uid)
         let name = String(cString: pw.pointee.pw_name)
-        guard uid >= 500, !name.hasPrefix("_"), !adminNames.contains(name) else { continue }
+        guard ManagedUserFilter.isEligibleManagedUser(
+            username: name,
+            uid: Int(signedUID),
+            adminNames: adminNames
+        ) else { continue }
         users.append((name, Int(uid)))
     }
     return users
@@ -526,6 +531,10 @@ private final class MaintenanceTerminalSession {
 final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
     private let maintenanceSessionLock = NSLock()
     private var maintenanceSessions: [String: MaintenanceTerminalSession] = [:]
+    private let cloneControlLock = NSLock()
+    private var runningCloneTargets: Set<String> = []
+    private var cancelledCloneTargets: Set<String> = []
+    private var cloneStatusByTarget: [String: String] = [:]
 
     func getVersion(withReply reply: @escaping (String) -> Void) {
         reply(kHelperVersion)
@@ -1086,7 +1095,31 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
     func cancelInit(username: String, withReply reply: @escaping (Bool) -> Void) {
         let logPath = "/tmp/clawdhome-init-\(username).log"
         terminateManagedProcess(logPath: logPath)
+        terminateInitInstallCommands(username: username)
         reply(true)
+    }
+
+    /// 兜底终止初始化安装命令（例如 npm install -g --prefix /Users/<user>/.npm-global ...）。
+    /// 作用：当受管进程映射丢失或父进程已变更时，仍可杀掉“最后执行的初始化命令”。
+    private func terminateInitInstallCommands(username: String) {
+        let patterns = [
+            "npm install -g --prefix /Users/\(username)/.npm-global",
+            "/usr/bin/sudo -u \(username) -H env PATH=",
+        ]
+
+        var pids = Set<Int32>()
+        for pattern in patterns {
+            let output = (try? run("/usr/bin/pgrep", args: ["-f", pattern])) ?? ""
+            for line in output.split(whereSeparator: \.isNewline) {
+                if let pid = Int32(line.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 0 {
+                    pids.insert(pid)
+                }
+            }
+        }
+
+        for pid in pids {
+            terminateProcessTreeByPID(pid)
+        }
     }
 
     func resetUserEnv(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
@@ -1231,16 +1264,65 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         helperLog("克隆新虾执行")
         do {
             let request = try CloneClawManager.decodeRequest(requestJSON)
-            let result = try executeCloneClaw(request)
-            let json = try CloneClawManager.encodeResult(result)
-            reply(true, json, nil)
+            let targetUsername = request.targetUsername
+            guard markCloneStarted(targetUsername: targetUsername) else {
+                reply(false, "", "该目标用户已存在正在执行的克隆任务：\(targetUsername)")
+                return
+            }
+            setCloneStatus(targetUsername: targetUsername, status: "准备克隆")
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                defer { self.finishClone(targetUsername: targetUsername) }
+                do {
+                    let result = try self.executeCloneClaw(request)
+                    let json = try CloneClawManager.encodeResult(result)
+                    self.setCloneStatus(targetUsername: targetUsername, status: "克隆完成")
+                    reply(true, json, nil)
+                } catch {
+                    self.setCloneStatus(targetUsername: targetUsername, status: "克隆失败：\(error.localizedDescription)")
+                    helperLog("克隆执行失败: \(error.localizedDescription)", level: .error)
+                    reply(false, "", error.localizedDescription)
+                }
+            }
         } catch {
             helperLog("克隆执行失败: \(error.localizedDescription)", level: .error)
             reply(false, "", error.localizedDescription)
         }
     }
 
+    func cancelCloneClaw(targetUsername: String,
+                         withReply reply: @escaping (Bool, String?) -> Void) {
+        let username = targetUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !username.isEmpty else {
+            reply(false, "目标用户名不能为空")
+            return
+        }
+        let requested = requestCloneCancel(targetUsername: username)
+        if requested {
+            setCloneStatus(targetUsername: username, status: "正在终止克隆…")
+            helperLog("已请求终止克隆 @\(username)", level: .warn)
+            reply(true, nil)
+        } else {
+            reply(false, "当前没有正在执行的克隆任务：\(username)")
+        }
+    }
+
+    func getCloneClawStatus(targetUsername: String,
+                            withReply reply: @escaping (String?) -> Void) {
+        let username = targetUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !username.isEmpty else {
+            reply(nil)
+            return
+        }
+        cloneControlLock.lock()
+        let status = cloneStatusByTarget[username]
+        cloneControlLock.unlock()
+        reply(status)
+    }
+
     private func executeCloneClaw(_ request: CloneClawRequest) throws -> CloneClawResult {
+        setCloneStatus(targetUsername: request.targetUsername, status: "校验参数")
+        try assertCloneNotCancelled(targetUsername: request.targetUsername)
         try CloneClawManager.validateUsername(request.targetUsername)
         guard !request.selectedItemIDs.isEmpty else { throw CloneClawManagerError.noItemsSelected }
 
@@ -1248,6 +1330,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             throw CloneClawManagerError.targetUserExists(request.targetUsername)
         }
 
+        setCloneStatus(targetUsername: request.targetUsername, status: "扫描可克隆数据")
         let scan = try CloneClawManager.scanCloneItems(sourceUsername: request.sourceUsername)
         let itemMap = Dictionary(uniqueKeysWithValues: scan.items.map { ($0.id, $0) })
         var selectedItems: [CloneScanItem] = []
@@ -1261,6 +1344,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             selectedItems.append(item)
         }
         guard !selectedItems.isEmpty else { throw CloneClawManagerError.noItemsSelected }
+        try assertCloneNotCancelled(targetUsername: request.targetUsername)
 
         let password = request.targetPassword?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             ? request.targetPassword!
@@ -1269,6 +1353,8 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
 
         var createdTarget = false
         do {
+            try assertCloneNotCancelled(targetUsername: request.targetUsername)
+            setCloneStatus(targetUsername: request.targetUsername, status: "创建目标用户")
             try UserManager.createUser(
                 username: request.targetUsername,
                 fullName: request.targetFullName,
@@ -1282,34 +1368,54 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             let shouldSanitizeConfig = selectedItems.contains(where: { $0.kind == .openclawConfig })
             let shouldEnsureShellInit = selectedItems.contains(where: { $0.kind == .envDirectory || $0.kind == .shellProfiles })
             for item in selectedItems {
-                try copyCloneItem(item, sourceHome: sourceHome, targetHome: targetHome)
+                try assertCloneNotCancelled(targetUsername: request.targetUsername)
+                setCloneStatus(targetUsername: request.targetUsername, status: "复制数据：\(item.title)")
+                try copyCloneItem(
+                    item,
+                    sourceHome: sourceHome,
+                    targetHome: targetHome,
+                    cancelCheck: { [weak self] in
+                        guard let self else { return }
+                        try self.assertCloneNotCancelled(targetUsername: request.targetUsername)
+                    }
+                )
             }
+            try assertCloneNotCancelled(targetUsername: request.targetUsername)
             if shouldSanitizeConfig {
+                setCloneStatus(targetUsername: request.targetUsername, status: "清洗 openclaw.json")
                 try sanitizeClonedConfig(
                     username: request.targetUsername,
                     uid: targetUID,
                     gid: targetGID
                 )
             }
+            try assertCloneNotCancelled(targetUsername: request.targetUsername)
+            setCloneStatus(targetUsername: request.targetUsername, status: "修复权限")
             try fixCloneOwnership(
                 username: request.targetUsername,
                 uid: targetUID,
                 gid: targetGID
             )
             if shouldEnsureShellInit {
+                try assertCloneNotCancelled(targetUsername: request.targetUsername)
+                setCloneStatus(targetUsername: request.targetUsername, status: "修复 Shell 初始化")
                 try ensureCloneShellInit(username: request.targetUsername)
             }
 
+            try assertCloneNotCancelled(targetUsername: request.targetUsername)
+            setCloneStatus(targetUsername: request.targetUsername, status: "启动 Gateway")
             try GatewayManager.startGateway(username: request.targetUsername, uid: targetUID)
             // Gateway 启动会执行 openclaw config set，部分字段可能被回写为绝对路径。
             // 这里再做一次归一化，确保最终 openclaw.json 保持 ~/ 相对 home 的写法。
             if shouldSanitizeConfig {
+                setCloneStatus(targetUsername: request.targetUsername, status: "归一化配置路径")
                 try sanitizeClonedConfig(
                     username: request.targetUsername,
                     uid: targetUID,
                     gid: targetGID
                 )
             }
+            setCloneStatus(targetUsername: request.targetUsername, status: "整理结果")
             let gatewayURL = resolveCloneGatewayURL(username: request.targetUsername, uid: targetUID)
 
             return CloneClawResult(
@@ -1325,7 +1431,12 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         }
     }
 
-    private func copyCloneItem(_ item: CloneScanItem, sourceHome: String, targetHome: String) throws {
+    private func copyCloneItem(
+        _ item: CloneScanItem,
+        sourceHome: String,
+        targetHome: String,
+        cancelCheck: () throws -> Void
+    ) throws {
         let fm = FileManager.default
         switch item.kind {
         case .envDirectory:
@@ -1337,8 +1448,9 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             if fm.fileExists(atPath: targetPath) {
                 try fm.removeItem(atPath: targetPath)
             }
-            try fm.copyItem(atPath: sourcePath, toPath: targetPath)
+            try copyCloneDirectory(from: sourcePath, to: targetPath, cancelCheck: cancelCheck)
         case .openclawConfig:
+            try cancelCheck()
             let sourcePath = "\(sourceHome)/\(item.sourceRelativePath)"
             guard fm.fileExists(atPath: sourcePath) else {
                 throw CloneClawManagerError.sourceItemMissing(item.sourceRelativePath)
@@ -1348,6 +1460,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             let shellRelativePaths = [".zprofile", ".zshrc"]
             var copiedAny = false
             for relativePath in shellRelativePaths {
+                try cancelCheck()
                 let sourcePath = "\(sourceHome)/\(relativePath)"
                 if fm.fileExists(atPath: sourcePath) {
                     try copyCloneFile(from: sourcePath, to: "\(targetHome)/\(relativePath)")
@@ -1357,32 +1470,23 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             if !copiedAny {
                 throw CloneClawManagerError.sourceItemMissing(".zprofile/.zshrc")
             }
-        case .secrets:
-            let sourcePath = "\(sourceHome)/\(item.sourceRelativePath)"
-            guard fm.fileExists(atPath: sourcePath) else {
-                throw CloneClawManagerError.sourceItemMissing(item.sourceRelativePath)
-            }
-            try copyCloneFile(from: sourcePath, to: "\(targetHome)/.openclaw/secrets.json")
-        case .authProfiles:
-            var copiedAny = false
+        case .secrets, .authProfiles:
+            // 兼容旧请求：这两类克隆项已废弃
+            throw CloneClawManagerError.selectedItemDisabled(item.id)
+        case .roleData:
+            let roleAgentRelativePath = ".openclaw/agents/main/agent"
 
-            let sourcePath = "\(sourceHome)/\(item.sourceRelativePath)"
-            if fm.fileExists(atPath: sourcePath) {
-                try copyCloneFile(from: sourcePath, to: "\(targetHome)/.openclaw/auth-profiles.json")
-                copiedAny = true
-            }
-
-            let agentAuthPaths = CloneClawManager.discoverAgentAuthProfileRelativePaths(sourceHome: sourceHome)
-            for relativePath in agentAuthPaths {
-                try copyCloneFile(
-                    from: "\(sourceHome)/\(relativePath)",
-                    to: "\(targetHome)/\(relativePath)"
-                )
-                copiedAny = true
-            }
-
-            if !copiedAny {
-                throw CloneClawManagerError.sourceItemMissing(item.sourceRelativePath)
+            let roleAgentSource = "\(sourceHome)/\(roleAgentRelativePath)"
+            var isRoleAgentDir: ObjCBool = false
+            if fm.fileExists(atPath: roleAgentSource, isDirectory: &isRoleAgentDir), isRoleAgentDir.boolValue {
+                let roleAgentTarget = "\(targetHome)/\(roleAgentRelativePath)"
+                try fm.createDirectory(atPath: "\(targetHome)/.openclaw/agents/main", withIntermediateDirectories: true, attributes: nil)
+                if fm.fileExists(atPath: roleAgentTarget) {
+                    try fm.removeItem(atPath: roleAgentTarget)
+                }
+                try copyCloneDirectory(from: roleAgentSource, to: roleAgentTarget, cancelCheck: cancelCheck)
+            } else {
+                throw CloneClawManagerError.sourceItemMissing(roleAgentRelativePath)
             }
         }
     }
@@ -1395,6 +1499,94 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             try fm.removeItem(atPath: targetPath)
         }
         try fm.copyItem(atPath: sourcePath, toPath: targetPath)
+    }
+
+    private func copyCloneDirectory(from sourcePath: String, to targetPath: String, cancelCheck: () throws -> Void) throws {
+        let fm = FileManager.default
+        let sourceURL = URL(fileURLWithPath: sourcePath)
+        let targetURL = URL(fileURLWithPath: targetPath)
+
+        var isSourceDir: ObjCBool = false
+        guard fm.fileExists(atPath: sourcePath, isDirectory: &isSourceDir), isSourceDir.boolValue else {
+            throw CloneClawManagerError.sourceItemMissing(sourcePath)
+        }
+
+        try cancelCheck()
+        if fm.fileExists(atPath: targetPath) {
+            try fm.removeItem(atPath: targetPath)
+        }
+        try fm.createDirectory(at: targetURL, withIntermediateDirectories: true)
+
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey]
+        guard let enumerator = fm.enumerator(
+            at: sourceURL,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsPackageDescendants]
+        ) else { return }
+
+        for case let itemURL as URL in enumerator {
+            try cancelCheck()
+            let relativePath = itemURL.path.replacingOccurrences(of: sourceURL.path + "/", with: "")
+            let destinationURL = targetURL.appendingPathComponent(relativePath)
+            let values = try itemURL.resourceValues(forKeys: keys)
+
+            if values.isDirectory == true {
+                try fm.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+                continue
+            }
+
+            if values.isSymbolicLink == true {
+                let dest = try fm.destinationOfSymbolicLink(atPath: itemURL.path)
+                try fm.createSymbolicLink(atPath: destinationURL.path, withDestinationPath: dest)
+                continue
+            }
+
+            if values.isRegularFile == true {
+                try fm.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.copyItem(at: itemURL, to: destinationURL)
+            }
+        }
+    }
+
+    private func markCloneStarted(targetUsername: String) -> Bool {
+        cloneControlLock.lock()
+        defer { cloneControlLock.unlock() }
+        if runningCloneTargets.contains(targetUsername) {
+            return false
+        }
+        runningCloneTargets.insert(targetUsername)
+        cancelledCloneTargets.remove(targetUsername)
+        return true
+    }
+
+    private func finishClone(targetUsername: String) {
+        cloneControlLock.lock()
+        runningCloneTargets.remove(targetUsername)
+        cancelledCloneTargets.remove(targetUsername)
+        cloneControlLock.unlock()
+    }
+
+    private func requestCloneCancel(targetUsername: String) -> Bool {
+        cloneControlLock.lock()
+        defer { cloneControlLock.unlock() }
+        guard runningCloneTargets.contains(targetUsername) else { return false }
+        cancelledCloneTargets.insert(targetUsername)
+        return true
+    }
+
+    private func assertCloneNotCancelled(targetUsername: String) throws {
+        cloneControlLock.lock()
+        let cancelled = cancelledCloneTargets.contains(targetUsername)
+        cloneControlLock.unlock()
+        if cancelled {
+            throw CloneClawManagerError.cloneCancelled(targetUsername)
+        }
+    }
+
+    private func setCloneStatus(targetUsername: String, status: String) {
+        cloneControlLock.lock()
+        cloneStatusByTarget[targetUsername] = status
+        cloneControlLock.unlock()
     }
 
     private func ensureCloneShellInit(username: String) throws {
