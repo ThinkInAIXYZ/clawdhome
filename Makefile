@@ -16,7 +16,7 @@ PKG_SIGN_IDENTITY ?= Developer ID Installer: Mengjun Xie (Y7P5QLKLYG)
 NOTARY_PROFILE ?= clawdhome-release
 SIGN_APP ?= false
 SIGN_PKG ?= false
-NOTARIZE ?= false
+NOTARIZE ?= true
 
 .PHONY: help bump-build build build-helper build-release install-helper uninstall-helper pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-dry-run release-notes-draft changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean
 
@@ -39,7 +39,7 @@ help:
 	@echo "  pkg-signed       生成已签名未公证安装包（发布前本地验收推荐）"
 	@echo "  notarize-pkg     生成已签名且已公证安装包（读取 NOTARY_PROFILE / CLAWDHOME_NOTARY_PROFILE）"
 	@echo "  QUIET_XCODE=false 可显示完整 xcodebuild 输出（默认静默并写入 build/logs/）"
-	@echo "  release          正式发布：更新 changelog + tag + 签名 pkg + 可选公证 + GitHub Release"
+	@echo "  release          正式发布：更新 changelog + tag + 签名 pkg + 默认公证 + GitHub Release（可用 NOTARIZE=false 关闭）"
 	@echo "  release-dry-run  预览正式发布流程（不执行）"
 	@echo "  test-release-scripts  校验 release/changelog 脚本"
 	@echo "  install-hooks    安装 git commit-msg / pre-commit hooks"
