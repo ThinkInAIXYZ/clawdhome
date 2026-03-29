@@ -6,6 +6,36 @@
 import SwiftUI
 import SwiftTerm
 
+private func firstOAuthAuthorizeURL(in text: String) -> URL? {
+    for token in text.split(whereSeparator: { $0.isWhitespace }) {
+        let candidate = String(token).trimmingCharacters(in: CharacterSet(charactersIn: "\"'()[]<>.,"))
+        guard candidate.hasPrefix("https://auth.openai.com/oauth/authorize") else { continue }
+        if let url = URL(string: candidate) {
+            return url
+        }
+    }
+    return nil
+}
+
+private func openExternalURL(_ url: URL) {
+    DispatchQueue.main.async {
+        _ = NSWorkspace.shared.open(url)
+    }
+}
+
+private func writeToPasteboard(_ content: Data) {
+    guard !content.isEmpty else { return }
+    DispatchQueue.main.async {
+        let board = NSPasteboard.general
+        board.clearContents()
+        if let text = String(data: content, encoding: .utf8) {
+            board.setString(text, forType: .string)
+        } else {
+            board.setData(content, forType: .string)
+        }
+    }
+}
+
 // MARK: - 对外接口（与原 InitLogPanel 接口兼容）
 
 final class LocalTerminalControl: ObservableObject {
@@ -400,13 +430,16 @@ struct LocalProcessNSView: NSViewRepresentable {
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         let tv = OutputObservingLocalProcessTerminalView(frame: .zero)
         tv.processDelegate = context.coordinator
+        // Keep text selection stable while output is streaming.
+        tv.allowMouseReporting = false
         tv.nativeForegroundColor = NSColor.labelColor
         tv.nativeBackgroundColor = NSColor.textBackgroundColor
         tv.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         tv.onOutputBytes = { bytes in
-            guard let onOutput else { return }
             let chunk = String(decoding: Array(bytes), as: UTF8.self)
             guard !chunk.isEmpty else { return }
+            context.coordinator.handleOutputChunk(chunk)
+            guard let onOutput else { return }
             DispatchQueue.main.async {
                 onOutput(chunk)
             }
@@ -596,6 +629,8 @@ private struct HelperMaintenanceTerminalNSView: NSViewRepresentable {
     func makeNSView(context: Context) -> TerminalView {
         let tv = TerminalView(frame: .zero)
         tv.terminalDelegate = context.coordinator
+        // Keep text selection stable while output is streaming.
+        tv.allowMouseReporting = false
         tv.nativeForegroundColor = NSColor.labelColor
         tv.nativeBackgroundColor = NSColor.textBackgroundColor
         tv.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
@@ -626,6 +661,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     private var isCleaningUp = false
     private var lastResizeSent: (cols: Int, rows: Int)?
     private var pendingResize: (cols: Int, rows: Int)?
+    private var openedOAuthURLs: Set<String> = []
 
     init(
         helperClient: HelperClient,
@@ -741,6 +777,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
         if !chunk.isEmpty {
             feedToTerminal(chunk)
             onOutput?(chunk)
+            autoOpenOAuthIfNeeded(chunk)
         }
         if exited {
             timer?.invalidate()
@@ -821,17 +858,31 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     func setTerminalTitle(source: TerminalView, title: String) {}
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
     func scrolled(source: TerminalView, position: Double) {}
-    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
+    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        guard let url = URL(string: link) else { return }
+        openExternalURL(url)
+    }
     func bell(source: TerminalView) {}
-    func clipboardCopy(source: TerminalView, content: Data) {}
+    func clipboardCopy(source: TerminalView, content: Data) {
+        writeToPasteboard(content)
+    }
     func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
     func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+
+    private func autoOpenOAuthIfNeeded(_ chunk: String) {
+        guard let url = firstOAuthAuthorizeURL(in: chunk) else { return }
+        let raw = url.absoluteString
+        guard !raw.isEmpty, !openedOAuthURLs.contains(raw) else { return }
+        openedOAuthURLs.insert(raw)
+        openExternalURL(url)
+    }
 }
 
 // MARK: - LocalProcessTerminalViewDelegate
 
 final class LocalProcessCoordinator: NSObject, LocalProcessTerminalViewDelegate {
     var onExit: ((Int32?) -> Void)?
+    private var openedOAuthURLs: Set<String> = []
 
     init(onExit: ((Int32?) -> Void)?) {
         self.onExit = onExit
@@ -843,7 +894,22 @@ final class LocalProcessCoordinator: NSObject, LocalProcessTerminalViewDelegate 
         }
     }
 
+    func handleOutputChunk(_ chunk: String) {
+        guard let url = firstOAuthAuthorizeURL(in: chunk) else { return }
+        let raw = url.absoluteString
+        guard !raw.isEmpty, !openedOAuthURLs.contains(raw) else { return }
+        openedOAuthURLs.insert(raw)
+        openExternalURL(url)
+    }
+
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        guard let url = URL(string: link) else { return }
+        openExternalURL(url)
+    }
+    func clipboardCopy(source: TerminalView, content: Data) {
+        writeToPasteboard(content)
+    }
 }
