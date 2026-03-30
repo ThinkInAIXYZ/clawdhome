@@ -2,6 +2,7 @@
 
 import SwiftUI
 import AppKit
+import CFNetwork
 
 struct SettingsView: View {
     @Environment(HelperClient.self) private var helperClient
@@ -34,9 +35,33 @@ struct SettingsView: View {
 
 private struct GeneralSettingsTab: View {
     @Environment(HelperClient.self) private var helperClient
+    @Environment(ShrimpPool.self) private var pool
     @State private var gatewayAutostart = true
     @AppStorage("clawPoolShowCurrentAdmin") private var showCurrentAdminInPool = false
     @AppStorage("appLanguage") private var appLanguageRaw = AppLanguage.system.rawValue
+    @AppStorage("proxyEnabled") private var proxyEnabled = false
+    @AppStorage("proxyScheme") private var proxySchemeRaw = ProxyScheme.http.rawValue
+    @AppStorage("proxyHost") private var proxyHost = ""
+    @AppStorage("proxyPort") private var proxyPort = "7890"
+    @AppStorage("proxyUsername") private var proxyUsername = ""
+    @AppStorage("proxyPassword") private var proxyPassword = ""
+    @AppStorage("proxyNoProxy") private var proxyNoProxy = "localhost,127.0.0.1"
+    @State private var isApplyingProxy = false
+    @State private var proxyMessage: String? = nil
+    @State private var proxyError: String? = nil
+    @State private var proxyProgressText: String? = nil
+
+    private enum ProxyScheme: String, CaseIterable, Identifiable {
+        case http
+        case socks5
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .http: return "HTTP"
+            case .socks5: return "SOCKS5"
+            }
+        }
+    }
 
     private var appLanguageBinding: Binding<AppLanguage> {
         Binding(
@@ -68,6 +93,93 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("代理") {
+                Toggle("为虾用户启用代理", isOn: $proxyEnabled)
+
+                Group {
+                    Picker("协议", selection: $proxySchemeRaw) {
+                        ForEach(ProxyScheme.allCases) { scheme in
+                            Text(scheme.title).tag(scheme.rawValue)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 240)
+
+                    LabeledContent("服务器") {
+                        HStack(spacing: 8) {
+                            TextField("", text: $proxyHost, prompt: Text("地址（例如 127.0.0.1）"))
+                                .textFieldStyle(.roundedBorder)
+                            Text(":")
+                                .foregroundStyle(.secondary)
+                            TextField("", text: $proxyPort, prompt: Text("端口"))
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 70)
+                        }
+                    }
+
+                    LabeledContent("认证") {
+                        HStack(spacing: 8) {
+                            TextField("", text: $proxyUsername, prompt: Text("用户名（可选）"))
+                                .textFieldStyle(.roundedBorder)
+                            SecureField("", text: $proxyPassword, prompt: Text("密码（可选）"))
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+
+                    TextField("绕过代理", text: $proxyNoProxy, prompt: Text("用逗号分隔，例如 localhost,127.0.0.1"))
+                        .textFieldStyle(.roundedBorder)
+                }
+                .disabled(!proxyEnabled)
+                .opacity(proxyEnabled ? 1.0 : 0.6)
+
+                LabeledContent("") {
+                    HStack {
+                        Button {
+                            loadFromSystemProxy()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "macwindow")
+                                Text("读取系统代理")
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        Button {
+                            Task { await applyProxyToAllUsers() }
+                        } label: {
+                            HStack(spacing: 4) {
+                                if isApplyingProxy {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Image(systemName: "checkmark.circle.fill")
+                                }
+                                Text(isApplyingProxy ? "应用中…" : "应用到所有虾")
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isApplyingProxy || !helperClient.isConnected || (proxyEnabled && !isProxyInputValid))
+                    }
+                }
+
+                Text("将写入虾用户环境变量：HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY（含小写同名），并重启运行中的 Gateway。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let proxyProgressText {
+                    HStack(spacing: 8) {
+                        if isApplyingProxy { ProgressView().controlSize(.small) }
+                        Text(proxyProgressText).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if let proxyMessage {
+                    Text(proxyMessage).font(.caption).foregroundStyle(.green)
+                }
+                if let proxyError {
+                    Text(proxyError).font(.caption).foregroundStyle(.red)
+                }
+            }
+
             Section(L10n.k("views.settings_view.text_ffa993d5", fallback: "虾塘显示")) {
                 Toggle(L10n.k("views.settings_view.current_account", fallback: "显示当前管理员账户（不推荐）"), isOn: $showCurrentAdminInPool)
                 if showCurrentAdminInPool {
@@ -96,6 +208,102 @@ private struct GeneralSettingsTab: View {
             if helperClient.isConnected {
                 gatewayAutostart = await helperClient.getGatewayAutostart()
             }
+        }
+    }
+
+    private var isProxyInputValid: Bool {
+        !proxyHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        && Int(proxyPort.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+    }
+
+    private func loadFromSystemProxy() {
+        guard let raw = CFNetworkCopySystemProxySettings()?.takeRetainedValue() as? [String: Any] else {
+            proxyError = "无法读取系统代理配置。"
+            proxyMessage = nil
+            return
+        }
+        func intFlag(_ key: String) -> Bool { (raw[key] as? Int ?? 0) == 1 }
+        func str(_ key: String) -> String { (raw[key] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        if intFlag(kCFNetworkProxiesSOCKSEnable as String) {
+            proxySchemeRaw = ProxyScheme.socks5.rawValue
+            proxyHost = str(kCFNetworkProxiesSOCKSProxy as String)
+            if let port = raw[kCFNetworkProxiesSOCKSPort as String] as? Int { proxyPort = String(port) }
+            proxyEnabled = !proxyHost.isEmpty
+        } else if intFlag(kCFNetworkProxiesHTTPSEnable as String) {
+            proxySchemeRaw = ProxyScheme.http.rawValue
+            proxyHost = str(kCFNetworkProxiesHTTPSProxy as String)
+            if let port = raw[kCFNetworkProxiesHTTPSPort as String] as? Int { proxyPort = String(port) }
+            proxyEnabled = !proxyHost.isEmpty
+        } else if intFlag(kCFNetworkProxiesHTTPEnable as String) {
+            proxySchemeRaw = ProxyScheme.http.rawValue
+            proxyHost = str(kCFNetworkProxiesHTTPProxy as String)
+            if let port = raw[kCFNetworkProxiesHTTPPort as String] as? Int { proxyPort = String(port) }
+            proxyEnabled = !proxyHost.isEmpty
+        } else {
+            proxyError = "未检测到系统代理，请手动填写。"
+            proxyMessage = nil
+            return
+        }
+
+        proxyMessage = "已读取系统代理，可按需修改后应用。"
+        proxyError = nil
+    }
+
+    private func applyProxyToAllUsers() async {
+        proxyError = nil
+        proxyMessage = nil
+        proxyProgressText = nil
+        isApplyingProxy = true
+        defer {
+            isApplyingProxy = false
+            if proxyError == nil { proxyProgressText = nil }
+        }
+
+        let users = pool.users.filter { !$0.isAdmin && $0.clawType == .macosUser }
+        if users.isEmpty {
+            proxyError = "没有可应用代理的虾用户。"
+            return
+        }
+
+        let host = proxyHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        let port = proxyPort.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noProxy = proxyNoProxy.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var auth = ""
+        let username = proxyUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !username.isEmpty {
+            let password = proxyPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+            auth = "\(username):\(password)@"
+        }
+
+        let proxyURL = "\(proxySchemeRaw)://\(auth)\(host):\(port)"
+        let value = proxyEnabled ? proxyURL : ""
+        let noProxyValue = proxyEnabled ? noProxy : ""
+
+        var failed: [String] = []
+        let total = users.count
+        for (idx, u) in users.enumerated() {
+            proxyProgressText = "正在应用 \(idx + 1)/\(total)：\(u.username)"
+            do {
+                try await helperClient.applyProxySettings(
+                    username: u.username,
+                    enabled: proxyEnabled,
+                    proxyURL: value,
+                    noProxy: noProxyValue,
+                    restartGatewayIfRunning: true
+                )
+            } catch {
+                failed.append("\(u.username): \(error.localizedDescription)")
+            }
+        }
+
+        if failed.isEmpty {
+            proxyMessage = "代理配置已应用到 \(users.count) 个虾用户。"
+            proxyProgressText = "应用完成：\(users.count)/\(users.count)"
+        } else {
+            proxyError = "部分用户应用失败：\n" + failed.joined(separator: "\n")
+            proxyProgressText = "应用完成：成功 \(users.count - failed.count)，失败 \(failed.count)"
         }
     }
 }

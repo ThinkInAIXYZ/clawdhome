@@ -322,6 +322,7 @@ struct RoleMarketView: View {
                     // 把在市场配置的 DNA 提前落盘
                     let workspaceDir = ".openclaw/workspace"
                     try? await helperClient.createDirectory(username: normalizedUsername, relativePath: workspaceDir)
+                    try? await helperClient.applySavedProxySettingsIfAny(username: normalizedUsername)
                     if !soul.isEmpty {
                         try? await helperClient.writeFile(username: normalizedUsername, relativePath: "\(workspaceDir)/SOUL.md", data: soul.data(using: .utf8) ?? Data())
                     }

@@ -1948,6 +1948,263 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         }
     }
 
+    func applySystemProxyEnv(
+        username: String,
+        enabled: Bool,
+        proxyURL: String,
+        noProxy: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        helperLog("系统代理环境注入 @\(username) enabled=\(enabled)")
+        do {
+            let trimmedProxy = proxyURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedNoProxy = noProxy.trimmingCharacters(in: .whitespacesAndNewlines)
+            let home = "/Users/\(username)"
+            let zprofilePath = "\(home)/.zprofile"
+            let zshrcPath = "\(home)/.zshrc"
+
+            try rewriteProxyManagedBlock(
+                path: zprofilePath,
+                username: username,
+                enabled: enabled,
+                proxyURL: trimmedProxy,
+                noProxy: trimmedNoProxy
+            )
+            try rewriteProxyManagedBlock(
+                path: zshrcPath,
+                username: username,
+                enabled: enabled,
+                proxyURL: trimmedProxy,
+                noProxy: trimmedNoProxy
+            )
+            refreshLaunchctlProxyEnv(
+                username: username,
+                enabled: enabled,
+                proxyURL: trimmedProxy,
+                noProxy: trimmedNoProxy
+            )
+            reply(true, nil)
+        } catch {
+            helperLog("系统代理环境注入失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func applyProxySettings(
+        username: String,
+        enabled: Bool,
+        proxyURL: String,
+        noProxy: String,
+        restartGatewayIfRunning: Bool,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        helperLog("代理配置应用 @\(username) enabled=\(enabled) restart=\(restartGatewayIfRunning)")
+        do {
+            let trimmedProxy = proxyURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedNoProxy = noProxy.trimmingCharacters(in: .whitespacesAndNewlines)
+            try writeProxyEnvToOpenclawConfig(
+                username: username,
+                enabled: enabled,
+                proxyURL: trimmedProxy,
+                noProxy: trimmedNoProxy
+            )
+            try rewriteProxyManagedBlock(
+                path: "/Users/\(username)/.zprofile",
+                username: username,
+                enabled: enabled,
+                proxyURL: trimmedProxy,
+                noProxy: trimmedNoProxy
+            )
+            try rewriteProxyManagedBlock(
+                path: "/Users/\(username)/.zshrc",
+                username: username,
+                enabled: enabled,
+                proxyURL: trimmedProxy,
+                noProxy: trimmedNoProxy
+            )
+            refreshLaunchctlProxyEnv(
+                username: username,
+                enabled: enabled,
+                proxyURL: trimmedProxy,
+                noProxy: trimmedNoProxy
+            )
+            if restartGatewayIfRunning {
+                do {
+                    let uid = try UserManager.uid(for: username)
+                    let status = GatewayManager.status(username: username, uid: uid)
+                    if status.running {
+                        try GatewayManager.restartGateway(username: username, uid: uid)
+                    }
+                } catch {
+                    helperLog("代理配置应用时重启 Gateway 失败 @\(username): \(error.localizedDescription)", level: .error)
+                    reply(false, "重启 Gateway 失败：\(error.localizedDescription)")
+                    return
+                }
+            }
+            reply(true, nil)
+        } catch {
+            helperLog("代理配置应用失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    private func writeProxyEnvToOpenclawConfig(
+        username: String,
+        enabled: Bool,
+        proxyURL: String,
+        noProxy: String
+    ) throws {
+        let configPath = "/Users/\(username)/.openclaw/openclaw.json"
+        let fm = FileManager.default
+        var root: [String: Any]
+        if let data = fm.contents(atPath: configPath),
+           let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            root = dict
+        } else {
+            root = [:]
+        }
+        var env = root["env"] as? [String: Any] ?? [:]
+        let proxyValue = enabled ? proxyURL : ""
+        let noProxyValue = enabled ? noProxy : ""
+        env["HTTP_PROXY"] = proxyValue
+        env["HTTPS_PROXY"] = proxyValue
+        env["ALL_PROXY"] = proxyValue
+        env["http_proxy"] = proxyValue
+        env["https_proxy"] = proxyValue
+        env["all_proxy"] = proxyValue
+        env["NO_PROXY"] = noProxyValue
+        env["no_proxy"] = noProxyValue
+        root["env"] = env
+
+        let outData = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+        let dir = "/Users/\(username)/.openclaw"
+        if !fm.fileExists(atPath: dir) {
+            try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        }
+        try outData.write(to: URL(fileURLWithPath: configPath), options: .atomic)
+        _ = try? run("/usr/sbin/chown", args: [username, dir])
+        _ = try? run("/usr/sbin/chown", args: [username, configPath])
+    }
+
+    private func rewriteProxyManagedBlock(
+        path: String,
+        username: String,
+        enabled: Bool,
+        proxyURL: String,
+        noProxy: String
+    ) throws {
+        let existing = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        let start = "# >>> CLAWDHOME_PROXY_START >>>"
+        let end = "# <<< CLAWDHOME_PROXY_END <<<"
+        let stripped = stripManagedBlock(content: existing, start: start, end: end)
+
+        var finalContent = stripped
+        if enabled, !proxyURL.isEmpty {
+            let quotedProxy = shellSingleQuoted(proxyURL)
+            let quotedNoProxy = shellSingleQuoted(noProxy)
+            let block = """
+                \(start)
+                # Managed by ClawdHome. Do not edit manually.
+                export HTTP_PROXY=\(quotedProxy)
+                export HTTPS_PROXY=\(quotedProxy)
+                export ALL_PROXY=\(quotedProxy)
+                export http_proxy=\(quotedProxy)
+                export https_proxy=\(quotedProxy)
+                export all_proxy=\(quotedProxy)
+                export NO_PROXY=\(quotedNoProxy)
+                export no_proxy=\(quotedNoProxy)
+                \(end)
+                """
+            if !finalContent.isEmpty, !finalContent.hasSuffix("\n") {
+                finalContent += "\n"
+            }
+            if !finalContent.isEmpty {
+                finalContent += "\n"
+            }
+            finalContent += block + "\n"
+        } else {
+            // disabled: 仅保留去除受管块后的内容
+            if !finalContent.isEmpty, !finalContent.hasSuffix("\n") {
+                finalContent += "\n"
+            }
+        }
+
+        guard finalContent != existing else { return }
+        try Data(finalContent.utf8).write(to: URL(fileURLWithPath: path), options: .atomic)
+        _ = try? run("/usr/sbin/chown", args: [username, path])
+        _ = try? run("/bin/chmod", args: ["644", path])
+    }
+
+    private func stripManagedBlock(content: String, start: String, end: String) -> String {
+        var lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var result: [String] = []
+        var skipping = false
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == start {
+                skipping = true
+                continue
+            }
+            if skipping {
+                if trimmed == end {
+                    skipping = false
+                }
+                continue
+            }
+            result.append(line)
+        }
+        lines = result
+        while lines.last?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+            _ = lines.popLast()
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func shellSingleQuoted(_ value: String) -> String {
+        let escaped = value.replacingOccurrences(of: "'", with: "'\"'\"'")
+        return "'\(escaped)'"
+    }
+
+    private func refreshLaunchctlProxyEnv(
+        username: String,
+        enabled: Bool,
+        proxyURL: String,
+        noProxy: String
+    ) {
+        guard let uid = try? UserManager.uid(for: username) else { return }
+        let proxyKeys = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]
+        let noProxyKeys = ["NO_PROXY", "no_proxy"]
+
+        if enabled, !proxyURL.isEmpty {
+            for key in proxyKeys {
+                do {
+                    try run("/bin/launchctl", args: ["asuser", "\(uid)", "/bin/launchctl", "setenv", key, proxyURL])
+                } catch {
+                    helperLog("launchctl setenv 失败 @\(username) key=\(key): \(error.localizedDescription)", level: .warn)
+                }
+            }
+            for key in noProxyKeys {
+                do {
+                    if noProxy.isEmpty {
+                        try run("/bin/launchctl", args: ["asuser", "\(uid)", "/bin/launchctl", "unsetenv", key])
+                    } else {
+                        try run("/bin/launchctl", args: ["asuser", "\(uid)", "/bin/launchctl", "setenv", key, noProxy])
+                    }
+                } catch {
+                    helperLog("launchctl no_proxy 同步失败 @\(username) key=\(key): \(error.localizedDescription)", level: .warn)
+                }
+            }
+        } else {
+            for key in proxyKeys + noProxyKeys {
+                do {
+                    try run("/bin/launchctl", args: ["asuser", "\(uid)", "/bin/launchctl", "unsetenv", key])
+                } catch {
+                    helperLog("launchctl unsetenv 失败 @\(username) key=\(key): \(error.localizedDescription)", level: .warn)
+                }
+            }
+        }
+    }
+
     func runModelCommand(username: String, argsJSON: String,
                          withReply reply: @escaping (Bool, String) -> Void) {
         guard let args = try? JSONDecoder().decode([String].self, from: Data(argsJSON.utf8)),

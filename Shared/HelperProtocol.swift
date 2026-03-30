@@ -260,6 +260,26 @@ enum ManagedUserFilter {
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
+    /// 将代理环境变量注入到系统级用户环境（~/.zprofile / ~/.zshrc + launchctl user 域）
+    /// enabled=false 时会移除受管注入块并在当前用户会话执行 unsetenv
+    func applySystemProxyEnv(
+        username: String,
+        enabled: Bool,
+        proxyURL: String,
+        noProxy: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 一次性应用代理配置（openclaw env + 系统环境注入 + 可选重启运行中的 Gateway）
+    func applyProxySettings(
+        username: String,
+        enabled: Bool,
+        proxyURL: String,
+        noProxy: String,
+        restartGatewayIfRunning: Bool,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
 
     /// 以指定用户身份运行 openclaw models 子命令
     /// argsJSON：JSON 编码的 [String]，如 ["list","--all","--json"]

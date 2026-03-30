@@ -651,6 +651,70 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.write_failed", fallback: "写入失败")) }
     }
 
+    /// 将代理环境变量注入到用户级系统环境（shell 配置 + launchctl user 域）
+    func applySystemProxyEnv(username: String, enabled: Bool, proxyURL: String, noProxy: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
+            proxy.applySystemProxyEnv(username: username, enabled: enabled, proxyURL: proxyURL, noProxy: noProxy) { ok, msg in
+                cont.resume(returning: (ok, msg))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.write_failed", fallback: "写入失败")) }
+    }
+
+    /// 一次性应用代理配置（openclaw env + 系统环境注入 + 可选重启）
+    func applyProxySettings(
+        username: String,
+        enabled: Bool,
+        proxyURL: String,
+        noProxy: String,
+        restartGatewayIfRunning: Bool
+    ) async throws {
+        // 代理批量应用属于长任务，走 installConnection，避免阻塞控制通道上的维护终端轮询。
+        guard let proxy = installProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
+            proxy.applyProxySettings(
+                username: username,
+                enabled: enabled,
+                proxyURL: proxyURL,
+                noProxy: noProxy,
+                restartGatewayIfRunning: restartGatewayIfRunning
+            ) { ok, msg in
+                cont.resume(returning: (ok, msg))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.write_failed", fallback: "写入失败")) }
+    }
+
+    /// 新用户创建后应用“当前设置页保存的代理配置”
+    /// 读取 UserDefaults 中 proxy* 字段，写入 openclaw env + 系统 shell 环境
+    func applySavedProxySettingsIfAny(username: String) async throws {
+        let defaults = UserDefaults.standard
+        let enabled = defaults.bool(forKey: "proxyEnabled")
+        let scheme = (defaults.string(forKey: "proxyScheme") ?? "http").trimmingCharacters(in: .whitespacesAndNewlines)
+        let host = (defaults.string(forKey: "proxyHost") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let port = (defaults.string(forKey: "proxyPort") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let noProxy = (defaults.string(forKey: "proxyNoProxy") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let proxyUsername = (defaults.string(forKey: "proxyUsername") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let proxyPassword = (defaults.string(forKey: "proxyPassword") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var proxyValue = ""
+        if enabled {
+            guard !host.isEmpty, Int(port) != nil else { return }
+            let auth = proxyUsername.isEmpty ? "" : "\(proxyUsername):\(proxyPassword)@"
+            proxyValue = "\(scheme)://\(auth)\(host):\(port)"
+        }
+        let noProxyValue = enabled ? noProxy : ""
+
+        try await applyProxySettings(
+            username: username,
+            enabled: enabled,
+            proxyURL: proxyValue,
+            noProxy: noProxyValue,
+            restartGatewayIfRunning: false
+        )
+    }
+
     /// 将 Any 序列化为 JSON 文本，支持对象/数组，也支持顶层 String/Bool/Number/null。
     private func serializeJSONValue(_ value: Any) throws -> String {
         // JSONObject（对象/数组）直接序列化
