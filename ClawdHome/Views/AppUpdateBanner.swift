@@ -63,6 +63,11 @@ struct AppUpdateBanner: View {
                 AppUpdateSheet()
                     .environment(updater)
             }
+            .onChange(of: updater.isAwaitingAppRelaunch) { _, waiting in
+                if waiting {
+                    showSheet = false
+                }
+            }
         }
     }
 }
@@ -200,6 +205,11 @@ struct AppUpdateSheet: View {
         }
         .padding(24)
         .frame(width: 440)
+        .onAppear {
+            if updater.isAwaitingAppRelaunch {
+                dismiss()
+            }
+        }
         .onChange(of: updater.isAwaitingAppRelaunch) { _, waiting in
             if waiting { dismiss() }
         }

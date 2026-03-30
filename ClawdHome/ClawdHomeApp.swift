@@ -266,6 +266,7 @@ private struct MaintenanceTerminalWindow: View {
 private struct MaintenanceTerminalWindowContent: View {
     let request: MaintenanceTerminalWindowRequest
 
+    @Environment(\.dismiss) private var dismiss
     @Environment(ShrimpPool.self) private var pool
     @StateObject private var terminalControl = LocalTerminalControl()
     @State private var terminalRunID = 0
@@ -277,6 +278,7 @@ private struct MaintenanceTerminalWindowContent: View {
     @State private var outputBuffer = ""
     @State private var didStart = false
     @State private var didPostCloseNotification = false
+    @State private var didAutoCloseOnConfigureComplete = false
 
     private let waitingThreshold: TimeInterval = 8
     private let uiTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -298,6 +300,13 @@ private struct MaintenanceTerminalWindowContent: View {
         guard let runStartedAt else { return "00:00" }
         let elapsed = max(0, Int(now.timeIntervalSince(runStartedAt)))
         return String(format: "%02d:%02d", elapsed / 60, elapsed % 60)
+    }
+    private var isModelConfigureCommand: Bool {
+        request.command.count >= 4
+            && request.command[0] == "openclaw"
+            && request.command[1] == "configure"
+            && (request.command[2] == "--section" || request.command[2] == "--selection")
+            && request.command[3] == "model"
     }
     private var sanitizedOutput: String {
         stripANSIEscapeSequences(outputBuffer)
@@ -395,7 +404,7 @@ private struct MaintenanceTerminalWindowContent: View {
             terminalControl.terminate()
             appLog("[maintenance-window] closed user=\(request.username) index=\(request.index) title=\(request.title)")
         }
-        .frame(minWidth: 760, minHeight: 480)
+        .frame(minWidth: isModelConfigureCommand ? 900 : 760, minHeight: isModelConfigureCommand ? 640 : 480)
     }
 
     @ViewBuilder
@@ -439,7 +448,7 @@ private struct MaintenanceTerminalWindowContent: View {
         HelperMaintenanceTerminalPanel(
             username: request.username,
             command: request.command,
-            minHeight: 280,
+            minHeight: isModelConfigureCommand ? 420 : 280,
             onOutput: { chunk in
                 handleTerminalOutput(chunk)
             },
@@ -478,6 +487,19 @@ private struct MaintenanceTerminalWindowContent: View {
         let maxChars = 300_000
         if outputBuffer.count > maxChars {
             outputBuffer.removeFirst(outputBuffer.count - maxChars)
+        }
+        autoCloseIfConfigureCompleted(chunk)
+    }
+
+    private func autoCloseIfConfigureCompleted(_ chunk: String) {
+        guard isModelConfigureCommand, !didAutoCloseOnConfigureComplete else { return }
+        let normalized = stripANSIEscapeSequences(chunk).lowercased()
+        guard normalized.contains("configure complete.") else { return }
+        didAutoCloseOnConfigureComplete = true
+        statusText = "检测到 Configure complete.，正在关闭窗口并刷新调用方…"
+        postCloseNotificationIfNeeded()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            dismiss()
         }
     }
 
