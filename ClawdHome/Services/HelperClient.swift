@@ -556,6 +556,21 @@ final class HelperClient {
         }
     }
 
+    func getCachedAppUpdateState() async -> AppUpdateState? {
+        guard let proxy = dashboardProxy else { return nil }
+        let json: String? = await withCheckedContinuation { cont in
+            proxy.getCachedAppUpdateState { cont.resume(returning: $0) }
+        }
+        guard let json, let data = json.data(using: .utf8) else { return nil }
+        do {
+            return try JSONDecoder().decode(AppUpdateState.self, from: data)
+        } catch {
+            let preview = json.prefix(240).replacingOccurrences(of: "\n", with: " ")
+            appLog("[app-update] cached state decode failed: \(error.localizedDescription); payload=\(preview)", level: .warn)
+            return nil
+        }
+    }
+
     /// 获取当前连接列表（无连接或未连接时返回空数组）
     func getConnections() async -> [ConnectionInfo] {
         guard let proxy = dashboardProxy else { return [] }
