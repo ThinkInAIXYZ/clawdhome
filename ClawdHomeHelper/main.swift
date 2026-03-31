@@ -1782,6 +1782,10 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         reply(json)
     }
 
+    func getCachedAppUpdateState(withReply reply: @escaping (String?) -> Void) {
+        reply(AppUpdateHeartbeatService.shared.cachedStateJSON())
+    }
+
     func getConnections(withReply reply: @escaping (String?) -> Void) {
         let conns = DashboardCollector.shared.currentSnapshot().connections
         let json = (try? JSONEncoder().encode(conns)).flatMap { String(data: $0, encoding: .utf8) }
@@ -3250,6 +3254,7 @@ listener.resume()
 // 启动仪表盘数据采集（双频 Timer：1s 动态指标 / 60s 静态指标）
 helperLog("Helper 启动")
 DashboardCollector.shared.start()
+AppUpdateHeartbeatService.shared.start()
 // 2 秒后记录首次采集结果（用于诊断连接采集问题）
 DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
     let snap = DashboardCollector.shared.currentSnapshot()

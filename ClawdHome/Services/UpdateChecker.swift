@@ -25,7 +25,7 @@ final class UpdateChecker {
     private static let udKeyLatestVersion     = "updateChecker.latestVersion"
     private static let udKeyLatestReleaseURL  = "updateChecker.latestReleaseURL"
     private static let openclawApiURL         = "https://api.github.com/repos/openclaw/openclaw/releases/latest"
-    private let openclawCacheInterval: TimeInterval = 6 * 3600
+    private let openclawCacheInterval: TimeInterval = 24 * 3600
 
     // MARK: - ClawdHome App 自身版本检测
 
@@ -56,7 +56,7 @@ final class UpdateChecker {
     private static let udKeyAppReleaseNotes = "appUpdate.releaseNotes"
     private static let udKeyAppMinVersion   = "appUpdate.minVersion"
     private static let appApiURL            = "https://clawdhome.app/api/version.json"
-    private let appCacheInterval: TimeInterval = 3600
+    private let appCacheInterval: TimeInterval = 24 * 3600
 
     // MARK: - 初始化（从缓存恢复，避免启动时显示L10n.k("services.update_checker.text_f013ea9d", fallback: "加载中")）
 
@@ -78,9 +78,14 @@ final class UpdateChecker {
     // MARK: - openclaw 检测
 
     func checkIfNeeded() async {
-        let lastChecked = UserDefaults.standard.double(forKey: Self.udKeyLastChecked)
-        let elapsed = Date().timeIntervalSinceReferenceDate - lastChecked
-        guard elapsed >= openclawCacheInterval || latestVersion == nil else { return }
+        let lastChecked = UserDefaults.standard.object(forKey: Self.udKeyLastChecked) as? TimeInterval
+        let now = Date().timeIntervalSinceReferenceDate
+        guard UpdateCheckPolicy.shouldCheck(
+            now: now,
+            lastChecked: lastChecked,
+            cachedVersion: latestVersion,
+            minimumInterval: openclawCacheInterval
+        ) else { return }
         await check()
     }
 
@@ -133,12 +138,14 @@ final class UpdateChecker {
     }
 
     func checkAppIfNeeded() async {
-        let lastChecked = UserDefaults.standard.double(forKey: Self.udKeyAppLastChecked)
-        let elapsed = Date().timeIntervalSinceReferenceDate - lastChecked
-        // 若缓存显示“当前无需升级”，启动时强制向服务端再确认一次，
-        // 避免新版本刚发布时，因本地缓存导致提示延迟。
-        let shouldForceRefresh = !appNeedsUpdate
-        guard shouldForceRefresh || elapsed >= appCacheInterval || appLatestVersion == nil else { return }
+        let lastChecked = UserDefaults.standard.object(forKey: Self.udKeyAppLastChecked) as? TimeInterval
+        let now = Date().timeIntervalSinceReferenceDate
+        guard UpdateCheckPolicy.shouldCheck(
+            now: now,
+            lastChecked: lastChecked,
+            cachedVersion: appLatestVersion,
+            minimumInterval: appCacheInterval
+        ) else { return }
         await checkApp()
     }
 
@@ -146,32 +153,69 @@ final class UpdateChecker {
         guard let url = URL(string: Self.appApiURL) else { return }
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
         req.setValue(buildUpdateUserAgent(), forHTTPHeaderField: "User-Agent")
+        req.setValue(Self.preferredSystemLanguage(), forHTTPHeaderField: "X-ClawdHome-System-Language")
         do {
             let (data, _) = try await URLSession.shared.data(for: req)
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
 
-            if let v = json["version"] as? String {
-                appLatestVersion = v
-                UserDefaults.standard.set(v, forKey: Self.udKeyAppVersion)
-            }
-            if let dl = json["download_url"] as? String {
-                appDownloadURL = URL(string: dl)
-                UserDefaults.standard.set(dl, forKey: Self.udKeyAppDownloadURL)
-            }
-            // 中文优先，fallback 英文
-            let notes = json["release_notes"] as? String ?? json["release_notes_en"] as? String
-            if let notes {
-                appReleaseNotes = notes
-                UserDefaults.standard.set(notes, forKey: Self.udKeyAppReleaseNotes)
-            }
-            if let minV = json["min_version"] as? String {
-                appMinVersion = minV
-                UserDefaults.standard.set(minV, forKey: Self.udKeyAppMinVersion)
-            }
-            UserDefaults.standard.set(Date().timeIntervalSinceReferenceDate,
-                                      forKey: Self.udKeyAppLastChecked)
+            applyAppUpdateState(
+                AppUpdateState(
+                    latestVersion: json["version"] as? String,
+                    downloadURL: json["download_url"] as? String,
+                    releaseNotes: json["release_notes"] as? String ?? json["release_notes_en"] as? String,
+                    minimumVersion: json["min_version"] as? String,
+                    lastSuccessfulCheckAt: Date().timeIntervalSinceReferenceDate,
+                    lastHeartbeatAt: nil,
+                    lastError: nil,
+                    source: "app-fallback"
+                )
+            )
         } catch {
             // 网络错误静默失败，不影响主功能
+        }
+    }
+
+    func refreshAppUpdateState(helperClient: HelperClient) async {
+        if !helperClient.isConnected {
+            helperClient.connect()
+        }
+        if let cached = await helperClient.getCachedAppUpdateState() {
+            applyAppUpdateState(cached)
+            return
+        }
+        await checkAppIfNeeded()
+    }
+
+    private func applyAppUpdateState(_ state: AppUpdateState) {
+        appLatestVersion = state.latestVersion
+        UserDefaults.standard.set(state.latestVersion, forKey: Self.udKeyAppVersion)
+
+        if let downloadURL = state.downloadURL {
+            appDownloadURL = URL(string: downloadURL)
+            UserDefaults.standard.set(downloadURL, forKey: Self.udKeyAppDownloadURL)
+        } else {
+            appDownloadURL = nil
+            UserDefaults.standard.removeObject(forKey: Self.udKeyAppDownloadURL)
+        }
+
+        if let releaseNotes = state.releaseNotes {
+            appReleaseNotes = releaseNotes
+            UserDefaults.standard.set(releaseNotes, forKey: Self.udKeyAppReleaseNotes)
+        } else {
+            appReleaseNotes = nil
+            UserDefaults.standard.removeObject(forKey: Self.udKeyAppReleaseNotes)
+        }
+
+        if let minimumVersion = state.minimumVersion {
+            appMinVersion = minimumVersion
+            UserDefaults.standard.set(minimumVersion, forKey: Self.udKeyAppMinVersion)
+        } else {
+            appMinVersion = nil
+            UserDefaults.standard.removeObject(forKey: Self.udKeyAppMinVersion)
+        }
+
+        if let lastSuccessfulCheckAt = state.lastSuccessfulCheckAt {
+            UserDefaults.standard.set(lastSuccessfulCheckAt, forKey: Self.udKeyAppLastChecked)
         }
     }
 
@@ -307,7 +351,8 @@ final class UpdateChecker {
         let cpuModel = Self.cpuModel()
         let memory = Self.physicalMemoryString()
         let build = currentAppBuild
-        return "ClawdHome/\(currentAppVersion) (\(build); macOS \(osVersion); \(arch); \(cpuModel); RAM \(memory))"
+        let language = Self.preferredSystemLanguage()
+        return "ClawdHome/\(currentAppVersion) (\(build); macOS \(osVersion); \(arch); \(cpuModel); RAM \(memory); lang \(language))"
     }
 
     private var currentAppBuild: String {
@@ -348,6 +393,12 @@ final class UpdateChecker {
             return "\(Int(gib.rounded()))GB"
         }
         return String(format: "%.1fGB", gib)
+    }
+
+    private static func preferredSystemLanguage() -> String {
+        let preferred = Locale.preferredLanguages.first?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let preferred, !preferred.isEmpty else { return "en" }
+        return preferred
     }
 
     private static func sysctlString(_ name: String) -> String? {
