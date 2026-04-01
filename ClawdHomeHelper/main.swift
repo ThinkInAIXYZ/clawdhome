@@ -382,7 +382,41 @@ private final class MaintenanceTerminalSession {
     private(set) var exited = false
     private(set) var exitCode: Int32 = -1
 
-    init(username: String, nodePath: String, command: [String]) {
+    private static func ensureNpxShimDirectory(username: String) throws -> String {
+        let shimDir = "/tmp/clawdhome-maintenance-shims/\(username)"
+        let npxShim = "\(shimDir)/npx"
+
+        try FileManager.default.createDirectory(
+            atPath: shimDir,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o755]
+        )
+
+        let target = try? ConfigWriter.findIsolatedNpxBinary(for: username)
+        let script: String
+        if let target {
+            script = """
+                #!/bin/sh
+                exec "\(target)" "$@"
+                """
+        } else {
+            script = """
+                #!/bin/sh
+                echo "npx is restricted to the isolated user environment (~/.brew), but no isolated npx was found." >&2
+                exit 127
+                """
+        }
+
+        let existing = try? String(contentsOfFile: npxShim, encoding: .utf8)
+        if existing != script {
+            try Data(script.utf8).write(to: URL(fileURLWithPath: npxShim), options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: npxShim)
+        }
+
+        return shimDir
+    }
+
+    init(username: String, nodePath: String, command: [String]) throws {
         self.id = UUID().uuidString
         self.username = username
         self.process = Process()
@@ -397,10 +431,20 @@ private final class MaintenanceTerminalSession {
         let lcCType = inheritedEnv["LC_CTYPE"] ?? lang
         let argv0 = command.first ?? ""
         let argvRest = Array(command.dropFirst())
+        let shimDir = try Self.ensureNpxShimDirectory(username: username)
+        let effectivePath = "\(shimDir):\(nodePath)"
         let resolvedExecutable: String
         switch argv0 {
         case "openclaw":
             resolvedExecutable = "\(home)/.npm-global/bin/openclaw"
+        case "npx":
+            resolvedExecutable = try ConfigWriter.findIsolatedNpxBinary(for: username)
+        case "zsh":
+            resolvedExecutable = "/bin/zsh"
+        case "bash":
+            resolvedExecutable = "/bin/bash"
+        case "sh":
+            resolvedExecutable = "/bin/sh"
         default:
             resolvedExecutable = argv0
         }
@@ -412,7 +456,7 @@ private final class MaintenanceTerminalSession {
             "/usr/bin/sudo", "-n", "-u", username, "-H",
             "/usr/bin/env",
             "HOME=\(home)",
-            "PATH=\(nodePath)",
+            "PATH=\(effectivePath)",
             "NPM_CONFIG_PREFIX=\(npmGlobalDir)",
             "npm_config_prefix=\(npmGlobalDir)",
             "LANG=\(lang)",
@@ -812,6 +856,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
 
     func installNode(username: String, nodeDistURL: String, withReply reply: @escaping (Bool, String?) -> Void) {
         let logURL = initLogURL(username: username)
+        let userNodePath = "/Users/\(username)/.brew/bin/node"
 
         func appendLog(_ msg: String) {
             if let fh = FileHandle(forWritingAtPath: logURL.path) {
@@ -821,9 +866,9 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             }
         }
 
-        // 检查 Node.js 是否已安装（直接下载路径）
-        if NodeDownloader.isInstalled() {
-            let version = (try? run("/usr/local/bin/node", args: ["--version"]))
+        // 检查目标用户隔离 Node.js 是否已安装
+        if NodeDownloader.isInstalled(for: username) {
+            let version = (try? run(userNodePath, args: ["--version"]))
                 ?? "(version unknown)"
             appendLog("✓ Node.js 已安装：\(version)\n")
             reply(true, nil)
@@ -831,7 +876,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         }
 
         do {
-            try NodeDownloader.install(distBaseURL: nodeDistURL, logURL: logURL)
+            try NodeDownloader.install(username: username, distBaseURL: nodeDistURL, logURL: logURL)
             reply(true, nil)
         } catch {
             helperLog("安装 Node.js 失败 @\(username): \(error.localizedDescription)", level: .error)
@@ -839,8 +884,8 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         }
     }
 
-    func isNodeInstalled(withReply reply: @escaping (Bool) -> Void) {
-        reply(NodeDownloader.isInstalled())
+    func isNodeInstalled(username: String, withReply reply: @escaping (Bool) -> Void) {
+        reply(NodeDownloader.isInstalled(for: username))
     }
 
     func getXcodeEnvStatus(withReply reply: @escaping (String) -> Void) {
@@ -1072,7 +1117,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
     func setNpmRegistry(username: String, registry: String,
                         withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("设置 npm 源 @\(username): \(registry)")
-        if !NodeDownloader.isInstalled() {
+        if !NodeDownloader.isInstalled(for: username) {
             let message = "Node.js 未安装就绪，暂不允许切换 npm 源"
             helperLog("设置 npm 源失败 @\(username): \(message)", level: .warn)
             reply(false, message)
@@ -2337,7 +2382,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         let nodePath = ConfigWriter.buildNodePath(username: username)
 
         do {
-            let session = MaintenanceTerminalSession(username: username, nodePath: nodePath, command: command)
+            let session = try MaintenanceTerminalSession(username: username, nodePath: nodePath, command: command)
             try session.start()
             maintenanceSessionLock.lock()
             maintenanceSessions[session.id] = session
@@ -2421,6 +2466,13 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
                            args: [String]) throws -> String {
         let home = "/Users/\(username)"
         let npmGlobalDir = "\(home)/.npm-global"
+        let resolvedCommand: String
+        switch command {
+        case "npx":
+            resolvedCommand = try ConfigWriter.findIsolatedNpxBinary(for: username)
+        default:
+            resolvedCommand = command
+        }
         let fullArgs = [
             "-n", "-u", username, "-H",
             "/usr/bin/env",
@@ -2428,7 +2480,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             "PATH=\(nodePath)",
             "NPM_CONFIG_PREFIX=\(npmGlobalDir)",
             "npm_config_prefix=\(npmGlobalDir)",
-            command,
+            resolvedCommand,
         ] + args
         return try run("/usr/bin/sudo", args: fullArgs)
     }

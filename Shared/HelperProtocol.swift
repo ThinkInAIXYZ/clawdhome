@@ -113,8 +113,8 @@ enum ManagedUserFilter {
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
-    /// Node.js 是否已安装就绪（用于控制 npm 相关操作开关）
-    func isNodeInstalled(withReply reply: @escaping (Bool) -> Void)
+    /// 指定用户的 Node.js 是否已安装就绪（用于控制 npm 相关操作开关）
+    func isNodeInstalled(username: String, withReply reply: @escaping (Bool) -> Void)
 
     /// 获取 Xcode/CLT 环境状态（JSON 编码的 XcodeEnvStatus）
     func getXcodeEnvStatus(withReply reply: @escaping (String) -> Void)
