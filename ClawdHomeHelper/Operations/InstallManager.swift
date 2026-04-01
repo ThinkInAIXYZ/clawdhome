@@ -193,13 +193,13 @@ struct InstallManager {
         }
 
         if FileManager.default.fileExists(atPath: npmCacheDir) {
-            _ = try? run("/usr/sbin/chown", args: ["-R", username, npmCacheDir])
+            try run("/usr/sbin/chown", args: ["-R", username, npmCacheDir])
         }
         if FileManager.default.fileExists(atPath: npmrcPath) {
-            _ = try? run("/usr/sbin/chown", args: [username, npmrcPath])
+            try run("/usr/sbin/chown", args: [username, npmrcPath])
         }
         if FileManager.default.fileExists(atPath: npmGlobal) {
-            _ = try? run("/usr/sbin/chown", args: ["-R", username, npmGlobal])
+            try run("/usr/sbin/chown", args: ["-R", username, npmGlobal])
         }
     }
 

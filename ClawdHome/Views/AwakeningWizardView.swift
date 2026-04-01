@@ -414,9 +414,27 @@ struct DNAFileEditor: View {
     let iconColor: Color
     let title: String
     let subtitle: String
+    let initiallyExpanded: Bool
     @Binding var text: String
 
-    @State private var isExpanded = false
+    @State private var isExpanded: Bool
+
+    init(
+        icon: String,
+        iconColor: Color,
+        title: String,
+        subtitle: String,
+        initiallyExpanded: Bool = false,
+        text: Binding<String>
+    ) {
+        self.icon = icon
+        self.iconColor = iconColor
+        self.title = title
+        self.subtitle = subtitle
+        self.initiallyExpanded = initiallyExpanded
+        _text = text
+        _isExpanded = State(initialValue: initiallyExpanded)
+    }
 
     var body: some View {
         VStack(spacing: 0) {

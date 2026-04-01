@@ -929,6 +929,13 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             }
         }
 
+        guard getpwnam(username) != nil else {
+            let message = "用户不存在：\(username)"
+            appendLog("❌ \(message)\n")
+            reply(false, message)
+            return
+        }
+
         do {
             // 1. 创建 ~/.npm-global 和 ~/.npm-global/bin 目录
             appendLog("$ mkdir -p \(npmGlobalBin)\n")
@@ -1053,7 +1060,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         let nodePath = ConfigWriter.buildNodePath(username: username)
         let home = "/Users/\(username)"
         let profilePath = "\(home)/.zprofile"
-        let installScript = "mkdir -p \"$HOME/.brew\" && curl -L https://github.com/Homebrew/brew/tarball/master | tar xz --strip 1 -C \"$HOME/.brew\""
+        let installScript = "mkdir -p \"$HOME/.brew\" && curl --fail --show-error -L --connect-timeout 10 --max-time 180 --retry 2 --retry-delay 2 https://github.com/Homebrew/brew/tarball/master | tar xz --strip 1 -C \"$HOME/.brew\""
         let requiredExports = [
             "export PATH=\"$HOME/.brew/bin:$PATH\"",
             "export HOMEBREW_PREFIX=\"$HOME/.brew\"",
@@ -1067,6 +1074,13 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
                 fh.write(Data(msg.utf8))
                 fh.closeFile()
             }
+        }
+
+        guard getpwnam(username) != nil else {
+            let message = "用户不存在：\(username)"
+            appendLog("❌ \(message)\n")
+            reply(false, message)
+            return
         }
 
         do {
@@ -1105,7 +1119,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             }
 
             // 防御性修正：避免历史 root 执行导致目录归属错误
-            _ = try? run("/usr/sbin/chown", args: ["-R", "\(username):\(username)", "\(home)/.brew"])
+            _ = try? run("/usr/sbin/chown", args: ["-R", username, "\(home)/.brew"])
             reply(true, nil)
         } catch {
             helperLog("修复 Homebrew 权限失败 @\(username): \(error.localizedDescription)", level: .warn)
@@ -2579,7 +2593,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             var fixed: Bool? = nil
             var fixError: String? = nil
             if fix {
-                do { try run("/usr/sbin/chown", args: ["-R", "\(username):\(username)", openclawDir]); fixed = true }
+                do { try run("/usr/sbin/chown", args: ["-R", username, openclawDir]); fixed = true }
                 catch { fixed = false; fixError = error.localizedDescription }
             }
             findings.append(HealthFinding(
@@ -2614,7 +2628,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             var fixed: Bool? = nil
             var fixError: String? = nil
             if fix {
-                do { try run("/usr/sbin/chown", args: ["-R", "\(username):\(username)", npmGlobal]); fixed = true }
+                do { try run("/usr/sbin/chown", args: ["-R", username, npmGlobal]); fixed = true }
                 catch { fixed = false; fixError = error.localizedDescription }
             }
             findings.append(HealthFinding(

@@ -15,6 +15,23 @@ Website: [clawdhome.app](https://clawdhome.app)
 Downloads: [GitHub Releases](https://github.com/ThinkInAIXYZ/clawdhome/releases)  
 Changelog: [English](CHANGELOG.en.md) | [中文](CHANGELOG.zh.md)
 
+## Community Groups
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/assets/readme/feishu-group.png" alt="Feishu Group QR Code" width="220" />
+      <br />
+      Feishu Group
+    </td>
+    <td align="center">
+      <img src="docs/assets/readme/wechat-group.png" alt="WeChat Group QR Code" width="220" />
+      <br />
+      WeChat Group
+    </td>
+  </tr>
+</table>
+
 ## Screenshots
 
 <table>

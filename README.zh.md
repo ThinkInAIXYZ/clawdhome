@@ -15,6 +15,23 @@ ClawdHome 适合那些希望在一台机器上托管多只 OpenClaw “虾”，
 下载：[GitHub Releases](https://github.com/ThinkInAIXYZ/clawdhome/releases)  
 更新记录：[中文](CHANGELOG.zh.md) | [English](CHANGELOG.en.md)
 
+## 社区群
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/assets/readme/feishu-group.png" alt="飞书群二维码" width="220" />
+      <br />
+      飞书群
+    </td>
+    <td align="center">
+      <img src="docs/assets/readme/wechat-group.png" alt="微信群二维码" width="220" />
+      <br />
+      微信群
+    </td>
+  </tr>
+</table>
+
 ## 界面预览
 
 <table>

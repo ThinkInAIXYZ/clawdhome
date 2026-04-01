@@ -1207,6 +1207,7 @@ struct UserInitWizardView: View {
                     iconColor: .orange,
                     title: "我的画像",
                     subtitle: "USER",
+                    initiallyExpanded: true,
                     text: $roleUser
                 )
             }
@@ -2061,6 +2062,8 @@ struct UserInitWizardView: View {
             return
         }
 
+        await checkAndApplyProxySettingsForInit()
+
         if wizardConn == nil { wizardConn = WizardConnection() }
         guard let conn = wizardConn else { return }
 
@@ -2200,6 +2203,34 @@ struct UserInitWizardView: View {
         }
         await refreshXcodeEnvStatus()
         isInstallingXcodeCLT = false
+    }
+
+    private func checkAndApplyProxySettingsForInit() async {
+        appendLog("\n▶ 检查代理配置\n")
+
+        let defaults = UserDefaults.standard
+        let enabled = defaults.bool(forKey: "proxyEnabled")
+        guard enabled else {
+            appendLog("✓ 代理未启用：将使用直连网络\n")
+            return
+        }
+
+        let scheme = (defaults.string(forKey: "proxyScheme") ?? "http").trimmingCharacters(in: .whitespacesAndNewlines)
+        let host = (defaults.string(forKey: "proxyHost") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let port = (defaults.string(forKey: "proxyPort") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !host.isEmpty, Int(port) != nil else {
+            appendLog("⚠️ 代理已启用，但 host/port 配置不完整：将跳过代理注入（不影响初始化继续）\n")
+            return
+        }
+
+        appendLog("✓ 代理已启用：\(scheme)://\(host):\(port)\n")
+        do {
+            try await helperClient.applySavedProxySettingsIfAny(username: user.username)
+            appendLog("✓ 已同步代理配置到当前虾环境\n")
+        } catch {
+            appendLog("⚠️ 代理配置同步失败（不影响初始化继续）：\(error.localizedDescription)\n")
+        }
     }
 
     private func acceptXcodeLicenseFromWizard() async {
