@@ -18,6 +18,8 @@ final class ShrimpPool {
     private(set) var snapshotVersion: Int = 0
     /// 用户加载错误
     private(set) var loadError: String? = nil
+    /// 虾列表首次加载是否已结束（成功或失败）
+    private(set) var didFinishInitialUserLoad: Bool = false
     /// 机器指标历史（最多保留 300 秒）— 跨视图切换持久化
     private(set) var machineHistory: [MachineStats] = []
     /// 网络速率历史（最多保留 300 秒）— 跨视图切换持久化
@@ -111,6 +113,7 @@ final class ShrimpPool {
             } catch {
                 loadError = error.localizedDescription
             }
+            didFinishInitialUserLoad = true
         }
     }
 

@@ -5,6 +5,63 @@ import Darwin
 import AppKit
 import SwiftUI
 
+private enum UserEntryWindowTarget: String {
+    case detail = "claw-detail"
+    case initWizard = "user-init-wizard"
+}
+
+private enum UserEntryWindowResolver {
+    static func resolve(
+        user: ManagedUser,
+        helperClient: HelperClient,
+        readiness: GatewayReadiness?,
+        hasForcedOnboarding: Bool
+    ) async -> UserEntryWindowTarget {
+        guard !user.isAdmin, user.clawType == .macosUser else {
+            return .detail
+        }
+
+        if hasForcedOnboarding || user.initStep != nil {
+            return .initWizard
+        }
+
+        guard helperClient.isConnected else {
+            return .detail
+        }
+
+        async let versionResult = helperClient.getOpenclawVersion(username: user.username)
+        async let stateJSONResult = helperClient.loadInitState(username: user.username)
+
+        let hasInstalledOpenClaw = await versionResult != nil
+        let isGatewayOperational = user.isRunning || readiness == .starting || readiness == .ready
+        let state = InitWizardState.from(json: await stateJSONResult)
+
+        let hasUnfinishedWizardState = state.map { !$0.isCompleted } ?? false
+        let hasRecoverableWizardProgress = state.map { state in
+            guard !state.isCompleted else { return false }
+
+            if state.active {
+                return true
+            }
+
+            return InitStep.allCases.contains { step in
+                let raw = state.steps[step.key] ?? state.steps[step.title] ?? "pending"
+                return raw != "pending"
+            }
+        } ?? false
+
+        return shouldOpenUserInitWizardFromEntry(
+            hasForcedOnboarding: hasForcedOnboarding,
+            hasUnfinishedWizardState: hasUnfinishedWizardState,
+            hasRecoverableWizardProgress: hasRecoverableWizardProgress,
+            hasInstalledOpenClaw: hasInstalledOpenClaw,
+            isGatewayOperational: isGatewayOperational,
+            isAdmin: user.isAdmin,
+            isMacOSUser: user.clawType == .macosUser
+        ) ? .initWizard : .detail
+    }
+}
+
 struct ClawPoolView: View {
     var onLoadUsers: () -> Void = {}
     var onGoToRoleMarket: () -> Void = {}
@@ -19,6 +76,7 @@ struct ClawPoolView: View {
     @State private var isCreatingUser = false
     @AppStorage("clawPoolIsCardView") private var isCardView = true
     @AppStorage("clawPoolShowCurrentAdmin") private var showCurrentAdmin = false
+    @AppStorage("debugForceEmptyClawPool") private var debugForceEmptyClawPool = false
     @Environment(\.openWindow) private var openWindow
 
     // MARK: 右键菜单 — 快速操作
@@ -37,10 +95,17 @@ struct ClawPoolView: View {
     @State private var pendingFlashFreezeClawID: ManagedUser.ID?
     @State private var quickTransferAlertMessage: String?
     @State private var quickTransferClipboardText = ""
+    @State private var windowOpenInFlightUsernames: Set<String> = []
+    @State private var lastWindowOpenAtByUsername: [String: Date] = [:]
     private var currentUsername: String { NSUserName() }
     /// 默认仅展示标准用户；可在设置中显式开启当前管理员展示。
     private var displayedUsers: [ManagedUser] {
-        pool.users.filter {
+        #if DEBUG
+        if debugForceEmptyClawPool {
+            return []
+        }
+        #endif
+        return pool.users.filter {
             ClawPoolVisibilityPolicy.shouldShowUser(
                 username: $0.username,
                 isAdmin: $0.isAdmin,
@@ -53,6 +118,24 @@ struct ClawPoolView: View {
     private var selectedUser: ManagedUser? {
         guard let id = selectedClaw else { return nil }
         return displayedUsers.first { $0.id == id }
+    }
+
+    private func visibleProfileDescription(for claw: ManagedUser) -> String? {
+        let description = claw.profileDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !description.isEmpty else { return nil }
+
+        let fullName = claw.fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !fullName.isEmpty, description.caseInsensitiveCompare(fullName) == .orderedSame {
+            return nil
+        }
+
+        if description.caseInsensitiveCompare(claw.username) == .orderedSame {
+            return nil
+        }
+        if description.caseInsensitiveCompare("@\(claw.username)") == .orderedSame {
+            return nil
+        }
+        return description
     }
 
     @ViewBuilder
@@ -100,13 +183,19 @@ struct ClawPoolView: View {
     // 主体内容（拆出来避免 body 类型检查超时）
     private var baseContent: some View {
         Group {
-            if isCardView { cardContent } else { tableContent }
+            if pool.didFinishInitialUserLoad && displayedUsers.isEmpty {
+                emptyStateContent
+            } else if isCardView {
+                cardContent
+            } else {
+                tableContent
+            }
         }
         // 点击行/卡片时打开独立详情窗口（同一用户已开则置前）
         .onChange(of: selectedClaw) { _, newValue in
             guard let id = newValue,
                   let claw = displayedUsers.first(where: { $0.id == id }) else { return }
-            openWindow(id: "claw-detail", value: claw.username)
+            openPreferredWindow(for: claw)
             // 短暂延迟后取消选中，避免行持续高亮
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(200))
@@ -184,9 +273,7 @@ struct ClawPoolView: View {
                     let trimmedDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
                     pool.setDescription(trimmedDescription, for: normalized.username)
                     pool.markNeedsOnboarding(username: normalized.username)
-                    // 新用户创建后立即打开详情窗口，稳定进入初始化向导；
-                    // 不依赖异步 loadUsers 完成后的选中态时序。
-                    openWindow(id: "claw-detail", value: normalized.username)
+                    openWindow(id: "user-init-wizard", value: normalized.username)
                 }
             )
         }
@@ -238,6 +325,25 @@ struct ClawPoolView: View {
             }
         } message: {
             Text(quickTransferAlertMessage ?? "")
+        }
+    }
+
+    private var emptyStateContent: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(nsColor: .windowBackgroundColor),
+                    Color.accentColor.opacity(0.025)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            ClawPoolEmptyStateCard {
+                onGoToRoleMarket()
+            }
+            .padding(32)
         }
     }
 
@@ -349,7 +455,7 @@ struct ClawPoolView: View {
     @ViewBuilder
     private func sessionMenuItems(for claw: ManagedUser) -> some View {
         Button {
-            openWindow(id: "claw-detail", value: claw.username)
+            openPreferredWindow(for: claw)
         } label: { Label(L10n.k("views.user_list_view.open", fallback: "在新窗口打开"), systemImage: "macwindow.on.rectangle") }
 
         Button { openTerminal(for: claw) } label: {
@@ -419,8 +525,8 @@ struct ClawPoolView: View {
                                 .background(Color.accentColor.opacity(0.85), in: Capsule())
                         }
                     }
-                    if !claw.profileDescription.isEmpty {
-                        Text(claw.profileDescription)
+                    if let profileDescription = visibleProfileDescription(for: claw) {
+                        Text(profileDescription)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -428,7 +534,7 @@ struct ClawPoolView: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) {
-                    openWindow(id: "claw-detail", value: claw.username)
+                    openPreferredWindow(for: claw)
                 }
             }
             .width(min: 100, ideal: 140)
@@ -551,10 +657,9 @@ struct ClawPoolView: View {
                         claw: claw,
                         isSelected: false
                     ) {
-                        // 单击直接开详情窗口
-                        openWindow(id: "claw-detail", value: claw.username)
+                        openPreferredWindow(for: claw)
                     } onDoubleClick: {
-                        openWindow(id: "claw-detail", value: claw.username)
+                        openPreferredWindow(for: claw)
                     } onOpenWebUI: {
                         Task { await openWebUI(for: claw) }
                     } onTerminal: {
@@ -581,6 +686,35 @@ struct ClawPoolView: View {
             quickTransferClipboardText = result.clipboardText
             QuickFileTransferService.copyToPasteboard(result.clipboardText)
             quickTransferAlertMessage = result.summaryMessage
+        }
+    }
+
+    private func openPreferredWindow(for claw: ManagedUser) {
+        let usernameKey = claw.username.lowercased()
+        let now = Date()
+        if windowOpenInFlightUsernames.contains(usernameKey) {
+            return
+        }
+        if let lastOpenedAt = lastWindowOpenAtByUsername[usernameKey],
+           now.timeIntervalSince(lastOpenedAt) < 0.6 {
+            return
+        }
+
+        windowOpenInFlightUsernames.insert(usernameKey)
+        lastWindowOpenAtByUsername[usernameKey] = now
+        let hasForcedOnboarding = pool.consumeNeedsOnboarding(username: claw.username)
+        Task { @MainActor in
+            defer {
+                windowOpenInFlightUsernames.remove(usernameKey)
+                lastWindowOpenAtByUsername[usernameKey] = Date()
+            }
+            let target = await UserEntryWindowResolver.resolve(
+                user: claw,
+                helperClient: helperClient,
+                readiness: gatewayHub.readinessMap[claw.username],
+                hasForcedOnboarding: hasForcedOnboarding
+            )
+            openWindow(id: target.rawValue, value: claw.username)
         }
     }
 
@@ -1081,8 +1215,8 @@ private struct ClawCard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    if !claw.profileDescription.isEmpty {
-                        Text(claw.profileDescription)
+                    if let profileDescription = visibleProfileDescription {
+                        Text(profileDescription)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -1239,6 +1373,23 @@ private struct ClawCard: View {
         }
     }
 
+    private var visibleProfileDescription: String? {
+        let description = claw.profileDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !description.isEmpty else { return nil }
+
+        let fullName = claw.fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !fullName.isEmpty, description.caseInsensitiveCompare(fullName) == .orderedSame {
+            return nil
+        }
+        if description.caseInsensitiveCompare(claw.username) == .orderedSame {
+            return nil
+        }
+        if description.caseInsensitiveCompare("@\(claw.username)") == .orderedSame {
+            return nil
+        }
+        return description
+    }
+
     private func freezeColor(_ mode: FreezeMode) -> Color {
         switch mode {
         case .pause: .blue
@@ -1298,6 +1449,76 @@ private struct AddClawCard: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+    }
+}
+
+private struct ClawPoolEmptyStateCard: View {
+    let onGoToRoleMarket: () -> Void
+
+    var body: some View {
+        VStack(spacing: 28) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.98),
+                                Color.accentColor.opacity(0.08)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(0.9), lineWidth: 1)
+                    )
+                    .shadow(color: Color.accentColor.opacity(0.10), radius: 28, x: 0, y: 14)
+                    .frame(width: 160, height: 160)
+
+                Text("🦞")
+                    .font(.system(size: 68))
+            }
+
+            VStack(spacing: 12) {
+                Text(L10n.k("views.user_list_view.empty.title", fallback: "池塘空空如也"))
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(.primary)
+
+                Text(L10n.k("views.user_list_view.empty.subtitle", fallback: "在这里，你可以养育并管理拥有不同技能的数字生命。\n立刻领养你的第一只虾，开启自动化之旅。"))
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+            }
+
+            Button(action: onGoToRoleMarket) {
+                HStack(spacing: 10) {
+                    Text(L10n.k("views.user_list_view.empty.cta", fallback: "前往角色中心领养"))
+                        .font(.system(size: 18, weight: .semibold))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 16, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 18)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color.accentColor,
+                            Color.accentColor.opacity(0.92)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .shadow(color: Color.accentColor.opacity(0.22), radius: 18, x: 0, y: 10)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
