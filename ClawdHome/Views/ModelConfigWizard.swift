@@ -287,6 +287,45 @@ struct ModelAddSheet: View {
     @Environment(HelperClient.self) private var helperClient
 
     enum Step { case selectModel, providerSetup, executing, result }
+    enum CustomCompatibility: String, CaseIterable, Identifiable {
+        case openai
+        case anthropic
+
+        var id: String { rawValue }
+        var apiType: String {
+            switch self {
+            case .openai: return "openai-completions"
+            case .anthropic: return "anthropic-messages"
+            }
+        }
+
+        var displayName: String {
+            switch self {
+            case .openai: return "OpenAI"
+            case .anthropic: return "Anthropic"
+            }
+        }
+    }
+
+    enum CustomAuthChoice: String, CaseIterable, Identifiable {
+        case customAPIKey
+        case secretReference
+
+        var id: String { rawValue }
+        var displayName: String {
+            switch self {
+            case .customAPIKey: return "粘贴 API Key"
+            case .secretReference: return "使用 Secret Reference"
+            }
+        }
+    }
+
+    struct CustomProviderConfigInput {
+        var baseUrl: String
+        var modelId: String
+        var providerId: String?
+        var compatibility: CustomCompatibility
+    }
 
     @State private var step: Step = .selectModel
 
@@ -294,15 +333,22 @@ struct ModelAddSheet: View {
     @State private var filter = ""
     @State private var selectedModel = ""
     @State private var useCustom = false
-    @State private var customModel = ""
+    @State private var customProviderId = ""
+    @State private var customModelId = ""
+    @State private var customBaseURL = ""
+    @State private var customCompatibility: CustomCompatibility = .openai
+    @State private var customProviderInput = CustomProviderConfigInput(baseUrl: "", modelId: "", providerId: nil, compatibility: .openai)
 
     // Step 2: Provider
     @State private var providerConfig: ProviderKeyConfig? = nil
     @State private var apiKeyInput = ""
+    @State private var secretReferenceInput = ""
+    @State private var customAuthChoice: CustomAuthChoice = .customAPIKey
     @State private var sideValues: [String: String] = [:]  // sideConfig key → value
     @State private var providerReady = false  // API key already configured
     @State private var isCheckingProvider = false
     @State private var isCustomProvider = false  // 未知 provider → OpenAI 兼容模式
+    @State private var providerErrorMsg = ""
 
     // Step 3: Executing
     @State private var commands: [CommandRun] = []
@@ -311,8 +357,25 @@ struct ModelAddSheet: View {
     // Step 4: Result
     @State private var allSuccess = true
 
+    private var resolvedCustomProviderId: String {
+        customProviderId.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var effectiveCustomProviderId: String {
+        let v = resolvedCustomProviderId
+        return v.isEmpty ? "custom" : v
+    }
+
+    private var resolvedCustomModelId: String {
+        customModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var chosenModel: String {
-        useCustom ? customModel.trimmingCharacters(in: .whitespaces) : selectedModel
+        if useCustom {
+            guard !resolvedCustomModelId.isEmpty else { return "" }
+            return "\(effectiveCustomProviderId)/\(resolvedCustomModelId)"
+        }
+        return selectedModel
     }
 
     private var activeModelGroups: [ModelGroup] {
@@ -370,9 +433,14 @@ struct ModelAddSheet: View {
     private var selectModelView: some View {
         HStack(spacing: 8) {
             if useCustom {
-                TextField("provider/model-id", text: $customModel)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField(L10n.k("wizard.model_config.custom_provider_id_placeholder", fallback: "providerId (可选 custom-provider-id)"), text: $customProviderId)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                    TextField("modelId (custom-model-id)", text: $customModelId)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                }
             } else {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField(L10n.k("auto.model_config_wizard.searchmodels", fallback: "搜索模型…"), text: $filter)
@@ -385,7 +453,7 @@ struct ModelAddSheet: View {
             }
             Button(useCustom ? L10n.k("auto.model_config_wizard.choose_from_list", fallback: "从清单选") : L10n.k("auto.model_config_wizard.input", fallback: "手动输入")) {
                 useCustom.toggle()
-                filter = ""; customModel = ""; selectedModel = ""
+                filter = ""; selectedModel = ""
             }
             .buttonStyle(.bordered).font(.caption)
         }
@@ -410,7 +478,7 @@ struct ModelAddSheet: View {
                 Task { await checkProvider() }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(chosenModel.isEmpty || (useCustom && !chosenModel.contains("/")))
+            .disabled(chosenModel.isEmpty)
         }
     }
 
@@ -427,6 +495,8 @@ struct ModelAddSheet: View {
                 guidanceExample("ollama/qwen3:32b", note: L10n.k("auto.model_config_wizard.local_ollama", fallback: "本地 Ollama"))
             }
             Text(L10n.k("auto.model_config_wizard.unknown_provider_openai_configuration_base_url_api_key", fallback: "未知 provider 将进入 OpenAI 兼容配置，需填写 Base URL 和 API Key。"))
+                .font(.caption2).foregroundStyle(.tertiary)
+            Text(L10n.k("wizard.model_config.custom_compatibility_hint", fallback: "自定义支持 `openai` / `anthropic` 兼容类型；默认 `openai`。"))
                 .font(.caption2).foregroundStyle(.tertiary)
         }
         .padding(10)
@@ -545,10 +615,39 @@ struct ModelAddSheet: View {
                 .font(.subheadline).fontWeight(.semibold)
                 .foregroundStyle(.secondary)
 
+            if !providerErrorMsg.isEmpty {
+                Text(providerErrorMsg)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
             if providerReady && isCustomProvider {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
                     Text(L10n.k("auto.model_config_wizard.configuration_configuration", fallback: "已配置，可直接添加或修改配置后添加")).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            if isCustomProvider {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("compatibility")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Picker("compatibility", selection: $customCompatibility) {
+                        ForEach(CustomCompatibility.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("auth-choice")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Picker("auth-choice", selection: $customAuthChoice) {
+                        ForEach(CustomAuthChoice.allCases) { choice in
+                            Text(choice.displayName).tag(choice)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
             }
 
@@ -569,17 +668,39 @@ struct ModelAddSheet: View {
             }
 
             // API Key / URL
-            VStack(alignment: .leading, spacing: 4) {
-                Text(config.inputLabel)
-                    .font(.caption).foregroundStyle(.secondary)
-                if config.isUrlConfig {
-                    TextField(config.placeholder, text: $apiKeyInput)
+            if isCustomProvider && customAuthChoice == .secretReference {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Secret Reference")
+                        .font(.caption).foregroundStyle(.secondary)
+                    TextField(L10n.k("wizard.model_config.secret_reference_placeholder", fallback: "env:MY_API_KEY 或 provider:accountName"), text: $secretReferenceInput)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
-                } else {
-                    SecureField(config.placeholder, text: $apiKeyInput)
-                        .textFieldStyle(.roundedBorder)
+                    Text(L10n.k("wizard.model_config.secret_reference_hint", fallback: "支持 `env:VAR` / `${VAR}` / `provider:accountName`。应用前会做预检查。"))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(config.inputLabel)
+                        .font(.caption).foregroundStyle(.secondary)
+                    if config.isUrlConfig {
+                        TextField(config.placeholder, text: $apiKeyInput)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                    } else {
+                        SecureField(config.placeholder, text: $apiKeyInput)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                }
+            }
+
+            if isCustomProvider {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("custom-provider-id: \(effectiveCustomProviderId)")
+                    Text("custom-model-id: \(resolvedCustomModelId)")
+                }
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.tertiary)
             }
         }
 
@@ -597,15 +718,23 @@ struct ModelAddSheet: View {
             if providerReady && isCustomProvider {
                 // Custom provider already configured — can skip or update
                 Button(L10n.k("auto.model_config_wizard.add_directly", fallback: "直接添加")) {
+                    providerErrorMsg = ""
                     buildAndExecute(providerCommands: [])
                 }
                 .buttonStyle(.bordered)
             }
             Button(L10n.k("auto.model_config_wizard.configuration", fallback: "应用配置")) {
-                // 所有 provider 字段合并为单条 JSON-object 命令
-                // 分字段写入会因 provider 对象不完整而导致 Zod 验证失败
-                let provCmds = providerConfig.map { buildProviderJSONCommand(config: $0) } ?? []
-                buildAndExecute(providerCommands: provCmds)
+                Task {
+                    providerErrorMsg = ""
+                    if let err = await validateCustomSecretReferenceIfNeeded() {
+                        providerErrorMsg = err
+                        return
+                    }
+                    // 所有 provider 字段合并为单条 JSON-object 命令
+                    // 分字段写入会因 provider 对象不完整而导致 Zod 验证失败
+                    let provCmds = providerConfig.map { buildProviderJSONCommand(config: $0) } ?? []
+                    buildAndExecute(providerCommands: provCmds)
+                }
             }
             .buttonStyle(.borderedProminent)
             .disabled(applyDisabled)
@@ -692,13 +821,58 @@ struct ModelAddSheet: View {
     private func checkProvider() async {
         isCheckingProvider = true
         isCustomProvider = false
+        providerErrorMsg = ""
         step = .providerSetup
         sideValues = [:]
+        apiKeyInput = ""
+        secretReferenceInput = ""
+        customAuthChoice = .customAPIKey
 
         let provider = chosenModel.components(separatedBy: "/").first ?? ""
         providerConfig = supportedProviderKeys.first { $0.id == provider }
 
-        if let config = providerConfig {
+        if useCustom {
+            isCustomProvider = true
+            let apiKeyPath = "models.providers.\(provider).apiKey"
+            let baseUrlPath = "models.providers.\(provider).baseUrl"
+            let apiPath = "models.providers.\(provider).api"
+
+            // Check existing values
+            let existingKey = await helperClient.getConfig(username: user.username, key: apiKeyPath)
+            let existingUrl = await helperClient.getConfig(username: user.username, key: baseUrlPath)
+            let existingApi = await helperClient.getConfig(username: user.username, key: apiPath)
+            let hasKey = existingKey != nil && !existingKey!.isEmpty
+            let hasUrl = existingUrl != nil && !existingUrl!.isEmpty
+            providerReady = hasKey && hasUrl
+
+            if let existingApi {
+                customCompatibility = existingApi.contains("anthropic") ? .anthropic : .openai
+            }
+            customBaseURL = existingUrl ?? customBaseURL
+            if customBaseURL.isEmpty {
+                customBaseURL = "https://api.example.com/v1"
+            }
+            customProviderInput = CustomProviderConfigInput(
+                baseUrl: customBaseURL,
+                modelId: resolvedCustomModelId,
+                providerId: resolvedCustomProviderId.isEmpty ? nil : resolvedCustomProviderId,
+                compatibility: customCompatibility
+            )
+
+            providerConfig = ProviderKeyConfig(
+                id: provider,
+                displayName: "\(provider)（Custom）",
+                configPath: apiKeyPath,
+                placeholder: "sk-...",
+                isUrlConfig: false,
+                supportsOAuth: false,
+                sideConfigs: [
+                    (apiPath, .string(customCompatibility.apiType)),
+                    (baseUrlPath, .string(customBaseURL)),
+                ]
+            )
+            sideValues[baseUrlPath] = customBaseURL
+        } else if let config = providerConfig {
             // Known provider — check if already configured
             let existing = await helperClient.getConfig(
                 username: user.username,
@@ -814,10 +988,19 @@ struct ModelAddSheet: View {
         }
 
         // apiKey / URL（取 configPath 最后一个分量作为字段名）
-        let keyVal = apiKeyInput.trimmingCharacters(in: .whitespaces)
-        if !keyVal.isEmpty {
+        if isCustomProvider {
+            customProviderInput = CustomProviderConfigInput(
+                baseUrl: sideValues["models.providers.\(provider).baseUrl"] ?? customBaseURL,
+                modelId: resolvedCustomModelId,
+                providerId: resolvedCustomProviderId.isEmpty ? nil : resolvedCustomProviderId,
+                compatibility: customCompatibility
+            )
+            fields["api"] = customProviderInput.compatibility.apiType
+        }
+
+        if let keyValue = resolvedProviderSecretValue() {
             let fieldName = config.configPath.components(separatedBy: ".").last ?? "apiKey"
-            fields[fieldName] = keyVal
+            fields[fieldName] = keyValue
         }
 
         guard !fields.isEmpty else { return [] }
@@ -870,15 +1053,69 @@ struct ModelAddSheet: View {
     private var applyDisabled: Bool {
         let keyVal = apiKeyInput.trimmingCharacters(in: .whitespaces)
         if isCustomProvider {
-            // Custom provider: need at least baseUrl OR apiKey to be new
-            let hasNewKey = !keyVal.isEmpty
+            let hasNewKey = resolvedProviderSecretValue() != nil
             let hasBaseUrl = providerConfig?.sideConfigs.first(where: { $0.key.hasSuffix(".baseUrl") }).map { side in
                 let val = sideValues[side.key] ?? ""
                 return !val.trimmingCharacters(in: .whitespaces).isEmpty
             } ?? false
-            return !hasNewKey && !hasBaseUrl
+            return !hasBaseUrl || !hasNewKey
         }
         return keyVal.isEmpty
+    }
+
+    private func resolvedProviderSecretValue() -> String? {
+        if isCustomProvider && customAuthChoice == .secretReference {
+            let raw = secretReferenceInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty else { return nil }
+            if raw.hasPrefix("${"), raw.hasSuffix("}") {
+                return raw
+            }
+            if raw.hasPrefix("env:") {
+                let envName = String(raw.dropFirst(4))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !envName.isEmpty else { return nil }
+                return "${\(envName)}"
+            }
+            return raw
+        }
+
+        let keyVal = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        return keyVal.isEmpty ? nil : keyVal
+    }
+
+    private func validateCustomSecretReferenceIfNeeded() async -> String? {
+        guard isCustomProvider, customAuthChoice == .secretReference else { return nil }
+        let raw = secretReferenceInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.isEmpty {
+            return "Secret Reference 不能为空。"
+        }
+        if raw.hasPrefix("${"), raw.hasSuffix("}") {
+            let envName = String(raw.dropFirst(2).dropLast())
+            guard !envName.isEmpty else { return "环境变量引用格式错误。示例：${CUSTOM_API_KEY}" }
+            let existing = await helperClient.getConfig(username: user.username, key: "env.\(envName)")
+            if existing == nil || existing?.isEmpty == true {
+                return "环境变量 \(envName) 未配置（预检失败）。"
+            }
+            return nil
+        }
+        if raw.hasPrefix("env:") {
+            let envName = String(raw.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !envName.isEmpty else { return "env 引用格式错误。示例：env:CUSTOM_API_KEY" }
+            let existing = await helperClient.getConfig(username: user.username, key: "env.\(envName)")
+            if existing == nil || existing?.isEmpty == true {
+                return "环境变量 \(envName) 未配置（预检失败）。"
+            }
+            return nil
+        }
+
+        if raw.contains(":") {
+            if !GlobalSecretsStore.shared.has(secretKey: raw) {
+                return "provider ref \(raw) 不存在于全局 secrets（预检失败）。"
+            }
+            return nil
+        }
+
+        return "Secret Reference 格式不支持。请使用 env:VAR / ${VAR} / provider:account。"
     }
 }
 

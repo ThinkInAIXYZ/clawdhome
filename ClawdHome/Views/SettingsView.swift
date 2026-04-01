@@ -37,6 +37,7 @@ private struct GeneralSettingsTab: View {
     @Environment(HelperClient.self) private var helperClient
     @Environment(ShrimpPool.self) private var pool
     @State private var gatewayAutostart = true
+    @State private var showGatewayActivationPreview = false
     @AppStorage("clawPoolShowCurrentAdmin") private var showCurrentAdminInPool = false
     @AppStorage("appLanguage") private var appLanguageRaw = AppLanguage.system.rawValue
     @AppStorage("proxyEnabled") private var proxyEnabled = false
@@ -46,6 +47,7 @@ private struct GeneralSettingsTab: View {
     @AppStorage("proxyUsername") private var proxyUsername = ""
     @AppStorage("proxyPassword") private var proxyPassword = ""
     @AppStorage("proxyNoProxy") private var proxyNoProxy = "localhost,127.0.0.1"
+    @AppStorage("debugForceEmptyClawPool") private var debugForceEmptyClawPool = false
     @State private var isApplyingProxy = false
     @State private var proxyMessage: String? = nil
     @State private var proxyError: String? = nil
@@ -209,14 +211,32 @@ private struct GeneralSettingsTab: View {
                 }
             }
 
-            AppLockSection()
+            #if DEBUG
+            Section(L10n.k("settings.debug.section", fallback: "调试")) {
+                Toggle(L10n.k("settings.debug.force_empty_pool", fallback: "强制显示空虾塘"), isOn: $debugForceEmptyClawPool)
+                Text(L10n.k("settings.debug.force_empty_pool_hint", fallback: "仅影响当前 App 的虾塘展示，用于预览空状态，不会删除或修改任何真实虾数据。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-            Section(L10n.k("views.settings_view.about", fallback: "关于")) {
-                LabeledContent(L10n.k("views.settings_view.text_fe2df04a", fallback: "版本"), value: "ClawdHome 1.0")
-                LabeledContent("Helper", value: "/Library/PrivilegedHelperTools/ai.clawdhome.mac.helper")
+                Button(L10n.k("settings.debug.preview_gateway_activation", fallback: "预览 Gateway 启动页")) {
+                    showGatewayActivationPreview = true
+                }
+                .buttonStyle(.bordered)
+
+                Text(L10n.k("settings.debug.preview_gateway_activation_hint", fallback: "打开独立预览窗口查看“正在启动 OpenClaw Gateway…”动画，不会触发真实启动。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+            #endif
+
+            AppLockSection()
         }
         .formStyle(.grouped)
+#if DEBUG
+        .sheet(isPresented: $showGatewayActivationPreview) {
+            DebugGatewayActivationPreviewSheet()
+        }
+#endif
         .task {
             if helperClient.isConnected {
                 gatewayAutostart = await helperClient.getGatewayAutostart()
@@ -320,6 +340,65 @@ private struct GeneralSettingsTab: View {
         }
     }
 }
+
+#if DEBUG
+private struct DebugGatewayActivationPreviewSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var activationProgress: Double = 0.12
+    @State private var activationShrimpLifted = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(L10n.k("settings.debug.gateway_preview_title", fallback: "Gateway 启动页预览"))
+                    .font(.headline)
+                Spacer()
+                Button(L10n.k("auto.model_config_wizard.close", fallback: "关闭")) { dismiss() }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+
+            Divider()
+
+            VStack(spacing: 24) {
+                GatewayActivationCard(
+                    progress: activationProgress,
+                    isAnimating: true,
+                    isShrimpLifted: activationShrimpLifted
+                )
+
+                HStack(spacing: 12) {
+                    Button(L10n.k("settings.debug.replay", fallback: "重新播放")) {
+                        activationProgress = 0.12
+                    }
+                    .buttonStyle(.bordered)
+
+                    Spacer()
+
+                    Text(L10n.k("settings.debug.preview_warning", fallback: "DEBUG 预览，不会启动真实 Gateway"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(24)
+        }
+        .frame(width: 620, height: 560)
+        .task {
+            withAnimation(.easeInOut(duration: 1.3).repeatForever(autoreverses: true)) {
+                activationShrimpLifted = true
+            }
+
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(220))
+                activationProgress += 0.03
+                if activationProgress >= 0.92 {
+                    activationProgress = 0.12
+                }
+            }
+        }
+    }
+}
+#endif
 
 // MARK: - App 锁定设置区
 
