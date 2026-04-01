@@ -21,7 +21,7 @@ struct ContentView: View {
     @Environment(UpdateChecker.self) private var updater
     @Environment(AppLockStore.self) private var lockStore
     @State private var daemonInstaller = DaemonInstaller()
-    @State private var navSelection: NavDestination? = .dashboard
+    @State private var navSelection: NavDestination? = .clawPool
     var body: some View {
         VStack(spacing: 0) {
             // Helper 未连接时显示安装引导横幅
@@ -97,24 +97,6 @@ struct ContentView: View {
                     }
                 }
                 .toolbar {
-                    let upgradeCount = updater.upgradableCount(in: pool.users)
-                    if upgradeCount > 0 {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button { navSelection = .clawPool } label: {
-                                Label(L10n.f("content_view.text_312c16ea", fallback: "可升级 (%@)", String(describing: upgradeCount)),
-                                      systemImage: "arrow.up.circle.fill")
-                                    .foregroundStyle(.blue)
-                            }
-                            .help(
-                                L10n.f(
-                                    "content_view.upgrade_help",
-                                    fallback: "有 %@ 只虾可升级到 v%@",
-                                    String(describing: upgradeCount),
-                                    updater.latestVersion ?? ""
-                                )
-                            )
-                        }
-                    }
                     if lockStore.isEnabled {
                         ToolbarItem(placement: .primaryAction) {
                             Button { lockStore.lock() } label: {
