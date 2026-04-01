@@ -72,6 +72,17 @@ struct UpgradeConfirmSheet: View {
                 Text(L10n.k("auto.upgrade_confirm_sheet.upgrade_gateway_stop", fallback: "升级期间 Gateway 将暂时停止。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.caption)
+                        .padding(.top, 1)
+                    Text(L10n.k("auto.upgrade_confirm_sheet.wait_and_watch_warning", fallback: "风险提示：不要盲目升级新版本，建议先观望几天，确认社区反馈稳定后再升级。"))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
