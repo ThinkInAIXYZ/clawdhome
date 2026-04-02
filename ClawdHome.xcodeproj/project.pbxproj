@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -48,7 +48,6 @@
 		46AE452761C8D472CAEA4D2D /* LocalAIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */; };
 		4853C793D4CFACBA2205144A /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5177F3CC658EC613A8D76CF1 /* UpdateChecker.swift */; };
 		4853C794D4CFACBA2205144A /* UpdateCheckPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5177F3CD658EC613A8D76CF1 /* UpdateCheckPolicy.swift */; };
-		4983179D8FF13E438DED0FEE /* OpenDirectory.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 05980B1012E839BAA33AD8CE /* OpenDirectory.framework */; };
 		4AFD7B4DF92B2A3466717D5E /* GatewayHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1CD2C5DBEEFC059991B495 /* GatewayHub.swift */; };
 		4D9977D09130B0CC18E9FEAF /* HelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 467287AC8BE705E07CE3C366 /* HelperProtocol.swift */; };
 		4FCD2C3BFF60D4569A0E7DD0 /* AddUserSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A4D0168443D77B00A4092E7 /* AddUserSheet.swift */; };
@@ -90,7 +89,6 @@
 		A17E7AB99A51E1819E434548 /* FormatUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C86690A71173471BC77C57 /* FormatUtils.swift */; };
 		A19DC0FB0FB2383088C47E80 /* UserFilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A623F9F0DFBC22F900B5ACED /* UserFilesView.swift */; };
 		A3581A320A78854BFF6B234D /* ModelPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E294E274D560257BC77114C /* ModelPickerSheet.swift */; };
-		A6188B820368B96D0C17F1F6 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C8CA7E043030EBA6AECA81CC /* SystemConfiguration.framework */; };
 		A74D7C244C8DC0ECFAE9A55B /* HealthCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CB22903A652976B892FA384 /* HealthCheck.swift */; };
 		A78B8054BE8C76489EEBCA77 /* AppUpdateBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94D002A8E22C08FDDD74BE18 /* AppUpdateBanner.swift */; };
 		A8BE1B4D2DCDE54C8F63CBF2 /* ClawdHomeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AF76BC505A9925D08297CB1 /* ClawdHomeApp.swift */; };
@@ -126,7 +124,6 @@
 		EFB354F72C60BB435A62D4B4 /* NetworkPolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54673332FA3CBD020381CD20 /* NetworkPolicyView.swift */; };
 		F7E5A9A08C640A5E7684F7B1 /* UserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */; };
 		FA4AA7F683A3E8C096CFCCC8 /* UserInitWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EE6965A7DA630D46B4F1B50 /* UserInitWizardView.swift */; };
-		FB35463F40D9D7B9C7166E4E /* OpenDirectory.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 05980B1012E839BAA33AD8CE /* OpenDirectory.framework */; };
 		FBCAA5C027073F120856AC08 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6474BB5EEF5B87B65666E978 /* NetworkModels.swift */; };
 		FD7FF04B316FD5DFE140F7E4 /* BackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E6E607472BCCB5C61A50EA /* BackupView.swift */; };
 		FEEE2C606A086D0D191F1200 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 5D7D1F12DB908202E9E91105 /* AppIcon.icns */; };
@@ -143,8 +140,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0067A9F11A4D5E6F708192A3 /* AppUpdateState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateState.swift; sourceTree = "<group>"; };
+		0067A9F21A4D5E6F708192A3 /* AppUpdateHeartbeatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateHeartbeatService.swift; sourceTree = "<group>"; };
 		0511A43DA0C20592D7181ABD /* RoleMarketView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoleMarketView.swift; sourceTree = "<group>"; };
-		05980B1012E839BAA33AD8CE /* OpenDirectory.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = OpenDirectory.framework; sourceTree = "<group>"; };
 		0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInitPresentationRouting.swift; sourceTree = "<group>"; };
 		0A5775BF93F05639CCBFCC06 /* UserDetailWindowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDetailWindowLayout.swift; sourceTree = "<group>"; };
 		0A5775C093F05639CCBFCC06 /* ManagedUserDisplayName.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedUserDisplayName.swift; sourceTree = "<group>"; };
@@ -182,8 +180,6 @@
 		4A4D0168443D77B00A4092E7 /* AddUserSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddUserSheet.swift; sourceTree = "<group>"; };
 		4B639FCB2D3020F3E95F7EFC /* AppLockStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockStore.swift; sourceTree = "<group>"; };
 		4E294E274D560257BC77114C /* ModelPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerSheet.swift; sourceTree = "<group>"; };
-		0067A9F11A4D5E6F708192A3 /* AppUpdateState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateState.swift; sourceTree = "<group>"; };
-		0067A9F21A4D5E6F708192A3 /* AppUpdateHeartbeatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateHeartbeatService.swift; sourceTree = "<group>"; };
 		502BBF84DE690AD43299985F /* ModelsStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsStatus.swift; sourceTree = "<group>"; };
 		50BF8C6365FBBA9CA2C07D90 /* ApplyCredentialSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplyCredentialSheet.swift; sourceTree = "<group>"; };
 		5177F3CC658EC613A8D76CF1 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
@@ -236,8 +232,7 @@
 		C1EAFFDC5338D0ACC3A06CDD /* CloneClawManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneClawManager.swift; sourceTree = "<group>"; };
 		C409AF7F1CC045A211F7F27E /* WizardConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardConnection.swift; sourceTree = "<group>"; };
 		C587B0EBFC1DB0062C0195FF /* VoiceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceProfile.swift; sourceTree = "<group>"; };
-		C5A39CB77EAD5FD2A03768D4 /* ClawdHomeHelper */ = {isa = PBXFileReference; includeInIndex = 0; path = ClawdHomeHelper; sourceTree = BUILT_PRODUCTS_DIR; };
-		C8CA7E043030EBA6AECA81CC /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = SystemConfiguration.framework; sourceTree = "<group>"; };
+		C5A39CB77EAD5FD2A03768D4 /* ClawdHomeHelper */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "compiled.mach-o.executable"; path = ClawdHomeHelper; sourceTree = BUILT_PRODUCTS_DIR; };
 		CAA3C56D1FE192B7799A3FDC /* GatewayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayManager.swift; sourceTree = "<group>"; };
 		CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedVersion.swift; sourceTree = "<group>"; };
 		D143389A65EDC5DC54EAADDA /* PortAllocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortAllocator.swift; sourceTree = "<group>"; };
@@ -265,8 +260,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A6188B820368B96D0C17F1F6 /* SystemConfiguration.framework in Frameworks */,
-				4983179D8FF13E438DED0FEE /* OpenDirectory.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -274,7 +267,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FB35463F40D9D7B9C7166E4E /* OpenDirectory.framework in Frameworks */,
 				8DF359DE93EFFFFA2E49695F /* Charts.framework in Frameworks */,
 				96C93E87A53551D90828E5D1 /* SwiftTerm in Frameworks */,
 			);
@@ -316,8 +308,6 @@
 			isa = PBXGroup;
 			children = (
 				2BD15AFBF24DE05D57194904 /* Charts.framework */,
-				05980B1012E839BAA33AD8CE /* OpenDirectory.framework */,
-				C8CA7E043030EBA6AECA81CC /* SystemConfiguration.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -594,7 +584,6 @@
 			packageReferences = (
 				74F355130984997690AD4FDF /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -676,7 +665,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "BUILD_NUM=$(git -C \"${SRCROOT}\" rev-list --count HEAD 2>/dev/null || echo 0)\nOUT=\"${SRCROOT}/ClawdHomeHelper/GeneratedVersion.swift\"\necho \"// Auto-generated — do not edit\" > \"$OUT\"\necho \"let kHelperVersion = \\\"1.1.${BUILD_NUM}\\\"\" >> \"$OUT\"\n";
+			shellScript = "BUILD_NUM=\"${CLAWDHOME_BUILD_NUMBER_OVERRIDE:-${CURRENT_PROJECT_VERSION:-}}\"\nif [ -z \"$BUILD_NUM\" ]; then\n  BUILD_NUM=$(git -C \"${SRCROOT}\" rev-list --count HEAD 2>/dev/null || echo 0)\nfi\nMARKETING_VER=\"${CLAWDHOME_MARKETING_VERSION_OVERRIDE:-${MARKETING_VERSION:-}}\"\nif [ -z \"$MARKETING_VER\" ]; then\n  MARKETING_VER=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleShortVersionString\" \"${SRCROOT}/ClawdHome/Info.plist\" 2>/dev/null || true)\nfi\nif [ -n \"$MARKETING_VER\" ] && [ -n \"$BUILD_NUM\" ]; then\n  HELPER_VER=\"${MARKETING_VER} (${BUILD_NUM})\"\nelif [ -n \"$MARKETING_VER\" ]; then\n  HELPER_VER=\"${MARKETING_VER}\"\nelse\n  HELPER_VER=\"${BUILD_NUM}\"\nfi\nOUT=\"${SRCROOT}/ClawdHomeHelper/GeneratedVersion.swift\"\necho \"// Auto-generated — do not edit\" > \"$OUT\"\necho \"let kHelperVersion = \\\"${HELPER_VER}\\\"\" >> \"$OUT\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
