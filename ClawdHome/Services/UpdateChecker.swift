@@ -38,6 +38,8 @@ final class UpdateChecker {
     /// 下载进度：nil=空闲，0.0–1.0=下载中，1.0=完成
     var appUpdateProgress: Double? = nil
     var appUpdateError: String? = nil
+    var appCheckError: String? = nil
+    var isCheckingAppUpdate: Bool = false
     /// 已下载字节数
     var appDownloadedBytes: Int64 = 0
     /// 文件总大小
@@ -150,6 +152,11 @@ final class UpdateChecker {
     }
 
     func checkApp() async {
+        guard !isCheckingAppUpdate else { return }
+        isCheckingAppUpdate = true
+        appCheckError = nil
+        defer { isCheckingAppUpdate = false }
+
         guard let url = URL(string: Self.appApiURL) else { return }
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
         req.setValue(buildUpdateUserAgent(), forHTTPHeaderField: "User-Agent")
@@ -171,7 +178,7 @@ final class UpdateChecker {
                 )
             )
         } catch {
-            // 网络错误静默失败，不影响主功能
+            appCheckError = error.localizedDescription
         }
     }
 
