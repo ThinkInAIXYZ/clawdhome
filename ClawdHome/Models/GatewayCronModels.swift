@@ -239,7 +239,7 @@ struct GatewayCronJob: Identifiable, Codable, Equatable {
 // MARK: - GatewayCronRunLogEntry
 
 struct GatewayCronRunLogEntry: Codable, Identifiable {
-    var id: String { "\(ts)-\(jobId)" }
+    var id: String { "\(ts)-\(jobId)-\(action)" }
 
     let ts: Int
     let jobId: String
@@ -269,7 +269,7 @@ struct GatewayCronAddParams {
     let wakeMode: String
     let payload: GatewayCronPayload
 
-    func toDict() throws -> [String: Any] {
+    func toDict() -> [String: Any] {
         var dict: [String: Any] = [
             "name": name,
             "schedule": schedule.toDict(),
