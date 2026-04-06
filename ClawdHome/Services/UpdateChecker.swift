@@ -438,7 +438,7 @@ final class UpdateChecker {
     }
 
     func upgradableCount(in users: [ManagedUser]) -> Int {
-        users.filter { !$0.isAdmin && needsUpdate($0.openclawVersion) }.count
+        users.filter { needsUpdate($0.openclawVersion) }.count
     }
 
     /// 逐段比较版本号（支持 "YYYY.M.DL10n.k("services.update_checker.text_ed4b80bf", fallback: " 和 ")1.0.180" 两种格式）
