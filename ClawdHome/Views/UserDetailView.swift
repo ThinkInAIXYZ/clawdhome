@@ -4587,8 +4587,7 @@ private struct ProcessColumnHeader: View {
             cpuCol(right: $widths.mem) { onSort(.cpu) }
             memCol(right: $widths.uptime) { onSort(.mem) }
             uptimeCol(right: $widths.ports) { onSort(.uptime) }
-            resizableText(L10n.k("user.detail.auto.port", fallback: "端口"), width: $widths.ports, min: 84, max: 360, rightWidth: $widths.purpose, rightMin: 96, rightMax: 420)
-            resizableText(L10n.k("user.detail.auto.description", fallback: "说明"), width: $widths.purpose, min: 96, max: 420)
+            resizableText(L10n.k("user.detail.auto.port", fallback: "端口"), width: $widths.ports, min: 84, max: 360)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -4711,6 +4710,7 @@ private struct ProcessRow: View {
             }
             .frame(width: widths.name, alignment: .leading)
             .padding(.horizontal, 4)
+            .help(proc.purposeDescription.isEmpty ? proc.cmdline : proc.purposeDescription)
 
             // Command — 弹性列，可选中，居中截断
             Text(proc.cmdline.isEmpty ? "—" : proc.cmdline)
@@ -4751,15 +4751,6 @@ private struct ProcessRow: View {
                 .frame(width: widths.ports, alignment: .leading)
                 .padding(.horizontal, 4)
 
-            // 进程说明
-            Text(proc.purposeDescription)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: widths.purpose, alignment: .leading)
-                .padding(.horizontal, 4)
-                .help(proc.purposeDescription)
         }
         .padding(.vertical, 2)
     }

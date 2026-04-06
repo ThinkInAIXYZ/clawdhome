@@ -44,7 +44,7 @@ enum UserDetailWindowLayout {
 
     static let defaultProcessColumns = ProcessTableColumnLayout(
         pid: 52,
-        name: 96,
+        name: 160,
         command: 160,
         cpu: 48,
         mem: 54,
