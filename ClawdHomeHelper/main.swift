@@ -390,6 +390,8 @@ private final class MaintenanceTerminalSession {
     private var lastResize: (cols: Int, rows: Int)?
     private(set) var exited = false
     private(set) var exitCode: Int32 = -1
+    /// 上次被 poll 的时间（用于自动清理空闲会话）
+    private(set) var lastPollTime = Date()
 
     private static func ensureNpxShimDirectory(username: String) throws -> String {
         let shimDir = "/tmp/clawdhome-maintenance-shims/\(username)"
@@ -516,6 +518,7 @@ private final class MaintenanceTerminalSession {
         lock.lock()
         defer { lock.unlock() }
 
+        lastPollTime = Date()
         let start = max(0, min(Int(fromOffset), outputBuffer.count))
         let slice = outputBuffer.subdata(in: start..<outputBuffer.count)
         let text = String(decoding: slice, as: UTF8.self)
@@ -585,9 +588,67 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
     private var runningCloneTargets: Set<String> = []
     private var cancelledCloneTargets: Set<String> = []
     private var cloneStatusByTarget: [String: String] = [:]
+    /// PTY 会话空闲超时（10 分钟无 poll 或进程已退出 60 秒后自动清理）
+    private var sessionCleanupTimer: DispatchSourceTimer?
+
+    override init() {
+        super.init()
+        startSessionCleanupTimer()
+    }
+
+    /// 定期清理空闲/已退出的 PTY 会话，防止 App 崩溃后内存泄漏
+    private func startSessionCleanupTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .background))
+        timer.schedule(deadline: .now() + 30, repeating: .seconds(30))
+        timer.setEventHandler { [weak self] in
+            self?.sweepStaleSessions()
+        }
+        sessionCleanupTimer = timer
+        timer.resume()
+    }
+
+    private func sweepStaleSessions() {
+        let now = Date()
+        let idleTimeout: TimeInterval = 600   // 10 分钟无 poll
+        let exitedTimeout: TimeInterval = 60  // 已退出 60 秒
+
+        maintenanceSessionLock.lock()
+        let snapshot = maintenanceSessions
+        maintenanceSessionLock.unlock()
+
+        var toRemove: [String] = []
+        for (id, session) in snapshot {
+            let idleSeconds = now.timeIntervalSince(session.lastPollTime)
+            if session.exited && idleSeconds > exitedTimeout {
+                toRemove.append(id)
+                helperLog("[maintenance] auto-cleanup exited session id=\(id) user=\(session.username) idle=\(Int(idleSeconds))s")
+            } else if !session.exited && idleSeconds > idleTimeout {
+                session.terminate()
+                toRemove.append(id)
+                helperLog("[maintenance] auto-cleanup idle session id=\(id) user=\(session.username) idle=\(Int(idleSeconds))s")
+            }
+        }
+
+        if !toRemove.isEmpty {
+            maintenanceSessionLock.lock()
+            for id in toRemove {
+                maintenanceSessions.removeValue(forKey: id)
+            }
+            maintenanceSessionLock.unlock()
+        }
+    }
 
     func getVersion(withReply reply: @escaping (String) -> Void) {
         reply(kHelperVersion)
+    }
+
+    func requestRestart(withReply reply: @escaping (Bool) -> Void) {
+        helperLog("[lifecycle] restart requested by app — exiting for launchd respawn", level: .warn)
+        reply(true)
+        // 延迟 0.5 秒退出，让 reply 有时间送达 App
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            exit(0)
+        }
     }
 
     // MARK: 用户管理
