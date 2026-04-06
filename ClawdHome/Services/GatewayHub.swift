@@ -61,6 +61,7 @@ final class GatewayHub {
                 await skills.start(client: connectedClient)
             }
         } catch {
+            appLog("GatewayHub connect(\(username)) failed: \(error.localizedDescription)", level: .error)
             connectedUsernames.remove(username)
         }
     }
@@ -101,6 +102,24 @@ final class GatewayHub {
         let store = GatewaySkillsStore()
         skillsStores[username] = store
         return store
+    }
+
+    // MARK: - View 层触发 Store 启动
+
+    /// View 出现或连接状态变化时调用，确保 CronStore 已与 client 关联
+    func ensureCronStarted(for username: String) async {
+        guard let client = clients[username] else { return }
+        let connected = await client.connected
+        guard connected else { return }
+        await cronStore(for: username).startIfNeeded(client: client)
+    }
+
+    /// View 出现或连接状态变化时调用，确保 SkillsStore 已与 client 关联
+    func ensureSkillsStarted(for username: String) async {
+        guard let client = clients[username] else { return }
+        let connected = await client.connected
+        guard connected else { return }
+        await skillsStore(for: username).startIfNeeded(client: client)
     }
 
     // MARK: - 配置读写
@@ -152,6 +171,19 @@ final class GatewayHub {
         } catch {
             return nil
         }
+    }
+
+    /// 读取完整配置快照 + baseHash
+    func configGetFull(username: String) async throws -> (config: [String: Any], baseHash: String) {
+        guard let client = clients[username] else { throw GatewayClientError.notConnected }
+        return try await client.configGetFull()
+    }
+
+    /// JSON Merge Patch 写入配置（带 schema 校验 + 自动热重启）
+    @discardableResult
+    func configPatch(username: String, patch: [String: Any], baseHash: String, note: String? = nil) async throws -> (noop: Bool, config: [String: Any]) {
+        guard let client = clients[username] else { throw GatewayClientError.notConnected }
+        return try await client.configPatch(patch: patch, baseHash: baseHash, note: note)
     }
 
     /// 发送任意 RPC 方法（用于高级场景）
