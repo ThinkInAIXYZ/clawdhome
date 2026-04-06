@@ -5,7 +5,9 @@ import ServiceManagement
 
 struct DaemonSetupBanner: View {
     let installer: DaemonInstaller
+    @Environment(HelperClient.self) private var helperClient
     @State private var isInstalling = false
+    @State private var isRestarting = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -34,11 +36,28 @@ struct DaemonSetupBanner: View {
                 }
                 .buttonStyle(.bordered)
             } else {
-                Button(isInstalling ? L10n.k("auto.daemon_setup_banner.text_b2c6913616", fallback: "安装中…") : L10n.k("auto.daemon_setup_banner.install", fallback: "安装")) {
-                    Task { await install() }
+                // 已安装但无法连接 → 提供重启选项
+                if installer.isEnabled {
+                    Button {
+                        Task { await forceRestart() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            if isRestarting {
+                                ProgressView().controlSize(.small)
+                            }
+                            Text(isRestarting ? "重启中…" : "重启 Helper")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .disabled(isRestarting)
+                } else {
+                    Button(isInstalling ? L10n.k("auto.daemon_setup_banner.text_b2c6913616", fallback: "安装中…") : L10n.k("auto.daemon_setup_banner.install", fallback: "安装")) {
+                        Task { await install() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isInstalling)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(isInstalling)
             }
         }
         .padding(.horizontal, 16)
@@ -56,5 +75,30 @@ struct DaemonSetupBanner: View {
             errorMessage = error.localizedDescription
         }
         isInstalling = false
+    }
+
+    private func forceRestart() async {
+        isRestarting = true
+        errorMessage = nil
+
+        // 先尝试 XPC 优雅重启
+        let graceful = await helperClient.requestHelperRestart()
+        if graceful {
+            try? await Task.sleep(for: .seconds(2))
+            helperClient.connect()
+            try? await Task.sleep(for: .seconds(1))
+            isRestarting = false
+            return
+        }
+
+        // XPC 不通 → launchctl 强制重启（弹出管理员密码授权）
+        let ok = installer.forceRestart()
+        if ok {
+            try? await Task.sleep(for: .seconds(2))
+            helperClient.connect()
+        } else {
+            errorMessage = "重启失败，请手动运行：sudo launchctl kickstart -k system/ai.clawdhome.mac.helper"
+        }
+        isRestarting = false
     }
 }

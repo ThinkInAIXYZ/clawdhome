@@ -11,6 +11,7 @@
 import Foundation
 import ServiceManagement
 import Observation
+import os.log
 
 @Observable
 final class DaemonInstaller {
@@ -69,5 +70,23 @@ final class DaemonInstaller {
     func refresh() {
         if Self.isDevMode { return }
         _ = service.status
+    }
+
+    /// 强制重启 Helper（通过 launchctl kickstart -k，需要管理员密码授权）
+    /// 适用于 Helper 卡死、XPC 无响应等场景
+    @discardableResult
+    func forceRestart() -> Bool {
+        let script = """
+        do shell script "launchctl kickstart -k system/ai.clawdhome.mac.helper" with administrator privileges
+        """
+        var error: NSDictionary?
+        NSAppleScript(source: script)?.executeAndReturnError(&error)
+        if let error {
+            let msg = error[NSAppleScript.errorMessage] as? String ?? "未知错误"
+            os_log(.error, "[DaemonInstaller] forceRestart failed: %{public}@", msg)
+            return false
+        }
+        os_log(.info, "[DaemonInstaller] forceRestart succeeded via launchctl kickstart -k")
+        return true
     }
 }
