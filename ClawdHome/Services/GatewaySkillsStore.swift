@@ -1,5 +1,6 @@
 // ClawdHome/Services/GatewaySkillsStore.swift
 // per-shrimp Skills 状态管理
+// 参考 openclaw/apps/macos/Sources/OpenClaw/SkillsSettings.swift
 
 import Foundation
 import Observation
@@ -20,6 +21,15 @@ final class GatewaySkillsStore {
     func start(client: GatewayClient) async {
         self.client = client
         await refresh()
+    }
+
+    /// 幂等启动：仅在 client 尚未设置时执行完整启动；已有 client 时仅 refresh
+    func startIfNeeded(client: GatewayClient) async {
+        if self.client != nil {
+            await refresh()
+            return
+        }
+        await start(client: client)
     }
 
     func stop() {

@@ -1,5 +1,6 @@
 // ClawdHome/Services/GatewayCronStore.swift
 // per-shrimp 定时任务状态管理，订阅 Gateway 事件流
+// 参考 openclaw/apps/macos/Sources/OpenClaw/CronJobsStore.swift
 
 import Foundation
 import Observation
@@ -24,6 +25,15 @@ final class GatewayCronStore {
         await refresh()
         startEventSubscription(client: client)
         startPolling()
+    }
+
+    /// 幂等启动：仅在 client 尚未设置时执行完整启动；已有 client 时仅 refresh
+    func startIfNeeded(client: GatewayClient) async {
+        if self.client != nil {
+            await refresh()
+            return
+        }
+        await start(client: client)
     }
 
     func stop() {

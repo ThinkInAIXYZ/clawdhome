@@ -1,3 +1,5 @@
+// 简化自 openclaw/apps/macos/Sources/OpenClaw/SkillsModels.swift
+
 import Foundation
 
 struct GatewaySkillsStatusReport: Codable {
