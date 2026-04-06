@@ -6,6 +6,13 @@
 import Foundation
 import OSLog
 
+// MARK: - Gateway 事件
+
+struct GatewayEvent {
+    let name: String
+    let payload: [String: Any]?
+}
+
 // MARK: - 错误类型
 
 enum GatewayClientError: LocalizedError {
@@ -47,11 +54,18 @@ actor GatewayClient {
     /// 待回复的 RPC 请求：requestId → continuation
     private var pending: [String: CheckedContinuation<[String: Any]?, Error>] = [:]
 
+    nonisolated let eventStream: AsyncStream<GatewayEvent>
+    private var eventContinuation: AsyncStream<GatewayEvent>.Continuation?
+
     // MARK: - 初始化
 
     init(port: Int, token: String) {
         self.url = URL(string: "ws://127.0.0.1:\(port)/")!
         self.token = token
+        var cont: AsyncStream<GatewayEvent>.Continuation?
+        let stream = AsyncStream<GatewayEvent> { cont = $0 }
+        self.eventStream = stream
+        self.eventContinuation = cont
     }
 
     // MARK: - 连接管理
@@ -120,6 +134,8 @@ actor GatewayClient {
         socket = nil
         session = nil
         failAllPending(GatewayClientError.notConnected)
+        eventContinuation?.finish()
+        eventContinuation = nil
     }
 
     func updateToken(_ newToken: String) {
@@ -277,8 +293,11 @@ actor GatewayClient {
                     } else {
                         cont.resume(returning: dict["payload"] as? [String: Any])
                     }
+                } else if type == "event",
+                          let name = dict["event"] as? String {
+                    let payload = dict["payload"] as? [String: Any]
+                    eventContinuation?.yield(GatewayEvent(name: name, payload: payload))
                 }
-                // events 暂不处理（后续可扩展 pushHandler）
             } catch {
                 appLog("gateway receive error: \(error.localizedDescription)", level: .error)
                 isConnected = false
@@ -311,6 +330,73 @@ actor GatewayClient {
         }
         guard let data else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
+    // MARK: - Cron API
+
+    func cronList() async throws -> [GatewayCronJob] {
+        let payload = try await request(method: "cron.list", params: ["includeDisabled": true])
+        guard let arr = payload?["jobs"] as? [[String: Any]] else { return [] }
+        let data = try JSONSerialization.data(withJSONObject: arr)
+        return try JSONDecoder().decode([GatewayCronJob].self, from: data)
+    }
+
+    func cronRuns(jobId: String, limit: Int = 100) async throws -> [GatewayCronRunLogEntry] {
+        let payload = try await request(method: "cron.runs", params: ["id": jobId, "limit": limit])
+        guard let arr = payload?["entries"] as? [[String: Any]] else { return [] }
+        let data = try JSONSerialization.data(withJSONObject: arr)
+        return try JSONDecoder().decode([GatewayCronRunLogEntry].self, from: data)
+    }
+
+    func cronRun(jobId: String) async throws {
+        _ = try await request(method: "cron.run", params: ["id": jobId, "force": true])
+    }
+
+    func cronRemove(jobId: String) async throws {
+        _ = try await request(method: "cron.remove", params: ["id": jobId])
+    }
+
+    func cronUpdate(jobId: String, enabled: Bool) async throws {
+        _ = try await request(method: "cron.update", params: ["id": jobId, "enabled": enabled])
+    }
+
+    func cronAdd(_ params: GatewayCronAddParams) async throws -> GatewayCronJob {
+        let dict = params.toDict()
+        guard let payload = try await request(method: "cron.add", params: dict),
+              let jobDict = payload["job"] as? [String: Any]
+        else { throw GatewayClientError.requestFailed(code: nil, message: "cron.add returned no job") }
+        let data = try JSONSerialization.data(withJSONObject: jobDict)
+        return try JSONDecoder().decode(GatewayCronJob.self, from: data)
+    }
+
+    // MARK: - Skills API
+
+    func skillsStatus() async throws -> GatewaySkillsStatusReport {
+        guard let payload = try await request(method: "skills.status") else {
+            throw GatewayClientError.requestFailed(code: nil, message: "skills.status returned nil")
+        }
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        return try JSONDecoder().decode(GatewaySkillsStatusReport.self, from: data)
+    }
+
+    func skillsInstall(skillKey: String, optionId: String) async throws -> GatewaySkillInstallResult {
+        guard let payload = try await request(method: "skills.install", params: ["skillKey": skillKey, "optionId": optionId]),
+              let resultDict = payload["result"] as? [String: Any]
+        else { throw GatewayClientError.requestFailed(code: nil, message: "skills.install returned no result") }
+        let data = try JSONSerialization.data(withJSONObject: resultDict)
+        return try JSONDecoder().decode(GatewaySkillInstallResult.self, from: data)
+    }
+
+    func skillsRemove(skillKey: String) async throws {
+        _ = try await request(method: "skills.remove", params: ["skillKey": skillKey])
+    }
+
+    func skillsUpdate(skillKey: String) async throws -> GatewaySkillUpdateResult {
+        guard let payload = try await request(method: "skills.update", params: ["skillKey": skillKey]) else {
+            throw GatewayClientError.requestFailed(code: nil, message: "skills.update returned nil")
+        }
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        return try JSONDecoder().decode(GatewaySkillUpdateResult.self, from: data)
     }
 
     // MARK: - HTTP 探活（无需 WebSocket 连接）

@@ -19,6 +19,8 @@ final class GatewayHub {
     private(set) var connectedUsernames: Set<String> = []
 
     private var clients: [String: GatewayClient] = [:]
+    private var cronStores: [String: GatewayCronStore] = [:]
+    private var skillsStores: [String: GatewaySkillsStore] = [:]
 
     /// Gateway 就绪状态（HTTP 探活维护）
     private(set) var readinessMap: [String: GatewayReadiness] = [:]
@@ -51,6 +53,13 @@ final class GatewayHub {
         do {
             try await clients[username]!.connect()
             connectedUsernames.insert(username)
+            let connectedClient = clients[username]!
+            let cron = cronStore(for: username)
+            let skills = skillsStore(for: username)
+            Task {
+                await cron.start(client: connectedClient)
+                await skills.start(client: connectedClient)
+            }
         } catch {
             connectedUsernames.remove(username)
         }
@@ -63,6 +72,8 @@ final class GatewayHub {
         }
         clients.removeValue(forKey: username)
         connectedUsernames.remove(username)
+        cronStores[username]?.stop()
+        skillsStores[username]?.stop()
     }
 
     /// 断开所有连接（应用退出时调用）
@@ -70,8 +81,26 @@ final class GatewayHub {
         for (username, client) in clients {
             await client.disconnect()
             connectedUsernames.remove(username)
+            cronStores[username]?.stop()
+            skillsStores[username]?.stop()
         }
         clients.removeAll()
+    }
+
+    // MARK: - Gateway Feature Stores
+
+    func cronStore(for username: String) -> GatewayCronStore {
+        if let existing = cronStores[username] { return existing }
+        let store = GatewayCronStore()
+        cronStores[username] = store
+        return store
+    }
+
+    func skillsStore(for username: String) -> GatewaySkillsStore {
+        if let existing = skillsStores[username] { return existing }
+        let store = GatewaySkillsStore()
+        skillsStores[username] = store
+        return store
     }
 
     // MARK: - 配置读写
