@@ -118,6 +118,9 @@ enum ManagedUserFilter {
     /// 获取 Helper 版本号，用于连通性验证
     func getVersion(withReply reply: @escaping (String) -> Void)
 
+    /// 请求 Helper 自行重启（exit(0) 后由 launchd 拉起）
+    func requestRestart(withReply reply: @escaping (Bool) -> Void)
+
     /// 在系统创建新的 macOS 标准用户账户
     func createUser(
         username: String,
@@ -388,6 +391,25 @@ enum ManagedUserFilter {
     /// 返回 (success, json) — json 为 JSON 编码的 HealthCheckResult
     func runHealthCheck(
         username: String,
+        fix: Bool,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 统一诊断：环境检测 + 权限检测 + 配置校验 + 安全审计 + Gateway 状态 + 网络连通
+    /// fix=true 时按顺序修复所有可修复项，修复后自动重新检测
+    /// 返回 (success, json) — json 为 JSON 编码的 DiagnosticsResult
+    func runDiagnostics(
+        username: String,
+        fix: Bool,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 单组诊断（供 App 逐组调用，实时展示进度）
+    /// groupName: DiagnosticGroup.rawValue（如 "environment"、"network" 等）
+    /// 返回 (success, json) — json 为 JSON 编码的 [DiagnosticItem]
+    func runDiagnosticGroup(
+        username: String,
+        groupName: String,
         fix: Bool,
         withReply reply: @escaping (Bool, String) -> Void
     )
