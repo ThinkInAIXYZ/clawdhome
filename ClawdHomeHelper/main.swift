@@ -2892,7 +2892,10 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             }
             reply(json, nil)
         } catch {
-            helperLog("[FileManager] listDirectory error: \(error)", level: .error)
+            let isNotFound = (error as? UserFileError) == .notFound
+                || (error as NSError).code == NSFileReadNoSuchFileError
+            helperLog("[FileManager] listDirectory error: \(error)",
+                      level: isNotFound ? .warn : .error)
             reply(nil, error.localizedDescription)
         }
     }
@@ -2933,7 +2936,9 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             helperLog("[FileManager] readFile ok bytes=\(data.count)", level: .debug, channel: .fileManager)
             reply(data, nil)
         } catch {
-            helperLog("[FileManager] readFile error: \(error)", level: .error)
+            let isNotFound = (error as? UserFileError) == .notFound
+            helperLog("[FileManager] readFile error: \(error)",
+                      level: isNotFound ? .warn : .error)
             reply(nil, error.localizedDescription)
         }
     }
@@ -2951,7 +2956,9 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             helperLog("[FileManager] readFileTail ok bytes=\(data.count)", level: .debug, channel: .fileManager)
             reply(data, nil)
         } catch {
-            helperLog("[FileManager] readFileTail error: \(error)", level: .error)
+            let isNotFound = (error as? UserFileError) == .notFound
+            helperLog("[FileManager] readFileTail error: \(error)",
+                      level: isNotFound ? .warn : .error)
             reply(nil, error.localizedDescription)
         }
     }
