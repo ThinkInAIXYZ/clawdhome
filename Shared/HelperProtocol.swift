@@ -17,6 +17,82 @@ enum XPCTimeoutPolicy {
     }
 }
 
+enum GatewayStartFailureType: Equatable {
+    case nodeToolchainMissing
+    case startupTimeout
+    case xpcUnavailable
+    case other
+}
+
+enum GatewayStartFailureClassifier {
+    static func classify(_ message: String) -> GatewayStartFailureType {
+        let lowered = message.lowercased()
+
+        if isLikelyNodeToolchainMissing(lowered) {
+            return .nodeToolchainMissing
+        }
+        if isLikelyXPCUnavailable(lowered) {
+            return .xpcUnavailable
+        }
+        if isLikelyGatewayStartupTimeout(lowered) {
+            return .startupTimeout
+        }
+        return .other
+    }
+
+    /// nodeInstalledProbe:
+    /// - `true`: 已确认 Node 可用
+    /// - `false`: 已确认 Node 缺失
+    /// - `nil`: 当前无法确认（例如 XPC 不可用）
+    static func shouldSuggestNodeRepair(
+        startupErrorMessage: String,
+        nodeInstalledProbe: Bool?
+    ) -> Bool {
+        switch classify(startupErrorMessage) {
+        case .nodeToolchainMissing:
+            return true
+        case .xpcUnavailable:
+            return false
+        case .startupTimeout:
+            guard let installed = nodeInstalledProbe else { return false }
+            return !installed
+        case .other:
+            guard let installed = nodeInstalledProbe else { return false }
+            return !installed
+        }
+    }
+
+    private static func isLikelyGatewayStartupTimeout(_ lowered: String) -> Bool {
+        if lowered.contains("启动 gateway 超时") { return true }
+        if lowered.contains("start gateway timeout") { return true }
+        if lowered.contains("gateway start timeout") { return true }
+        return false
+    }
+
+    private static func isLikelyXPCUnavailable(_ lowered: String) -> Bool {
+        if lowered.contains("未能与帮助应用程序通信") { return true }
+        if lowered.contains("xpc 调用超时") { return true }
+        if lowered.contains("sec code lookup failed") { return true }
+        if lowered.contains("seccode lookup failed") { return true }
+        if lowered.contains("not connected") { return true }
+        return false
+    }
+
+    private static func isLikelyNodeToolchainMissing(_ lowered: String) -> Bool {
+        if lowered.contains("env: node: no such file or directory") { return true }
+        if lowered.contains("未找到 npm，请先完成 node.js 安装步骤") { return true }
+        if lowered.contains("node.js 未安装就绪") { return true }
+        if lowered.contains("未找到隔离用户环境 npx") { return true }
+        if lowered.contains("npx is restricted to the isolated user environment") { return true }
+        if lowered.contains("exit 127")
+            && lowered.contains("openclaw")
+            && lowered.contains("gateway.port") {
+            return true
+        }
+        return false
+    }
+}
+
 enum ManagedUserFilter {
     static let minimumStandardUID = 500
     private static let systemAccounts: Set<String> = ["nobody", "root", "daemon", "Guest"]
