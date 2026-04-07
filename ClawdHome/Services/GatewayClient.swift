@@ -251,7 +251,7 @@ actor GatewayClient {
     }
 
     private func serializeJSON(_ value: Any) throws -> String {
-        let data = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+        let data = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .withoutEscapingSlashes])
         guard let json = String(data: data, encoding: .utf8) else {
             throw GatewayClientError.encodingError(
                 NSError(domain: "GatewayClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "UTF-8 encoding failed"])
