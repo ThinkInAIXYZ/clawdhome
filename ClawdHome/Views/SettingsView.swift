@@ -52,6 +52,7 @@ private struct GeneralSettingsTab: View {
     @State private var proxyMessage: String? = nil
     @State private var proxyError: String? = nil
     @State private var proxyProgressText: String? = nil
+    @State private var proxyExpanded = false
 
     private enum ProxyScheme: String, CaseIterable, Identifiable {
         case http
@@ -95,7 +96,8 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(L10n.k("views.settings_view.proxy", fallback: "代理")) {
+            Section {
+                DisclosureGroup(L10n.k("views.settings_view.proxy", fallback: "代理"), isExpanded: $proxyExpanded) {
                 Toggle(L10n.k("views.settings_view.enable_proxy_for_shrimp_users", fallback: "为虾用户启用代理"), isOn: $proxyEnabled)
 
                 Group {
@@ -192,6 +194,7 @@ private struct GeneralSettingsTab: View {
                 }
                 if let proxyError {
                     Text(proxyError).font(.caption).foregroundStyle(.red)
+                }
                 }
             }
 

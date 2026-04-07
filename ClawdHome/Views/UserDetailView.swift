@@ -276,7 +276,7 @@ struct UserDetailView: View {
     @State private var isReopeningInitWizard = false
     @State private var suppressNpmRegistryOnChange = false
     @State private var showHealthCheck = false
-    @State private var lastHealthCheck: HealthCheckResult? = nil
+    @State private var lastHealthCheck: DiagnosticsResult? = nil
     @State private var showUpgradeConfirm = false
     @State private var pendingUpgradeVersion: String? = nil
     // 版本回退（记录升级前版本，支持降级）
@@ -564,6 +564,11 @@ struct UserDetailView: View {
             } else {
                 gatewayURLTokenPollTask?.cancel()
                 gatewayURLTokenPollTask = nil
+                // Gateway 启动后立即崩溃：readinessMap 还停留在 .starting，但进程已死
+                if gatewayHub.readinessMap[user.username] == .starting {
+                    gatewayHub.markPendingStopped(username: user.username)
+                    showHealthCheck = true
+                }
             }
         }
         .onChange(of: gatewayHub.readinessMap[user.username]) { _, newReadiness in
@@ -601,8 +606,8 @@ struct UserDetailView: View {
             .environment(gatewayHub)
         }
         .sheet(isPresented: $showHealthCheck) {
-            HealthCheckSheet(user: user) { result in
-                lastHealthCheck = result
+            DiagnosticsSheet(user: user) { diagResult in
+                lastHealthCheck = diagResult
             }
         }
         .sheet(isPresented: $showUpgradeConfirm) {
@@ -1076,6 +1081,7 @@ struct UserDetailView: View {
 
                     if updater.needsUpdate(user.openclawVersion),
                        let latest = updater.latestVersion {
+                        Divider()
                         Button {
                             pendingUpgradeVersion = latest
                             showUpgradeConfirm = true
@@ -1086,11 +1092,11 @@ struct UserDetailView: View {
                             )
                         }
                         .disabled(isInstalling || isRollingBack || !helperClient.isConnected)
-
-                        Divider()
                     }
 
                     if !user.isAdmin {
+                        Divider()
+
                         Button {
                             showLogoutConfirm = true
                         } label: {
@@ -1303,16 +1309,15 @@ struct UserDetailView: View {
         tint: Color,
         foreground: Color
     ) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
             Text(title)
                 .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
-            Spacer(minLength: 0)
         }
         .foregroundStyle(foreground)
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         .frame(height: UserDetailWindowLayout.overviewActionButtonHeight)
         .frame(maxWidth: .infinity)
         .background(
@@ -1675,32 +1680,11 @@ struct UserDetailView: View {
         HStack(spacing: 12) {
             Text(L10n.k("user.detail.auto.health_check", fallback: "健康体检")).font(.subheadline)
             Spacer()
-            if let check = lastHealthCheck {
-                let issueCount = check.criticalCount + check.warnCount
-                HStack(spacing: 4) {
-                    if issueCount > 0 {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange).font(.system(size: 11))
-                        Text(L10n.f("views.user_detail_view.text_7c8c2ef4", fallback: "%@ 个问题", String(describing: issueCount))).foregroundStyle(.orange)
-                    } else {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green).font(.system(size: 11))
-                        Text(L10n.k("user.detail.auto.normal", fallback: "正常")).foregroundStyle(.green)
-                    }
-                    Text("·").foregroundStyle(.tertiary)
-                    Text(Date(timeIntervalSince1970: check.checkedAt), style: .relative)
-                        .foregroundStyle(.secondary).font(.callout)
-                    Text(L10n.k("user.detail.auto.ago", fallback: "前")).foregroundStyle(.secondary).font(.callout)
-                }
-            } else {
-                Text(L10n.k("user.detail.auto.health_check", fallback: "从未体检")).foregroundStyle(.tertiary).font(.callout)
-            }
-            Button(lastHealthCheck == nil ? L10n.k("views.user_detail_view.text_258fc51d", fallback: "体检") : L10n.k("views.user_detail_view.text_dced7ba8", fallback: "重新体检")) {
+            Button(L10n.k("views.user_detail_view.text_258fc51d", fallback: "体检")) {
                 showHealthCheck = true
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
-            .padding(.leading, 4)
             .disabled(!helperClient.isConnected)
         }
     }
@@ -2032,6 +2016,7 @@ struct UserDetailView: View {
 
                         if updater.needsUpdate(user.openclawVersion),
                            let latest = updater.latestVersion {
+                            Divider()
                             Button {
                                 pendingUpgradeVersion = latest
                                 showUpgradeConfirm = true
@@ -2042,11 +2027,11 @@ struct UserDetailView: View {
                                 )
                             }
                             .disabled(isInstalling || isRollingBack || !helperClient.isConnected)
-
-                            Divider()
                         }
 
                         if !user.isAdmin {
+                            Divider()
+
                             Button {
                                 showLogoutConfirm = true
                             } label: {
@@ -2195,6 +2180,8 @@ struct UserDetailView: View {
             } catch {
                 if error is GatewayStartNodeRepairPromptError {
                     // 已切换到"修复并继续启动"弹窗，不显示通用错误。
+                } else if error is GatewayStartDiagnosticsPromptError {
+                    // 已自动弹出诊断中心，不显示通用错误。
                 } else {
                     actionError = error.localizedDescription
                 }
@@ -2205,21 +2192,28 @@ struct UserDetailView: View {
     }
 
     private struct GatewayStartNodeRepairPromptError: Error {}
+    private struct GatewayStartDiagnosticsPromptError: Error {}
 
     private func startGatewayWithNodeRepairPrompt() async throws {
-        let result = try await helperClient.startGatewayDiagnoseNodeToolchain(username: user.username)
-        switch result {
-        case .started:
-            return
-        case .needsNodeRepair(let reason):
-            appLog("[gateway-repair] detected missing base env user=\(user.username) reason=\(reason)", level: .warn)
-            gatewayNodeRepairReason = reason
-            gatewayNodeRepairCompletedSteps = 0
-            gatewayNodeRepairCurrentStep = ""
-            gatewayNodeRepairError = nil
-            gatewayNodeRepairReadyToRetryStart = false
-            showGatewayNodeRepairSheet = true
-            throw GatewayStartNodeRepairPromptError()
+        do {
+            let result = try await helperClient.startGatewayDiagnoseNodeToolchain(username: user.username)
+            switch result {
+            case .started:
+                return
+            case .needsNodeRepair(let reason):
+                appLog("[gateway-repair] detected missing base env user=\(user.username) reason=\(reason)", level: .warn)
+                gatewayNodeRepairReason = reason
+                gatewayNodeRepairCompletedSteps = 0
+                gatewayNodeRepairCurrentStep = ""
+                gatewayNodeRepairError = nil
+                gatewayNodeRepairReadyToRetryStart = false
+                showGatewayNodeRepairSheet = true
+                throw GatewayStartNodeRepairPromptError()
+            }
+        } catch let error where !(error is GatewayStartNodeRepairPromptError) {
+            appLog("[gateway-diag] start failed, opening diagnostics user=\(user.username) error=\(error.localizedDescription)", level: .warn)
+            showHealthCheck = true
+            throw GatewayStartDiagnosticsPromptError()
         }
     }
 

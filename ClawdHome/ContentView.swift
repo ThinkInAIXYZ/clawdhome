@@ -23,20 +23,7 @@ struct ContentView: View {
     @State private var daemonInstaller = DaemonInstaller()
     @State private var navSelection: NavDestination? = .clawPool
     var body: some View {
-        VStack(spacing: 0) {
-            // Helper 未连接时显示安装引导横幅
-            if !helperClient.isConnected {
-                DaemonSetupBanner(installer: daemonInstaller)
-            }
-
-            if let err = pool.loadError {
-                Text(L10n.f("content_view.text_c851a279", fallback: "加载用户失败：%@", String(describing: err)))
-                    .foregroundStyle(.red)
-                    .font(.caption)
-                    .padding(8)
-            }
-
-            NavigationSplitView {
+        NavigationSplitView {
                 List(selection: $navSelection) {
                     Section(L10n.k("auto.content_view.daily", fallback: "日常")) {
                         Label(L10n.k("auto.content_view.dashboard", fallback: "仪表盘"), systemImage: "gauge.with.dots.needle.33percent")
@@ -145,7 +132,25 @@ struct ContentView: View {
                 }
             }
             .frame(minWidth: 960, minHeight: 560)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let err = pool.loadError {
+                    Text(L10n.f("content_view.text_c851a279", fallback: "加载用户失败：%@", String(describing: err)))
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(Color.red.opacity(0.08))
+                        .overlay(alignment: .bottom) { Divider() }
+                }
+            }
+        .overlay(alignment: .top) {
+            // Helper 未连接时显示安装引导横幅（最顶层浮动）
+            if !helperClient.isConnected {
+                DaemonSetupBanner(installer: daemonInstaller)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.25), value: helperClient.isConnected)
         // 系统屏幕锁定时自动锁定 App
         .onReceive(
             DistributedNotificationCenter.default().publisher(
