@@ -4178,6 +4178,8 @@ private struct CronRunEntryRow: View {
 }
 
 // MARK: - Skills Tab
+// 参考 openclaw/apps/macos/Sources/OpenClaw/SkillsSettings.swift
+// 参考 openclaw commit 505b980f63 (2026-04-07)
 
 private struct SkillsTabView: View {
     let username: String
@@ -4196,117 +4198,402 @@ private struct SkillsTabView: View {
     }
 }
 
+// MARK: 筛选枚举
+
+private enum SkillsFilter: String, CaseIterable, Identifiable {
+    case all, ready, needsSetup, disabled
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "全部"
+        case .ready: return "就绪"
+        case .needsSetup: return "需配置"
+        case .disabled: return "已禁用"
+        }
+    }
+}
+
+// MARK: 环境变量编辑状态
+
+private struct SkillEnvEditorState: Identifiable {
+    let skillKey: String
+    let skillName: String
+    let envKey: String
+    let isPrimary: Bool
+    let homepage: String?
+
+    var id: String { "\(skillKey)::\(envKey)" }
+}
+
+// MARK: SkillsTabContent
+
 private struct SkillsTabContent: View {
     let store: GatewaySkillsStore
+    @State private var filter: SkillsFilter = .all
+    @State private var envEditor: SkillEnvEditorState?
+
+    private var filteredSkills: [GatewaySkillStatus] {
+        let base = store.skills.filter { skill in
+            switch filter {
+            case .all: return true
+            case .ready: return !skill.disabled && skill.eligible
+            case .needsSetup: return !skill.disabled && !skill.eligible
+            case .disabled: return skill.disabled
+            }
+        }
+        if store.searchText.isEmpty { return base }
+        let q = store.searchText.lowercased()
+        return base.filter {
+            $0.name.lowercased().contains(q) || $0.description.lowercased().contains(q)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             // 顶栏
-            HStack {
-                Text("Skills").font(.headline)
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Skills").font(.headline)
+                    Text("满足依赖条件（二进制、环境变量、配置）后自动启用")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
                 Spacer()
                 if store.isLoading {
                     ProgressView().scaleEffect(0.7).frame(width: 20, height: 20)
+                } else {
+                    Button {
+                        Task { await store.refresh() }
+                    } label: {
+                        Label("刷新", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
                 }
-                Button {
-                    Task { await store.refresh() }
-                } label: {
-                    Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
+                Picker("筛选", selection: $filter) {
+                    ForEach(SkillsFilter.allCases) { f in
+                        Text(f.title).tag(f)
+                    }
                 }
-                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 90)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             .background(.bar)
 
             Divider()
 
+            // 搜索栏
+            HStack {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("搜索 Skills…", text: Bindable(store).searchText)
+                    .textFieldStyle(.plain)
+                if !store.searchText.isEmpty {
+                    Button { store.searchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 6)
+            .background(.bar)
+
+            Divider()
+
+            // 状态消息
+            if let msg = store.statusMessage {
+                HStack {
+                    Text(msg).font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button { store.statusMessage = nil } label: {
+                        Image(systemName: "xmark").font(.caption2)
+                    }
+                    .buttonStyle(.plain).foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 4)
+                .background(Color.accentColor.opacity(0.06))
+            }
+
+            // 内容
             if let err = store.error {
                 ContentUnavailableView(err, systemImage: "exclamationmark.triangle")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if store.skills.isEmpty && !store.isLoading {
-                ContentUnavailableView(
-                    L10n.k("user.detail.skills.no_skills", fallback: "暂无 Skills"),
-                    systemImage: "star.leadinghalf.filled"
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ContentUnavailableView("暂无 Skills", systemImage: "star.leadinghalf.filled")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if filteredSkills.isEmpty {
+                ContentUnavailableView("没有匹配的 Skills", systemImage: "magnifyingglass")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(store.skills) { skill in
-                    SkillItemRow(skill: skill, store: store)
+                List(filteredSkills) { skill in
+                    SkillItemRow(skill: skill, store: store, onSetEnv: { envKey, isPrimary in
+                        envEditor = SkillEnvEditorState(
+                            skillKey: skill.skillKey,
+                            skillName: skill.name,
+                            envKey: envKey,
+                            isPrimary: isPrimary,
+                            homepage: skill.homepage
+                        )
+                    })
                 }
                 .listStyle(.plain)
             }
         }
         .task { await store.refresh() }
+        .sheet(item: $envEditor) { editor in
+            SkillEnvEditorSheet(editor: editor) { value in
+                Task {
+                    if editor.isPrimary {
+                        await store.setApiKey(skillKey: editor.skillKey, value: value)
+                    } else {
+                        await store.setEnvVar(skillKey: editor.skillKey, envKey: editor.envKey, value: value)
+                    }
+                }
+            }
+        }
     }
 }
+
+// MARK: SkillItemRow
 
 private struct SkillItemRow: View {
     let skill: GatewaySkillStatus
     let store: GatewaySkillsStore
+    let onSetEnv: (_ envKey: String, _ isPrimary: Bool) -> Void
     @State private var showRemoveConfirm = false
 
-    private var isPending: Bool { store.pendingOps[skill.skillKey] != nil }
+    private var isBusy: Bool { store.isBusy(skill: skill) }
     private var pendingLabel: String { store.pendingOps[skill.skillKey] ?? "" }
+    private var requirementsMet: Bool { skill.missing.isEmpty }
+
+    /// 有 missing bins 且存在 install option 时可安装
+    private var installOptions: [GatewaySkillInstallOption] {
+        guard !skill.missing.bins.isEmpty else { return [] }
+        let missingSet = Set(skill.missing.bins)
+        return skill.install.filter { opt in
+            opt.bins.isEmpty || !missingSet.isDisjoint(with: opt.bins)
+        }
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
-            // 状态指示
-            Circle()
-                .fill(skill.eligible ? Color.green : Color.orange)
-                .frame(width: 8, height: 8)
+        HStack(alignment: .top, spacing: 12) {
+            // Emoji
+            Text(skill.emoji ?? "✨").font(.title2)
 
-            // 名称 + 描述
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    if let emoji = skill.emoji {
-                        Text(emoji)
-                    }
-                    Text(skill.name)
-                        .font(.subheadline).fontWeight(.medium)
-                    if skill.always {
-                        CronTagBadge("always-on")
-                    }
-                    if !skill.missing.isEmpty {
-                        CronTagBadge("⚠️ missing")
+            // 信息区
+            VStack(alignment: .leading, spacing: 4) {
+                // 名称
+                Text(skill.name).font(.headline)
+
+                // 描述
+                Text(skill.description)
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3)
+
+                // 标签行：来源 + 主页链接
+                HStack(spacing: 8) {
+                    CronTagBadge(skill.sourceLabel)
+                    if let urlStr = skill.homepage,
+                       let url = URL(string: urlStr),
+                       url.scheme == "http" || url.scheme == "https" {
+                        Link(destination: url) {
+                            Label("网站", systemImage: "link")
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .buttonStyle(.link)
                     }
                 }
-                Text(skill.description)
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+
+                // 禁用状态提示
+                if skill.disabled {
+                    Text("已在配置中禁用")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                // 缺失依赖提示（仅当没有安装选项或有非 bin 缺失时）
+                if !skill.disabled, !requirementsMet, shouldShowMissingSummary {
+                    missingSummary
+                }
+
+                // 配置检查
+                if !skill.configChecks.isEmpty {
+                    configChecksView
+                }
+
+                // 环境变量设置按钮
+                if !skill.missing.env.isEmpty {
+                    envActionRow
+                }
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            // 操作按钮区
-            if isPending {
+            // 右侧操作区
+            trailingActions
+        }
+        .padding(.vertical, 6)
+    }
+
+    // MARK: 缺失摘要
+
+    private var shouldShowMissingBins: Bool {
+        !skill.missing.bins.isEmpty && installOptions.isEmpty
+    }
+
+    private var shouldShowMissingSummary: Bool {
+        shouldShowMissingBins || !skill.missing.env.isEmpty || !skill.missing.config.isEmpty
+    }
+
+    private var missingSummary: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if shouldShowMissingBins {
+                Text("缺少二进制: \(skill.missing.bins.joined(separator: ", "))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if !skill.missing.env.isEmpty {
+                Text("缺少环境变量: \(skill.missing.env.joined(separator: ", "))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if !skill.missing.config.isEmpty {
+                Text("需要配置: \(skill.missing.config.joined(separator: ", "))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: 配置检查
+
+    private var configChecksView: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(skill.configChecks) { check in
                 HStack(spacing: 4) {
-                    ProgressView().scaleEffect(0.7)
+                    Image(systemName: check.satisfied ? "checkmark.circle" : "xmark.circle")
+                        .foregroundStyle(check.satisfied ? .green : .secondary)
+                        .font(.caption)
+                    Text(check.path).font(.caption)
+                }
+            }
+        }
+    }
+
+    // MARK: 环境变量按钮
+
+    private var envActionRow: some View {
+        HStack(spacing: 6) {
+            ForEach(skill.missing.env, id: \.self) { envKey in
+                let isPrimary = envKey == skill.primaryEnv
+                Button(isPrimary ? "设置 API Key" : "设置 \(envKey)") {
+                    onSetEnv(envKey, isPrimary)
+                }
+                .buttonStyle(.bordered).controlSize(.small)
+                .disabled(isBusy)
+            }
+        }
+    }
+
+    // MARK: 右侧操作
+
+    @ViewBuilder
+    private var trailingActions: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            if isBusy {
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.small)
                     Text(pendingLabel).font(.caption).foregroundStyle(.secondary)
                 }
-            } else {
-                HStack(spacing: 6) {
-                    if !skill.disabled {
-                        Button(L10n.k("user.detail.skills.update", fallback: "更新")) {
-                            Task { try? await store.update(skillKey: skill.skillKey) }
-                        }
-                        .buttonStyle(.bordered).controlSize(.small)
+            } else if !installOptions.isEmpty {
+                // 有可安装选项 → 显示安装按钮
+                ForEach(installOptions) { option in
+                    Button("安装") {
+                        Task { await store.install(skill: skill, option: option) }
                     }
-                    Button(L10n.k("user.detail.skills.remove", fallback: "卸载")) {
+                    .buttonStyle(.borderedProminent).controlSize(.small)
+                    .help(option.label)
+                }
+            } else {
+                // 已安装 → 启用/禁用 Toggle
+                Toggle("", isOn: Binding(
+                    get: { !skill.disabled },
+                    set: { enabled in
+                        Task { await store.toggleEnabled(skillKey: skill.skillKey, enabled: enabled) }
+                    }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .disabled(isBusy || !requirementsMet)
+
+                // 卸载按钮（仅非内置 skill）
+                if !skill.isBundled {
+                    Button("卸载") {
                         showRemoveConfirm = true
                     }
-                    .buttonStyle(.bordered).controlSize(.small)
+                    .buttonStyle(.bordered).controlSize(.mini)
+                    .foregroundStyle(.secondary)
                     .confirmationDialog(
-                        L10n.f("user.detail.skills.remove_confirm", fallback: "卸载 %@？", skill.name),
+                        "卸载 \(skill.name)？",
                         isPresented: $showRemoveConfirm,
                         titleVisibility: .visible
                     ) {
-                        Button(L10n.k("user.detail.skills.remove", fallback: "卸载"), role: .destructive) {
-                            Task { try? await store.remove(skillKey: skill.skillKey) }
+                        Button("卸载", role: .destructive) {
+                            Task { await store.remove(skillKey: skill.skillKey) }
                         }
                     }
                 }
             }
         }
-        .padding(.vertical, 4)
+    }
+}
+
+// MARK: 环境变量编辑 Sheet
+
+private struct SkillEnvEditorSheet: View {
+    let editor: SkillEnvEditorState
+    let onSave: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var value: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(editor.isPrimary ? "设置 API Key" : "设置环境变量")
+                .font(.headline)
+            Text("Skill: \(editor.skillName)")
+                .font(.subheadline).foregroundStyle(.secondary)
+
+            if let url = homepageUrl {
+                Link("获取密钥 →", destination: url).font(.caption)
+            }
+
+            SecureField(editor.envKey, text: $value)
+                .textFieldStyle(.roundedBorder)
+
+            Text("保存至 openclaw.json 中 skills.entries.\(editor.skillKey)")
+                .font(.caption2).foregroundStyle(.tertiary)
+
+            HStack {
+                Button("取消") { dismiss() }
+                Spacer()
+                Button("保存") {
+                    onSave(value)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+
+    private var homepageUrl: URL? {
+        guard let raw = editor.homepage?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              let url = URL(string: raw),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else { return nil }
+        return url
     }
 }
 

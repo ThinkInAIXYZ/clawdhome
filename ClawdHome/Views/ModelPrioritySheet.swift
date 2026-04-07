@@ -137,6 +137,7 @@ struct ModelPrioritySheet: View {
     @State private var addCustomBaseURL: String = "https://api.example.com/v1"
     @State private var addCustomModelId: String = ""
     @State private var addCustomCompatibility: String = "openai-completions"
+    @State private var addCustomProviderId: String = ""
 
     // 已有配置中各提供商的 API Key（用于判断是否已配置）
     @State private var existingProviderKeys: [String: Bool] = [:]
@@ -282,24 +283,14 @@ struct ModelPrioritySheet: View {
             .onChange(of: addProvider) { _, _ in updateDefaultSelection() }
 
             if addProvider == .custom {
-                // 自定义：Base URL + 兼容协议 + 模型 ID
-                TextField(
-                    "Base URL",
-                    text: $addCustomBaseURL
+                // 自定义：复用 CustomProviderFormFields 组件
+                CustomProviderFormFields(
+                    compatibility: $addCustomCompatibility,
+                    baseURL: $addCustomBaseURL,
+                    apiKey: $addApiKey,
+                    modelId: $addCustomModelId,
+                    providerId: $addCustomProviderId
                 )
-                .textFieldStyle(.roundedBorder)
-
-                Picker(L10n.k("model_priority.compatibility", fallback: "兼容协议"), selection: $addCustomCompatibility) {
-                    Text("OpenAI").tag("openai-completions")
-                    Text("Anthropic").tag("anthropic-messages")
-                }
-                .pickerStyle(.segmented)
-
-                TextField(
-                    L10n.k("model_priority.model_id", fallback: "模型 ID"),
-                    text: $addCustomModelId
-                )
-                .textFieldStyle(.roundedBorder)
             } else {
                 // 预设提供商：模型下拉
                 let models = addProvider.presetModels
@@ -312,18 +303,20 @@ struct ModelPrioritySheet: View {
                 }
             }
 
-            // API Key
-            HStack {
-                SecureField(addProvider.apiKeyPlaceholder, text: $addApiKey)
-                    .textFieldStyle(.roundedBorder)
+            // API Key（自定义模式已包含在 CustomProviderFormFields 中）
+            if addProvider != .custom {
+                HStack {
+                    SecureField(addProvider.apiKeyPlaceholder, text: $addApiKey)
+                        .textFieldStyle(.roundedBorder)
 
-                if existingProviderKeys[addProvider.rawValue] == true {
-                    Text(L10n.k("model_priority.key_exists", fallback: "已有密钥"))
-                        .font(.caption2)
-                        .foregroundStyle(.green)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+                    if existingProviderKeys[addProvider.rawValue] == true {
+                        Text(L10n.k("model_priority.key_exists", fallback: "已有密钥"))
+                            .font(.caption2)
+                            .foregroundStyle(.green)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+                    }
                 }
             }
 
@@ -387,6 +380,7 @@ struct ModelPrioritySheet: View {
         addCustomBaseURL = "https://api.example.com/v1"
         addCustomModelId = ""
         addCustomCompatibility = "openai-completions"
+        addCustomProviderId = ""
         updateDefaultSelection()
     }
 
@@ -403,13 +397,26 @@ struct ModelPrioritySheet: View {
         }
         // 记住新提供商需要写入的配置
         let key = addApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !key.isEmpty {
+        if addProvider == .custom {
+            // 自定义提供商：即使 apiKey 为空也需保存 baseURL 等配置
+            let rawPid = addCustomProviderId.trimmingCharacters(in: .whitespacesAndNewlines)
+            let configKey = rawPid.isEmpty ? "custom" : rawPid
+            pendingProviderConfigs[configKey] = PendingProviderConfig(
+                provider: addProvider,
+                apiKey: key,
+                customBaseURL: addCustomBaseURL,
+                customModelId: addCustomModelId,
+                customApiType: addCustomCompatibility,
+                customProviderId: addCustomProviderId
+            )
+        } else if !key.isEmpty {
             pendingProviderConfigs[addProvider.rawValue] = PendingProviderConfig(
                 provider: addProvider,
                 apiKey: key,
-                customBaseURL: addProvider == .custom ? addCustomBaseURL : nil,
-                customModelId: addProvider == .custom ? addCustomModelId : nil,
-                customApiType: addProvider == .custom ? addCustomCompatibility : nil
+                customBaseURL: nil,
+                customModelId: nil,
+                customApiType: nil,
+                customProviderId: nil
             )
         }
         resetAddForm()
@@ -571,7 +578,8 @@ struct ModelPrioritySheet: View {
         let provider = config.provider
 
         if provider == .custom {
-            let providerId = "custom"
+            let rawId = (config.customProviderId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let providerId = rawId.isEmpty ? "custom" : rawId
             let baseURL = (config.customBaseURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let modelId = (config.customModelId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let apiType = config.customApiType ?? "openai-completions"
@@ -623,6 +631,7 @@ private struct PendingProviderConfig {
     let customBaseURL: String?
     let customModelId: String?
     let customApiType: String?
+    let customProviderId: String?
 }
 
 // MARK: - 单行 View
