@@ -63,7 +63,7 @@ struct PersonaGitManager {
         } catch let e as ShellError {
             // "nothing to commit" 不视为错误（文件内容未变化时保存）
             if case .nonZeroExit(_, _, let stderr) = e,
-               stderr.contains("nothing to commit") || stderr.contains("nothing added to commit") {
+               isNothingToCommitMessage(stderr) {
                 return
             }
             throw e
@@ -186,7 +186,7 @@ struct PersonaGitManager {
         } catch let e as ShellError {
             // 内容已与目标一致（nothing to commit）→ 视为成功
             if case .nonZeroExit(_, _, let stderr) = e,
-               stderr.contains("nothing to commit") || stderr.contains("nothing added to commit") {
+               isNothingToCommitMessage(stderr) {
                 return
             }
             throw e
@@ -197,6 +197,11 @@ struct PersonaGitManager {
 
     private static func homeDir(_ username: String) -> String {
         "/Users/\(username)"
+    }
+
+    private static func isNothingToCommitMessage(_ text: String) -> Bool {
+        let normalized = text.lowercased()
+        return normalized.contains("nothing to commit") || normalized.contains("nothing added to commit")
     }
 
     /// 以 sudo -u <username> /usr/bin/git 执行 git 命令
@@ -219,10 +224,13 @@ struct PersonaGitManager {
         let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 
         guard proc.terminationStatus == 0 else {
+            let trimmedErr = err.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedOut = out.trimmingCharacters(in: .whitespacesAndNewlines)
             throw ShellError.nonZeroExit(
                 command: (["/usr/bin/sudo", "-u", username, "/usr/bin/git"] + args).joined(separator: " "),
                 status: proc.terminationStatus,
-                stderr: err.trimmingCharacters(in: .whitespacesAndNewlines)
+                // git 有些失败信息（如 nothing to commit）会写到 stdout
+                stderr: trimmedErr.isEmpty ? trimmedOut : trimmedErr
             )
         }
         return out.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -272,10 +280,13 @@ struct PersonaGitManager {
         }
 
         guard proc.terminationStatus == 0 else {
+            let trimmedErr = err.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedOut = out.trimmingCharacters(in: .whitespacesAndNewlines)
             throw ShellError.nonZeroExit(
                 command: (["/usr/bin/sudo", "-u", username, "/usr/bin/git"] + args).joined(separator: " "),
                 status: proc.terminationStatus,
-                stderr: err.trimmingCharacters(in: .whitespacesAndNewlines)
+                // git 有些失败信息（如 nothing to commit）会写到 stdout
+                stderr: trimmedErr.isEmpty ? trimmedOut : trimmedErr
             )
         }
         return out.trimmingCharacters(in: .whitespacesAndNewlines)

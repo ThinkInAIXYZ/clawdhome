@@ -53,12 +53,16 @@ struct LocalLLMManager {
             let (running, _) = parseRunning(from: printOut ?? "")
             if running { helperLog("[omlx] 已在运行，跳过"); return }
             if existing != plist {
-                _ = try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])
+                if (try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])) == nil {
+                    helperLog("[omlx] launchctl bootout system/\(label) failed before config-change bootstrap", level: .warn)
+                }
                 Thread.sleep(forTimeInterval: 0.3)
                 try writePlist(plist)
                 try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
             } else {
-                _ = try? run("/bin/launchctl", args: ["kickstart", "system/\(label)"])
+                if (try? run("/bin/launchctl", args: ["kickstart", "system/\(label)"])) == nil {
+                    helperLog("[omlx] launchctl kickstart system/\(label) failed", level: .warn)
+                }
             }
         } else {
             try writePlist(plist)

@@ -9,17 +9,20 @@ struct ModelsStatus: Decodable {
     let fallbacks: [String]
     let imageModel: String?
     let imageFallbacks: [String]
+    /// 从 meta.lastTouchedVersion 读取的 openclaw 已安装版本
+    let installedVersion: String?
 
     enum CodingKeys: String, CodingKey {
         case defaultModel, resolvedDefault, fallbacks, imageModel, imageFallbacks
     }
 
-    init(defaultModel: String?, resolvedDefault: String?, fallbacks: [String], imageModel: String?, imageFallbacks: [String]) {
+    init(defaultModel: String?, resolvedDefault: String?, fallbacks: [String], imageModel: String?, imageFallbacks: [String], installedVersion: String? = nil) {
         self.defaultModel = defaultModel
         self.resolvedDefault = resolvedDefault
         self.fallbacks = fallbacks
         self.imageModel = imageModel
         self.imageFallbacks = imageFallbacks
+        self.installedVersion = installedVersion
     }
 
     init(from decoder: Decoder) throws {
@@ -29,6 +32,7 @@ struct ModelsStatus: Decodable {
         fallbacks      = (try? c.decode([String].self, forKey: .fallbacks)) ?? []
         imageModel     = try c.decodeIfPresent(String.self, forKey: .imageModel)
         imageFallbacks = (try? c.decode([String].self, forKey: .imageFallbacks)) ?? []
+        installedVersion = nil
     }
 }
 

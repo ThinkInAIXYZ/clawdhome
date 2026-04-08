@@ -4,30 +4,13 @@
 
 import Foundation
 
-enum ManagedUserFilter {
-    static let minimumStandardUID = 500
-    private static let systemAccounts: Set<String> = ["nobody", "root", "daemon", "Guest"]
-    private static let usersDirectorySkipEntries: Set<String> = ["Shared", ".localized"]
-
-    static func isExcludedUsername(_ username: String) -> Bool {
-        username.hasPrefix("_") || systemAccounts.contains(username)
-    }
-
-    static func isEligibleManagedUser(username: String, uid: Int, adminNames: Set<String>) -> Bool {
-        uid >= minimumStandardUID
-            && !adminNames.contains(username)
-            && !isExcludedUsername(username)
-    }
-
-    static func shouldConsiderUsersDirectoryEntry(_ name: String) -> Bool {
-        !name.hasPrefix(".") && !usersDirectorySkipEntries.contains(name)
-    }
-}
-
 /// Helper 对外暴露的操作接口（ClawdHome.app 调用）
 @objc protocol ClawdHomeHelperProtocol: NSObjectProtocol {
     /// 获取 Helper 版本号，用于连通性验证
     func getVersion(withReply reply: @escaping (String) -> Void)
+
+    /// 请求 Helper 自行重启（exit(0) 后由 launchd 拉起）
+    func requestRestart(withReply reply: @escaping (Bool) -> Void)
 
     /// 在系统创建新的 macOS 标准用户账户
     func createUser(
@@ -296,9 +279,28 @@ enum ManagedUserFilter {
 
     /// 对指定用户执行体检（环境隔离检查 + 应用安全审计）
     /// fix=true 时自动修复可修复项（目前为文件权限类问题）
-    /// 返回 (success, json) — json 为 JSON 编码的 HealthCheckResult
+    /// 返回 (success, json) — json 为 JSON 编码的 DiagnosticsResult
     func runHealthCheck(
         username: String,
+        fix: Bool,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 统一诊断：环境检测 + 权限检测 + 配置校验 + 安全审计 + Gateway 状态 + 网络连通
+    /// fix=true 时按顺序修复所有可修复项，修复后自动重新检测
+    /// 返回 (success, json) — json 为 JSON 编码的 DiagnosticsResult
+    func runDiagnostics(
+        username: String,
+        fix: Bool,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 单组诊断（供 App 逐组调用，实时展示进度）
+    /// groupName: DiagnosticGroup.rawValue（如 "environment"、"network" 等）
+    /// 返回 (success, json) — json 为 JSON 编码的 [DiagnosticItem]
+    func runDiagnosticGroup(
+        username: String,
+        groupName: String,
         fix: Bool,
         withReply reply: @escaping (Bool, String) -> Void
     )
@@ -619,57 +621,5 @@ enum ManagedUserFilter {
     )
 }
 
-struct XcodeEnvStatus: Codable, Sendable {
-    var commandLineToolsInstalled: Bool
-    var clangAvailable: Bool
-    var licenseAccepted: Bool
-    var detail: String
-
-    var isHealthy: Bool {
-        commandLineToolsInstalled && clangAvailable && licenseAccepted
-    }
-}
-
 /// XPC Mach Service 名称（App 与 Helper 均引用此常量）
 let kHelperMachServiceName = "ai.clawdhome.mac.helper"
-
-enum PairingOutputParser {
-    private static let ansiPattern = "\u{001B}\\[[0-9;?]*[ -/]*[@-~]"
-
-    static func extractQRCodeBlock(from output: String) -> String? {
-        let plain = stripANSI(output)
-        let lines = plain.components(separatedBy: .newlines)
-
-        var current: [String] = []
-        var best: [String] = []
-
-        for line in lines {
-            if isQRCodeLike(line) {
-                current.append(line)
-                if current.count > best.count {
-                    best = current
-                }
-            } else {
-                current.removeAll(keepingCapacity: true)
-            }
-        }
-
-        guard best.count >= 4 else { return nil }
-        return best.joined(separator: "\n")
-    }
-
-    static func stripANSI(_ text: String) -> String {
-        text.replacingOccurrences(
-            of: ansiPattern,
-            with: "",
-            options: .regularExpression
-        )
-    }
-
-    private static func isQRCodeLike(_ line: String) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return false }
-        let qrChars = CharacterSet(charactersIn: "█▀▄▌▐▖▗▘▙▚▛▜▝▞▟▔▁▂▃▄▅▆▇▓▒░")
-        return trimmed.unicodeScalars.contains(where: { qrChars.contains($0) })
-    }
-}

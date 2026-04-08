@@ -62,6 +62,36 @@ struct UserInitPresentationRoutingTests {
             "initialized users should stay in the normal detail tabs"
         )
 
+        guard shouldEmbedOverviewGatewayConsole(
+            selectedTabRawValue: "overview",
+            initPresentationRoute: .detailTabs,
+            isAdmin: true,
+            versionChecked: true,
+            hasInstalledOpenClaw: false,
+            isGatewayOperational: true
+        ) else {
+            fputs(
+                "FAIL: admin users with running gateway should still keep overview console\n",
+                stderr
+            )
+            exit(1)
+        }
+
+        guard !shouldEmbedOverviewGatewayConsole(
+            selectedTabRawValue: "overview",
+            initPresentationRoute: .detailTabs,
+            isAdmin: true,
+            versionChecked: true,
+            hasInstalledOpenClaw: false,
+            isGatewayOperational: false
+        ) else {
+            fputs(
+                "FAIL: admin users without install and without running gateway should show unavailable state\n",
+                stderr
+            )
+            exit(1)
+        }
+
         print("User init presentation routing tests passed.")
     }
 }
