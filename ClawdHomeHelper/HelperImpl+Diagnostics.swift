@@ -10,7 +10,7 @@ extension ClawdHomeHelperImpl {
     func runHealthCheck(username: String, fix: Bool,
                         withReply reply: @escaping (Bool, String) -> Void) {
         let home = "/Users/\(username)"
-        var findings: [HealthFinding] = []
+        var items: [DiagnosticItem] = []
 
         // --- 环境隔离检查（FileManager.attributesOfItem，无子进程）---
 
@@ -26,11 +26,11 @@ extension ClawdHomeHelperImpl {
                     do { try FilePermissionHelper.chmod(home, mode: "700"); fixed = true }
                     catch { fixed = false; fixError = error.localizedDescription }
                 }
-                findings.append(HealthFinding(
-                    id: "home-perms", source: "isolation", severity: "critical",
+                items.append(DiagnosticItem(
+                    id: "home-perms", group: .permissions, severity: "critical",
                     title: "家目录未隔离",
                     detail: "当前权限 \(String(format: "%o", perms))，所有用户均在 staff 组，必须设为 700 才能阻止其他用户浏览文件",
-                    fixable: true, fixed: fixed, fixError: fixError))
+                    fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
             }
         }
 
@@ -47,11 +47,11 @@ extension ClawdHomeHelperImpl {
                     do { try FilePermissionHelper.chmodSymbolicRecursive(openclawDir, expr: "go-rwx"); fixed = true }
                     catch { fixed = false; fixError = error.localizedDescription }
                 }
-                findings.append(HealthFinding(
-                    id: "openclaw-perms", source: "isolation", severity: "critical",
+                items.append(DiagnosticItem(
+                    id: "openclaw-perms", group: .permissions, severity: "critical",
                     title: ".openclaw 目录权限过宽",
                     detail: "当前权限 \(String(format: "%o", perms))，API Key 等敏感数据对其他用户可见",
-                    fixable: true, fixed: fixed, fixError: fixError))
+                    fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
             }
         }
 
@@ -68,11 +68,11 @@ extension ClawdHomeHelperImpl {
                     do { try FilePermissionHelper.chmodSymbolic(npmGlobal, expr: "o-w"); fixed = true }
                     catch { fixed = false; fixError = error.localizedDescription }
                 }
-                findings.append(HealthFinding(
-                    id: "npm-global-writable", source: "isolation", severity: "critical",
+                items.append(DiagnosticItem(
+                    id: "npm-global-writable", group: .permissions, severity: "critical",
                     title: "npm 全局目录可被任意用户写入",
                     detail: "当前权限 \(String(format: "%o", perms))，其他用户可替换可执行文件（潜在供应链风险）",
-                    fixable: true, fixed: fixed, fixError: fixError))
+                    fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
             }
         }
 
@@ -85,11 +85,11 @@ extension ClawdHomeHelperImpl {
                 do { try FilePermissionHelper.chown(home, owner: username); fixed = true }
                 catch { fixed = false; fixError = error.localizedDescription }
             }
-            findings.append(HealthFinding(
-                id: "home-owner", source: "isolation", severity: "critical",
+            items.append(DiagnosticItem(
+                id: "home-owner", group: .permissions, severity: "critical",
                 title: "家目录归属错误",
                 detail: "家目录当前归属 \(owner)，应归属 \(username)，用户无法写入自己的家目录",
-                fixable: true, fixed: fixed, fixError: fixError))
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
         }
 
         // 检查 5：.openclaw 目录归属（openclaw CLI 以用户身份运行，需要写权限）
@@ -102,11 +102,11 @@ extension ClawdHomeHelperImpl {
                 do { try FilePermissionHelper.chownRecursive(openclawDir, owner: username); fixed = true }
                 catch { fixed = false; fixError = error.localizedDescription }
             }
-            findings.append(HealthFinding(
-                id: "openclaw-owner", source: "isolation", severity: "critical",
+            items.append(DiagnosticItem(
+                id: "openclaw-owner", group: .permissions, severity: "critical",
                 title: ".openclaw 目录归属错误",
                 detail: ".openclaw 当前归属 \(owner)，应归属 \(username)，导致 openclaw CLI 无法读写配置",
-                fixable: true, fixed: fixed, fixError: fixError))
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
         }
 
         // 检查 6：openclaw.json 配置文件归属（用户需要能写入，否则 config set 静默失败）
@@ -120,11 +120,11 @@ extension ClawdHomeHelperImpl {
                 do { try FilePermissionHelper.chown(configFile, owner: username); fixed = true }
                 catch { fixed = false; fixError = error.localizedDescription }
             }
-            findings.append(HealthFinding(
-                id: "config-owner", source: "isolation", severity: "critical",
+            items.append(DiagnosticItem(
+                id: "config-owner", group: .permissions, severity: "critical",
                 title: "配置文件归属错误",
                 detail: "openclaw.json 当前归属 \(owner)，应归属 \(username)，导致 API Key 等配置无法保存",
-                fixable: true, fixed: fixed, fixError: fixError))
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
         }
 
         // 检查 7：npm-global 目录归属（包含 openclaw 可执行文件，需要用户可执行）
@@ -137,24 +137,25 @@ extension ClawdHomeHelperImpl {
                 do { try FilePermissionHelper.chownRecursive(npmGlobal, owner: username); fixed = true }
                 catch { fixed = false; fixError = error.localizedDescription }
             }
-            findings.append(HealthFinding(
-                id: "npm-global-owner", source: "isolation", severity: "critical",
+            items.append(DiagnosticItem(
+                id: "npm-global-owner", group: .permissions, severity: "critical",
                 title: "npm 全局目录归属错误",
                 detail: "~/.npm-global 当前归属 \(owner)，应归属 \(username)，openclaw 命令无法执行",
-                fixable: true, fixed: fixed, fixError: fixError))
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
         }
 
         // --- 应用安全审计（openclaw security audit --json）---
-        var auditSkipped = false
-        var auditError: String? = nil
 
         guard let openclawPath = try? ConfigWriter.findOpenclawBinary(for: username) else {
             // openclaw 未安装，跳过审计
-            auditSkipped = true
-            let result = HealthCheckResult(username: username,
-                checkedAt: Date().timeIntervalSince1970,
-                findings: findings, auditSkipped: true, auditError: nil)
-            encodeAndReply(result, reply)
+            items.append(DiagnosticItem(
+                id: "security-skip", group: .security, severity: "info",
+                title: "跳过安全审计",
+                detail: "OpenClaw 未安装",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+            let result = DiagnosticsResult(username: username,
+                checkedAt: Date().timeIntervalSince1970, items: items)
+            encodeAndReplyDiag(result, reply)
             return
         }
 
@@ -162,7 +163,7 @@ extension ClawdHomeHelperImpl {
         let auditEnv = ["-n", "-u", username, "-H", "/usr/bin/env", "PATH=\(nodePath)", openclawPath, "security", "audit", "--json"]
 
         if let output = try? run("/usr/bin/sudo", args: auditEnv) {
-            let initialFindings = parseAuditOutput(output)
+            let initialFindings = parseAuditItems(output)
 
             if fix && !initialFindings.isEmpty {
                 // 运行 openclaw doctor --repair 修复应用层问题
@@ -171,45 +172,48 @@ extension ClawdHomeHelperImpl {
                 ])
                 // 修复后重新审计，对比前后 id 差异
                 if let postOutput = try? run("/usr/bin/sudo", args: auditEnv) {
-                    let postFindings = parseAuditOutput(postOutput)
+                    let postFindings = parseAuditItems(postOutput)
                     let postIDs      = Set(postFindings.map { $0.id })
                     let initialIDs   = Set(initialFindings.map { $0.id })
                     // 原有发现：消失的 = 已修复，仍在的 = 未修复
                     for f in initialFindings {
-                        findings.append(HealthFinding(
-                            id: f.id, source: f.source, severity: f.severity,
+                        items.append(DiagnosticItem(
+                            id: f.id, group: .security, severity: f.severity,
                             title: f.title, detail: f.detail,
-                            fixable: true, fixed: !postIDs.contains(f.id), fixError: nil))
+                            fixable: true, fixed: !postIDs.contains(f.id), fixError: nil, latencyMs: nil))
                     }
                     // 修复后新增的发现（防御性处理）
                     for f in postFindings where !initialIDs.contains(f.id) {
-                        findings.append(f)
+                        items.append(f)
                     }
                 } else {
                     // 重新审计失败，保留原始发现并标记修复状态未知
                     for f in initialFindings {
-                        findings.append(HealthFinding(
-                            id: f.id, source: f.source, severity: f.severity,
+                        items.append(DiagnosticItem(
+                            id: f.id, group: .security, severity: f.severity,
                             title: f.title, detail: f.detail,
-                            fixable: true, fixed: false, fixError: "修复后重新检查失败"))
+                            fixable: true, fixed: false, fixError: "修复后重新检查失败", latencyMs: nil))
                     }
                 }
             } else {
-                findings += initialFindings
+                items += initialFindings
             }
         } else {
-            auditError = "安全审计执行失败（openclaw security audit --json）"
+            items.append(DiagnosticItem(
+                id: "security-fail", group: .security, severity: "warn",
+                title: "安全审计执行失败",
+                detail: "openclaw security audit --json",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
         }
 
-        let result = HealthCheckResult(username: username,
-            checkedAt: Date().timeIntervalSince1970,
-            findings: findings, auditSkipped: auditSkipped, auditError: auditError)
-        encodeAndReply(result, reply)
+        let result = DiagnosticsResult(username: username,
+            checkedAt: Date().timeIntervalSince1970, items: items)
+        encodeAndReplyDiag(result, reply)
     }
 
-    /// 解析 `openclaw security audit --json` 输出
+    /// 解析 `openclaw security audit --json` 输出为 DiagnosticItem 数组
     /// 兼容 {"findings":[...]} / {"issues":[...]} / 直接数组 [...] 三种格式
-    func parseAuditOutput(_ output: String) -> [HealthFinding] {
+    func parseAuditItems(_ output: String) -> [DiagnosticItem] {
         guard let data = output.data(using: .utf8) else { return [] }
         var rawList: [[String: Any]] = []
         if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -225,14 +229,14 @@ extension ClawdHomeHelperImpl {
             let detail   = (raw["detail"] as? String)
                 ?? (raw["description"] as? String)
                 ?? (raw["message"] as? String) ?? ""
-            return HealthFinding(id: "audit-\(id)", source: "audit",
+            return DiagnosticItem(id: "audit-\(id)", group: .security,
                 severity: severity, title: title, detail: detail,
-                fixable: true, fixed: nil, fixError: nil)
+                fixable: true, fixed: nil, fixError: nil, latencyMs: nil)
         }
     }
 
-    private func encodeAndReply(_ result: HealthCheckResult,
-                                 _ reply: (Bool, String) -> Void) {
+    private func encodeAndReplyDiag(_ result: DiagnosticsResult,
+                                     _ reply: (Bool, String) -> Void) {
         if let data = try? JSONEncoder().encode(result),
            let json = String(data: data, encoding: .utf8) {
             reply(true, json)
@@ -550,7 +554,7 @@ extension ClawdHomeHelperImpl {
 
         do {
             let output = try run("/usr/bin/sudo", args: auditArgs)
-            let findings = parseAuditOutput(output)
+            let findings = parseAuditItems(output)
             if findings.isEmpty {
                 items.append(DiagnosticItem(
                     id: "security-ok", group: .security, severity: "ok",
@@ -562,7 +566,7 @@ extension ClawdHomeHelperImpl {
                                openclawPath, "doctor", "--repair"]
                 _ = try? run("/usr/bin/sudo", args: fixArgs)
                 if let postOutput = try? run("/usr/bin/sudo", args: auditArgs) {
-                    let postFindings = parseAuditOutput(postOutput)
+                    let postFindings = parseAuditItems(postOutput)
                     let postIDs = Set(postFindings.map { $0.id })
                     for f in findings {
                         items.append(DiagnosticItem(

@@ -1312,7 +1312,7 @@ final class HelperClient {
 
     /// 对指定用户执行体检（环境隔离 + 安全审计）
     /// fix=true 时自动修复可修复的权限问题
-    func runHealthCheck(username: String, fix: Bool) async -> HealthCheckResult? {
+    func runHealthCheck(username: String, fix: Bool) async -> DiagnosticsResult? {
         guard let proxy = controlProxy else { return nil }
         do {
             let (_, json): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
@@ -1321,7 +1321,7 @@ final class HelperClient {
                 }
             }
             guard let data = json.data(using: .utf8) else { return nil }
-            return try? JSONDecoder().decode(HealthCheckResult.self, from: data)
+            return try? JSONDecoder().decode(DiagnosticsResult.self, from: data)
         } catch { return nil }
     }
 
