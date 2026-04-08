@@ -833,6 +833,11 @@ struct HelperLogTab: View {
         let channel: String
         let message: String
         let pid: Int32?
+        let username: String?
+        let requestId: String?
+        let component: String?
+        let event: String?
+        let fields: [String: String]?
     }
 
     private struct ParsedLogLine: Identifiable {
@@ -1103,7 +1108,33 @@ struct HelperLogTab: View {
         if let data = line.data(using: .utf8),
            let json = try? JSONDecoder().decode(JSONLogLine.self, from: data) {
             let normalizedTs = LogTimestampFormatter.normalizeTimestamp(json.ts)
-            let text = "[\(normalizedTs)] [\(json.level)] [\(json.channel)] \(json.message)"
+            var tags: [String] = []
+            if let username = json.username, !username.isEmpty {
+                tags.append("user=\(username)")
+            }
+            if let requestId = json.requestId, !requestId.isEmpty {
+                tags.append("req=\(requestId)")
+            }
+            if let component = json.component, !component.isEmpty {
+                if let event = json.event, !event.isEmpty {
+                    tags.append("\(component).\(event)")
+                } else {
+                    tags.append(component)
+                }
+            }
+            if let fields = json.fields, !fields.isEmpty {
+                let summary = fields
+                    .sorted { $0.key < $1.key }
+                    .map { "\($0.key)=\($0.value)" }
+                    .joined(separator: ",")
+                if !summary.isEmpty {
+                    tags.append(summary)
+                }
+            }
+            let tagText = tags.map { "[\($0)]" }.joined(separator: " ")
+            let text = "[\(normalizedTs)] [\(json.level)] [\(json.channel)]"
+                + (tagText.isEmpty ? "" : " \(tagText)")
+                + " \(json.message)"
             return ParsedLogLine(
                 id: "\(id)-\(normalizedTs)-\(json.level)-\(json.channel)",
                 text: text,
