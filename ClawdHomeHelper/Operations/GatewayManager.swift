@@ -50,9 +50,17 @@ struct GatewayManager {
         if FileManager.default.fileExists(atPath: agentPlist) {
             GatewayLog.log("START_STEP", username: username,
                 detail: "清理冲突 LaunchAgent: \(agentPlist)")
-            _ = try? run("/bin/launchctl", args: ["bootout", "gui/\(uid)/ai.openclaw.gateway"])
-            _ = try? run("/bin/launchctl", args: ["unload", agentPlist])
-            try? FileManager.default.removeItem(atPath: agentPlist)
+            if (try? run("/bin/launchctl", args: ["bootout", "gui/\(uid)/ai.openclaw.gateway"])) == nil {
+                helperLog("launchctl bootout gui/\(uid)/ai.openclaw.gateway failed for @\(username)", level: .warn)
+            }
+            if (try? run("/bin/launchctl", args: ["unload", agentPlist])) == nil {
+                helperLog("launchctl unload \(agentPlist) failed for @\(username)", level: .warn)
+            }
+            do {
+                try FileManager.default.removeItem(atPath: agentPlist)
+            } catch {
+                helperLog("removeItem \(agentPlist) failed: \(error.localizedDescription)", level: .warn)
+            }
         }
 
         // 3. 修复可能损坏的配置文件（智能引号等非法字符）
@@ -133,21 +141,27 @@ struct GatewayManager {
                 // 必须 bootout + bootstrap 才能让新 plist 生效
                 GatewayLog.log("START_STEP", username: username,
                     detail: "配置变更（正在运行），bootout + bootstrap 更新端口 pid=\(existingPid)")
-                _ = try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])
+                if (try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])) == nil {
+                    helperLog("launchctl bootout system/\(label) failed during config change for @\(username)", level: .warn)
+                }
                 Thread.sleep(forTimeInterval: 0.5)
                 try writePlist(newPlist, to: plistPath)
                 try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
             } else if existingPlist != newPlist {
                 GatewayLog.log("START_STEP", username: username,
                     detail: "plist 变更，bootout 后重新 bootstrap")
-                _ = try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])
+                if (try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])) == nil {
+                    helperLog("launchctl bootout system/\(label) failed during plist change for @\(username)", level: .warn)
+                }
                 Thread.sleep(forTimeInterval: 0.5)
                 try writePlist(newPlist, to: plistPath)
                 try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
             } else {
                 GatewayLog.log("START_STEP", username: username,
                     detail: "plist 未变，kickstart 重启")
-                _ = try? run("/bin/launchctl", args: ["kickstart", "system/\(label)"])
+                if (try? run("/bin/launchctl", args: ["kickstart", "system/\(label)"])) == nil {
+                    helperLog("launchctl kickstart system/\(label) failed for @\(username)", level: .warn)
+                }
             }
         } else {
             GatewayLog.log("START_STEP", username: username,

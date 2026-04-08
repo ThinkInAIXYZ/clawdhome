@@ -209,7 +209,9 @@ extension ClawdHomeHelperImpl {
             }
             fm.createFile(atPath: configPath, contents: outData)
             // 修正所有权
-            _ = try? run("/usr/sbin/chown", args: ["-R", username, dir])
+            if (try? run("/usr/sbin/chown", args: ["-R", username, dir])) == nil {
+                helperLog("chown -R \(username) \(dir) failed after config write", level: .warn)
+            }
             reply(true, nil)
         } catch {
             reply(false, error.localizedDescription)
@@ -350,8 +352,12 @@ extension ClawdHomeHelperImpl {
             try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
         }
         try outData.write(to: URL(fileURLWithPath: configPath), options: .atomic)
-        _ = try? run("/usr/sbin/chown", args: [username, dir])
-        _ = try? run("/usr/sbin/chown", args: [username, configPath])
+        if (try? run("/usr/sbin/chown", args: [username, dir])) == nil {
+            helperLog("chown \(username) \(dir) failed after proxy config write", level: .warn)
+        }
+        if (try? run("/usr/sbin/chown", args: [username, configPath])) == nil {
+            helperLog("chown \(username) \(configPath) failed after proxy config write", level: .warn)
+        }
     }
 
     private func rewriteProxyManagedBlock(
@@ -399,8 +405,12 @@ extension ClawdHomeHelperImpl {
 
         guard finalContent != existing else { return }
         try Data(finalContent.utf8).write(to: URL(fileURLWithPath: path), options: .atomic)
-        _ = try? run("/usr/sbin/chown", args: [username, path])
-        _ = try? run("/bin/chmod", args: ["644", path])
+        if (try? run("/usr/sbin/chown", args: [username, path])) == nil {
+            helperLog("chown \(username) \(path) failed after proxy managed block rewrite", level: .warn)
+        }
+        if (try? run("/bin/chmod", args: ["644", path])) == nil {
+            helperLog("chmod 644 \(path) failed after proxy managed block rewrite", level: .warn)
+        }
     }
 
     private func stripManagedBlock(content: String, start: String, end: String) -> String {
@@ -503,7 +513,9 @@ extension ClawdHomeHelperImpl {
         let openclawDir = "\(home)/.openclaw"
         // 先修复权限：防止之前的操作遗留 root 归属导致 openclaw 读取失败
         if FileManager.default.fileExists(atPath: openclawDir) {
-            _ = try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])
+            if (try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])) == nil {
+                helperLog("chown -R \(username) \(openclawDir) failed before runOpenclawCommand", level: .warn)
+            }
         }
         let shellArgs = args.map(shellSingleQuoted).joined(separator: " ")
         let shellCommand = "cd \"$HOME\" && \(shellSingleQuoted(openclawPath))\(shellArgs.isEmpty ? "" : " \(shellArgs)")"
@@ -531,7 +543,9 @@ extension ClawdHomeHelperImpl {
         let nodePath = ConfigWriter.buildNodePath(username: username)
         let openclawDir = "\(home)/.openclaw"
         if FileManager.default.fileExists(atPath: openclawDir) {
-            _ = try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])
+            if (try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])) == nil {
+                helperLog("chown -R \(username) \(openclawDir) failed before runPairingCommand", level: .warn)
+            }
         }
         let shellArgs = (["pairing"] + args).map(shellSingleQuoted).joined(separator: " ")
         let shellCommand = "cd \"$HOME\" && \(shellSingleQuoted(openclawPath)) \(shellArgs)"
@@ -560,7 +574,9 @@ extension ClawdHomeHelperImpl {
         let nodePath = ConfigWriter.buildNodePath(username: username)
         let openclawDir = "\(home)/.openclaw"
         if FileManager.default.fileExists(atPath: openclawDir) {
-            _ = try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])
+            if (try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])) == nil {
+                helperLog("chown -R \(username) \(openclawDir) failed before runFeishuOnboardCommand", level: .warn)
+            }
         }
         if !requestedArgs.isEmpty {
             helperLog("[feishu] requested args ignored in install-only flow: \(requestedArgs.joined(separator: " "))", level: .info)
@@ -611,7 +627,9 @@ extension ClawdHomeHelperImpl {
         let home = "/Users/\(username)"
         let openclawDir = "\(home)/.openclaw"
         if FileManager.default.fileExists(atPath: openclawDir) {
-            _ = try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])
+            if (try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])) == nil {
+                helperLog("chown -R \(username) \(openclawDir) failed before maintenance terminal session", level: .warn)
+            }
         }
         let nodePath = ConfigWriter.buildNodePath(username: username)
 
