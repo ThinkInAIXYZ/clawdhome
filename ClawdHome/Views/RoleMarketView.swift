@@ -143,11 +143,11 @@ final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigatio
               let data = try? JSONSerialization.data(withJSONObject: body),
               let dna = try? JSONDecoder().decode(AgentDNA.self, from: data)
         else {
-            print("[Bridge] Failed to parse DNA:", message.body)
+            appLog("[Bridge] Failed to parse DNA: \(message.body)", level: .warn)
             return
         }
 
-        print("[Bridge] Received DNA: \(dna.name) (\(dna.id))")
+        appLog("[Bridge] Received DNA: \(dna.name) (\(dna.id))")
         DispatchQueue.main.async {
             self.onAdoptAgent?(dna)
         }
@@ -238,12 +238,12 @@ final class RoleMarketWebViewCache {
         if let url = Bundle.main.url(forResource: "roles", withExtension: "html") {
             wv.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else {
-            print("[RoleMarketWebViewCache] roles.html not found in Bundle!")
+            appLog("[RoleMarketWebViewCache] roles.html not found in Bundle!", level: .error)
         }
 
         self.coordinator = c
         self.webView = wv
-        print("[RoleMarketWebViewCache] WebView preloaded")
+        appLog("[RoleMarketWebViewCache] WebView preloaded")
     }
 }
 
@@ -259,13 +259,13 @@ struct RoleMarketWebView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         // 优先复用预热好的缓存，命中时直接返回，零延迟
         if let cached = RoleMarketWebViewCache.shared.webView {
-            print("[RoleMarketWebView] Using prewarmed WebView")
+            appLog("[RoleMarketWebView] Using prewarmed WebView")
             applyRoleMarketLocale(localeIdentifier, to: cached)
             return cached
         }
 
         // 缓存未命中（未预热或首次）：降级为当场创建
-        print("[RoleMarketWebView] Cache miss — creating WebView on demand")
+        appLog("[RoleMarketWebView] Cache miss — creating WebView on demand")
         let config = makeRoleMarketConfiguration(
             coordinator: context.coordinator,
             localeIdentifier: localeIdentifier
@@ -278,7 +278,7 @@ struct RoleMarketWebView: NSViewRepresentable {
         if let url = Bundle.main.url(forResource: "roles", withExtension: "html") {
             webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else {
-            print("[RoleMarketWebView] roles.html not found in Bundle!")
+            appLog("[RoleMarketWebView] roles.html not found in Bundle!", level: .error)
         }
 
         return webView
