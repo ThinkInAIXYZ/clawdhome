@@ -68,6 +68,7 @@
 		5C4286A2BA6C2A17C2E8D16A /* ApplyCredentialSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BF8C6365FBBA9CA2C07D90 /* ApplyCredentialSheet.swift */; };
 		5FF1FC550784127BA01FA09D /* LocalLLMManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9DBC78DA4D1FFD0EB50D466 /* LocalLLMManager.swift */; };
 		61122BA3487584B844D57BB3 /* GlobalModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89D6CAF4FF1A5DD31BFE266E /* GlobalModelStore.swift */; };
+		645CD594F1E088E7A3515D0D /* WizardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E2BC3AA8DD32C2E7B370D0 /* WizardComponents.swift */; };
 		647F82D1797FC9D80FF86C16 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6474BB5EEF5B87B65666E978 /* NetworkModels.swift */; };
 		69BF685059BE6B7AEB250E07 /* HelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F39F27916E7B56B4688842 /* HelperClient.swift */; };
 		6B6B8E332776101B198630AC /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 806D35D06FA4AFEDDAA912AD /* L10n.swift */; };
@@ -83,6 +84,7 @@
 		7F1931508A7DA6D48319500F /* ShellRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6C76557D6C46315D058A794 /* ShellRunner.swift */; };
 		844ED367CC5266A513A5FADE /* UserInitPresentationRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */; };
 		84EE8ABA47536FEBAD8C7E53 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13F07CE9D25F72DDB11AB739 /* ContentView.swift */; };
+		864844DC8AC7F16874F7E23F /* WizardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B0925580BD2EF371BC98D4 /* WizardModels.swift */; };
 		87442F9B989A859F1BCF6FC2 /* GatewayLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81B47FD58BA6519F937D3A52 /* GatewayLog.swift */; };
 		8782D0C95C1470BAA40F3CB3 /* AppLockScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DFA0D3288E6276A9630CE4B /* AppLockScreen.swift */; };
 		8846B8802FACD8C78C40CEAB /* ProviderKeySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A583A7B98571015C5E62789E /* ProviderKeySheet.swift */; };
@@ -216,10 +218,12 @@
 		5D7D1F12DB908202E9E91105 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		5F97A493AAFD488D32EC70F5 /* ClawdHome.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClawdHome.entitlements; sourceTree = "<group>"; };
 		5FB700C239BC180E618B6D07 /* CustomProviderFormFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomProviderFormFields.swift; sourceTree = "<group>"; };
+		60E2BC3AA8DD32C2E7B370D0 /* WizardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardComponents.swift; sourceTree = "<group>"; };
 		642F3F921C3D218DB8393578 /* HelperImpl+Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Config.swift"; sourceTree = "<group>"; };
 		6474BB5EEF5B87B65666E978 /* NetworkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkModels.swift; sourceTree = "<group>"; };
 		6482AE0816A0181D42B69AB4 /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
 		67AB0A69D9F15FA551CD2FFE /* ClawPoolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawPoolView.swift; sourceTree = "<group>"; };
+		67B0925580BD2EF371BC98D4 /* WizardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardModels.swift; sourceTree = "<group>"; };
 		6805588FE98C2E1FE665C5F1 /* ModelManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerView.swift; sourceTree = "<group>"; };
 		6CC9E8292B772B2D7305F978 /* HelperImpl+Install.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Install.swift"; sourceTree = "<group>"; };
 		6E1B997BD537C60950ED9DD3 /* UserDirectoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDirectoryService.swift; sourceTree = "<group>"; };
@@ -564,6 +568,8 @@
 				A623F9F0DFBC22F900B5ACED /* UserFilesView.swift */,
 				0EE6965A7DA630D46B4F1B50 /* UserInitWizardView.swift */,
 				DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */,
+				60E2BC3AA8DD32C2E7B370D0 /* WizardComponents.swift */,
+				67B0925580BD2EF371BC98D4 /* WizardModels.swift */,
 				0836569296D71804D39AAEE4 /* ChannelOnboarding */,
 				78E04859045A1EC490479CDF /* ModelManager */,
 			);
@@ -830,7 +836,9 @@
 				346939ADEDF99620B1967823 /* UserPasswordStore.swift in Sources */,
 				9D6B268A8115D86664724753 /* VoiceLibraryTab.swift in Sources */,
 				CF9F809B95CDA2464FC36087 /* VoiceProfile.swift in Sources */,
+				645CD594F1E088E7A3515D0D /* WizardComponents.swift in Sources */,
 				7A11F882D706844DD3EF518F /* WizardConnection.swift in Sources */,
+				864844DC8AC7F16874F7E23F /* WizardModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
