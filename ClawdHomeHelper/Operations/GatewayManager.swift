@@ -24,8 +24,7 @@ struct GatewayManager {
         // 先读配置文件中的现有端口（用户可能手动修改过），没有则用公式兜底
         let preferredPort = readConfiguredPort(username: username) ?? port(for: uid)
 
-        GatewayLog.log("START_BEGIN", username: username,
-            detail: "uid=\(uid) preferred_port=\(preferredPort)")
+        helperLog("[GatewayManager] START_BEGIN: uid=\(uid) preferred_port=\(preferredPort) @\(username)")
 
         let initialPrintOutput = try? run("/bin/launchctl", args: ["print", "system/\(label)"])
         let launchdProtectedPIDs: Set<Int32> = {
@@ -37,19 +36,16 @@ struct GatewayManager {
         let openclawPath: String
         do {
             openclawPath = try ConfigWriter.findOpenclawBinary(for: username)
-            GatewayLog.log("START_STEP", username: username,
-                detail: "binary=\(openclawPath)")
+            helperLog("[GatewayManager] START_STEP: binary=\(openclawPath) @\(username)")
         } catch {
-            GatewayLog.log("START_FAIL", username: username,
-                detail: "找不到 openclaw: \(error.localizedDescription)")
+            helperLog("[GatewayManager] START_FAIL: 找不到 openclaw: \(error.localizedDescription) @\(username)", level: .error)
             throw error
         }
 
         // 2. 清理 OpenClaw 原生 LaunchAgent（避免双重注册抢端口）
         let agentPlist = "/Users/\(username)/Library/LaunchAgents/ai.openclaw.gateway.plist"
         if FileManager.default.fileExists(atPath: agentPlist) {
-            GatewayLog.log("START_STEP", username: username,
-                detail: "清理冲突 LaunchAgent: \(agentPlist)")
+            helperLog("[GatewayManager] START_STEP: 清理冲突 LaunchAgent: \(agentPlist) @\(username)")
             if (try? run("/bin/launchctl", args: ["bootout", "gui/\(uid)/ai.openclaw.gateway"])) == nil {
                 helperLog("launchctl bootout gui/\(uid)/ai.openclaw.gateway failed for @\(username)", level: .warn)
             }
@@ -69,19 +65,17 @@ struct GatewayManager {
         // 4. 端口选定：优先使用首选端口，被占用时自动找备用（向后最多 20 个）
         let resolvedPort: Int
         if let occupant = portOccupant(port: preferredPort, ignorePIDs: launchdProtectedPIDs) {
-            GatewayLog.log("START_STEP", username: username,
-                detail: "首选端口 \(preferredPort) 被 \(occupant) 占用，寻找备用端口")
+            helperLog("[GatewayManager] START_STEP: 首选端口 \(preferredPort) 被 \(occupant) 占用，寻找备用端口 @\(username)")
             guard let alt = findAvailablePort(
                 preferred: preferredPort + 1,
                 ignorePIDs: launchdProtectedPIDs
             ) else {
                 let err = GatewayError.portConflict(port: preferredPort, occupant: occupant)
-                GatewayLog.log("START_FAIL", username: username, detail: err.localizedDescription)
+                helperLog("[GatewayManager] START_FAIL: \(err.localizedDescription) @\(username)", level: .error)
                 throw err
             }
             resolvedPort = alt
-            GatewayLog.log("START_STEP", username: username,
-                detail: "切换到备用端口 \(resolvedPort)（首选 \(preferredPort) 被占用）")
+            helperLog("[GatewayManager] START_STEP: 切换到备用端口 \(resolvedPort)（首选 \(preferredPort) 被占用） @\(username)")
         } else {
             resolvedPort = preferredPort
         }
@@ -93,11 +87,9 @@ struct GatewayManager {
             // 允许 ClawdHome（本地 Control UI）以 token auth 连接而无需 device identity
             // gateway 默认会清空无 device identity 客户端的 scopes，此配置保留 localhost 客户端的 scopes
             try ConfigWriter.setConfig(username: username, key: "gateway.controlUi.allowInsecureAuth", value: "true")
-            GatewayLog.log("START_STEP", username: username,
-                detail: "config 写入成功: port=\(resolvedPort) mode=local allowInsecureAuth=true")
+            helperLog("[GatewayManager] START_STEP: config 写入成功: port=\(resolvedPort) mode=local allowInsecureAuth=true @\(username)")
         } catch {
-            GatewayLog.log("START_FAIL", username: username,
-                detail: "config 写入失败: \(error.localizedDescription)")
+            helperLog("[GatewayManager] START_FAIL: config 写入失败: \(error.localizedDescription) @\(username)", level: .error)
             throw error
         }
 
@@ -106,7 +98,7 @@ struct GatewayManager {
         let actualPort = parsePortFromCLIOutput(actualPortRaw)
         if actualPort != resolvedPort {
             let err = GatewayError.portConfigMismatch(expected: resolvedPort, actualRaw: actualPortRaw, normalized: actualPort)
-            GatewayLog.log("START_FAIL", username: username, detail: err.localizedDescription)
+            helperLog("[GatewayManager] START_FAIL: \(err.localizedDescription) @\(username)", level: .error)
             throw err
         }
 
@@ -133,14 +125,12 @@ struct GatewayManager {
             if running {
                 if existingPlist == newPlist {
                     // 端口一致，真正的 no-op
-                    GatewayLog.log("START_SKIP", username: username,
-                        detail: "已在运行 pid=\(existingPid) port=\(resolvedPort)")
+                    helperLog("[GatewayManager] START_SKIP: 已在运行 pid=\(existingPid) port=\(resolvedPort) @\(username)")
                     return
                 }
                 // 配置变更（含端口）→ launchd 不会重读 plist，kickstart -k 无效
                 // 必须 bootout + bootstrap 才能让新 plist 生效
-                GatewayLog.log("START_STEP", username: username,
-                    detail: "配置变更（正在运行），bootout + bootstrap 更新端口 pid=\(existingPid)")
+                helperLog("[GatewayManager] START_STEP: 配置变更（正在运行），bootout + bootstrap 更新端口 pid=\(existingPid) @\(username)")
                 if (try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])) == nil {
                     helperLog("launchctl bootout system/\(label) failed during config change for @\(username)", level: .warn)
                 }
@@ -148,8 +138,7 @@ struct GatewayManager {
                 try writePlist(newPlist, to: plistPath)
                 try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
             } else if existingPlist != newPlist {
-                GatewayLog.log("START_STEP", username: username,
-                    detail: "plist 变更，bootout 后重新 bootstrap")
+                helperLog("[GatewayManager] START_STEP: plist 变更，bootout 后重新 bootstrap @\(username)")
                 if (try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])) == nil {
                     helperLog("launchctl bootout system/\(label) failed during plist change for @\(username)", level: .warn)
                 }
@@ -157,22 +146,20 @@ struct GatewayManager {
                 try writePlist(newPlist, to: plistPath)
                 try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
             } else {
-                GatewayLog.log("START_STEP", username: username,
-                    detail: "plist 未变，kickstart 重启")
+                helperLog("[GatewayManager] START_STEP: plist 未变，kickstart 重启 @\(username)")
                 if (try? run("/bin/launchctl", args: ["kickstart", "system/\(label)"])) == nil {
                     helperLog("launchctl kickstart system/\(label) failed for @\(username)", level: .warn)
                 }
             }
         } else {
-            GatewayLog.log("START_STEP", username: username,
-                detail: "首次注册，bootstrap")
+            helperLog("[GatewayManager] START_STEP: 首次注册，bootstrap @\(username)")
             try writePlist(newPlist, to: plistPath)
             try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
         }
 
         guard let startedPID = waitForGatewayRunning(username: username, uid: uid, timeout: 8) else {
             let err = GatewayError.startVerificationFailed(reason: "启动后 8 秒内未获得运行中的 PID")
-            GatewayLog.log("START_FAIL", username: username, detail: err.localizedDescription)
+            helperLog("[GatewayManager] START_FAIL: \(err.localizedDescription) @\(username)", level: .error)
             throw err
         }
 
@@ -181,12 +168,11 @@ struct GatewayManager {
         let stabilizedStatus = status(username: username, uid: uid)
         if !stabilizedStatus.running || stabilizedStatus.pid <= 0 {
             let err = GatewayError.startVerificationFailed(reason: "启动后进程未保持存活，疑似循环重启")
-            GatewayLog.log("START_FAIL", username: username, detail: err.localizedDescription)
+            helperLog("[GatewayManager] START_FAIL: \(err.localizedDescription) @\(username)", level: .error)
             throw err
         }
 
-        GatewayLog.log("START_OK", username: username,
-            detail: "port=\(resolvedPort) label=\(label) pid=\(stabilizedStatus.pid)")
+        helperLog("[GatewayManager] START_OK: port=\(resolvedPort) label=\(label) pid=\(stabilizedStatus.pid) @\(username)")
     }
 
     private static func writePlist(_ content: String, to path: String) throws {
@@ -198,13 +184,13 @@ struct GatewayManager {
 
     static func stopGateway(username: String, uid: Int) throws {
         let label = "\(gatewayLabel).\(username)"
-        GatewayLog.log("STOP", username: username, detail: "label=\(label)")
+        helperLog("[GatewayManager] STOP: label=\(label) @\(username)")
         var bootoutError: Error? = nil
         do {
             try run("/bin/launchctl", args: ["bootout", "system/\(label)"])
         } catch {
             if isIgnorableLaunchctlBootoutError(error) {
-                GatewayLog.log("STOP_SKIP", username: username, detail: "job 不存在，视为已停止")
+                helperLog("[GatewayManager] STOP_SKIP: job 不存在，视为已停止 @\(username)")
             } else {
                 bootoutError = error
             }
@@ -212,7 +198,7 @@ struct GatewayManager {
 
         // 停止语义必须“停稳”：即使 bootout 返回错误，也要尝试收敛到已停止状态。
         if !waitForGatewayStopped(username: username, uid: uid, timeout: 6) {
-            GatewayLog.log("STOP_STEP", username: username, detail: "bootout 后仍有残留 gateway，强制清理")
+            helperLog("[GatewayManager] STOP_STEP: bootout 后仍有残留 gateway，强制清理 @\(username)")
             forceStopGatewayProcesses(username: username)
             // 再尝试一次 bootout，清除 launchd 注册态（忽略 no such process）
             do {
@@ -224,15 +210,15 @@ struct GatewayManager {
             }
             if !waitForGatewayStopped(username: username, uid: uid, timeout: 4) {
                 let err = bootoutError ?? GatewayError.stopVerificationFailed(reason: "bootout 后仍存在 gateway 残留进程")
-                GatewayLog.log("STOP_FAIL", username: username, detail: err.localizedDescription)
+                helperLog("[GatewayManager] STOP_FAIL: \(err.localizedDescription) @\(username)", level: .error)
                 throw err
             }
         }
 
         if let bootoutError {
-            GatewayLog.log("STOP_WARN", username: username, detail: "bootout 返回异常但已停稳：\(bootoutError.localizedDescription)")
+            helperLog("[GatewayManager] STOP_WARN: bootout 返回异常但已停稳：\(bootoutError.localizedDescription) @\(username)", level: .warn)
         }
-        GatewayLog.log("STOP_OK", username: username)
+        helperLog("[GatewayManager] STOP_OK @\(username)")
     }
 
     /// 卸载 gateway launchd 服务：
@@ -242,7 +228,7 @@ struct GatewayManager {
         let label = "\(gatewayLabel).\(username)"
         let plistPath = launchDaemonPath(username: username)
 
-        GatewayLog.log("UNINSTALL", username: username, detail: "label=\(label)")
+        helperLog("[GatewayManager] UNINSTALL: label=\(label) @\(username)")
         do {
             try run("/bin/launchctl", args: ["bootout", "system/\(label)"])
         } catch {
@@ -254,7 +240,7 @@ struct GatewayManager {
         if FileManager.default.fileExists(atPath: plistPath) {
             try FileManager.default.removeItem(atPath: plistPath)
         }
-        GatewayLog.log("UNINSTALL_OK", username: username, detail: "plist=\(plistPath)")
+        helperLog("[GatewayManager] UNINSTALL_OK: plist=\(plistPath) @\(username)")
     }
 
     // MARK: - 原子重启
@@ -264,21 +250,21 @@ struct GatewayManager {
     /// 直接 kickstart -k 只会用 launchd 内存里的旧 spec，不会重读 plist 文件。
     static func restartGateway(username: String, uid: Int) throws {
         let label = "\(gatewayLabel).\(username)"
-        GatewayLog.log("RESTART", username: username)
+        helperLog("[GatewayManager] RESTART @\(username)")
         // bootout 清除旧注册（忽略错误，可能本来就未注册）
         _ = try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])
         if !waitForGatewayStopped(username: username, uid: uid, timeout: 8) {
-            GatewayLog.log("RESTART_STEP", username: username, detail: "bootout 后仍有残留 gateway，强制清理")
+            helperLog("[GatewayManager] RESTART_STEP: bootout 后仍有残留 gateway，强制清理 @\(username)")
             forceStopGatewayProcesses(username: username)
             if !waitForGatewayStopped(username: username, uid: uid, timeout: 4) {
                 let err = GatewayError.restartVerificationFailed(reason: "旧 gateway 进程未能停止")
-                GatewayLog.log("RESTART_FAIL", username: username, detail: err.localizedDescription)
+                helperLog("[GatewayManager] RESTART_FAIL: \(err.localizedDescription) @\(username)", level: .error)
                 throw err
             }
         }
         // startGateway 读取最新 openclaw.json 端口，重写 plist，bootstrap
         try startGateway(username: username, uid: uid)
-        GatewayLog.log("RESTART_OK", username: username, detail: "bootout + startGateway")
+        helperLog("[GatewayManager] RESTART_OK: bootout + startGateway @\(username)")
     }
 
     // MARK: - 状态查询
@@ -400,8 +386,7 @@ struct GatewayManager {
         let orphanPIDs = gatewayProcessPIDs(username: username, excluding: [keepPID])
         guard !orphanPIDs.isEmpty else { return }
 
-        GatewayLog.log("START_STEP", username: username,
-            detail: "清理遗留 gateway 进程 keep=\(keepPID) orphans=\(orphanPIDs)")
+        helperLog("[GatewayManager] START_STEP: 清理遗留 gateway 进程 keep=\(keepPID) orphans=\(orphanPIDs) @\(username)")
 
         for pid in orphanPIDs {
             _ = try? run("/bin/kill", args: ["-TERM", "\(pid)"])
@@ -417,7 +402,7 @@ struct GatewayManager {
     private static func forceStopGatewayProcesses(username: String) {
         let pids = gatewayProcessPIDs(username: username)
         guard !pids.isEmpty else { return }
-        GatewayLog.log("RESTART_STEP", username: username, detail: "强制终止残留 gateway pids=\(pids)")
+        helperLog("[GatewayManager] RESTART_STEP: 强制终止残留 gateway pids=\(pids) @\(username)")
         for pid in pids {
             _ = try? run("/bin/kill", args: ["-TERM", "\(pid)"])
         }
