@@ -115,6 +115,7 @@
 		BD523BF37E409AB6FA1D6D27 /* UpgradeConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800B6FF59BBD8AF1F7721480 /* UpgradeConfirmSheet.swift */; };
 		BE20A437ADC0E25426EC7750 /* FeishuChannelOnboardingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40305CC98880248434C11684 /* FeishuChannelOnboardingSheet.swift */; };
 		C11B2113E212A1BBC279EC49 /* UserFileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAD293FACB59B2F45FF9D4A /* UserFileManager.swift */; };
+		C1D80403CCA910757BC41012 /* FilePermissionHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44A9E4389475CA9623EA4CD0 /* FilePermissionHelper.swift */; };
 		C72DF5FEB4906D0AA459139E /* UserDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46E3226FB170F1C35BB73B5 /* UserDetailView.swift */; };
 		C745EB73F505520BE75D6E88 /* GeneratedVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */; };
 		C87F24E951A075FE182FF745 /* ManagedUserDisplayName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58D6A0A3A03533CF7E7AC045 /* ManagedUserDisplayName.swift */; };
@@ -194,6 +195,7 @@
 		41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderKeyConfig.swift; sourceTree = "<group>"; };
 		41E6E607472BCCB5C61A50EA /* BackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupView.swift; sourceTree = "<group>"; };
 		442171CEA410BEA9920973CC /* DashboardCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCollector.swift; sourceTree = "<group>"; };
+		44A9E4389475CA9623EA4CD0 /* FilePermissionHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePermissionHelper.swift; sourceTree = "<group>"; };
 		451BD17BA16A789AB35460D1 /* onboard.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = onboard.html; sourceTree = "<group>"; };
 		467287AC8BE705E07CE3C366 /* HelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperProtocol.swift; sourceTree = "<group>"; };
 		48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserAdoptionFlow.swift; sourceTree = "<group>"; };
@@ -497,6 +499,7 @@
 				ABE86644B5FC4578CCB9C6FF /* ConfigWriter.swift */,
 				DA495FBE50F338DEF7A55573 /* ConnectionCollector.swift */,
 				442171CEA410BEA9920973CC /* DashboardCollector.swift */,
+				44A9E4389475CA9623EA4CD0 /* FilePermissionHelper.swift */,
 				81B47FD58BA6519F937D3A52 /* GatewayLog.swift */,
 				CAA3C56D1FE192B7799A3FDC /* GatewayManager.swift */,
 				F9091EC70CE63EDC745444F7 /* InstallManager.swift */,
@@ -845,6 +848,7 @@
 				16C806CD97F4A5FB8DD95D1C /* DashboardModels.swift in Sources */,
 				2097CA2F620A1F864C858033 /* FileInputAcceptFilter.swift in Sources */,
 				B33BF87630AE1CBD7D47F438 /* FileModels.swift in Sources */,
+				C1D80403CCA910757BC41012 /* FilePermissionHelper.swift in Sources */,
 				87442F9B989A859F1BCF6FC2 /* GatewayLog.swift in Sources */,
 				508DBEDAF0C5804D9E21CCD9 /* GatewayManager.swift in Sources */,
 				0373437553BE2695E5525662 /* GatewayWatchdog.swift in Sources */,

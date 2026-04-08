@@ -138,7 +138,7 @@ extension ClawdHomeHelperImpl {
                 withIntermediateDirectories: true,
                 attributes: [.ownerAccountName: username, .posixPermissions: 0o755]
             )
-            try run("/usr/sbin/chown", args: ["-R", username, npmGlobal])
+            try FilePermissionHelper.chownRecursive(npmGlobal, owner: username)
             appendLog("✓ 已创建 \(npmGlobal)\n")
 
             // 2. 将 npm 全局环境写入 ~/.zprofile（幂等）
@@ -165,7 +165,7 @@ extension ClawdHomeHelperImpl {
                     }
                 } else {
                     try data.write(to: URL(fileURLWithPath: profilePath))
-                    try run("/usr/sbin/chown", args: [username, profilePath])
+                    try FilePermissionHelper.chown(profilePath, owner: username)
                 }
                 appendLog("✓ 已将 npm global prefix/PATH 写入 ~/.zprofile\n")
             } else {
@@ -188,7 +188,7 @@ extension ClawdHomeHelperImpl {
                     }
                 } else {
                     try data.write(to: URL(fileURLWithPath: zshrcPath))
-                    try run("/usr/sbin/chown", args: [username, zshrcPath])
+                    try FilePermissionHelper.chown(zshrcPath, owner: username)
                 }
                 appendLog("✓ 已在 ~/.zshrc 中添加 compinit 初始化\n")
             } else {
@@ -237,7 +237,7 @@ extension ClawdHomeHelperImpl {
 
             if zshrcNormalized != zshrcContent {
                 try Data(zshrcNormalized.utf8).write(to: URL(fileURLWithPath: zshrcPath))
-                try run("/usr/sbin/chown", args: [username, zshrcPath])
+                try FilePermissionHelper.chown(zshrcPath, owner: username)
                 appendLog("✓ 已修复 openclaw 补全加载逻辑（文件不存在时不报错）\n")
             } else {
                 appendLog("✓ openclaw 补全加载逻辑已是安全模式\n")
@@ -328,8 +328,8 @@ extension ClawdHomeHelperImpl {
                 withIntermediateDirectories: true,
                 attributes: nil
             )
-            _ = try? run("/bin/chmod", args: ["1777", sharedCacheRoot])
-            _ = try? run("/bin/chmod", args: ["1777", homebrewCacheDir])
+            _ = try? FilePermissionHelper.chmod(sharedCacheRoot, mode: "1777")
+            _ = try? FilePermissionHelper.chmod(homebrewCacheDir, mode: "1777")
 
             appendLog("\n▶ 修复 Homebrew 权限（普通用户目录安装）\n")
             appendLog("$ \(installScript)\n")
@@ -362,14 +362,14 @@ extension ClawdHomeHelperImpl {
                 } else {
                     try data.write(to: URL(fileURLWithPath: profilePath))
                 }
-                try run("/usr/sbin/chown", args: [username, profilePath])
+                try FilePermissionHelper.chown(profilePath, owner: username)
                 appendLog("✓ 已将 ~/.brew 环境变量写入 ~/.zprofile\n")
             } else {
                 appendLog("✓ ~/.zprofile 已包含 ~/.brew 环境变量配置\n")
             }
 
             // 防御性修正：避免历史 root 执行导致目录归属错误
-            _ = try? run("/usr/sbin/chown", args: ["-R", username, "\(home)/.brew"])
+            _ = try? FilePermissionHelper.chownRecursive("\(home)/.brew", owner: username)
             reply(true, nil)
         } catch {
             helperLog("修复 Homebrew 权限失败 @\(username): \(error.localizedDescription)", level: .warn)
@@ -548,7 +548,7 @@ extension ClawdHomeHelperImpl {
             }
 
             // 5. 修正所有权（root 运行解压，文件归 root；只设 user，group 由系统默认 staff）
-            try run("/usr/sbin/chown", args: ["-R", username, openclawDir])
+            try FilePermissionHelper.chownRecursive(openclawDir, owner: username)
 
             // 6. 清理临时文件
             try? fm.removeItem(atPath: tmpDir)
@@ -884,7 +884,7 @@ extension ClawdHomeHelperImpl {
             } else {
                 try data.write(to: URL(fileURLWithPath: profilePath))
             }
-            try run("/usr/sbin/chown", args: [username, profilePath])
+            try FilePermissionHelper.chown(profilePath, owner: username)
         }
 
         var zshrcContent = (try? String(contentsOfFile: zshrcPath, encoding: .utf8)) ?? ""
@@ -900,7 +900,7 @@ extension ClawdHomeHelperImpl {
             } else {
                 try data.write(to: URL(fileURLWithPath: zshrcPath))
             }
-            try run("/usr/sbin/chown", args: [username, zshrcPath])
+            try FilePermissionHelper.chown(zshrcPath, owner: username)
             zshrcContent = (try? String(contentsOfFile: zshrcPath, encoding: .utf8)) ?? ""
         }
 
@@ -940,7 +940,7 @@ extension ClawdHomeHelperImpl {
         zshrcNormalized += completionBlock + "\n"
         if zshrcNormalized != zshrcContent {
             try Data(zshrcNormalized.utf8).write(to: URL(fileURLWithPath: zshrcPath))
-            try run("/usr/sbin/chown", args: [username, zshrcPath])
+            try FilePermissionHelper.chown(zshrcPath, owner: username)
         }
     }
 
@@ -956,28 +956,28 @@ extension ClawdHomeHelperImpl {
         let cleaned = CloneClawManager.sanitizeOpenclawConfig(object)
         let outData = try JSONSerialization.data(withJSONObject: cleaned, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         try outData.write(to: URL(fileURLWithPath: path), options: .atomic)
-        let owner = "\(uid):\(gid)"
-        try run("/usr/sbin/chown", args: [owner, path])
-        try run("/bin/chmod", args: ["644", path])
+        try FilePermissionHelper.chown(path, owner: "\(uid)", group: "\(gid)")
+        try FilePermissionHelper.chmod(path, mode: "644")
     }
 
     private func fixCloneOwnership(username: String, uid: Int, gid: Int) throws {
         let home = try CloneClawManager.homeDirectory(for: username)
         let openclawPath = "\(home)/.openclaw"
         let npmGlobalPath = "\(home)/.npm-global"
-        let owner = "\(uid):\(gid)"
+        let owner = "\(uid)"
+        let group = "\(gid)"
 
-        try run("/usr/sbin/chown", args: [owner, home])
-        try run("/bin/chmod", args: ["700", home])
+        try FilePermissionHelper.chown(home, owner: owner, group: group)
+        try FilePermissionHelper.chmod(home, mode: "700")
         try assertOwnership(username: username, path: home)
 
         if FileManager.default.fileExists(atPath: openclawPath) {
-            try run("/usr/sbin/chown", args: ["-R", owner, openclawPath])
-            try run("/bin/chmod", args: ["700", openclawPath])
+            try FilePermissionHelper.chownRecursive(openclawPath, owner: "\(owner):\(group)")
+            try FilePermissionHelper.chmod(openclawPath, mode: "700")
             try assertOwnership(username: username, path: openclawPath)
         }
         if FileManager.default.fileExists(atPath: npmGlobalPath) {
-            try run("/usr/sbin/chown", args: ["-R", owner, npmGlobalPath])
+            try FilePermissionHelper.chownRecursive(npmGlobalPath, owner: "\(owner):\(group)")
             try assertOwnership(username: username, path: npmGlobalPath)
         }
     }

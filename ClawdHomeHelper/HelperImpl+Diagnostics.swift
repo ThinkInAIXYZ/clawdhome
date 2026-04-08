@@ -23,7 +23,7 @@ extension ClawdHomeHelperImpl {
                 var fixed: Bool? = nil
                 var fixError: String? = nil
                 if fix {
-                    do { try run("/bin/chmod", args: ["700", home]); fixed = true }
+                    do { try FilePermissionHelper.chmod(home, mode: "700"); fixed = true }
                     catch { fixed = false; fixError = error.localizedDescription }
                 }
                 findings.append(HealthFinding(
@@ -44,7 +44,7 @@ extension ClawdHomeHelperImpl {
                 var fixed: Bool? = nil
                 var fixError: String? = nil
                 if fix {
-                    do { try run("/bin/chmod", args: ["-R", "go-rwx", openclawDir]); fixed = true }
+                    do { try FilePermissionHelper.chmodSymbolicRecursive(openclawDir, expr: "go-rwx"); fixed = true }
                     catch { fixed = false; fixError = error.localizedDescription }
                 }
                 findings.append(HealthFinding(
@@ -65,7 +65,7 @@ extension ClawdHomeHelperImpl {
                 var fixed: Bool? = nil
                 var fixError: String? = nil
                 if fix {
-                    do { try run("/bin/chmod", args: ["o-w", npmGlobal]); fixed = true }
+                    do { try FilePermissionHelper.chmodSymbolic(npmGlobal, expr: "o-w"); fixed = true }
                     catch { fixed = false; fixError = error.localizedDescription }
                 }
                 findings.append(HealthFinding(
@@ -82,7 +82,7 @@ extension ClawdHomeHelperImpl {
             var fixed: Bool? = nil
             var fixError: String? = nil
             if fix {
-                do { try run("/usr/sbin/chown", args: [username, home]); fixed = true }
+                do { try FilePermissionHelper.chown(home, owner: username); fixed = true }
                 catch { fixed = false; fixError = error.localizedDescription }
             }
             findings.append(HealthFinding(
@@ -99,7 +99,7 @@ extension ClawdHomeHelperImpl {
             var fixed: Bool? = nil
             var fixError: String? = nil
             if fix {
-                do { try run("/usr/sbin/chown", args: ["-R", username, openclawDir]); fixed = true }
+                do { try FilePermissionHelper.chownRecursive(openclawDir, owner: username); fixed = true }
                 catch { fixed = false; fixError = error.localizedDescription }
             }
             findings.append(HealthFinding(
@@ -117,7 +117,7 @@ extension ClawdHomeHelperImpl {
             var fixed: Bool? = nil
             var fixError: String? = nil
             if fix {
-                do { try run("/usr/sbin/chown", args: [username, configFile]); fixed = true }
+                do { try FilePermissionHelper.chown(configFile, owner: username); fixed = true }
                 catch { fixed = false; fixError = error.localizedDescription }
             }
             findings.append(HealthFinding(
@@ -134,7 +134,7 @@ extension ClawdHomeHelperImpl {
             var fixed: Bool? = nil
             var fixError: String? = nil
             if fix {
-                do { try run("/usr/sbin/chown", args: ["-R", username, npmGlobal]); fixed = true }
+                do { try FilePermissionHelper.chownRecursive(npmGlobal, owner: username); fixed = true }
                 catch { fixed = false; fixError = error.localizedDescription }
             }
             findings.append(HealthFinding(
@@ -369,7 +369,15 @@ extension ClawdHomeHelperImpl {
                 var fixed: Bool? = nil
                 var fixError: String? = nil
                 if fix {
-                    do { try run("/bin/chmod", args: fixArgs); fixed = true }
+                    do {
+                        // fixArgs: [mode, path] or ["-R", mode, path] or [expr, path]
+                        if fixArgs.count == 2 {
+                            try FilePermissionHelper.chmodSymbolic(fixArgs[1], expr: fixArgs[0])
+                        } else if fixArgs.count == 3, fixArgs[0] == "-R" {
+                            try FilePermissionHelper.chmodSymbolicRecursive(fixArgs[2], expr: fixArgs[1])
+                        }
+                        fixed = true
+                    }
                     catch { fixed = false; fixError = error.localizedDescription }
                 }
                 items.append(DiagnosticItem(
@@ -387,8 +395,14 @@ extension ClawdHomeHelperImpl {
             var fixed: Bool? = nil
             var fixError: String? = nil
             if fix {
-                let args = recursive ? ["-R", username, path] : [username, path]
-                do { try run("/usr/sbin/chown", args: args); fixed = true }
+                do {
+                    if recursive {
+                        try FilePermissionHelper.chownRecursive(path, owner: username)
+                    } else {
+                        try FilePermissionHelper.chown(path, owner: username)
+                    }
+                    fixed = true
+                }
                 catch { fixed = false; fixError = error.localizedDescription }
             }
             items.append(DiagnosticItem(
