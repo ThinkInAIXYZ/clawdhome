@@ -331,5 +331,6 @@ DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 8) {
     bootAutostartGatewaysIfNeeded()
 }
 GatewayWatchdog.shared.start()
+BackupScheduler.shared.start()
 
 RunLoop.main.run()

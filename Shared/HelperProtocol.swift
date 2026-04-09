@@ -165,6 +165,71 @@ import Foundation
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
+    // MARK: - 分层备份与恢复（v2）
+
+    /// 备份全局配置到指定目录
+    func backupGlobal(
+        destinationDir: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 备份单个 Shrimp 数据到指定目录
+    func backupShrimp(
+        username: String,
+        destinationDir: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 一键备份全部（全局 + 所有 Shrimp），返回结果摘要
+    func backupAll(
+        destinationDir: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 恢复全局配置
+    func restoreGlobal(
+        sourcePath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 恢复单个 Shrimp（自动停/启网关，可选恢复前备份）
+    func restoreShrimp(
+        username: String,
+        sourcePath: String,
+        backupBeforeRestore: Bool,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 读取备份配置
+    func getBackupConfig(
+        withReply reply: @escaping (String?) -> Void
+    )
+
+    /// 更新备份配置（JSON 字符串），同时重建定时器
+    func setBackupConfig(
+        configJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 列出备份目录中的所有备份文件（返回 JSON 编码的 [BackupListEntry]）
+    func listBackups(
+        destinationDir: String,
+        withReply reply: @escaping (String?) -> Void
+    )
+
+    /// 删除指定备份文件
+    func deleteBackup(
+        filePath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 按保留策略清理旧备份
+    func pruneBackups(
+        destinationDir: String,
+        maxCount: Int,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
     /// 扫描可克隆的新虾数据项（返回 CloneScanResult JSON）
     func scanCloneClaw(
         username: String,
