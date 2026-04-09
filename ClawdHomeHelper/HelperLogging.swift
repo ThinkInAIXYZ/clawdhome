@@ -41,7 +41,13 @@ private let helperLogEncoder = JSONEncoder()
 private let helperLogCheckEvery = 300
 private let helperLogMaxBytes = 2_000_000
 private let helperLogRotateKeep = 3
-private let helperLogPath = "/tmp/clawdhome-helper.log"
+private let helperLogPath: String = {
+    #if DEBUG
+    return "/tmp/clawdhome-helper-dev.log"
+    #else
+    return "/tmp/clawdhome-helper.log"
+    #endif
+}()
 private let helperLogQueue = DispatchQueue(label: "ai.clawdhome.helper.log", qos: .utility)
 
 /// 创建日志文件并设置权限为 root:admin 0640（仅 admin 组用户可读）

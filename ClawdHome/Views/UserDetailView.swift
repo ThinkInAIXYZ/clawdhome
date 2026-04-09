@@ -504,7 +504,7 @@ struct UserDetailView: View {
         case .logs:
             GatewayLogViewer(username: user.username, externalSearchQuery: $logSearchText)
         case .cron:      CronTabView(username: user.username)
-        case .skills:    SkillsTabView(username: user.username)
+        case .skills:    SkillsTabView(username: user.username, gatewayURL: gatewayURL)
         case .characterDef: CharacterDefTabView(username: user.username)
         case .sessions:  SessionsTabView(username: user.username)
         case .memory:    MemoryTabView(username: user.username)
@@ -4197,6 +4197,7 @@ private struct CronRunEntryRow: View {
 
 private struct SkillsTabView: View {
     let username: String
+    let gatewayURL: String?
     @Environment(GatewayHub.self) private var hub
 
     private var isConnected: Bool {
@@ -4204,7 +4205,7 @@ private struct SkillsTabView: View {
     }
 
     var body: some View {
-        SkillsTabContent(store: hub.skillsStore(for: username))
+        SkillsTabContent(store: hub.skillsStore(for: username), username: username, gatewayURL: gatewayURL)
             .task(id: isConnected) {
                 guard isConnected else { return }
                 await hub.ensureSkillsStarted(for: username)
@@ -4245,8 +4246,14 @@ private struct SkillEnvEditorState: Identifiable {
 
 private struct SkillsTabContent: View {
     let store: GatewaySkillsStore
+    let username: String
+    let gatewayURL: String?
+    @Environment(HelperClient.self) private var helperClient
     @State private var filter: SkillsFilter = .all
     @State private var envEditor: SkillEnvEditorState?
+    @State private var showSkillsMarket = false
+    @State private var skillsMarketURL: URL?
+    @State private var isPreparingSkillsMarket = false
 
     private var filteredSkills: [GatewaySkillStatus] {
         let base = store.skills.filter { skill in
@@ -4274,6 +4281,20 @@ private struct SkillsTabContent: View {
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Spacer()
+                if isPreparingSkillsMarket {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("准备中…").font(.caption).foregroundStyle(.secondary)
+                    }
+                } else {
+                    Button {
+                        Task { await openSkillsMarket() }
+                    } label: {
+                        Label("获取更多 Skills", systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
                 if store.isLoading {
                     ProgressView().scaleEffect(0.7).frame(width: 20, height: 20)
                 } else {
@@ -4365,6 +4386,85 @@ private struct SkillsTabContent: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showSkillsMarket) {
+            if let url = skillsMarketURL {
+                SkillsMarketSheetView(url: url)
+            } else {
+                ContentUnavailableView("无法打开 Skills 商店", systemImage: "network")
+                    .frame(minWidth: 800, minHeight: 520)
+            }
+        }
+    }
+
+    private func openSkillsMarket() async {
+        isPreparingSkillsMarket = true
+        defer { isPreparingSkillsMarket = false }
+
+        let freshGatewayURL = await helperClient.getGatewayURL(username: username)
+        let candidates = [freshGatewayURL, gatewayURL ?? ""].filter { !$0.isEmpty }
+        for raw in candidates {
+            if let target = makeSkillsMarketURL(from: raw) {
+                skillsMarketURL = target
+                showSkillsMarket = true
+                return
+            }
+        }
+        store.statusMessage = "未获取到可用 Token，请先确认 Gateway 已启动并就绪。"
+    }
+
+    private func makeSkillsMarketURL(from rawURL: String) -> URL? {
+        guard var components = URLComponents(string: rawURL) else { return nil }
+        guard let fragment = components.fragment, fragment.hasPrefix("token=") else { return nil }
+        let token = String(fragment.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return nil }
+
+        components.scheme = components.scheme ?? "http"
+        components.host = components.host ?? "127.0.0.1"
+        components.port = components.port ?? 18525
+        components.path = "/skills"
+        components.queryItems = [URLQueryItem(name: "token", value: token)]
+        components.fragment = "token=\(token)"
+        return components.url
+    }
+}
+
+private struct SkillsMarketSheetView: View {
+    let url: URL
+    @Environment(\.dismiss) private var dismiss
+    @State private var store = EmbeddedGatewayConsoleStore()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Text("Skills 商店")
+                    .font(.headline)
+                Spacer()
+                Button("重载") {
+                    store.reloadCurrent()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Button("浏览器打开") {
+                    NSWorkspace.shared.open(url)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Button("关闭") {
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            Divider()
+            EmbeddedGatewayConsoleView(url: url, store: store)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(minWidth: 1000, minHeight: 720)
+        .onDisappear {
+            store.invalidateLoadedURL()
         }
     }
 }

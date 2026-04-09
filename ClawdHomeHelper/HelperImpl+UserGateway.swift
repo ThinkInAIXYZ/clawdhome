@@ -5,6 +5,10 @@ import Foundation
 import SystemConfiguration
 
 extension ClawdHomeHelperImpl {
+    private static let gatewayStatusQueue = DispatchQueue(
+        label: "ai.clawdhome.helper.gateway-status",
+        qos: .userInitiated
+    )
 
     // MARK: 用户管理
 
@@ -226,10 +230,15 @@ extension ClawdHomeHelperImpl {
         }
 
         let timeoutSeconds: TimeInterval = 6
-        DispatchQueue.global(qos: .userInitiated).async {
+        Self.gatewayStatusQueue.async {
             do {
                 let uid = try UserManager.uid(for: username)
-                let (running, pid) = GatewayManager.status(username: username, uid: uid)
+                // 连接探针只需要快速可达性，使用轻量查询避免触发昂贵进程扫描。
+                let (running, pid) = GatewayManager.status(
+                    username: username,
+                    uid: uid,
+                    includeProcessFallback: false
+                )
                 replyOnce(running, pid)
             } catch {
                 replyOnce(false, -1)

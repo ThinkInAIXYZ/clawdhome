@@ -497,7 +497,12 @@ final class DashboardCollector {
                 uid: Int(signedUID),
                 adminNames: adminNames
             ) else { return nil }
-            let (running, _) = GatewayManager.status(username: name, uid: Int(uid))
+            // 仪表盘周期性刷新使用轻量状态查询，避免触发 ps/lsof 回溯造成线程堆积。
+            let (running, _) = GatewayManager.status(
+                username: name,
+                uid: Int(uid),
+                includeProcessFallback: false
+            )
             return (name, uid, running)
         }
     }

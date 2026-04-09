@@ -25,7 +25,9 @@ final class UpdateChecker {
     private static let udKeyLatestVersion     = "updateChecker.latestVersion"
     private static let udKeyLatestReleaseURL  = "updateChecker.latestReleaseURL"
     private static let openclawApiURL         = "https://api.github.com/repos/openclaw/openclaw/releases/latest"
-    private let openclawCacheInterval: TimeInterval = 24 * 3600
+    /// openclaw 发布节奏较快，缓存 24h 会导致“当天发版当天看不到”。
+    /// 采用 1h 节流 + 后台轮询，兼顾及时性和 GitHub API 负载。
+    private let openclawCacheInterval: TimeInterval = 3600
 
     // MARK: - ClawdHome App 自身版本检测
 
@@ -118,6 +120,17 @@ final class UpdateChecker {
             }
         } catch {
             checkError = error.localizedDescription
+        }
+    }
+
+    /// 后台自动检测 openclaw 新版本。
+    /// 轮询频率与缓存间隔解耦：频繁唤醒、按策略真正发请求。
+    func runOpenclawAutoCheckLoop() async {
+        // App 启动后先强制检测一次，避免被缓存命中导致当天新版本不可见。
+        await check()
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(600))
+            await checkIfNeeded()
         }
     }
 

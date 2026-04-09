@@ -54,11 +54,35 @@ final class HelperClient {
                 guard let self, self.connectionGeneration == generation else { return }
                 self.clearConnection(label: label, generation: generation)
                 if affectsConnectivity {
-                    os_log(.error, "[HelperClient] %{public}@ invalidated → 标记断连 (gen=%llu)", label, generation)
-                    appLog("[HelperClient] \(label) invalidated -> disconnected (gen=\(generation))", level: .warn)
-                    self.isConnected = false
                     if self.verifyInFlightGeneration == generation {
                         self.verifyInFlightGeneration = nil
+                    }
+                    // control 通道偶发 invalidation 时，先尝试软重连探测，避免误判整机断连。
+                    if self.isConnected {
+                        os_log(
+                            .error,
+                            "[HelperClient] %{public}@ invalidated → soft-reconnect probe (gen=%llu)",
+                            label,
+                            generation
+                        )
+                        appLog(
+                            "[HelperClient] \(label) invalidated -> soft-reconnect probe (gen=\(generation))",
+                            level: .warn
+                        )
+                        self.verifyInFlightGeneration = generation
+                        self.controlConnection = self.makeConnection(
+                            label: "control",
+                            generation: generation,
+                            affectsConnectivity: true
+                        )
+                        self.verifyConnection(
+                            generation: generation,
+                            source: "\(label) invalidated soft-reconnect"
+                        )
+                    } else {
+                        os_log(.error, "[HelperClient] %{public}@ invalidated → 标记断连 (gen=%llu)", label, generation)
+                        appLog("[HelperClient] \(label) invalidated -> disconnected (gen=\(generation))", level: .warn)
+                        self.isConnected = false
                     }
                 } else {
                     os_log(.info, "[HelperClient] %{public}@ invalidated → 将按需重建通道 (gen=%llu)", label, generation)
@@ -783,29 +807,7 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
-    /// 备份指定用户的 ~/.openclaw 到目标路径（tar.gz）
-    func backupUser(username: String, destinationPath: String) async throws {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
-        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
-            proxy.backupUser(username: username, destinationPath: destinationPath) { ok, msg in
-                done((ok, msg))
-            }
-        }
-        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
-    }
-
-    /// 从备份包恢复指定用户的 ~/.openclaw（解压 tar.gz 并修正权限）
-    func restoreUser(username: String, sourcePath: String) async throws {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
-        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
-            proxy.restoreUser(username: username, sourcePath: sourcePath) { ok, msg in
-                done((ok, msg))
-            }
-        }
-        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
-    }
-
-    // MARK: - 分层备份与恢复（v2）
+    // MARK: - 备份与恢复
 
     func backupGlobal(destinationDir: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
@@ -889,6 +891,16 @@ final class HelperClient {
             proxy.pruneBackups(destinationDir: destinationDir, maxCount: maxCount) { ok, msg in done((ok, msg)) }
         }
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
+    /// 读取最近一次定时备份结果
+    func getLastBackupResult() async throws -> BackupResult? {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let json: String? = try await xpcCall { done in
+            proxy.getLastBackupResult { json in done(json) }
+        }
+        guard let json, let data = json.data(using: .utf8) else { return nil }
+        return try JSONDecoder().decode(BackupResult.self, from: data)
     }
 
     /// 扫描来源虾可克隆项与大小

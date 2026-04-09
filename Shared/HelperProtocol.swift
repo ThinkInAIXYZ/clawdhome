@@ -149,23 +149,7 @@ import Foundation
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
-    /// 备份指定用户的 ~/.openclaw 数据到目标路径（tar.gz）
-    /// destinationPath：目标文件完整路径（由 app 通过 NSSavePanel 获取）
-    func backupUser(
-        username: String,
-        destinationPath: String,
-        withReply reply: @escaping (Bool, String?) -> Void
-    )
-
-    /// 从备份包恢复指定用户的 ~/.openclaw（解压 tar.gz 并修正权限）
-    /// sourcePath：备份文件完整路径（由 app 通过 NSOpenPanel 获取）
-    func restoreUser(
-        username: String,
-        sourcePath: String,
-        withReply reply: @escaping (Bool, String?) -> Void
-    )
-
-    // MARK: - 分层备份与恢复（v2）
+    // MARK: - 备份与恢复
 
     /// 备份全局配置到指定目录
     func backupGlobal(
@@ -228,6 +212,11 @@ import Foundation
         destinationDir: String,
         maxCount: Int,
         withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 读取最近一次定时备份结果（JSON 编码的 BackupResult?）
+    func getLastBackupResult(
+        withReply reply: @escaping (String?) -> Void
     )
 
     /// 扫描可克隆的新虾数据项（返回 CloneScanResult JSON）
@@ -687,4 +676,12 @@ import Foundation
 }
 
 /// XPC Mach Service 名称（App 与 Helper 均引用此常量）
+///
+/// 关键约束：
+/// - DEBUG 与 Release 必须使用不同服务名，避免开发态 helper 覆盖/污染发布态安装。
+/// - install-helper-dev.sh 需与 DEBUG 名称保持一致。
+#if DEBUG
+let kHelperMachServiceName = "ai.clawdhome.mac.helper.dev"
+#else
 let kHelperMachServiceName = "ai.clawdhome.mac.helper"
+#endif

@@ -8,6 +8,7 @@ enum BackupManager {
     // MARK: - 路径常量
 
     private static let configPath = "/var/lib/clawdhome/backup-config.json"
+    private static let resultPath = "/var/lib/clawdhome/last-backup-result.json"
     private static let stateDir = "/var/lib/clawdhome"
 
     private static let iso8601: ISO8601DateFormatter = {
@@ -36,9 +37,33 @@ enum BackupManager {
     static func loadConfig() -> BackupConfig {
         guard let data = FileManager.default.contents(atPath: configPath),
               let config = try? JSONDecoder().decode(BackupConfig.self, from: data) else {
-            return .default
+            // 无已保存配置：构建默认值，Helper 侧需解析管理员 home
+            var config = BackupConfig.default
+            let home = NSHomeDirectory()
+            if home == "/var/root" || home.hasPrefix("/var/root") {
+                let adminHome = resolveAdminHome()
+                config.backupDir = "\(adminHome)/Documents/ClawdHome-Backups"
+            }
+            return config
         }
         return config
+    }
+
+    /// 解析管理员用户的 home 目录（Helper 以 root 运行时使用）
+    private static func resolveAdminHome() -> String {
+        if let adminGroup = getgrnam("admin") {
+            var i = 0
+            while let member = adminGroup.pointee.gr_mem?[i] {
+                let name = String(cString: member)
+                if !ManagedUserFilter.isExcludedUsername(name) {
+                    if let pw = getpwnam(name), pw.pointee.pw_uid >= 500 {
+                        return String(cString: pw.pointee.pw_dir)
+                    }
+                }
+                i += 1
+            }
+        }
+        return "/Users/Shared"
     }
 
     static func saveConfig(_ config: BackupConfig) throws {
@@ -66,7 +91,7 @@ enum BackupManager {
         let archivePath = "\(globalDir)/global-\(timestamp).tar.gz"
 
         // 使用临时暂存目录打包跨目录文件
-        let tmpStaging = "\(NSTemporaryDirectory())clawdhome-backup-global-\(timestamp)"
+        let tmpStaging = "/tmp/clawdhome-backup-global-\(timestamp)"
         let fm = FileManager.default
         try fm.createDirectory(atPath: tmpStaging, withIntermediateDirectories: true)
         defer { try? fm.removeItem(atPath: tmpStaging) }
@@ -118,19 +143,20 @@ enum BackupManager {
         let archivePath = "\(shrimpDir)/shrimp-\(username)-\(timestamp).tar.gz"
 
         // 使用临时暂存目录，将 .openclaw + helper 状态文件合并打包
-        let tmpStaging = "\(NSTemporaryDirectory())clawdhome-backup-\(username)-\(timestamp)"
+        let tmpStaging = "/tmp/clawdhome-backup-\(username)-\(timestamp)"
         let fm = FileManager.default
         try fm.createDirectory(atPath: tmpStaging, withIntermediateDirectories: true)
         defer { try? fm.removeItem(atPath: tmpStaging) }
 
-        // 1. tar .openclaw（带排除项）到临时 tar，再解压到 staging
-        let tmpTar = "\(tmpStaging)/.openclaw.tar.gz"
-        var tarArgs = ["-czf", tmpTar, "-C", homeDir]
-        for excl in openclawExcludes { tarArgs += ["--exclude=\(excl)"] }
-        tarArgs.append(".openclaw")
-        try run("/usr/bin/tar", args: tarArgs)
-        try run("/usr/bin/tar", args: ["-xzf", tmpTar, "-C", tmpStaging])
-        try fm.removeItem(atPath: tmpTar)
+        // 1. 用 rsync 复制 .openclaw（带排除项），避免双重 tar
+        var rsyncArgs = ["-a"]
+        for excl in openclawExcludes {
+            // 排除项格式：.openclaw/xxx → 取 xxx 部分
+            let relative = excl.replacingOccurrences(of: ".openclaw/", with: "")
+            rsyncArgs += ["--exclude=\(relative)"]
+        }
+        rsyncArgs += ["\(openclawDir)/", "\(tmpStaging)/.openclaw/"]
+        try run("/usr/bin/rsync", args: rsyncArgs)
 
         // 2. 复制 helper 状态文件
         let helperStateStaging = "\(tmpStaging)/helper-state"
@@ -183,7 +209,7 @@ enum BackupManager {
 
     static func restoreGlobal(sourcePath: String) throws {
         let fm = FileManager.default
-        let tmpDir = "\(NSTemporaryDirectory())clawdhome-restore-global-\(UUID().uuidString)"
+        let tmpDir = "/tmp/clawdhome-restore-global-\(UUID().uuidString)"
         try fm.createDirectory(atPath: tmpDir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(atPath: tmpDir) }
 
@@ -336,7 +362,41 @@ enum BackupManager {
     // MARK: - 删除备份
 
     static func deleteBackup(filePath: String) throws {
+        let config = loadConfig()
+        try validateBackupPath(filePath, within: config.backupDir)
         try FileManager.default.removeItem(atPath: filePath)
+    }
+
+    // MARK: - 备份结果持久化
+
+    /// 保存最近一次备份结果
+    static func saveResult(_ result: BackupResult) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        if let data = try? encoder.encode(result) {
+            try? data.write(to: URL(fileURLWithPath: resultPath))
+        }
+    }
+
+    /// 读取最近一次备份结果
+    static func loadResult() -> BackupResult? {
+        guard let data = FileManager.default.contents(atPath: resultPath),
+              let result = try? JSONDecoder().decode(BackupResult.self, from: data) else {
+            return nil
+        }
+        return result
+    }
+
+    // MARK: - 路径安全校验
+
+    /// 校验文件路径在备份目录内且为 .tar.gz 文件，防止路径遍历
+    static func validateBackupPath(_ path: String, within baseDir: String) throws {
+        let resolved = (path as NSString).standardizingPath
+        let base = (baseDir as NSString).standardizingPath
+        guard resolved.hasPrefix(base + "/"),
+              resolved.hasSuffix(".tar.gz") else {
+            throw BackupError.invalidPath(path)
+        }
     }
 
     // MARK: - 保留策略清理
@@ -383,32 +443,20 @@ enum BackupManager {
     }
 
     /// 找到运行 App 的管理员用户的 Application Support 目录
-    /// Helper 以 root 运行，需推断管理员 home
     static func resolveAdminAppSupportDir() -> String {
-        if let adminGroup = getgrnam("admin") {
-            var i = 0
-            while let member = adminGroup.pointee.gr_mem?[i] {
-                let name = String(cString: member)
-                if !ManagedUserFilter.isExcludedUsername(name) {
-                    if let pw = getpwnam(name), pw.pointee.pw_uid >= 500 {
-                        let home = String(cString: pw.pointee.pw_dir)
-                        return "\(home)/Library/Application Support/ClawdHome"
-                    }
-                }
-                i += 1
-            }
-        }
-        return "/Users/Shared/Library/Application Support/ClawdHome"
+        "\(resolveAdminHome())/Library/Application Support/ClawdHome"
     }
 
     enum BackupError: LocalizedError {
         case openclawNotFound(String)
         case invalidArchive(String)
+        case invalidPath(String)
 
         var errorDescription: String? {
             switch self {
             case .openclawNotFound(let user): return "@\(user) 的 ~/.openclaw 目录不存在"
             case .invalidArchive(let msg): return "备份文件格式错误: \(msg)"
+            case .invalidPath(let path): return "非法备份路径: \(path)"
             }
         }
     }

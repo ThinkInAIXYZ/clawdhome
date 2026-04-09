@@ -9,6 +9,7 @@ struct DaemonSetupBanner: View {
     @State private var isInstalling = false
     @State private var isRestarting = false
     @State private var errorMessage: String?
+    private let bannerBackground = Color(red: 0.99, green: 0.95, blue: 0.90)
 
     var body: some View {
         HStack(spacing: 12) {
@@ -62,7 +63,7 @@ struct DaemonSetupBanner: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color.orange.opacity(0.12))
+        .background(bannerBackground)
         .overlay(alignment: .bottom) { Divider() }
     }
 

@@ -67,9 +67,19 @@ final class BackupScheduler {
         let result = BackupManager.backupAll(destinationDir: dir)
         let pruned = BackupManager.pruneBackups(destinationDir: dir, maxCount: config.retention.maxCount)
 
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        // 保存备份结果（供 App 读取显示告警）
+        let backupResult = BackupResult(
+            timestamp: now,
+            succeeded: result.succeeded,
+            failures: result.failures
+        )
+        BackupManager.saveResult(backupResult)
+
         // 更新 lastRunAt
         var updated = config
-        updated.schedule.lastRunAt = ISO8601DateFormatter().string(from: Date())
+        updated.schedule.lastRunAt = now
         try? BackupManager.saveConfig(updated)
 
         helperLog("[backup-scheduler] 定时备份完成: 成功 \(result.succeeded) 个, 失败 \(result.failures.count) 个, 清理 \(pruned.count) 个旧备份")
@@ -114,7 +124,10 @@ extension ClawdHomeHelperImpl {
         helperLog("全量备份 → \(destinationDir)")
         let result = BackupManager.backupAll(destinationDir: destinationDir)
         let config = BackupManager.loadConfig()
-        let _ = BackupManager.pruneBackups(destinationDir: destinationDir, maxCount: config.retention.maxCount)
+        let pruned = BackupManager.pruneBackups(destinationDir: destinationDir, maxCount: config.retention.maxCount)
+        if !pruned.isEmpty {
+            helperLog("全量备份后清理: 删除 \(pruned.count) 个旧备份")
+        }
         if result.failures.isEmpty {
             reply(true, nil)
         } else {
@@ -125,6 +138,11 @@ extension ClawdHomeHelperImpl {
     func restoreGlobal(sourcePath: String,
                        withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("全局恢复 ← \(sourcePath)")
+        // 校验路径：必须以 .tar.gz 结尾
+        guard sourcePath.hasSuffix(".tar.gz") else {
+            reply(false, "非法恢复路径: \(sourcePath)")
+            return
+        }
         do {
             try BackupManager.restoreGlobal(sourcePath: sourcePath)
             reply(true, nil)
@@ -137,6 +155,11 @@ extension ClawdHomeHelperImpl {
     func restoreShrimp(username: String, sourcePath: String, backupBeforeRestore: Bool,
                        withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("Shrimp 恢复 @\(username) ← \(sourcePath) (备份=\(backupBeforeRestore))")
+        // 校验路径
+        guard sourcePath.hasSuffix(".tar.gz") else {
+            reply(false, "非法恢复路径: \(sourcePath)")
+            return
+        }
         let config = BackupManager.loadConfig()
 
         // 恢复前备份
@@ -250,7 +273,17 @@ extension ClawdHomeHelperImpl {
     func pruneBackups(destinationDir: String, maxCount: Int,
                       withReply reply: @escaping (Bool, String?) -> Void) {
         let pruned = BackupManager.pruneBackups(destinationDir: destinationDir, maxCount: maxCount)
-        helperLog("清理旧备份: 删除 \(pruned.count) 个")
+        helperLog("清理旧备份: 删除 \(pruned.count) 个 — \(pruned.joined(separator: ", "))")
         reply(true, nil)
+    }
+
+    func getLastBackupResult(withReply reply: @escaping (String?) -> Void) {
+        guard let result = BackupManager.loadResult(),
+              let data = try? JSONEncoder().encode(result),
+              let json = String(data: data, encoding: .utf8) else {
+            reply(nil)
+            return
+        }
+        reply(json)
     }
 }
