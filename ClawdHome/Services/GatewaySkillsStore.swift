@@ -81,11 +81,9 @@ final class GatewaySkillsStore {
             do {
                 guard let client = self.client else { throw GatewayClientError.notConnected }
                 let result = try await client.skillsInstall(name: skill.name, installId: option.id, timeoutMs: 300_000)
-                if !result.ok {
-                    throw GatewaySkillsStoreError.installFailed(Self.formatInstallFailureMessage(result))
-                }
+                let installFailureMessage = result.ok ? nil : Self.formatInstallFailureMessage(result)
                 let baseMessage = Self.trimmed(result.message)
-                self.statusMessage = baseMessage?.isEmpty == false ? baseMessage : "安装命令已完成，正在验证结果…"
+                self.statusMessage = baseMessage?.isEmpty == false ? baseMessage : (result.ok ? "安装命令已完成，正在验证结果…" : "安装命令返回异常，正在验证结果…")
 
                 let verification = await self.waitForInstallCompletion(
                     skillKey: skill.skillKey,
@@ -94,12 +92,19 @@ final class GatewaySkillsStore {
                 )
                 switch verification {
                 case .ready:
-                    if let msg = baseMessage, !msg.isEmpty {
-                        self.statusMessage = msg
+                    if let installFailureMessage {
+                        self.statusMessage = Self.formatRecoveredInstallMessage(result, fallback: installFailureMessage)
                     } else {
-                        self.statusMessage = "安装成功"
+                        if let msg = baseMessage, !msg.isEmpty {
+                            self.statusMessage = msg
+                        } else {
+                            self.statusMessage = "安装成功"
+                        }
                     }
                 case .stillMissing(let bins):
+                    if let installFailureMessage {
+                        throw GatewaySkillsStoreError.installFailed(installFailureMessage)
+                    }
                     let missing = bins.joined(separator: ", ")
                     if missing.isEmpty {
                         self.statusMessage = "安装命令已结束，但状态未及时刷新，请稍后重试刷新。"
@@ -264,6 +269,17 @@ final class GatewaySkillsStore {
             return "安装失败，网关未返回可用错误信息。"
         }
         return "安装失败：\(segments.joined(separator: " | "))"
+    }
+
+    private static func formatRecoveredInstallMessage(
+        _ result: GatewaySkillInstallResult,
+        fallback: String
+    ) -> String {
+        let suffix = lastNonEmptyLine(result.stderr)
+            ?? lastNonEmptyLine(result.stdout)
+            ?? trimmed(result.message)
+            ?? fallback
+        return "安装已完成（安装器返回异常）：\(suffix)"
     }
 
     private static func messageFromSkillsEvent(_ event: GatewayEvent) -> String? {
