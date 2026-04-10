@@ -150,7 +150,7 @@ if [ "$DRY_RUN" = true ]; then
     echo "     dist/ClawdHome-${NEXT_VERSION}-x64.pkg"
   fi
   echo "  6. 同步 version.json（含中英文 release notes）"
-  echo "  7. git push && git push --tags"
+  echo "  7. git push && git push origin v\${NEXT_VERSION}"
   echo "  8. gh release create v${NEXT_VERSION}"
   exit 0
 fi
@@ -275,7 +275,7 @@ fi
 if [ "$SKIP_PUSH" = false ]; then
   log "推送到远程仓库..."
   git push
-  git push --tags
+  git push origin "v${NEXT_VERSION}"
 
   log "创建 GitHub Release..."
   RELEASE_NOTES_FILE=$(mktemp)
