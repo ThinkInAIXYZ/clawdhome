@@ -48,6 +48,7 @@
 		372F9047B27AB90A2CF66AF5 /* RoleMarketView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0511A43DA0C20592D7181ABD /* RoleMarketView.swift */; };
 		3A3F42C9E4F1D40D1214CDA8 /* ModelPingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9363CE8F8DF377157FAE1D71 /* ModelPingService.swift */; };
 		3B5E95B51DE262D04BC56FBA /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE86644B5FC4578CCB9C6FF /* ConfigWriter.swift */; };
+		C3A1F2E47A9B4C6D8E0F1234 /* UserEnvContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A1F2E47A9B4C6D8E0F1235 /* UserEnvContract.swift */; };
 		3B8D878C4D830AA5B9390BED /* ProviderKeyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */; };
 		3D7B3D66E56E6D32CFC39D1F /* NodeDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB4BFDC6320B7C035E22C884 /* NodeDownloader.swift */; };
 		41B0259B5FC9A1381D8F840C /* UserDetailWindowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54777C27B432E10D49786DE9 /* UserDetailWindowLayout.swift */; };
@@ -276,6 +277,7 @@
 		BFAD293FACB59B2F45FF9D4A /* UserFileManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserFileManager.swift; sourceTree = "<group>"; };
 		BFC7D68C6A9C0FEAD2BF30EA /* CommandOutputPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandOutputPanel.swift; sourceTree = "<group>"; };
 		C1EAFFDC5338D0ACC3A06CDD /* CloneClawManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneClawManager.swift; sourceTree = "<group>"; };
+		C3A1F2E47A9B4C6D8E0F1235 /* UserEnvContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserEnvContract.swift; sourceTree = "<group>"; };
 		C409AF7F1CC045A211F7F27E /* WizardConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardConnection.swift; sourceTree = "<group>"; };
 		C587B0EBFC1DB0062C0195FF /* VoiceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceProfile.swift; sourceTree = "<group>"; };
 		C5A39CB77EAD5FD2A03768D4 /* ClawdHomeHelper */ = {isa = PBXFileReference; includeInIndex = 0; path = ClawdHomeHelper; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -525,6 +527,7 @@
 				37C2B17425B19E3FD55EC7AF /* PersonaGitManager.swift */,
 				5C6946296FDE26A0A2A7A8EC /* ProcessManager.swift */,
 				D6C76557D6C46315D058A794 /* ShellRunner.swift */,
+				C3A1F2E47A9B4C6D8E0F1235 /* UserEnvContract.swift */,
 				BFAD293FACB59B2F45FF9D4A /* UserFileManager.swift */,
 				14984A3D87B04508056F24CF /* UserManager.swift */,
 			);
@@ -899,6 +902,7 @@
 				7F1931508A7DA6D48319500F /* ShellRunner.swift in Sources */,
 				07B6092C2C29BC1A19385B32 /* UserAdoptionFlow.swift in Sources */,
 				41B0259B5FC9A1381D8F840C /* UserDetailWindowLayout.swift in Sources */,
+				C3A1F2E47A9B4C6D8E0F1234 /* UserEnvContract.swift in Sources */,
 				C11B2113E212A1BBC279EC49 /* UserFileManager.swift in Sources */,
 				844ED367CC5266A513A5FADE /* UserInitPresentationRouting.swift in Sources */,
 				52DC4DCC5F6553B9DA7AE563 /* UserManager.swift in Sources */,

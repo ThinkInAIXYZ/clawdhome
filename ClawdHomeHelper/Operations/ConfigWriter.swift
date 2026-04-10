@@ -200,4 +200,30 @@ extension ConfigWriter {
         }
         throw ConfigError.isolatedNpxNotFound
     }
+
+    /// 从 ~/.openclaw/openclaw.json 读取代理相关环境变量（按需注入）。
+    /// 仅返回非空字符串，避免将空值显式写入运行时环境。
+    static func proxyEnvironment(username: String) -> [String: String] {
+        let configPath = "/Users/\(username)/.openclaw/openclaw.json"
+        guard let data = FileManager.default.contents(atPath: configPath),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let env = json["env"] as? [String: Any]
+        else { return [:] }
+
+        let keys = [
+            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+            "http_proxy", "https_proxy", "all_proxy",
+            "NO_PROXY", "no_proxy",
+        ]
+
+        var result: [String: String] = [:]
+        for key in keys {
+            guard let raw = env[key] as? String else { continue }
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty {
+                result[key] = value
+            }
+        }
+        return result
+    }
 }

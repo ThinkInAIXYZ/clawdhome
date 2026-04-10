@@ -144,6 +144,9 @@ extension ClawdHomeHelperImpl {
                 fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
         }
 
+        // 检查 8：环境变量契约（zprofile / 代理托管块 / Gateway 运行时）
+        items += diagEnvContract(username: username, fix: fix)
+
         // --- 应用安全审计（openclaw security audit --json）---
 
         guard let openclawPath = try? ConfigWriter.findOpenclawBinary(for: username) else {
@@ -352,7 +355,253 @@ extension ClawdHomeHelperImpl {
                 fixable: true, fixed: nil, fixError: nil, latencyMs: nil))
         }
 
+        items += diagEnvContract(username: username, fix: fix)
+
         return items
+    }
+
+    // MARK: 诊断 - 环境契约一致性（初始化/运行时）
+
+    private func diagEnvContract(username: String, fix: Bool) -> [DiagnosticItem] {
+        var items: [DiagnosticItem] = []
+        let home = "/Users/\(username)"
+        let zprofilePath = "\(home)/.zprofile"
+        let zshrcPath = "\(home)/.zshrc"
+        let npmrcPath = "\(home)/.npmrc"
+
+        let requiredExports = UserEnvContract.zprofileRequiredExports()
+        let missingExports = missingShellExports(path: zprofilePath, required: requiredExports)
+        if missingExports.isEmpty {
+            items.append(DiagnosticItem(
+                id: "env-shell-contract", group: .environment, severity: "ok",
+                title: "Shell 环境变量契约正常",
+                detail: "~/.zprofile 已包含 brew/npm/userconfig 关键变量",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+        } else {
+            var fixed: Bool? = nil
+            var fixError: String? = nil
+            if fix {
+                do {
+                    try appendMissingShellExports(path: zprofilePath, username: username, missing: missingExports)
+                    fixed = true
+                } catch {
+                    fixed = false
+                    fixError = error.localizedDescription
+                }
+            }
+            items.append(DiagnosticItem(
+                id: "env-shell-contract", group: .environment, severity: "warn",
+                title: "Shell 环境变量契约缺失",
+                detail: "缺失 \(missingExports.count) 项：\(missingExports.joined(separator: " | "))",
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
+        }
+
+        if FileManager.default.fileExists(atPath: npmrcPath) {
+            items.append(DiagnosticItem(
+                id: "env-npmrc", group: .environment, severity: "ok",
+                title: ".npmrc 就绪",
+                detail: npmrcPath,
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+        } else {
+            var fixed: Bool? = nil
+            var fixError: String? = nil
+            if fix {
+                do {
+                    try Data().write(to: URL(fileURLWithPath: npmrcPath), options: .atomic)
+                    try FilePermissionHelper.chown(npmrcPath, owner: username)
+                    _ = try? run("/bin/chmod", args: ["644", npmrcPath])
+                    fixed = true
+                } catch {
+                    fixed = false
+                    fixError = error.localizedDescription
+                }
+            }
+            items.append(DiagnosticItem(
+                id: "env-npmrc", group: .environment, severity: "info",
+                title: ".npmrc 不存在",
+                detail: "NPM_CONFIG_USERCONFIG 指向 \(npmrcPath)",
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
+        }
+
+        let proxyEnv = ConfigWriter.proxyEnvironment(username: username)
+        let proxy = normalizedProxySettings(from: proxyEnv)
+        if proxy.enabled {
+            let zprofileHasBlock = hasProxyManagedBlock(path: zprofilePath)
+            let zshrcHasBlock = hasProxyManagedBlock(path: zshrcPath)
+            if zprofileHasBlock && zshrcHasBlock {
+                items.append(DiagnosticItem(
+                    id: "env-proxy-managed-block", group: .environment, severity: "ok",
+                    title: "代理环境托管块正常",
+                    detail: "~/.zprofile 与 ~/.zshrc 均存在 CLAWDHOME 代理托管块",
+                    fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+            } else {
+                var fixed: Bool? = nil
+                var fixError: String? = nil
+                if fix {
+                    let repairResult = applyProxySettingsSync(
+                        username: username,
+                        enabled: true,
+                        proxyURL: proxy.proxyURL,
+                        noProxy: proxy.noProxy,
+                        restartGatewayIfRunning: true
+                    )
+                    fixed = repairResult.ok
+                    fixError = repairResult.message
+                }
+                items.append(DiagnosticItem(
+                    id: "env-proxy-managed-block", group: .environment, severity: "warn",
+                    title: "代理环境托管块缺失",
+                    detail: "检测到 openclaw 代理配置，但 shell profile 未完全托管（zprofile=\(zprofileHasBlock), zshrc=\(zshrcHasBlock)）",
+                    fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
+            }
+        } else {
+            items.append(DiagnosticItem(
+                id: "env-proxy-managed-block", group: .environment, severity: "info",
+                title: "未启用代理环境",
+                detail: "openclaw.json env 未设置代理变量",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+        }
+
+        if let uid = try? UserManager.uid(for: username) {
+            let gatewayStatus = GatewayManager.status(username: username, uid: uid)
+            if gatewayStatus.running {
+                let expected = Dictionary(
+                    uniqueKeysWithValues: UserEnvContract.orderedRuntimeEnvironment(
+                        username: username,
+                        nodePath: ConfigWriter.buildNodePath(username: username)
+                    )
+                )
+                if let actual = gatewayPlistEnvironment(username: username) {
+                    let mismatches = expected.keys.sorted().filter { key in
+                        actual[key] != expected[key]
+                    }
+                    if mismatches.isEmpty {
+                        items.append(DiagnosticItem(
+                            id: "env-gateway-runtime", group: .environment, severity: "ok",
+                            title: "Gateway 运行时环境契约正常",
+                            detail: "LaunchDaemon 环境变量与期望一致",
+                            fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+                    } else {
+                        var fixed: Bool? = nil
+                        var fixError: String? = nil
+                        if fix {
+                            do {
+                                try GatewayManager.restartGateway(username: username, uid: uid)
+                                let refreshed = gatewayPlistEnvironment(username: username) ?? [:]
+                                let remaining = expected.keys.sorted().filter { refreshed[$0] != expected[$0] }
+                                fixed = remaining.isEmpty
+                                if !remaining.isEmpty {
+                                    fixError = "重启后仍不一致：\(remaining.joined(separator: ", "))"
+                                }
+                            } catch {
+                                fixed = false
+                                fixError = error.localizedDescription
+                            }
+                        }
+                        items.append(DiagnosticItem(
+                            id: "env-gateway-runtime", group: .environment, severity: "warn",
+                            title: "Gateway 运行时环境契约不一致",
+                            detail: "不一致键：\(mismatches.joined(separator: ", "))",
+                            fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
+                    }
+                } else {
+                    items.append(DiagnosticItem(
+                        id: "env-gateway-runtime", group: .environment, severity: "warn",
+                        title: "Gateway 环境检查失败",
+                        detail: "无法读取 LaunchDaemon plist 环境变量",
+                        fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+                }
+            } else {
+                items.append(DiagnosticItem(
+                    id: "env-gateway-runtime", group: .environment, severity: "info",
+                    title: "Gateway 未运行，跳过运行时环境比对",
+                    detail: "仅在 Gateway 运行中执行契约一致性比对",
+                    fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+            }
+        }
+
+        return items
+    }
+
+    private func missingShellExports(path: String, required: [String]) -> [String] {
+        let existing = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        return required.filter { !existing.contains($0) }
+    }
+
+    private func appendMissingShellExports(path: String, username: String, missing: [String]) throws {
+        guard !missing.isEmpty else { return }
+        var block = "\n"
+        block += "# clawdhome env contract\n"
+        block += missing.joined(separator: "\n")
+        block += "\n"
+        let data = Data(block.utf8)
+        if FileManager.default.fileExists(atPath: path) {
+            if let fh = FileHandle(forWritingAtPath: path) {
+                fh.seekToEndOfFile()
+                fh.write(data)
+                fh.closeFile()
+            } else {
+                throw NSError(domain: "Diagnostics", code: 1, userInfo: [NSLocalizedDescriptionKey: "无法写入 \(path)"])
+            }
+        } else {
+            try data.write(to: URL(fileURLWithPath: path))
+        }
+        try FilePermissionHelper.chown(path, owner: username)
+    }
+
+    private func hasProxyManagedBlock(path: String) -> Bool {
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return false }
+        return content.contains("# >>> CLAWDHOME_PROXY_START >>>")
+            && content.contains("# <<< CLAWDHOME_PROXY_END <<<")
+    }
+
+    private func normalizedProxySettings(from env: [String: String]) -> (enabled: Bool, proxyURL: String, noProxy: String) {
+        let proxyKeys = ["HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "https_proxy", "http_proxy", "all_proxy"]
+        let noProxyKeys = ["NO_PROXY", "no_proxy"]
+        let proxyURL = proxyKeys.compactMap { env[$0] }.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? ""
+        let noProxy = noProxyKeys.compactMap { env[$0] }.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? ""
+        return (!proxyURL.isEmpty, proxyURL, noProxy)
+    }
+
+    private func applyProxySettingsSync(
+        username: String,
+        enabled: Bool,
+        proxyURL: String,
+        noProxy: String,
+        restartGatewayIfRunning: Bool
+    ) -> (ok: Bool, message: String?) {
+        let sem = DispatchSemaphore(value: 0)
+        var result: (Bool, String?) = (false, "未知错误")
+        applyProxySettings(
+            username: username,
+            enabled: enabled,
+            proxyURL: proxyURL,
+            noProxy: noProxy,
+            restartGatewayIfRunning: restartGatewayIfRunning
+        ) { ok, msg in
+            result = (ok, msg)
+            sem.signal()
+        }
+        let waitResult = sem.wait(timeout: .now() + 60)
+        if waitResult == .timedOut {
+            return (false, "代理修复超时")
+        }
+        return result
+    }
+
+    private func gatewayPlistEnvironment(username: String) -> [String: String]? {
+        let path = "/Library/LaunchDaemons/ai.clawdhome.gateway.\(username).plist"
+        guard let data = FileManager.default.contents(atPath: path),
+              let obj = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+              let env = obj["EnvironmentVariables"] as? [String: Any]
+        else { return nil }
+        var result: [String: String] = [:]
+        for (k, v) in env {
+            if let s = v as? String {
+                result[k] = s
+            }
+        }
+        return result
     }
 
     // MARK: 诊断 - 权限检测

@@ -144,11 +144,7 @@ extension ClawdHomeHelperImpl {
             // 2. 将 npm 全局环境写入 ~/.zprofile（幂等）
             let profilePath = "/Users/\(username)/.zprofile"
             let existing = (try? String(contentsOfFile: profilePath, encoding: .utf8)) ?? ""
-            let requiredExports = [
-                "export NPM_CONFIG_PREFIX=\"$HOME/.npm-global\"",
-                "export npm_config_prefix=\"$HOME/.npm-global\"",
-                "export PATH=\"$HOME/.npm-global/bin:$PATH\"",
-            ]
+            let requiredExports = UserEnvContract.zprofileRequiredExports()
             let missingExports = requiredExports.filter { !existing.contains($0) }
             if !missingExports.isEmpty {
                 var exportBlock = "\n"
@@ -299,12 +295,7 @@ extension ClawdHomeHelperImpl {
           extract_cached_tar
         fi
         """
-        let requiredExports = [
-            "export PATH=\"$HOME/.brew/bin:$PATH\"",
-            "export HOMEBREW_PREFIX=\"$HOME/.brew\"",
-            "export HOMEBREW_CELLAR=\"$HOME/.brew/Cellar\"",
-            "export HOMEBREW_REPOSITORY=\"$HOME/.brew\"",
-        ]
+        let requiredExports = UserEnvContract.zprofileRequiredExports()
 
         func appendLog(_ msg: String) {
             if let fh = FileHandle(forWritingAtPath: logURL.path) {

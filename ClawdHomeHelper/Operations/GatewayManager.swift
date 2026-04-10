@@ -464,6 +464,15 @@ struct GatewayManager {
         let label = "\(gatewayLabel).\(username)"
         let logPath = "/Users/\(username)/.openclaw/logs/gateway.log"
         let nodePath = ConfigWriter.buildNodePath(username: username)
+        let envXML = UserEnvContract
+            .orderedRuntimeEnvironment(username: username, nodePath: nodePath)
+            .map { key, value in
+                """
+                            <key>\(xmlEscaped(key))</key>
+                            <string>\(xmlEscaped(value))</string>
+                """
+            }
+            .joined(separator: "\n")
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -487,10 +496,7 @@ struct GatewayManager {
             </array>
             <key>EnvironmentVariables</key>
             <dict>
-                <key>PATH</key>
-                <string>\(nodePath)</string>
-                <key>HOME</key>
-                <string>/Users/\(username)</string>
+        \(envXML)
             </dict>
             <key>RunAtLoad</key>
             <true/>
@@ -503,6 +509,15 @@ struct GatewayManager {
         </dict>
         </plist>
         """
+    }
+
+    private static func xmlEscaped(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
     }
 
     /// openclaw CLI 可能包含 ANSI 控制码或包裹文本，这里做鲁棒解析。
