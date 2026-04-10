@@ -6455,43 +6455,38 @@ private struct KimiMinimaxModelConfigPanel: View {
             // 1. 构建 config patch + 同步 agent 文件
             let (patch, agentFileSync) = try await buildProviderPatch(apiKey: apiKey)
 
-            // 2. 通过 WebSocket config.patch 写入（带 schema 校验 + 自动热重启）
-            let (cfg, baseHash) = try await gatewayHub.configGetFull(username: user.username)
-            var mergedPatch = mergePatchWithExistingAliases(patch: patch, existingConfig: cfg)
+            // 2. 优先走 WebSocket config.patch；Gateway 未连接时回退到本地直写
+            do {
+                let (cfg, baseHash) = try await gatewayHub.configGetFull(username: user.username)
+                var mergedPatch = mergePatchWithExistingAliases(patch: patch, existingConfig: cfg)
+                applyOldModelAction(action, to: &mergedPatch, existingConfig: cfg)
 
-            // 3. 根据用户选择处理旧主模型
-            if action == .keepAsFallback, let oldPrimary = currentDefaultModel, !oldPrimary.isEmpty {
-                let existingModel = ((cfg["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]
-                var fallbacks = (existingModel?["fallbacks"] as? [String]) ?? []
-                // 将旧主模型插入 fallbacks 首位（避免重复）
-                fallbacks.removeAll { $0 == oldPrimary }
-                fallbacks.insert(oldPrimary, at: 0)
-                // 移除新主模型（避免重复）
-                let newPrimary = resolveNewPrimary()
-                fallbacks.removeAll { $0 == newPrimary }
+                let (noop, _) = try await gatewayHub.configPatch(
+                    username: user.username,
+                    patch: mergedPatch,
+                    baseHash: baseHash,
+                    note: "ClawdHome: apply \(selectedProvider.title) config"
+                )
 
-                var agentsPatch = (mergedPatch["agents"] as? [String: Any]) ?? [:]
-                var defaults = (agentsPatch["defaults"] as? [String: Any]) ?? [:]
-                var model = (defaults["model"] as? [String: Any]) ?? [:]
-                model["fallbacks"] = fallbacks
-                defaults["model"] = model
-                agentsPatch["defaults"] = defaults
-                mergedPatch["agents"] = agentsPatch
-            }
+                // 3. 同步 agent 目录文件
+                try await agentFileSync()
 
-            let (noop, _) = try await gatewayHub.configPatch(
-                username: user.username,
-                patch: mergedPatch,
-                baseHash: baseHash,
-                note: "ClawdHome: apply \(selectedProvider.title) config"
-            )
+                if !noop {
+                    isRestartingGateway = true
+                    gatewayHub.markPendingStart(username: user.username)
+                }
+            } catch {
+                guard isGatewayConnectivityError(error) else { throw error }
+                let cfg = await helperClient.getConfigJSON(username: user.username)
+                var mergedPatch = mergePatchWithExistingAliases(patch: patch, existingConfig: cfg)
+                applyOldModelAction(action, to: &mergedPatch, existingConfig: cfg)
 
-            // 4. 同步 agent 目录文件
-            try await agentFileSync()
+                try await applyPatchDirect(mergedPatch, existingConfig: cfg)
+                try await agentFileSync()
 
-            if !noop {
                 isRestartingGateway = true
                 gatewayHub.markPendingStart(username: user.username)
+                try await helperClient.restartGateway(username: user.username)
             }
             saveMessage = L10n.k("user.detail.auto.configuration", fallback: "配置已应用")
 
@@ -6504,6 +6499,67 @@ private struct KimiMinimaxModelConfigPanel: View {
         } catch {
             saveError = error.localizedDescription
         }
+    }
+
+    /// keepAsFallback 逻辑：将旧主模型保留到 fallback 首位
+    private func applyOldModelAction(_ action: OldModelAction, to patch: inout [String: Any], existingConfig: [String: Any]) {
+        guard action == .keepAsFallback, let oldPrimary = currentDefaultModel, !oldPrimary.isEmpty else { return }
+
+        let existingModel = ((existingConfig["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]
+        var fallbacks = (existingModel?["fallbacks"] as? [String]) ?? []
+        // 将旧主模型插入 fallbacks 首位（避免重复）
+        fallbacks.removeAll { $0 == oldPrimary }
+        fallbacks.insert(oldPrimary, at: 0)
+        // 移除新主模型（避免重复）
+        let newPrimary = resolveNewPrimary()
+        fallbacks.removeAll { $0 == newPrimary }
+
+        var agentsPatch = (patch["agents"] as? [String: Any]) ?? [:]
+        var defaults = (agentsPatch["defaults"] as? [String: Any]) ?? [:]
+        var model = (defaults["model"] as? [String: Any]) ?? [:]
+        model["fallbacks"] = fallbacks
+        defaults["model"] = model
+        agentsPatch["defaults"] = defaults
+        patch["agents"] = agentsPatch
+    }
+
+    /// Gateway 掉线时，按 merge-patch 语义在本地合成并直写变更的顶层键
+    private func applyPatchDirect(_ patch: [String: Any], existingConfig: [String: Any]) async throws {
+        let merged = mergeJSON(base: existingConfig, patch: patch)
+        for key in patch.keys.sorted() {
+            guard let value = merged[key] else { continue }
+            try await helperClient.setConfigDirect(username: user.username, path: key, value: value)
+        }
+    }
+
+    private func mergeJSON(base: [String: Any], patch: [String: Any]) -> [String: Any] {
+        var result = base
+        for (key, patchValue) in patch {
+            if patchValue is NSNull {
+                result.removeValue(forKey: key)
+                continue
+            }
+            if let patchObject = patchValue as? [String: Any] {
+                let baseObject = result[key] as? [String: Any] ?? [:]
+                result[key] = mergeJSON(base: baseObject, patch: patchObject)
+            } else {
+                result[key] = patchValue
+            }
+        }
+        return result
+    }
+
+    private func isGatewayConnectivityError(_ error: Error) -> Bool {
+        if let gatewayError = error as? GatewayClientError {
+            switch gatewayError {
+            case .notConnected, .connectFailed:
+                return true
+            case .requestFailed, .encodingError:
+                return false
+            }
+        }
+        let message = error.localizedDescription
+        return message.contains("Gateway 未连接") || message.contains("连接失败")
     }
 
     /// Qiniu 配置必须保持 v1.6.0 的 legacy 直写方式（setConfigDirect）。
