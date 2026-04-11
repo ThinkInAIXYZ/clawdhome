@@ -342,6 +342,7 @@ final class ShrimpPool {
                         }
                     }
                     user.openclawVersion = await self.helperClient.getOpenclawVersion(username: user.username)
+                    user.versionChecked = true
                 }
             }
         }
