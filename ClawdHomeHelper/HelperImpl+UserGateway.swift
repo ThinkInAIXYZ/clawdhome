@@ -17,6 +17,9 @@ extension ClawdHomeHelperImpl {
         helperLog("用户创建 @\(username) (\(fullName))")
         do {
             try UserManager.createUser(username: username, fullName: fullName, password: password)
+            // 初始化安全文件夹（非阻塞：失败仅记录日志，可通过 setupVault 重试）
+            do { try VaultManager.setupVault(username: username) }
+            catch { helperLog("Vault 自动初始化失败 @\(username): \(error.localizedDescription)", level: .warn) }
             // 新建虾默认关闭用户级自启：初始化完成后由用户手动启动，避免后台自动拉起。
             let autostartDisabledPath = ClawdHomeHelperImpl.userAutostartDisabledPath(username: username)
             try? FileManager.default.createDirectory(
@@ -91,6 +94,18 @@ extension ClawdHomeHelperImpl {
         GatewayIntentionalStopStore.clear(username: username)
         reply(true, nil)
     }
+
+    func setupVault(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("Vault 初始化 @\(username)")
+        do {
+            try VaultManager.setupVault(username: username)
+            reply(true, nil)
+        } catch {
+            helperLog("Vault 初始化失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
 
     // MARK: Gateway 管理
 

@@ -8,7 +8,7 @@ struct LocalLLMManager {
     static let label      = "ai.clawdhome.omlx"
     static let port       = 18800
     static let plistPath  = "/Library/LaunchDaemons/ai.clawdhome.omlx.plist"
-    static let modelDir   = "/Users/Shared/ClawdHome/models/omlx"
+    static let modelDir   = "/var/lib/clawdhome/models/omlx"
 
     // MARK: - 安装 omlx
 
@@ -128,7 +128,6 @@ struct LocalLLMManager {
         let fm = FileManager.default
         guard !fm.fileExists(atPath: modelDir) else { return }
         try? fm.createDirectory(atPath: modelDir, withIntermediateDirectories: true)
-        _ = try? run("/bin/chmod", args: ["755", "/Users/Shared/ClawdHome"])
         _ = try? run("/bin/chmod", args: ["755", modelDir])
     }
 

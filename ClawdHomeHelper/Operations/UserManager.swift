@@ -165,6 +165,7 @@ struct UserManager {
             helperLog("uninstallGateway failed during prepareDeleteUser @\(username): \(error.localizedDescription)", level: .warn)
         }
         removeFromAllGroups(username: username)
+        VaultManager.teardownVault(username: username, archive: true)
     }
 
     /// 删除后清理：移除 Helper 侧状态文件

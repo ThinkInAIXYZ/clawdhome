@@ -6,6 +6,7 @@ import SwiftUI
 enum NavDestination: Hashable {
     case dashboard
     case clawPool
+    case vaultFiles
     case network
     case aiLab
     case models
@@ -38,6 +39,8 @@ struct ContentView: View {
                             .tag(NavDestination.dashboard)
                         Label { Text(L10n.k("auto.content_view.claw_pool", fallback: "虾塘")) } icon: { Text("🦞") }
                             .tag(NavDestination.clawPool)
+                        Label(L10n.k("auto.content_view.vault_files", fallback: "文件共享"), systemImage: "folder.badge.person.crop")
+                            .tag(NavDestination.vaultFiles)
                     }
                     Section(L10n.k("auto.content_view.services", fallback: "服务")) {
                         Label { Text(L10n.k("auto.content_view.role_market", fallback: "角色中心")) } icon: { Text("🎭") }
@@ -114,6 +117,10 @@ struct ContentView: View {
                         onGoToRoleMarket: { navSelection = .roleMarket }
                     )
                     .environment(helperClient)
+                case .vaultFiles:
+                    VaultFilesView()
+                        .environment(helperClient)
+                        .environment(pool)
                 case .network:
                     NetworkPolicyView()
                         .environment(helperClient)

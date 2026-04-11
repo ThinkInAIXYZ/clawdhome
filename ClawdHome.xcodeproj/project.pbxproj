@@ -115,6 +115,7 @@
 		ACE028DB32C34188A8C47EA4 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6482AE0816A0181D42B69AB4 /* DeviceIdentity.swift */; };
 		B08AD6863D465C16D9D2D0FC /* HelperImpl+Backup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8B8FD7981A5C81058060CC /* HelperImpl+Backup.swift */; };
 		B33BF87630AE1CBD7D47F438 /* FileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71156CAD7673A87034AF0D8 /* FileModels.swift */; };
+		B4186F49E2F4E5365DA22652 /* VaultManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20AA8CD71AB761800F6128E /* VaultManager.swift */; };
 		B57160D717A6898E887EADDD /* CloneClawModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */; };
 		B81D3332811AFA345F523E3D /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E5226083EF9356F8C51363 /* AppLogger.swift */; };
 		BC5CEE02450C97178238E88A /* UserDirectoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1B997BD537C60950ED9DD3 /* UserDirectoryService.swift */; };
@@ -144,6 +145,7 @@
 		DA1F41ECCF5EF07721BC8FCF /* AppLockStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B639FCB2D3020F3E95F7EFC /* AppLockStore.swift */; };
 		DCE2C8C6147052102BB81D08 /* PersonaGitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C2B17425B19E3FD55EC7AF /* PersonaGitManager.swift */; };
 		DDC38ED579B3E862A571B156 /* LocalAIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */; };
+		DE12D55597459F084D76A461 /* VaultFilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2FCA2FCC5FE69859F138BFD /* VaultFilesView.swift */; };
 		DFF6D9534DA4C03A269C2278 /* AILabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1936AA347B3957C607B88773 /* AILabView.swift */; };
 		E05E2364346E9729CD25F0A7 /* DaemonInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 304E3BEE50A0653474FF27FC /* DaemonInstaller.swift */; };
 		E0C160E2E632CFA784D943BB /* ModelConfigWizard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 922B9F0332920FE79B0EF0B8 /* ModelConfigWizard.swift */; };
@@ -270,7 +272,9 @@
 		AE60C673397402540C236C95 /* HelperImpl+Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Diagnostics.swift"; sourceTree = "<group>"; };
 		AF5F77D9351528C6DEEFC633 /* ShrimpPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrimpPool.swift; sourceTree = "<group>"; };
 		B0C17363344B936997067010 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		B20AA8CD71AB761800F6128E /* VaultManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultManager.swift; sourceTree = "<group>"; };
 		B2C86690A71173471BC77C57 /* FormatUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatUtils.swift; sourceTree = "<group>"; };
+		B2FCA2FCC5FE69859F138BFD /* VaultFilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFilesView.swift; sourceTree = "<group>"; };
 		B62AE0CAFA22F67436019A51 /* BackupModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupModels.swift; sourceTree = "<group>"; };
 		B82A9FF38295968F2C08B29B /* HelperLogging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperLogging.swift; sourceTree = "<group>"; };
 		B9DBC78DA4D1FFD0EB50D466 /* LocalLLMManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMManager.swift; sourceTree = "<group>"; };
@@ -536,6 +540,7 @@
 				FF68B65CAD11828B98734EAC /* UserEnvContract.swift */,
 				BFAD293FACB59B2F45FF9D4A /* UserFileManager.swift */,
 				14984A3D87B04508056F24CF /* UserManager.swift */,
+				B20AA8CD71AB761800F6128E /* VaultManager.swift */,
 			);
 			path = Operations;
 			sourceTree = "<group>";
@@ -588,6 +593,7 @@
 				A623F9F0DFBC22F900B5ACED /* UserFilesView.swift */,
 				0EE6965A7DA630D46B4F1B50 /* UserInitWizardView.swift */,
 				DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */,
+				B2FCA2FCC5FE69859F138BFD /* VaultFilesView.swift */,
 				60E2BC3AA8DD32C2E7B370D0 /* WizardComponents.swift */,
 				67B0925580BD2EF371BC98D4 /* WizardModels.swift */,
 				0836569296D71804D39AAEE4 /* ChannelOnboarding */,
@@ -858,6 +864,7 @@
 				FA4AA7F683A3E8C096CFCCC8 /* UserInitWizardView.swift in Sources */,
 				F7E5A9A08C640A5E7684F7B1 /* UserListView.swift in Sources */,
 				346939ADEDF99620B1967823 /* UserPasswordStore.swift in Sources */,
+				DE12D55597459F084D76A461 /* VaultFilesView.swift in Sources */,
 				9D6B268A8115D86664724753 /* VoiceLibraryTab.swift in Sources */,
 				CF9F809B95CDA2464FC36087 /* VoiceProfile.swift in Sources */,
 				645CD594F1E088E7A3515D0D /* WizardComponents.swift in Sources */,
@@ -914,6 +921,7 @@
 				C11B2113E212A1BBC279EC49 /* UserFileManager.swift in Sources */,
 				844ED367CC5266A513A5FADE /* UserInitPresentationRouting.swift in Sources */,
 				52DC4DCC5F6553B9DA7AE563 /* UserManager.swift in Sources */,
+				B4186F49E2F4E5365DA22652 /* VaultManager.swift in Sources */,
 				8880D4FA5302740F6CD8F7B2 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

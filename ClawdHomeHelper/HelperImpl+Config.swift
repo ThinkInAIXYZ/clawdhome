@@ -636,9 +636,7 @@ extension ClawdHomeHelperImpl {
         do {
             let session = try MaintenanceTerminalSession(username: username, nodePath: nodePath, command: command)
             try session.start()
-            maintenanceSessionLock.lock()
-            maintenanceSessions[session.id] = session
-            maintenanceSessionLock.unlock()
+            storeMaintenanceSession(session)
             helperLog("[maintenance] session start ok id=\(session.id) pid=\(session.process.processIdentifier) user=\(username) cmd=\(command.joined(separator: " "))")
             reply(true, session.id, nil)
         } catch {
@@ -649,10 +647,8 @@ extension ClawdHomeHelperImpl {
 
     func pollMaintenanceTerminalSession(sessionID: String, fromOffset: Int64,
                                         withReply reply: @escaping (Bool, Data, Int64, Bool, Int32, String?) -> Void) {
-        maintenanceSessionLock.lock()
-        let session = maintenanceSessions[sessionID]
-        maintenanceSessionLock.unlock()
-        guard let session else {
+        guard let session = maintenanceSession(id: sessionID) else {
+            helperLog("[maintenance] poll miss id=\(sessionID) fromOffset=\(fromOffset)", level: .warn)
             reply(false, Data(), fromOffset, true, -1, "会话不存在或已结束")
             return
         }
@@ -662,10 +658,7 @@ extension ClawdHomeHelperImpl {
 
     func sendMaintenanceTerminalSessionInput(sessionID: String, inputBase64: String,
                                              withReply reply: @escaping (Bool, String?) -> Void) {
-        maintenanceSessionLock.lock()
-        let session = maintenanceSessions[sessionID]
-        maintenanceSessionLock.unlock()
-        guard let session else {
+        guard let session = maintenanceSession(id: sessionID) else {
             reply(false, "会话不存在或已结束")
             return
         }
@@ -683,10 +676,7 @@ extension ClawdHomeHelperImpl {
 
     func resizeMaintenanceTerminalSession(sessionID: String, cols: Int32, rows: Int32,
                                           withReply reply: @escaping (Bool, String?) -> Void) {
-        maintenanceSessionLock.lock()
-        let session = maintenanceSessions[sessionID]
-        maintenanceSessionLock.unlock()
-        guard let session else {
+        guard let session = maintenanceSession(id: sessionID) else {
             reply(false, "会话不存在或已结束")
             return
         }
@@ -700,10 +690,7 @@ extension ClawdHomeHelperImpl {
 
     func terminateMaintenanceTerminalSession(sessionID: String,
                                              withReply reply: @escaping (Bool, String?) -> Void) {
-        maintenanceSessionLock.lock()
-        let session = maintenanceSessions.removeValue(forKey: sessionID)
-        maintenanceSessionLock.unlock()
-        guard let session else {
+        guard let session = removeMaintenanceSession(id: sessionID) else {
             reply(true, nil)
             return
         }

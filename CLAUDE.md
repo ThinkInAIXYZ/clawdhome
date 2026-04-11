@@ -123,6 +123,9 @@ Build numbers are **auto-derived** from git commit count (`git rev-list --count 
 |------|---------|
 | `/tmp/clawdhome-helper.log` | Helper JSONL log (2MB max, 3 rotations) |
 | `/var/lib/clawdhome/` | Helper persistent state (init progress, debug flag, autostart config) |
+| `/var/lib/clawdhome/cache/` | Helper installation cache (homebrew, nodejs) — root only |
+| `/var/lib/clawdhome/models/` | Local AI models (omlx) — root only |
+| `/Users/Shared/ClawdHome/` | Cross-user shared file space (public folder, per-shrimp vaults) |
 | `~<shrimp>/.openclaw/` | Per-Shrimp OpenClaw config and data |
 | `~<shrimp>/.npm-global/` | Per-Shrimp npm global install directory |
 
