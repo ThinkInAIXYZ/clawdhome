@@ -1179,31 +1179,7 @@ struct UserDetailView: View {
                 }
             }
 
-            overviewSupplementaryCard(
-                title: L10n.k("user.detail.auto.channel", fallback: "IM 绑定"),
-                subtitle: L10n.k("user.detail.auto.feishu_wechat_configuration", fallback: "飞书/微信均通过独立流程扫码绑定，支持首次配置和重新绑定。")
-            ) {
-                HStack(spacing: 8) {
-                    overviewCompactActionButton(
-                        title: L10n.k("user.detail.auto.feishu", fallback: "飞书配对"),
-                        systemImage: "message",
-                        tint: Color.secondary.opacity(0.08),
-                        foreground: .primary,
-                        disabled: !helperClient.isConnected
-                    ) {
-                        openChannelOnboarding(.feishu)
-                    }
-                    overviewCompactActionButton(
-                        title: L10n.k("user.detail.auto.wechat", fallback: "微信配对"),
-                        systemImage: "message.badge",
-                        tint: Color.secondary.opacity(0.08),
-                        foreground: .primary,
-                        disabled: !helperClient.isConnected
-                    ) {
-                        openChannelOnboarding(.weixin)
-                    }
-                }
-            }
+            overviewChannelCard
         }
     }
 
@@ -1840,36 +1816,7 @@ struct UserDetailView: View {
                     .disabled(!helperClient.isConnected)
                 }
                 Divider()
-                HStack {
-                    Text(L10n.k("user.detail.auto.channel", fallback: "频道")).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
-                    Text(L10n.k("user.detail.auto.feishu_weixin", fallback: "飞书 / 微信"))
-                        .font(.caption).foregroundStyle(.tertiary)
-                    Spacer()
-                    Button(L10n.k("user.detail.auto.feishu", fallback: "飞书配对")) {
-                        openWindow(
-                            id: "channel-onboarding",
-                            value: "\(ChannelOnboardingFlow.feishu.rawValue):\(user.username)"
-                        )
-                    }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
-                        .disabled(!helperClient.isConnected)
-                    Text("·")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                    Button(L10n.k("user.detail.auto.wechat", fallback: "微信配对")) {
-                        openWindow(
-                            id: "channel-onboarding",
-                            value: "\(ChannelOnboardingFlow.weixin.rawValue):\(user.username)"
-                        )
-                    }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
-                        .disabled(!helperClient.isConnected)
-                }
-                Text(L10n.k("user.detail.auto.feishu_wechat_configuration", fallback: "飞书/微信均通过独立流程扫码绑定，支持首次配置和重新绑定。"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                channelDetailRow
 
                 if let status = xcodeEnvStatus, !status.isHealthy {
                     Divider().padding(.top, 2)
@@ -3240,6 +3187,134 @@ struct UserDetailView: View {
             id: "channel-onboarding",
             value: "\(flow.rawValue):\(user.username)"
         )
+    }
+
+    /// 按频道 ID 打开配对窗口（支持所有已知频道）
+    private func openChannelOnboarding(_ channelId: String) {
+        if let flow = ChannelOnboardingFlow(rawValue: channelId) {
+            openChannelOnboarding(flow)
+        } else {
+            // 对于尚无专用 onboarding 流程的频道，使用通用 channel-onboarding
+            openWindow(
+                id: "channel-onboarding",
+                value: "\(channelId):\(user.username)"
+            )
+        }
+    }
+
+    // MARK: - 频道状态 UI
+
+    /// 默认展示的频道（即使未绑定也显示）
+    private static let defaultChannelIds = ["feishu", "weixin"]
+
+    /// 频道对应的 SF Symbol
+    private static let channelSystemImages: [String: String] = [
+        "feishu": "message",
+        "weixin": "message.badge",
+        "slack": "number",
+        "discord": "bubble.left.and.bubble.right",
+        "telegram": "paperplane",
+        "whatsapp": "message",
+        "signal": "antenna.radiowaves.left.and.right",
+        "imessage": "message.fill",
+        "googlechat": "message.badge",
+    ]
+
+    /// compact 概览卡片：显示已绑定频道 + 默认频道
+    private var overviewChannelCard: some View {
+        let cStore = gatewayHub.channelStore(for: user.username)
+        let visibleChannels = channelVisibleIds(store: cStore)
+        return overviewSupplementaryCard(
+            title: L10n.k("user.detail.auto.channel", fallback: "IM 绑定"),
+            subtitle: channelSubtitle(store: cStore)
+        ) {
+            let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: min(visibleChannels.count, 3))
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(visibleChannels, id: \.self) { chId in
+                    let bound = cStore.isBound(chId)
+                    let label = cStore.label(for: chId)
+                    let icon = Self.channelSystemImages[chId] ?? "bubble.left"
+                    overviewCompactActionButton(
+                        title: label,
+                        systemImage: icon,
+                        tint: bound ? Color.accentColor.opacity(0.10) : Color.secondary.opacity(0.08),
+                        foreground: bound ? .accentColor : .primary,
+                        disabled: !helperClient.isConnected
+                    ) {
+                        openChannelOnboarding(chId)
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if bound {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.white, Color.accentColor)
+                                .offset(x: -2, y: 2)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// detail 列表中的频道行：已绑定频道徽章 + 配对按钮
+    private var channelDetailRow: some View {
+        let cStore = gatewayHub.channelStore(for: user.username)
+        let boundChannels = cStore.channelOrder.filter { cStore.isBound($0) }
+        return HStack {
+            Text(L10n.k("user.detail.auto.channel", fallback: "频道")).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
+            ForEach(boundChannels, id: \.self) { chId in
+                channelDetailBadge(label: cStore.label(for: chId))
+            }
+            if boundChannels.isEmpty {
+                Text(L10n.k("user.detail.channel.none", fallback: "未配置"))
+                    .font(.caption).foregroundStyle(.tertiary)
+            }
+            Spacer()
+            Button(L10n.k("user.detail.channel.pair", fallback: "配对")) {
+                openChannelOnboarding("feishu")
+            }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .disabled(!helperClient.isConnected)
+        }
+    }
+
+    /// 频道已绑定徽章（纯事实：已配置）
+    @ViewBuilder
+    private func channelDetailBadge(label: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 9))
+                .foregroundStyle(Color.accentColor)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Color.accentColor.opacity(0.08), in: Capsule())
+    }
+
+    /// 决定 compact 卡片中显示哪些频道：已绑定的 + 默认的，去重保序
+    private func channelVisibleIds(store: GatewayChannelStore) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for chId in store.channelOrder where store.isBound(chId) {
+            if seen.insert(chId).inserted { result.append(chId) }
+        }
+        for chId in Self.defaultChannelIds {
+            if seen.insert(chId).inserted { result.append(chId) }
+        }
+        return result
+    }
+
+    /// 频道卡片副标题
+    private func channelSubtitle(store: GatewayChannelStore) -> String {
+        let boundCount = store.channelOrder.filter { store.isBound($0) }.count
+        if boundCount == 0 {
+            return L10n.k("user.detail.auto.feishu_wechat_configuration", fallback: "飞书/微信均通过独立流程扫码绑定，支持首次配置和重新绑定。")
+        }
+        return "已配置 \(boundCount) 个频道"
     }
 
     private func installOpenclaw(version: String? = nil) async {
