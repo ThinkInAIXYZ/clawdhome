@@ -1302,9 +1302,9 @@ final class HelperClient {
 
     /// 轮询通用维护终端会话输出
     func pollMaintenanceTerminalSession(sessionID: String, fromOffset: Int64) async
-    -> (Bool, String, Int64, Bool, Int32, String?) {
+    -> (Bool, Data, Int64, Bool, Int32, String?) {
         guard let proxy = controlProxy else {
-            return (false, "", fromOffset, true, -1, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
+            return (false, Data(), fromOffset, true, -1, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
         }
         do {
             return try await xpcCall(timeout: .seconds(10)) { done in
@@ -1314,7 +1314,7 @@ final class HelperClient {
                 }
             }
         } catch {
-            return (false, "", fromOffset, true, -1, error.localizedDescription)
+            return (false, Data(), fromOffset, true, -1, error.localizedDescription)
         }
     }
 
