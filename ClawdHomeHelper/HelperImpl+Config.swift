@@ -648,12 +648,12 @@ extension ClawdHomeHelperImpl {
     }
 
     func pollMaintenanceTerminalSession(sessionID: String, fromOffset: Int64,
-                                        withReply reply: @escaping (Bool, String, Int64, Bool, Int32, String?) -> Void) {
+                                        withReply reply: @escaping (Bool, Data, Int64, Bool, Int32, String?) -> Void) {
         maintenanceSessionLock.lock()
         let session = maintenanceSessions[sessionID]
         maintenanceSessionLock.unlock()
         guard let session else {
-            reply(false, "", fromOffset, true, -1, "会话不存在或已结束")
+            reply(false, Data(), fromOffset, true, -1, "会话不存在或已结束")
             return
         }
         let snapshot = session.poll(fromOffset: fromOffset)
