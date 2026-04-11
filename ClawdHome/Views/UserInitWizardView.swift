@@ -1533,8 +1533,8 @@ struct UserInitWizardView: View {
 
     你有两个文件共享空间，可通过以下路径访问：
 
-    ### 安全文件夹（专属）
-    - 路径：`~/clawdhome_shared/vault/`
+    ### 专属文件夹（私有）
+    - 路径：`~/clawdhome_shared/private/`
     - 权限：仅你和管理员可访问，其他虾不可见
     - 用途：所有工作产出物、生成的文件、导出的数据都应优先存放在此目录
 
@@ -1544,7 +1544,7 @@ struct UserInitWizardView: View {
     - 用途：读写通用资源、共享文件、公共数据集
 
     ### 使用规范
-    - 当用户要求保存文件、导出结果、生成报告时，写入 `~/clawdhome_shared/vault/`
+    - 当用户要求保存文件、导出结果、生成报告时，写入 `~/clawdhome_shared/private/`
     - 需要引用公共资源时，从 `~/clawdhome_shared/public/` 读取
     - 不要将敏感数据写入公共文件夹
     """

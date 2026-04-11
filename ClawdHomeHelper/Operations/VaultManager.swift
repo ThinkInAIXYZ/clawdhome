@@ -59,6 +59,8 @@ enum VaultManager {
         try FilePermissionHelper.chmod(sharedRoot, mode: "755")
 
         // 6. 在虾 home 下创建符号链接 ~/clawdhome_shared/
+        //    skill/agent 统一通过 ~/clawdhome_shared/ 访问，底层存储路径是平台实现细节
+        //    macOS: /Users/Shared/ClawdHome/  Linux: /var/shared/clawdhome/ 等
         createHomeSymlinks(username: username, vaultPath: vaultPath)
 
         helperLog("Vault 初始化完成 @\(username): group=\(group)")
@@ -177,19 +179,28 @@ enum VaultManager {
     /// 虾 home 下的共享入口目录名
     private static let homeLinkDir = "clawdhome_shared"
 
-    /// 在虾的 home 下创建 ~/clawdhome_shared/ 符号链接
-    /// workspace 内容已经很多（persona 文件、git 仓库、memory 等），
-    /// 独立放在 home 根目录下更清晰，也不会干扰 workspace 的 git 仓库
+    /// 在虾的 home 下创建 ~/clawdhome_shared/ 目录，包含两个符号链接：
+    ///   private → 该虾自己的 vault（其他虾不可见）
+    ///   public  → 公共文件夹
+    /// skill/agent 统一通过 ~/clawdhome_shared/private 和 ~/clawdhome_shared/public 访问
     private static func createHomeSymlinks(username: String, vaultPath: String) {
         guard let home = resolveHomeDir(username: username) else { return }
 
         let linkDir = "\(home)/\(homeLinkDir)"
         let fm = FileManager.default
+
+        // 兼容旧版：如果 ~/clawdhome_shared 是一个符号链接（指向 sharedRoot），先删除
+        if let dest = try? fm.destinationOfSymbolicLink(atPath: linkDir) {
+            if dest == sharedRoot {
+                try? fm.removeItem(atPath: linkDir)
+            }
+        }
+
         try? fm.createDirectory(atPath: linkDir, withIntermediateDirectories: true, attributes: nil)
         try? FilePermissionHelper.chown(linkDir, owner: username)
         try? FilePermissionHelper.chmod(linkDir, mode: "755")
 
-        ensureSymlink(at: "\(linkDir)/vault", target: vaultPath)
+        ensureSymlink(at: "\(linkDir)/private", target: vaultPath)
         ensureSymlink(at: "\(linkDir)/public", target: publicDir)
     }
 

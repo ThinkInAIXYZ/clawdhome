@@ -808,6 +808,8 @@ struct ClawPoolView: View {
                         Task { await openWebUI(for: claw) }
                     } onTerminal: {
                         openTerminal(for: claw)
+                    } onOpenVault: {
+                        openVault(for: claw)
                     } onDropFiles: { droppedURLs in
                         handleQuickTransferDrop(for: claw, droppedURLs: droppedURLs)
                     }
@@ -1206,6 +1208,21 @@ struct ClawPoolView: View {
         openWindow(id: "maintenance-terminal", value: payload)
     }
 
+    private func openVault(for claw: ManagedUser) {
+        let vaultPath = "/Users/Shared/ClawdHome/vaults/\(claw.username)"
+        let url = URL(fileURLWithPath: vaultPath)
+        if FileManager.default.fileExists(atPath: vaultPath) {
+            NSWorkspace.shared.open(url)
+        } else {
+            Task {
+                try? await helperClient.setupVault(username: claw.username)
+                if FileManager.default.fileExists(atPath: vaultPath) {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        }
+    }
+
     private func runGatewayRepairFromListSheet() async {
         guard !isGatewayNodeRepairing, let username = gatewayNodeRepairUsername, !username.isEmpty else { return }
         quickActionError = nil
@@ -1421,6 +1438,7 @@ private struct ClawCard: View {
     var onUpgrade: (() -> Void)? = nil
     let onOpenWebUI: () -> Void
     let onTerminal: () -> Void
+    let onOpenVault: () -> Void
     let onDropFiles: ([URL]) -> Void
 
     @Environment(UpdateChecker.self) private var updater
@@ -1531,6 +1549,14 @@ private struct ClawCard: View {
                     }
                     .buttonStyle(.plain)
                     .help(L10n.k("views.user_list_view.open_terminal_action", fallback: "打开终端"))
+
+                    Button { onOpenVault() } label: {
+                        Image(systemName: "folder.badge.person.crop")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.k("views.user_list_view.open_vault", fallback: "打开共享文件夹"))
                 }
                 Spacer(minLength: 0)
             }
