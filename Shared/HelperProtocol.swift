@@ -96,6 +96,13 @@ import Foundation
         withReply reply: @escaping (String) -> Void
     )
 
+    /// 重装 openclaw：停止网关 → 清除旧安装 → 重新安装 → 验证环境 → 重启网关
+    func reinstallOpenclaw(
+        username: String,
+        version: String?,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
     /// 为指定用户安装 Node.js（直接下载）
     func installNode(
         username: String,
