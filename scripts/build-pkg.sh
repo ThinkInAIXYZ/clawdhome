@@ -217,6 +217,7 @@ if [ "$SKIP_BUILD" = false ]; then
       INFOPLIST_KEY_CFBundleShortVersionString="$BUILD_MARKETING_VERSION"
       INFOPLIST_KEY_CFBundleVersion="$BUILD_NUMBER"
       OTHER_CODE_SIGN_FLAGS="--timestamp"
+      ENABLE_HARDENED_RUNTIME=YES
     )
   else
     ARCHIVE_ARGS+=(
@@ -257,6 +258,7 @@ if [ "$SKIP_BUILD" = false ]; then
       CODE_SIGN_STYLE=Manual
       CODE_SIGN_IDENTITY="$APP_SIGN_IDENTITY"
       OTHER_CODE_SIGN_FLAGS="--timestamp"
+      ENABLE_HARDENED_RUNTIME=YES
     )
   else
     CLI_BUILD_ARGS+=(
@@ -281,7 +283,7 @@ if [ "$SKIP_BUILD" = false ]; then
     # CLI 嵌入后需要重新签名整个 app bundle（archive 签名在嵌入前完成，嵌入后封印失效）
     if [ "$SIGN_APP" = true ]; then
       log "重新签名 app bundle（CLI 嵌入后）..."
-      codesign --force --deep --sign "$APP_SIGN_IDENTITY" --timestamp \
+      codesign --force --deep --sign "$APP_SIGN_IDENTITY" --timestamp --options runtime \
         "$EXPORT_DIR/${APP_NAME}.app"
       ok "app bundle 重新签名完成"
     fi
