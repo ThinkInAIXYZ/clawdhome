@@ -76,6 +76,21 @@ targets:
         NSHumanReadableDescription: OpenClaw 家庭管理器
         LSApplicationCategoryType: public.app-category.utilities
 
+  ClawdHomeCLI:
+    type: tool
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ClawdHomeCLI
+      - path: Shared
+    dependencies: []
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.clawdhome.mac.cli
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SKIP_INSTALL: YES
+
   ClawdHomeHelper:
     type: tool
     platform: macOS

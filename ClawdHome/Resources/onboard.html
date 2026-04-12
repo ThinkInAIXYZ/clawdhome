@@ -1,358 +1,453 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>欢迎使用 ClawdHome</title>
-  <style>
-    /* ── 颜色令牌：浅色模式 ── */
-    :root {
-      --bg-primary:    #F5F5F7;
-      --bg-elevated:   #FFFFFF;
-      --bg-secondary:  #EEEEEF;
-      --label:         #1D1D1F;
-      --label-2:       #3C3C43;
-      --label-3:       #6C6C70;
-      --label-4:       #AEAEB2;
-      --separator:     rgba(0,0,0,0.10);
-      --card-shadow:   0 4px 24px rgba(0,0,0,0.06), 0 0 0 0.5px rgba(0,0,0,0.04);
-      --accent:        #007AFF;
-      --accent-hover:  #0056b3;
-      --success:       #34C759;
-    }
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, user-scalable=no"
+        />
+        <title>欢迎使用 ClawdHome</title>
+        <style>
+            /* ── 颜色令牌：浅色模式 ── */
+            :root {
+                --bg-primary: #f5f5f7;
+                --bg-elevated: #ffffff;
+                --bg-secondary: #eeeeef;
+                --label: #1d1d1f;
+                --label-2: #3c3c43;
+                --label-3: #6c6c70;
+                --label-4: #aeaeb2;
+                --separator: rgba(0, 0, 0, 0.1);
+                --card-shadow:
+                    0 4px 24px rgba(0, 0, 0, 0.06),
+                    0 0 0 0.5px rgba(0, 0, 0, 0.04);
+                --accent: #007aff;
+                --accent-hover: #0056b3;
+                --success: #34c759;
+            }
 
-    /* ── 颜色令牌：深色模式 ── */
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg-primary:    #000000;
-        --bg-elevated:   #1C1C1E;
-        --bg-secondary:  #2C2C2E;
-        --label:         #F5F5F7;
-        --label-2:       #EBEBF5CC;
-        --label-3:       #EBEBF599;
-        --label-4:       #EBEBF54D;
-        --separator:     rgba(255,255,255,0.10);
-        --card-shadow:   0 4px 24px rgba(0,0,0,0.40), 0 0 0 0.5px rgba(255,255,255,0.08);
-        --accent:        #0A84FF;
-        --accent-hover:  #006bf0;
-        --success:       #32D74B;
-      }
-    }
+            /* ── 颜色令牌：深色模式 ── */
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --bg-primary: #000000;
+                    --bg-elevated: #1c1c1e;
+                    --bg-secondary: #2c2c2e;
+                    --label: #f5f5f7;
+                    --label-2: #ebebf5cc;
+                    --label-3: #ebebf599;
+                    --label-4: #ebebf54d;
+                    --separator: rgba(255, 255, 255, 0.1);
+                    --card-shadow:
+                        0 4px 24px rgba(0, 0, 0, 0.4),
+                        0 0 0 0.5px rgba(255, 255, 255, 0.08);
+                    --accent: #0a84ff;
+                    --accent-hover: #006bf0;
+                    --success: #32d74b;
+                }
+            }
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
 
-    body, html {
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
-      background: var(--bg-primary);
-      color: var(--label);
-      width: 100%;
-      height: 100%;
-      overflow: hidden; /* 防止原生滚动 */
-      -webkit-font-smoothing: antialiased;
-    }
+            body,
+            html {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "SF Pro Display",
+                    "SF Pro Text", "Helvetica Neue", sans-serif;
+                background: var(--bg-primary);
+                color: var(--label);
+                width: 100%;
+                height: 100%;
+                overflow: hidden; /* 防止原生滚动 */
+                -webkit-font-smoothing: antialiased;
+            }
 
-    /* ── 幻灯片容器 ── */
-    .slider {
-      display: flex;
-      width: 300%;
-      height: 100%;
-      transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-    }
+            /* ── 幻灯片容器 ── */
+            .slider {
+                display: flex;
+                width: 300%;
+                height: 100%;
+                transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+            }
 
-    .slide {
-      width: 33.333%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 40px;
-      position: relative;
-    }
+            .slide {
+                width: 33.333%;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 40px;
+                position: relative;
+            }
 
-    /* ── 渐变装饰背景 ── */
-    .bg-blob {
-      position: absolute;
-      width: 60vh;
-      height: 60vh;
-      background: radial-gradient(circle, rgba(0,122,255,0.15) 0%, rgba(0,122,255,0) 70%);
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 0;
-      pointer-events: none;
-    }
-    @media (prefers-color-scheme: dark) {
-      .bg-blob { background: radial-gradient(circle, rgba(10,132,255,0.2) 0%, rgba(10,132,255,0) 70%); }
-    }
+            /* ── 渐变装饰背景 ── */
+            .bg-blob {
+                position: absolute;
+                width: 60vh;
+                height: 60vh;
+                background: radial-gradient(
+                    circle,
+                    rgba(0, 122, 255, 0.15) 0%,
+                    rgba(0, 122, 255, 0) 70%
+                );
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 0;
+                pointer-events: none;
+            }
+            @media (prefers-color-scheme: dark) {
+                .bg-blob {
+                    background: radial-gradient(
+                        circle,
+                        rgba(10, 132, 255, 0.2) 0%,
+                        rgba(10, 132, 255, 0) 70%
+                    );
+                }
+            }
 
-    /* ── 内容区域 ── */
-    .content {
-      position: relative;
-      z-index: 1;
-      text-align: center;
-      max-width: 480px;
-      width: 100%;
-    }
+            /* ── 内容区域 ── */
+            .content {
+                position: relative;
+                z-index: 1;
+                text-align: center;
+                max-width: 480px;
+                width: 100%;
+            }
 
-    .icon-large {
-      font-size: 80px;
-      margin-bottom: 24px;
-      line-height: 1;
-      display: inline-block;
-      filter: drop-shadow(0 8px 16px rgba(0,0,0,0.1));
-    }
+            .icon-large {
+                font-size: 80px;
+                margin-bottom: 24px;
+                line-height: 1;
+                display: inline-block;
+                filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.1));
+            }
 
-    h1 {
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      margin-bottom: 16px;
-      line-height: 1.2;
-    }
+            h1 {
+                font-size: 32px;
+                font-weight: 700;
+                letter-spacing: -0.5px;
+                margin-bottom: 16px;
+                line-height: 1.2;
+            }
 
-    p.subtitle {
-      font-size: 17px;
-      color: var(--label-2);
-      line-height: 1.5;
-      margin-bottom: 40px;
-    }
+            p.subtitle {
+                font-size: 17px;
+                color: var(--label-2);
+                line-height: 1.5;
+                margin-bottom: 40px;
+            }
 
-    /* ── 卡片（用于权限说明等） ── */
-    .feature-card {
-      background: var(--bg-elevated);
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: var(--card-shadow);
-      text-align: left;
-      margin-bottom: 20px;
-      display: flex;
-      gap: 16px;
-      align-items: center;
-    }
+            /* ── 卡片（用于权限说明等） ── */
+            .feature-card {
+                background: var(--bg-elevated);
+                border-radius: 16px;
+                padding: 24px;
+                box-shadow: var(--card-shadow);
+                text-align: left;
+                margin-bottom: 20px;
+                display: flex;
+                gap: 16px;
+                align-items: center;
+            }
 
-    .feature-icon {
-      font-size: 32px;
-      background: var(--bg-secondary);
-      width: 56px;
-      height: 56px;
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
+            .feature-icon {
+                font-size: 32px;
+                background: var(--bg-secondary);
+                width: 56px;
+                height: 56px;
+                border-radius: 14px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
 
-    .feature-text h3 {
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
+            .feature-text h3 {
+                font-size: 15px;
+                font-weight: 600;
+                margin-bottom: 4px;
+            }
 
-    .feature-text p {
-      font-size: 13px;
-      color: var(--label-3);
-      line-height: 1.4;
-    }
+            .feature-text p {
+                font-size: 13px;
+                color: var(--label-3);
+                line-height: 1.4;
+            }
 
-    /* ── 按钮 ── */
-    .btn-primary {
-      background: var(--accent);
-      color: #FFF;
-      border: none;
-      border-radius: 12px;
-      padding: 14px 24px;
-      font-size: 17px;
-      font-weight: 600;
-      width: 100%;
-      cursor: pointer;
-      transition: all 0.2s;
-      box-shadow: 0 4px 12px rgba(0,122,255,0.3);
-    }
-    .btn-primary:hover { background: var(--accent-hover); transform: scale(0.98); }
-    .btn-primary:active { transform: scale(0.95); opacity: 0.8; }
+            /* ── 按钮 ── */
+            .btn-primary {
+                background: var(--accent);
+                color: #fff;
+                border: none;
+                border-radius: 12px;
+                padding: 14px 24px;
+                font-size: 17px;
+                font-weight: 600;
+                width: 100%;
+                cursor: pointer;
+                transition: all 0.2s;
+                box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+            }
+            .btn-primary:hover {
+                background: var(--accent-hover);
+                transform: scale(0.98);
+            }
+            .btn-primary:active {
+                transform: scale(0.95);
+                opacity: 0.8;
+            }
 
-    .btn-secondary {
-      background: var(--bg-secondary);
-      color: var(--label);
-      border: none;
-      border-radius: 12px;
-      padding: 14px 24px;
-      font-size: 17px;
-      font-weight: 600;
-      width: 100%;
-      cursor: pointer;
-      transition: all 0.2s;
-      margin-top: 12px;
-    }
-    .btn-secondary:hover { background: var(--label-4); }
+            .btn-secondary {
+                background: var(--bg-secondary);
+                color: var(--label);
+                border: none;
+                border-radius: 12px;
+                padding: 14px 24px;
+                font-size: 17px;
+                font-weight: 600;
+                width: 100%;
+                cursor: pointer;
+                transition: all 0.2s;
+                margin-top: 12px;
+            }
+            .btn-secondary:hover {
+                background: var(--label-4);
+            }
 
-    /* ── 底部进度指示器 ── */
-    .dots {
-      position: absolute;
-      bottom: 40px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 8px;
-      z-index: 10;
-    }
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 4px;
-      background: var(--label-4);
-      transition: all 0.3s;
-    }
-    .dot.active {
-      width: 20px;
-      background: var(--label);
-    }
+            /* ── 底部进度指示器 ── */
+            .dots {
+                position: absolute;
+                bottom: 40px;
+                left: 50%;
+                transform: translateX(-50%);
+                display: flex;
+                gap: 8px;
+                z-index: 10;
+            }
+            .dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 4px;
+                background: var(--label-4);
+                transition: all 0.3s;
+            }
+            .dot.active {
+                width: 20px;
+                background: var(--label);
+            }
 
-    /* 动画辅助 */
-    .fade-up {
-      opacity: 0;
-      transform: translateY(20px);
-      transition: opacity 0.8s ease, transform 0.8s ease;
-    }
-    .slide.active .fade-up {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    .delay-1 { transition-delay: 0.1s; }
-    .delay-2 { transition-delay: 0.2s; }
-    .delay-3 { transition-delay: 0.3s; }
+            /* 动画辅助 */
+            .fade-up {
+                opacity: 0;
+                transform: translateY(20px);
+                transition:
+                    opacity 0.8s ease,
+                    transform 0.8s ease;
+            }
+            .slide.active .fade-up {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            .delay-1 {
+                transition-delay: 0.1s;
+            }
+            .delay-2 {
+                transition-delay: 0.2s;
+            }
+            .delay-3 {
+                transition-delay: 0.3s;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="slider" id="slider">
+            <!-- Step 1: 欢迎与理念 -->
+            <div class="slide active" id="slide0">
+                <div class="bg-blob"></div>
+                <div class="content">
+                    <div class="icon-large fade-up">🦞</div>
+                    <h1 class="fade-up delay-1">欢迎来到 ClawdHome</h1>
+                    <p class="subtitle fade-up delay-2">
+                        释放本地算力，构建你的「一人公司」。在这里，每一个 Agent
+                        都是独一无二的本地员工。
+                    </p>
+                    <button
+                        class="btn-primary fade-up delay-3"
+                        onclick="nextSlide()"
+                    >
+                        开始探索
+                    </button>
+                </div>
+            </div>
 
-  </style>
-</head>
-<body>
+            <!-- Step 2: 核心机制与权限 -->
+            <div class="slide" id="slide1">
+                <div
+                    class="bg-blob"
+                    style="
+                        background: radial-gradient(
+                            circle,
+                            rgba(52, 199, 89, 0.15) 0%,
+                            rgba(52, 199, 89, 0) 70%
+                        );
+                    "
+                ></div>
+                <div class="content">
+                    <h1 class="fade-up">底层环境准备</h1>
+                    <p class="subtitle fade-up delay-1">
+                        为了让 AI
+                        员工拥有真正的独立运行空间，我们需要进行一次系统级的初始化。
+                    </p>
 
-  <div class="slider" id="slider">
-    
-    <!-- Step 1: 欢迎与理念 -->
-    <div class="slide active" id="slide0">
-      <div class="bg-blob"></div>
-      <div class="content">
-        <div class="icon-large fade-up">🦐</div>
-        <h1 class="fade-up delay-1">欢迎来到 ClawdHome</h1>
-        <p class="subtitle fade-up delay-2">释放本地算力，构建你的「一人公司」。在这里，每一个 Agent 都是独一无二的本地员工。</p>
-        <button class="btn-primary fade-up delay-3" onclick="nextSlide()">开始探索</button>
-      </div>
-    </div>
+                    <div class="feature-card fade-up delay-2">
+                        <div class="feature-icon">🔐</div>
+                        <div class="feature-text">
+                            <h3>安全沙箱隔离</h3>
+                            <p>
+                                ClawdHome 会为每位 AI 角色创建独立的 macOS
+                                子系统账号，确保数据绝不越界。
+                            </p>
+                        </div>
+                    </div>
 
-    <!-- Step 2: 核心机制与权限 -->
-    <div class="slide" id="slide1">
-      <div class="bg-blob" style="background: radial-gradient(circle, rgba(52,199,89,0.15) 0%, rgba(52,199,89,0) 70%);"></div>
-      <div class="content">
-        <h1 class="fade-up">底层环境准备</h1>
-        <p class="subtitle fade-up delay-1">为了让 AI 员工拥有真正的独立运行空间，我们需要进行一次系统级的初始化。</p>
+                    <div class="feature-card fade-up delay-2">
+                        <div class="feature-icon">⚙️</div>
+                        <div class="feature-text">
+                            <h3>特权 Helper</h3>
+                            <p>
+                                接下来需要您输入 Mac
+                                登录密码，以安装底层环境控制器。这是一次性操作。
+                            </p>
+                        </div>
+                    </div>
 
-        <div class="feature-card fade-up delay-2">
-          <div class="feature-icon">🔐</div>
-          <div class="feature-text">
-            <h3>安全沙箱隔离</h3>
-            <p>ClawdHome 会为每位 AI 角色创建独立的 macOS 子系统账号，确保数据绝不越界。</p>
-          </div>
+                    <button
+                        class="btn-primary fade-up delay-3"
+                        onclick="requestPermission()"
+                    >
+                        授权并继续
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 3: 准备唤醒 -->
+            <div class="slide" id="slide2">
+                <div
+                    class="bg-blob"
+                    style="
+                        background: radial-gradient(
+                            circle,
+                            rgba(255, 149, 0, 0.15) 0%,
+                            rgba(255, 149, 0, 0) 70%
+                        );
+                    "
+                ></div>
+                <div class="content">
+                    <div class="icon-large fade-up">🧬</div>
+                    <h1 class="fade-up delay-1">一切就绪</h1>
+                    <p class="subtitle fade-up delay-2">
+                        系统环境已配置完毕。现在，去角色集市挑选并唤醒你的第一位员工吧。
+                    </p>
+
+                    <button
+                        class="btn-primary fade-up delay-3"
+                        onclick="finishOnboarding()"
+                    >
+                        前往角色集市
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <div class="feature-card fade-up delay-2">
-          <div class="feature-icon">⚙️</div>
-          <div class="feature-text">
-            <h3>特权 Helper</h3>
-            <p>接下来需要您输入 Mac 登录密码，以安装底层环境控制器。这是一次性操作。</p>
-          </div>
+        <div class="dots">
+            <div class="dot active" id="dot0"></div>
+            <div class="dot" id="dot1"></div>
+            <div class="dot" id="dot2"></div>
         </div>
 
-        <button class="btn-primary fade-up delay-3" onclick="requestPermission()">授权并继续</button>
-      </div>
-    </div>
+        <script>
+            let currentIndex = 0;
+            const totalSlides = 3;
 
-    <!-- Step 3: 准备唤醒 -->
-    <div class="slide" id="slide2">
-      <div class="bg-blob" style="background: radial-gradient(circle, rgba(255,149,0,0.15) 0%, rgba(255,149,0,0) 70%);"></div>
-      <div class="content">
-        <div class="icon-large fade-up">🧬</div>
-        <h1 class="fade-up delay-1">一切就绪</h1>
-        <p class="subtitle fade-up delay-2">系统环境已配置完毕。现在，去角色集市挑选并唤醒你的第一位员工吧。</p>
-        
-        <button class="btn-primary fade-up delay-3" onclick="finishOnboarding()">前往角色集市</button>
-      </div>
-    </div>
+            function updateSlider() {
+                const slider = document.getElementById("slider");
+                slider.style.transform = `translateX(-${(currentIndex * 100) / totalSlides}%)`;
 
-  </div>
+                // 状态更新
+                for (let i = 0; i < totalSlides; i++) {
+                    document
+                        .getElementById(`slide${i}`)
+                        .classList.remove("active");
+                    document
+                        .getElementById(`dot${i}`)
+                        .classList.remove("active");
+                }
 
-  <div class="dots">
-    <div class="dot active" id="dot0"></div>
-    <div class="dot" id="dot1"></div>
-    <div class="dot" id="dot2"></div>
-  </div>
+                // 触发动画重绘延时
+                setTimeout(() => {
+                    document
+                        .getElementById(`slide${currentIndex}`)
+                        .classList.add("active");
+                }, 50);
 
-  <script>
-    let currentIndex = 0;
-    const totalSlides = 3;
+                document
+                    .getElementById(`dot${currentIndex}`)
+                    .classList.add("active");
+            }
 
-    function updateSlider() {
-      const slider = document.getElementById('slider');
-      slider.style.transform = `translateX(-${(currentIndex * 100) / totalSlides}%)`;
+            function nextSlide() {
+                if (currentIndex < totalSlides - 1) {
+                    currentIndex++;
+                    updateSlider();
+                }
+            }
 
-      // 状态更新
-      for(let i=0; i<totalSlides; i++) {
-        document.getElementById(`slide${i}`).classList.remove('active');
-        document.getElementById(`dot${i}`).classList.remove('active');
-      }
-      
-      // 触发动画重绘延时
-      setTimeout(() => {
-        document.getElementById(`slide${currentIndex}`).classList.add('active');
-      }, 50);
-      
-      document.getElementById(`dot${currentIndex}`).classList.add('active');
-    }
+            function requestPermission() {
+                // 模拟与 Swift 端的交互
+                let btn = document.querySelector("#slide1 .btn-primary");
+                btn.innerHTML = "正在配置环境... (模拟)";
+                btn.style.opacity = 0.8;
 
-    function nextSlide() {
-      if (currentIndex < totalSlides - 1) {
-        currentIndex++;
-        updateSlider();
-      }
-    }
+                // 模拟调用 macOS 原生桥接 API
+                if (window.webkit?.messageHandlers?.ClawdHomeBridge) {
+                    window.webkit.messageHandlers.ClawdHomeBridge.postMessage({
+                        action: "installHelper",
+                    });
+                }
 
-    function requestPermission() {
-      // 模拟与 Swift 端的交互
-      let btn = document.querySelector('#slide1 .btn-primary');
-      btn.innerHTML = '正在配置环境... (模拟)';
-      btn.style.opacity = 0.8;
-      
-      // 模拟调用 macOS 原生桥接 API
-      if (window.webkit?.messageHandlers?.ClawdHomeBridge) {
-        window.webkit.messageHandlers.ClawdHomeBridge.postMessage({ action: "installHelper" });
-      }
+                // 假装 1.5 秒后成功
+                setTimeout(() => {
+                    btn.innerHTML = "配置成功";
+                    btn.style.background = "var(--success)";
+                    setTimeout(() => {
+                        nextSlide();
+                    }, 800);
+                }, 1500);
+            }
 
-      // 假装 1.5 秒后成功
-      setTimeout(() => {
-        btn.innerHTML = '配置成功';
-        btn.style.background = 'var(--success)';
-        setTimeout(() => {
-          nextSlide();
-        }, 800);
-      }, 1500);
-    }
+            function finishOnboarding() {
+                // 通知原生应用关闭 Onboarding 视窗，转到角色中心
+                if (window.webkit?.messageHandlers?.ClawdHomeBridge) {
+                    window.webkit.messageHandlers.ClawdHomeBridge.postMessage({
+                        action: "finishOnboarding",
+                    });
+                } else {
+                    alert("Onboarding 完成！即将进入主界面！");
+                    // 演示时重新开始
+                    // currentIndex = 0;
+                    // updateSlider();
+                }
+            }
 
-    function finishOnboarding() {
-      // 通知原生应用关闭 Onboarding 视窗，转到角色中心
-      if (window.webkit?.messageHandlers?.ClawdHomeBridge) {
-        window.webkit.messageHandlers.ClawdHomeBridge.postMessage({ action: "finishOnboarding" });
-      } else {
-        alert("Onboarding 完成！即将进入主界面！");
-        // 演示时重新开始
-        // currentIndex = 0;
-        // updateSlider();
-      }
-    }
-
-    // 初始化第一页动画
-    setTimeout(() => {
-      document.getElementById('slide0').classList.add('active');
-    }, 100);
-  </script>
-</body>
+            // 初始化第一页动画
+            setTimeout(() => {
+                document.getElementById("slide0").classList.add("active");
+            }, 100);
+        </script>
+    </body>
 </html>

@@ -1,0 +1,95 @@
+// ClawdHomeCLI/Commands/ShellCommand.swift
+// clawdhome shell <name> — 以虾用户身份进入交互式终端
+
+import Foundation
+
+enum ShellCommand {
+    static func run(_ args: [String], client: CLIHelperClient) throws {
+        guard let username = args.first else {
+            Output.printError("用法: clawdhome shell <name>")
+            exit(1)
+        }
+
+        // 1. 验证用户存在并获取环境信息
+        let proxy = try client.proxy()
+
+        // 检查用户是否存在（通过 getGatewayStatus 间接验证）
+        let group = DispatchGroup()
+        var nodeInstalled = false
+        var gatewayURL = ""
+
+        group.enter()
+        proxy.isNodeInstalled(username: username) { installed in
+            nodeInstalled = installed; group.leave()
+        }
+
+        group.enter()
+        proxy.getGatewayURL(username: username) { url in
+            gatewayURL = url; group.leave()
+        }
+
+        group.wait()
+
+        // 2. 构建环境变量
+        let home = "/Users/\(username)"
+        let brewBin = "\(home)/.brew/bin"
+        let npmGlobal = "\(home)/.npm-global"
+        let npmGlobalBin = "\(npmGlobal)/bin"
+
+        // 构建 PATH（与 ConfigWriter.buildNodePath 一致的逻辑）
+        var pathComponents = [npmGlobalBin, brewBin]
+        // 追加 node 版本回退路径
+        for version in ["node", "node@24", "node@22", "node@20", "node@18"] {
+            pathComponents.append("\(home)/.brew/opt/\(version)/bin")
+        }
+        // 检查 ~/.brew/lib/nodejs/ 下的直接安装
+        let libNodeRoot = "\(home)/.brew/lib/nodejs"
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: libNodeRoot).sorted(by: >) {
+            for entry in entries where entry.hasPrefix("node-") {
+                let binPath = "\(libNodeRoot)/\(entry)/bin"
+                if FileManager.default.isExecutableFile(atPath: "\(binPath)/node") {
+                    pathComponents.append(binPath)
+                }
+            }
+        }
+        pathComponents.append(contentsOf: ["/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
+        let nodePath = pathComponents.joined(separator: ":")
+
+        // 3. 构建 env 参数
+        var envArgs: [String] = [
+            "HOME=\(home)",
+            "PATH=\(nodePath)",
+            "HOMEBREW_PREFIX=\(home)/.brew",
+            "HOMEBREW_CELLAR=\(home)/.brew/Cellar",
+            "HOMEBREW_REPOSITORY=\(home)/.brew",
+            "NPM_CONFIG_PREFIX=\(npmGlobal)",
+            "npm_config_prefix=\(npmGlobal)",
+            "NPM_CONFIG_USERCONFIG=\(home)/.npmrc",
+            "npm_config_userconfig=\(home)/.npmrc",
+            "TERM=\(ProcessInfo.processInfo.environment["TERM"] ?? "xterm-256color")",
+            "LANG=\(ProcessInfo.processInfo.environment["LANG"] ?? "en_US.UTF-8")",
+        ]
+
+        // 追加代理环境（如果存在）
+        for key in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+                     "http_proxy", "https_proxy", "all_proxy", "no_proxy"] {
+            if let value = ProcessInfo.processInfo.environment[key] {
+                envArgs.append("\(key)=\(value)")
+            }
+        }
+
+        if !gatewayURL.isEmpty {
+            Output.printErr("Gateway: \(gatewayURL)")
+        }
+        Output.printErr("进入 \(username) 的 shell 环境...")
+
+        // 4. exec 替换当前进程
+        let fullArgs = ["/usr/bin/sudo", "-u", username, "-H", "/usr/bin/env"] + envArgs + ["/bin/zsh", "-l"]
+        let cArgs = fullArgs.map { strdup($0) } + [nil]
+        execvp(cArgs[0]!, cArgs)
+
+        // 如果 exec 失败
+        perror("exec failed")
+        exit(1)
+    }
+}
