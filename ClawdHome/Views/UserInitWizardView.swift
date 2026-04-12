@@ -65,7 +65,7 @@ struct UserInitWizardView: View {
     // Step 4: 频道配置
     @State private var selectedChannel: WizardChannelType = .feishu
     @State private var hoveredChannelBinding: WizardChannelType? = nil
-    @State private var autoChannelFinishInFlight = false
+    @State private var channelPairingDetectedHint: String? = nil
 
     // Step 5: 完成
     @State private var isStartingOpenclaw = false
@@ -232,7 +232,8 @@ struct UserInitWizardView: View {
             guard let userInfo = notification.userInfo,
                   let username = userInfo["username"] as? String,
                   username == user.username else { return }
-            Task { await handleAutoDetectedChannelPairing() }
+            let flow = userInfo["flow"] as? String
+            Task { await handleAutoDetectedChannelPairing(flow: flow) }
         }
         .alert(item: $pendingModelConfigTerminalClose) { state in
             Alert(
@@ -955,6 +956,19 @@ struct UserInitWizardView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
 
+            if let channelPairingDetectedHint {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(channelPairingDetectedHint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(10)
+                .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            }
+
             channelBindingList
 
             HStack(spacing: 12) {
@@ -977,7 +991,7 @@ struct UserInitWizardView: View {
                 selectedChannel = .feishu
                 openWindow(
                     id: "channel-onboarding",
-                    value: "\(ChannelOnboardingFlow.feishu.rawValue):\(user.username)"
+                    value: "\(ChannelOnboardingFlow.feishu.rawValue):\(user.username):\(ChannelOnboardingEntryMode.initialBinding.rawValue)"
                 )
             }
             channelBindingRow(
@@ -988,7 +1002,7 @@ struct UserInitWizardView: View {
                 selectedChannel = .weixin
                 openWindow(
                     id: "channel-onboarding",
-                    value: "\(ChannelOnboardingFlow.weixin.rawValue):\(user.username)"
+                    value: "\(ChannelOnboardingFlow.weixin.rawValue):\(user.username):\(ChannelOnboardingEntryMode.initialBinding.rawValue)"
                 )
             }
             channelNativeConfigRow(
@@ -2275,6 +2289,7 @@ struct UserInitWizardView: View {
     }
 
     private func markChannelStepDone() async {
+        channelPairingDetectedHint = nil
         statuses[InitStep.configureChannel.rawValue] = .done
         currentStep = .finish
         statuses[InitStep.finish.rawValue] = .running
@@ -2284,6 +2299,7 @@ struct UserInitWizardView: View {
     }
 
     private func markModelStepDone() async {
+        channelPairingDetectedHint = nil
         statuses[InitStep.configureModel.rawValue] = .done
         currentStep = .configureChannel
         statuses[InitStep.configureChannel.rawValue] = .running
@@ -2293,6 +2309,7 @@ struct UserInitWizardView: View {
     }
 
     private func skipModelStep() async {
+        channelPairingDetectedHint = nil
         statuses[InitStep.configureModel.rawValue] = .pending
         currentStep = .configureChannel
         statuses[InitStep.configureChannel.rawValue] = .running
@@ -2303,6 +2320,7 @@ struct UserInitWizardView: View {
     }
 
     private func moveBackToModelStep() async {
+        channelPairingDetectedHint = nil
         currentStep = .configureModel
         statuses[InitStep.configureModel.rawValue] = .running
         statuses[InitStep.configureChannel.rawValue] = .pending
@@ -2418,15 +2436,24 @@ struct UserInitWizardView: View {
         }
     }
 
-    private func handleAutoDetectedChannelPairing() async {
-        guard initiated,
-              currentStep == .configureChannel,
-              !autoChannelFinishInFlight,
-              !isStartingOpenclaw else { return }
-        autoChannelFinishInFlight = true
-        defer { autoChannelFinishInFlight = false }
-        await markChannelStepDone()
-        await finishAndStartOpenclaw()
+    private func handleAutoDetectedChannelPairing(flow: String?) async {
+        guard initiated, currentStep == .configureChannel else { return }
+        if let flow, let channel = WizardChannelType(rawValue: flow) {
+            selectedChannel = channel
+        }
+        let channelName: String
+        if let flow, let channel = WizardChannelType(rawValue: flow) {
+            switch channel {
+            case .feishu: channelName = "飞书"
+            case .weixin: channelName = "微信"
+            }
+        } else {
+            channelName = "当前频道"
+        }
+        channelPairingDetectedHint = L10n.k(
+            "wizard.channel.pairing_detected_continue_hint",
+            fallback: "已检测到\(channelName)配对成功。可继续检查“通道配置”选项，确认后点击「已完成，继续」。"
+        )
     }
 
     private func syncGatewayStateAfterStart(
