@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.8.0] - 2026-04-12
+
+### Features
+- Secure Vault: each Shrimp gets an isolated file space; data is invisible between Shrimps; admins exchange files via Finder
+- Public Folder: shared resource space across all Shrimps for prompt templates, reference data, etc.
+- Channel binding management: visual channel binding status with Feishu/WeChat configuration support
+- Channel pairing UX: pairing completion now keeps the config panel open instead of auto-closing
+- ClawdHome CLI: new command-line tool for scripted management
+- Offline config writes: config changes fall back to local file writes when the Gateway is offline
+- Upgrade UX: upgrade animations, in-card upgrade entry, and app update banner
+
+### Improvements & Fixes
+- XPC terminal output switched to Data transport, fixing ANSI/UTF-8 truncation garbling
+- Extracted UserEnvContract for unified user isolation environment variables
+- Version label distinguishes loading vs loaded states, eliminating flicker
+- Skills install shows recovery message when exit code is non-zero but verification passes
+- Backup list queries now include diagnostic logging
+- Environment validation fixes, deeper diagnostics checks, and recovery progress overlay
+- Process table column widths optimized
+
+
 ## [1.7.0] - 2026-04-09
 
 ### Features
