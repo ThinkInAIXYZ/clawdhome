@@ -26,19 +26,19 @@ enum VaultManager {
     /// 为指定虾初始化安全文件夹和公共文件夹
     /// 可重复调用，所有操作均为幂等
     static func setupVault(username: String) throws {
-        let admin = resolveConsoleAdmin()
+        let adminUsers = resolveAdminUsers()
         let group = perShrimpGroup(username)
 
         // 1. 创建虾专属组，加入管理员和虾
         try createGroupIfNeeded(group)
-        if !admin.isEmpty {
+        for admin in adminUsers {
             try addMemberIfNeeded(admin, to: group)
         }
         try addMemberIfNeeded(username, to: group)
 
         // 2. 全局共享组
         try createGroupIfNeeded(globalGroup)
-        if !admin.isEmpty {
+        for admin in adminUsers {
             try addMemberIfNeeded(admin, to: globalGroup)
         }
         try addMemberIfNeeded(username, to: globalGroup)
@@ -48,11 +48,13 @@ enum VaultManager {
         try ensureDirectory(vaultPath)
         try FilePermissionHelper.chown(vaultPath, owner: username, group: group)
         try FilePermissionHelper.chmod(vaultPath, mode: "2770")
+        applyAdminACLs(adminUsers, to: vaultPath)
 
         // 4. 创建公共文件夹目录
         try ensureDirectory(publicDir)
         try FilePermissionHelper.chown(publicDir, owner: "root", group: globalGroup)
         try FilePermissionHelper.chmod(publicDir, mode: "2775")
+        applyAdminACLs(adminUsers, to: publicDir)
 
         // 5. 确保上层目录可遍历
         try ensureDirectory(sharedRoot)
@@ -63,7 +65,7 @@ enum VaultManager {
         //    macOS: /Users/Shared/ClawdHome/  Linux: /var/shared/clawdhome/ 等
         createHomeSymlinks(username: username, vaultPath: vaultPath)
 
-        helperLog("Vault 初始化完成 @\(username): group=\(group)")
+        helperLog("Vault 初始化完成 @\(username): group=\(group), admins=\(adminUsers.joined(separator: ","))")
     }
 
     // MARK: - 清理
@@ -235,13 +237,51 @@ enum VaultManager {
         }
     }
 
-    /// 获取当前控制台管理员用户名
+    /// 解析可访问共享目录的管理员用户集合（去重，幂等）
+    /// 优先包含当前控制台用户，同时补齐 admin 组成员，避免仅靠控制台用户导致权限遗漏。
+    private static func resolveAdminUsers() -> [String] {
+        var users = Set<String>()
+
+        let console = resolveConsoleAdmin()
+        if !console.isEmpty {
+            users.insert(console)
+        }
+
+        if let output = try? run("/usr/bin/dscl", args: ["/Local/Default", "-read", "/Groups/admin", "GroupMembership"]) {
+            let list = output
+                .components(separatedBy: ":")
+                .dropFirst()
+                .joined(separator: ":")
+                .split(whereSeparator: \.isWhitespace)
+                .map(String.init)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty && $0 != "root" && !$0.hasPrefix("_") }
+            list.forEach { users.insert($0) }
+        }
+
+        if users.isEmpty {
+            helperLog("未解析到管理员用户，Vault 组将仅包含虾用户", level: .warn)
+        }
+        return users.sorted()
+    }
+
+    /// 获取当前控制台用户名（可能是管理员，也可能为空）
     private static func resolveConsoleAdmin() -> String {
         var uid: uid_t = 0
         guard let cfUser = SCDynamicStoreCopyConsoleUser(nil, &uid, nil), uid != 0 else {
-            helperLog("无法获取控制台用户，Vault 组将仅包含虾用户", level: .warn)
             return ""
         }
         return (cfUser as String).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 给管理员账户补充 ACL，避免“会话附加组未刷新”导致的临时写权限缺失。
+    private static func applyAdminACLs(_ adminUsers: [String], to path: String) {
+        for admin in adminUsers {
+            do {
+                try FilePermissionHelper.grantDirectoryWriteACL(path, username: admin)
+            } catch {
+                helperLog("为 \(path) 添加管理员 ACL 失败 @\(admin): \(error.localizedDescription)", level: .warn)
+            }
+        }
     }
 }

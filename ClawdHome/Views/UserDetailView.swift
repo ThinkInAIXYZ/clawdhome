@@ -3265,7 +3265,8 @@ struct UserDetailView: View {
 
     /// 按频道 ID 打开配对窗口（支持所有已知频道）
     private func openChannelOnboarding(_ channelId: String) {
-        if let flow = ChannelOnboardingFlow(rawValue: channelId) {
+        let canonical = canonicalChannelId(channelId)
+        if let flow = ChannelOnboardingFlow(rawValue: canonical) {
             openChannelOnboarding(flow)
         } else {
             // 对于尚无专用 onboarding 流程的频道，使用通用 channel-onboarding
@@ -3280,6 +3281,11 @@ struct UserDetailView: View {
 
     /// 默认展示的频道（即使未绑定也显示）
     private static let defaultChannelIds = ["feishu", "weixin"]
+
+    /// 频道别名归一化（例如 openclaw-weixin → weixin）
+    private static let channelAliasToCanonical: [String: String] = [
+        "openclaw-weixin": "weixin"
+    ]
 
     /// 频道对应的 SF Symbol
     private static let channelSystemImages: [String: String] = [
@@ -3305,8 +3311,8 @@ struct UserDetailView: View {
             let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: min(visibleChannels.count, 3))
             LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(visibleChannels, id: \.self) { chId in
-                    let bound = cStore.isBound(chId)
-                    let label = cStore.label(for: chId)
+                    let bound = isChannelBound(store: cStore, canonicalId: chId)
+                    let label = channelDisplayLabel(store: cStore, canonicalId: chId)
                     let icon = Self.channelSystemImages[chId] ?? "bubble.left"
                     overviewCompactActionButton(
                         title: label,
@@ -3333,11 +3339,11 @@ struct UserDetailView: View {
     /// detail 列表中的频道行：已绑定频道徽章 + 配对按钮
     private var channelDetailRow: some View {
         let cStore = gatewayHub.channelStore(for: user.username)
-        let boundChannels = cStore.channelOrder.filter { cStore.isBound($0) }
+        let boundChannels = canonicalBoundChannelIds(store: cStore)
         return HStack {
             Text(L10n.k("user.detail.auto.channel", fallback: "频道")).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
             ForEach(boundChannels, id: \.self) { chId in
-                channelDetailBadge(label: cStore.label(for: chId))
+                channelDetailBadge(label: channelDisplayLabel(store: cStore, canonicalId: chId))
             }
             if boundChannels.isEmpty {
                 Text(L10n.k("user.detail.channel.none", fallback: "未配置"))
@@ -3374,7 +3380,8 @@ struct UserDetailView: View {
         var seen = Set<String>()
         var result: [String] = []
         for chId in store.channelOrder where store.isBound(chId) {
-            if seen.insert(chId).inserted { result.append(chId) }
+            let canonical = canonicalChannelId(chId)
+            if seen.insert(canonical).inserted { result.append(canonical) }
         }
         for chId in Self.defaultChannelIds {
             if seen.insert(chId).inserted { result.append(chId) }
@@ -3384,11 +3391,51 @@ struct UserDetailView: View {
 
     /// 频道卡片副标题
     private func channelSubtitle(store: GatewayChannelStore) -> String {
-        let boundCount = store.channelOrder.filter { store.isBound($0) }.count
+        let boundCount = canonicalBoundChannelIds(store: store).count
         if boundCount == 0 {
             return L10n.k("user.detail.auto.feishu_wechat_configuration", fallback: "飞书/微信均通过独立流程扫码绑定，支持首次配置和重新绑定。")
         }
         return "已配置 \(boundCount) 个频道"
+    }
+
+    private static func channelAliases(for canonicalId: String) -> [String] {
+        switch canonicalId {
+        case "weixin": return ["weixin", "openclaw-weixin"]
+        default: return [canonicalId]
+        }
+    }
+
+    private func canonicalChannelId(_ channelId: String) -> String {
+        Self.channelAliasToCanonical[channelId] ?? channelId
+    }
+
+    private func isChannelBound(store: GatewayChannelStore, canonicalId: String) -> Bool {
+        Self.channelAliases(for: canonicalId).contains(where: { store.isBound($0) })
+    }
+
+    private func canonicalBoundChannelIds(store: GatewayChannelStore) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for channelId in store.channelOrder where store.isBound(channelId) {
+            let canonical = canonicalChannelId(channelId)
+            if seen.insert(canonical).inserted {
+                result.append(canonical)
+            }
+        }
+        return result
+    }
+
+    private func channelDisplayLabel(store: GatewayChannelStore, canonicalId: String) -> String {
+        if canonicalId == "weixin" {
+            return L10n.k("channel.flow.weixin.title", fallback: "微信")
+        }
+        for alias in Self.channelAliases(for: canonicalId) {
+            let label = store.label(for: alias)
+            if label != alias {
+                return label
+            }
+        }
+        return store.label(for: canonicalId)
     }
 
     private func installOpenclaw(version: String? = nil) async {
