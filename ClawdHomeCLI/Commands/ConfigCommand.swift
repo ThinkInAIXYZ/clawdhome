@@ -25,14 +25,14 @@ enum ConfigCommand {
 
     private static func get(_ args: [String], client: CLIHelperClient) throws {
         guard args.count >= 2 else {
-            Output.printError("用法: clawdhome config get <shrimp> <key>")
+            Output.printError("用法: clawdhome config get <name> <key>")
             exit(1)
         }
 
         let username = args[0]
         let key = args[1]
         guard FileManager.default.fileExists(atPath: "/Users/\(username)") else {
-            throw CLIError.operationFailed("虾 \(username) 不存在")
+            throw CLIError.operationFailed("实例 \(username) 不存在")
         }
         let proxy = try client.proxy()
 
@@ -51,7 +51,7 @@ enum ConfigCommand {
 
     private static func set(_ args: [String], client: CLIHelperClient) throws {
         guard args.count >= 3 else {
-            Output.printError("用法: clawdhome config set <shrimp> <key> <value>")
+            Output.printError("用法: clawdhome config set <name> <key> <value>")
             exit(1)
         }
 
@@ -89,8 +89,8 @@ enum ConfigCommand {
         用法: clawdhome config <command>
 
         Commands:
-          get <shrimp> <key>           读取配置
-          set <shrimp> <key> <value>   写入配置
+          get <name> <key>           读取配置
+          set <name> <key> <value>   写入配置
         """)
     }
 }
