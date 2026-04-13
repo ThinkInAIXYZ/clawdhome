@@ -30,7 +30,7 @@ enum ChatCommand {
 
         // 1. 获取 Gateway URL 和 token
         guard FileManager.default.fileExists(atPath: "/Users/\(username)") else {
-            throw CLIError.operationFailed("虾 \(username) 不存在")
+            throw CLIError.operationFailed("实例 \(username) 不存在")
         }
 
         let proxy = try client.proxy()
@@ -57,7 +57,7 @@ enum ChatCommand {
         }
         sema0.wait()
         guard isRunning else {
-            throw CLIError.operationFailed("Gateway \(username) 未运行。请先: clawdhome shrimp start \(username)")
+            throw CLIError.operationFailed("Gateway \(username) 未运行。请先: clawdhome start \(username)")
         }
 
         // 3. WebSocket 连接 + chat.send + 等待回复
@@ -73,16 +73,16 @@ enum ChatCommand {
 
     private static func printUsage() {
         Output.printErr("""
-        用法: clawdhome chat <shrimp> <message> [options]
+        用法: clawdhome chat <name> <message> [options]
 
         Options:
           --session <key>       会话 key（默认 "default"）
           --timeout <seconds>   超时秒数（默认 300）
 
         示例:
-          clawdhome chat openclaw "你好"
-          clawdhome chat openclaw "总结一下最近的对话" --session my_session
-          clawdhome chat openclaw "hello" --json
+          clawdhome chat alice "你好"
+          clawdhome chat alice "总结一下最近的对话" --session my_session
+          clawdhome chat alice "hello" --json
         """)
     }
 }

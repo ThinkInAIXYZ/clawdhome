@@ -1,50 +1,19 @@
-// ClawdHomeCLI/Commands/ShrimpCommand.swift
-// shrimp 子命令组：list / create / delete / start / stop / restart / status
+// ClawdHomeCLI/Commands/InstanceCommand.swift
+// 实例生命周期命令：ps / run / start / stop / restart / rm / inspect / doctor
 
 import Foundation
 
-enum ShrimpCommand {
-    static func run(_ args: [String], client: CLIHelperClient) throws {
-        guard let subcommand = args.first else {
-            printUsage()
-            exit(1)
-        }
+enum InstanceCommand {
 
-        let subArgs = Array(args.dropFirst())
-        switch subcommand {
-        case "list":
-            try list(client: client)
-        case "create":
-            try create(subArgs, client: client)
-        case "delete":
-            try delete(subArgs, client: client)
-        case "start":
-            try startGateway(subArgs, client: client)
-        case "stop":
-            try stopGateway(subArgs, client: client)
-        case "restart":
-            try restartGateway(subArgs, client: client)
-        case "status":
-            try status(subArgs, client: client)
-        case "doctor":
-            try doctor(subArgs, client: client)
-        default:
-            Output.printError("未知子命令: shrimp \(subcommand)")
-            printUsage()
-            exit(1)
-        }
-    }
+    // MARK: - ps（列出所有实例）
 
-    // MARK: - list
-
-    private static func list(client: CLIHelperClient) throws {
+    static func ps(client: CLIHelperClient) throws {
         let proxy = try client.proxy()
 
-        // 1. 获取 DashboardSnapshot（包含虾列表和运行状态）
         let snapshotJSON = syncCallString { proxy.getDashboardSnapshot(withReply: $0) }
         guard let data = snapshotJSON.data(using: .utf8),
               let snapshot = try? JSONDecoder().decode(DashboardSnapshot.self, from: data) else {
-            Output.printError("无法获取虾列表")
+            Output.printError("无法获取实例列表")
             exit(1)
         }
 
@@ -53,13 +22,13 @@ enum ShrimpCommand {
             if Output.jsonMode {
                 Output.printJSON([] as [String])
             } else {
-                Output.printErr("暂无虾")
+                Output.printErr("暂无实例")
             }
             return
         }
 
-        // 2. 并行查询每只虾的版本和 URL
-        struct ShrimpInfo {
+        // 并行查询每个实例的版本和 URL
+        struct InstanceInfo {
             var username: String
             var isRunning: Bool
             var port: Int
@@ -67,7 +36,7 @@ enum ShrimpCommand {
             var url: String = ""
         }
 
-        var infos = shrimps.map { ShrimpInfo(username: $0.username, isRunning: $0.isRunning ?? false, port: $0.gatewayPort) }
+        var infos = shrimps.map { InstanceInfo(username: $0.username, isRunning: $0.isRunning ?? false, port: $0.gatewayPort) }
         let group = DispatchGroup()
 
         for i in infos.indices {
@@ -115,11 +84,11 @@ enum ShrimpCommand {
         )
     }
 
-    // MARK: - create
+    // MARK: - run（创建并启动实例）
 
-    private static func create(_ args: [String], client: CLIHelperClient) throws {
+    static func run(_ args: [String], client: CLIHelperClient) throws {
         guard let username = args.first else {
-            Output.printError("用法: clawdhome shrimp create <name> [--full-name <name>] [--password <pw>]")
+            Output.printError("用法: clawdhome run <name> [--full-name <name>] [--password <pw>]")
             exit(1)
         }
 
@@ -181,16 +150,16 @@ enum ShrimpCommand {
         if Output.jsonMode {
             Output.printJSON(["name": username, "created": true, "password": password])
         } else {
-            Output.printSuccess("虾 \(username) 创建完成")
+            Output.printSuccess("实例 \(username) 创建完成")
             Output.printErr("密码: \(password)")
         }
     }
 
-    // MARK: - delete
+    // MARK: - rm（删除实例）
 
-    private static func delete(_ args: [String], client: CLIHelperClient) throws {
+    static func rm(_ args: [String], client: CLIHelperClient) throws {
         guard let username = args.first else {
-            Output.printError("用法: clawdhome shrimp delete <name> [--keep-home] [--admin-user <u>] [--admin-password <pw>]")
+            Output.printError("用法: clawdhome rm <name> [--keep-home] [--admin-user <u>] [--admin-password <pw>]")
             exit(1)
         }
 
@@ -211,12 +180,10 @@ enum ShrimpCommand {
             }
         }
 
-        // 获取当前管理员
         if adminUser.isEmpty {
             adminUser = NSUserName()
         }
         if adminPassword.isEmpty {
-            // 从 stdin 读取密码
             Output.printErr("请输入管理员密码: ")
             if let pw = readLine(strippingNewline: true) {
                 adminPassword = pw
@@ -251,18 +218,18 @@ enum ShrimpCommand {
         if Output.jsonMode {
             Output.printJSON(["name": username, "deleted": true])
         } else {
-            Output.printSuccess("虾 \(username) 已删除")
+            Output.printSuccess("实例 \(username) 已删除")
         }
     }
 
     // MARK: - start / stop / restart
 
-    private static func startGateway(_ args: [String], client: CLIHelperClient) throws {
+    static func start(_ args: [String], client: CLIHelperClient) throws {
         guard let username = args.first else {
-            Output.printError("用法: clawdhome shrimp start <name>")
+            Output.printError("用法: clawdhome start <name>")
             exit(1)
         }
-        try requireUser(username)
+        try requireInstance(username)
         let proxy = try client.proxy()
         let (ok, err) = syncCall2 { proxy.startGateway(username: username, withReply: $0) }
         guard ok else { throw CLIError.operationFailed("启动失败: \(err ?? "")") }
@@ -273,12 +240,12 @@ enum ShrimpCommand {
         }
     }
 
-    private static func stopGateway(_ args: [String], client: CLIHelperClient) throws {
+    static func stop(_ args: [String], client: CLIHelperClient) throws {
         guard let username = args.first else {
-            Output.printError("用法: clawdhome shrimp stop <name>")
+            Output.printError("用法: clawdhome stop <name>")
             exit(1)
         }
-        try requireUser(username)
+        try requireInstance(username)
         let proxy = try client.proxy()
         let (ok, err) = syncCall2 { proxy.stopGateway(username: username, withReply: $0) }
         guard ok else { throw CLIError.operationFailed("停止失败: \(err ?? "")") }
@@ -289,12 +256,12 @@ enum ShrimpCommand {
         }
     }
 
-    private static func restartGateway(_ args: [String], client: CLIHelperClient) throws {
+    static func restart(_ args: [String], client: CLIHelperClient) throws {
         guard let username = args.first else {
-            Output.printError("用法: clawdhome shrimp restart <name>")
+            Output.printError("用法: clawdhome restart <name>")
             exit(1)
         }
-        try requireUser(username)
+        try requireInstance(username)
         let proxy = try client.proxy()
         let (ok, err) = syncCall2 { proxy.restartGateway(username: username, withReply: $0) }
         guard ok else { throw CLIError.operationFailed("重启失败: \(err ?? "")") }
@@ -305,15 +272,15 @@ enum ShrimpCommand {
         }
     }
 
-    // MARK: - status
+    // MARK: - inspect（查看实例详情）
 
-    private static func status(_ args: [String], client: CLIHelperClient) throws {
+    static func inspect(_ args: [String], client: CLIHelperClient) throws {
         guard let username = args.first else {
-            Output.printError("用法: clawdhome shrimp status <name>")
+            Output.printError("用法: clawdhome inspect <name>")
             exit(1)
         }
 
-        try requireUser(username)
+        try requireInstance(username)
         let proxy = try client.proxy()
 
         // 并行收集信息
@@ -357,15 +324,15 @@ enum ShrimpCommand {
         }
     }
 
-    // MARK: - doctor
+    // MARK: - doctor（诊断检查）
 
-    private static func doctor(_ args: [String], client: CLIHelperClient) throws {
+    static func doctor(_ args: [String], client: CLIHelperClient) throws {
         guard let username = args.first else {
-            Output.printError("用法: clawdhome shrimp doctor <name> [--fix]")
+            Output.printError("用法: clawdhome doctor <name> [--fix]")
             exit(1)
         }
 
-        try requireUser(username)
+        try requireInstance(username)
         let fix = args.contains("--fix")
         let proxy = try client.proxy()
 
@@ -391,7 +358,6 @@ enum ShrimpCommand {
         }
 
         if Output.jsonMode {
-            // 直接输出原始 JSON（已经是完整的 DiagnosticsResult）
             print(resultJSON)
             return
         }
@@ -421,7 +387,6 @@ enum ShrimpCommand {
                 print(line)
 
                 if !item.detail.isEmpty && item.severity != "ok" {
-                    // 缩进详情
                     for detailLine in item.detail.split(separator: "\n") {
                         print("        \(detailLine)")
                     }
@@ -438,7 +403,6 @@ enum ShrimpCommand {
         // 摘要
         print("")
         let total = result.items.count
-        let okCount = result.items.filter { $0.severity == "ok" || $0.severity == "info" }.count
         let fixedCount = result.items.filter { $0.fixed == true }.count
 
         if result.hasIssues {
@@ -447,7 +411,7 @@ enum ShrimpCommand {
                 summary += "，\(fixedCount) 已修复"
             }
             if !fix && result.fixableIssueCount > 0 {
-                summary += "\n提示: 运行 clawdhome shrimp doctor \(username) --fix 自动修复 \(result.fixableIssueCount) 项"
+                summary += "\n提示: 运行 clawdhome doctor \(username) --fix 自动修复 \(result.fixableIssueCount) 项"
             }
             Output.printErr(summary)
         } else {
@@ -455,34 +419,15 @@ enum ShrimpCommand {
         }
     }
 
-    // MARK: - 用户存在性检查
+    // MARK: - 实例存在性检查
 
-    /// 检查虾用户是否存在（通过 home 目录判断）
     @discardableResult
-    private static func requireUser(_ username: String) throws -> Bool {
+    static func requireInstance(_ username: String) throws -> Bool {
         let home = "/Users/\(username)"
         guard FileManager.default.fileExists(atPath: home) else {
-            throw CLIError.operationFailed("虾 \(username) 不存在")
+            throw CLIError.operationFailed("实例 \(username) 不存在")
         }
         return true
-    }
-
-    // MARK: - 帮助
-
-    private static func printUsage() {
-        Output.printErr("""
-        用法: clawdhome shrimp <command>
-
-        Commands:
-          list                        列出所有虾
-          create <name> [options]     创建新虾
-          delete <name> [options]     删除虾
-          start <name>                启动网关
-          stop <name>                 停止网关
-          restart <name>              重启网关
-          status <name>               查看虾状态
-          doctor <name> [--fix]       诊断（加 --fix 自动修复）
-        """)
     }
 }
 
