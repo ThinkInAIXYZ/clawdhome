@@ -995,6 +995,8 @@ struct ClawPoolView: View {
     @ViewBuilder
     private func agentMiniCard(user: ManagedUser, agent: AgentProfile) -> some View {
         Button {
+            // 记录待选 agentId，详情页打开后自动选中对应 agent
+            pool.pendingAgentSelection[user.username] = agent.id
             openPreferredWindow(for: user)
         } label: {
             VStack(spacing: 4) {

@@ -24,8 +24,10 @@ final class ShrimpPool {
     private(set) var machineHistory: [MachineStats] = []
     /// 网络速率历史（最多保留 300 秒）— 跨视图切换持久化
     private(set) var netRateHistory: [(inBps: Double, outBps: Double)] = []
-    /// 新创建用户的一次性“强制进入初始化向导”标记（按用户名小写保存）
+    /// 新创建用户的一次性”强制进入初始化向导”标记（按用户名小写保存）
     private var forceOnboardingUsernames: Set<String> = []
+    /// 虾塘点击 agent 卡片时临时存储待选 agentId，详情页打开后消费并清除
+    var pendingAgentSelection: [String: String] = [:]
 
     private static let kHistoryMax = 300
 
