@@ -86,6 +86,7 @@ struct TranscriptMessage: Identifiable {
 
 struct SessionsTabView: View {
     let username: String
+    var agentId: String? = nil
     @Environment(GatewayHub.self) private var hub
     @Environment(HelperClient.self) private var helperClient
 
