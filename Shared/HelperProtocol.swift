@@ -644,6 +644,28 @@ import Foundation
     /// 读取 Helper DEBUG 日志开关
     func getHelperDebugLogging(withReply reply: @escaping (Bool) -> Void)
 
+    // MARK: - Agent Management
+
+    /// 获取指定用户的所有 agent 列表（返回 JSON: [AgentProfile]）
+    func listAgents(
+        username: String,
+        withReply reply: @escaping (String?, String?) -> Void
+    )
+
+    /// 创建新 agent（configJSON: AgentProfile JSON）
+    func createAgent(
+        username: String,
+        configJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 删除 agent（移除配置 + 清理 workspace + sessions）
+    func removeAgent(
+        username: String,
+        agentId: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
     // MARK: - 角色定义 Git 管理
 
     /// 初始化 workspace git repo（幂等）
