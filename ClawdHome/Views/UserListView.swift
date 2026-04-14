@@ -795,7 +795,7 @@ struct ClawPoolView: View {
         ScrollView {
             FlowLayout(spacing: 12) {
                 ForEach(displayedUsers) { claw in
-                    shrimpCard(user: claw)
+                    clawCardView(for: claw)
                         .contextMenu { clawContextMenu(for: claw) }
                 }
                 // 领养虾苗按钮
@@ -806,135 +806,29 @@ struct ClawPoolView: View {
         .task { await loadAllAgents() }
     }
 
-    // MARK: - Shrimp 卡片（自适应宽度）
+    // MARK: - 卡片（使用 ClawCard，多 agent 时显示 pill 标签）
 
     @ViewBuilder
-    private func shrimpCard(user: ManagedUser) -> some View {
-        let userAgents = agentsByUser[user.username] ?? []
-        let readiness = gatewayHub.readinessMap[user.username] ?? (user.isRunning ? .ready : .stopped)
-        let isRunning = readiness == .ready || readiness == .starting || user.isRunning
-
-        VStack(alignment: .leading, spacing: 8) {
-            // Header: 状态指示灯 + 名称 + @username + 冻结/版本
-            HStack(spacing: 6) {
-                shrimpCardStatusIndicator(user: user, readiness: readiness)
-
-                Text("@\(user.username)")
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                if user.isAdmin {
-                    Text(L10n.k("views.user_list_view.admin", fallback: "管理员"))
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(Color.accentColor.opacity(0.85), in: Capsule())
-                }
-                Spacer(minLength: 0)
-                // 版本号（紧凑显示）
-                if let v = user.openclawVersionLabel {
-                    let outdated = updater.needsUpdate(user.openclawVersion)
-                    Text(v)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(outdated ? Color.orange : Color.secondary.opacity(0.5))
-                }
-            }
-
-            // Agent 卡片横排
-            HStack(spacing: 6) {
-                if userAgents.isEmpty {
-                    agentMiniCard(user: user, agent: AgentProfile(
-                        id: "main",
-                        name: user.fullName.isEmpty ? user.username : user.fullName,
-                        emoji: "\u{1F99E}",
-                        modelPrimary: nil,
-                        workspacePath: nil,
-                        isDefault: true
-                    ))
-                } else {
-                    ForEach(userAgents) { agent in
-                        agentMiniCard(user: user, agent: agent)
-                    }
-                }
-            }
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
+    private func clawCardView(for claw: ManagedUser) -> some View {
+        let userAgents = agentsByUser[claw.username] ?? []
+        let isOpeningWebUI = webUIOpenInFlightUsernames.contains(claw.username.lowercased())
+        ClawCard(
+            claw: claw,
+            isSelected: selectedClaw == claw.id,
+            isOpeningWebUI: isOpeningWebUI,
+            agents: userAgents,
+            onTap: { openPreferredWindow(for: claw) },
+            onDoubleClick: { openPreferredWindow(for: claw) },
+            onUpgrade: { NotificationCenter.default.post(name: .openUpgradeSheet, object: nil) },
+            onAgentTap: { agent in
+                pool.pendingAgentSelection[claw.username] = agent.id
+                openPreferredWindow(for: claw)
+            },
+            onOpenWebUI: { Task { await openWebUI(for: claw) } },
+            onTerminal: { openTerminal(for: claw) },
+            onOpenVault: { openVault(for: claw) },
+            onDropFiles: { urls in handleQuickTransferDrop(for: claw, droppedURLs: urls) }
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(
-                    isRunning && !user.isFrozen
-                        ? Color.orange.opacity(0.6)
-                        : Color(nsColor: .separatorColor),
-                    lineWidth: isRunning && !user.isFrozen ? 1.5 : 0.5
-                )
-        )
-        .opacity(user.isFrozen ? 0.6 : 1)
-        .saturation(user.isFrozen ? 0.3 : 1)
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            openPreferredWindow(for: user)
-        }
-    }
-
-    /// 卡片 header 左侧状态指示（小圆点 / 冻结图标 / 初始化脉冲）
-    @ViewBuilder
-    private func shrimpCardStatusIndicator(user: ManagedUser, readiness: GatewayReadiness) -> some View {
-        if let _ = user.initStep {
-            Image(systemName: "circle.fill")
-                .foregroundStyle(.blue)
-                .symbolEffect(.pulse, options: .repeating)
-                .font(.system(size: 7))
-        } else if user.hasFreezeWarning {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-                .font(.system(size: 9))
-                .help(user.freezeWarning ?? "")
-        } else if user.isFrozen {
-            let mode = user.freezeMode ?? .normal
-            Image(systemName: freezeSymbol(for: mode))
-                .foregroundStyle(freezeColor(for: mode))
-                .font(.system(size: 9))
-        } else {
-            GatewayStatusDot(readiness: readiness)
-        }
-    }
-
-    // MARK: - Agent 小卡片
-
-    @ViewBuilder
-    private func agentMiniCard(user: ManagedUser, agent: AgentProfile) -> some View {
-        Button {
-            // 记录待选 agentId，详情页打开后自动选中对应 agent
-            pool.pendingAgentSelection[user.username] = agent.id
-            openPreferredWindow(for: user)
-        } label: {
-            VStack(spacing: 3) {
-                Text(agent.emoji.isEmpty ? "\u{1F916}" : agent.emoji)
-                    .font(.system(size: 24))
-                Text(agent.name)
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1)
-                if let model = agent.modelPrimary {
-                    Text(model.components(separatedBy: "/").last ?? model)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .frame(width: 88, height: 76)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.6))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
-            )
-        }
-        .buttonStyle(.plain)
     }
 
     private func handleQuickTransferDrop(for claw: ManagedUser, droppedURLs: [URL]) {
@@ -1548,9 +1442,11 @@ private struct ClawCard: View {
     let claw: ManagedUser
     let isSelected: Bool
     var isOpeningWebUI: Bool = false
+    var agents: [AgentProfile] = []
     let onTap: () -> Void
     var onDoubleClick: (() -> Void)? = nil
     var onUpgrade: (() -> Void)? = nil
+    var onAgentTap: ((AgentProfile) -> Void)? = nil
     let onOpenWebUI: () -> Void
     let onTerminal: () -> Void
     let onOpenVault: () -> Void
@@ -1559,6 +1455,14 @@ private struct ClawCard: View {
     @Environment(UpdateChecker.self) private var updater
     @State private var isDropTargeted = false
 
+    /// 多 agent 时稍微加宽卡片
+    private var cardMinWidth: CGFloat {
+        agents.count > 1 ? 180 : 140
+    }
+    private var cardMaxWidth: CGFloat {
+        agents.count > 1 ? 280 : 180
+    }
+
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 10) {
@@ -1566,7 +1470,7 @@ private struct ClawCard: View {
                 // 图标 + 状态角标
                 ZStack(alignment: .bottomTrailing) {
                     if claw.clawType == .macosUser {
-                        Text("🦞")
+                        Text("\u{1F99E}")
                             .font(.system(size: 32))
                             .frame(width: 44, height: 44)
                     } else {
@@ -1640,6 +1544,11 @@ private struct ClawCard: View {
                 .font(.caption2)
                 .lineLimit(1)
 
+                // Agent pill 标签区域（仅多 agent 时显示）
+                if agents.count > 1 {
+                    agentPillsSection
+                }
+
                 // 操作按钮行
                 HStack(spacing: 8) {
                     if claw.openclawVersion != nil {
@@ -1676,7 +1585,7 @@ private struct ClawCard: View {
                 Spacer(minLength: 0)
             }
             .padding(14)
-            .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160)
+            .frame(minWidth: cardMinWidth, maxWidth: cardMaxWidth, minHeight: 160)
             .background(
                 isSelected
                     ? Color.accentColor.opacity(0.08)
@@ -1766,6 +1675,48 @@ private struct ClawCard: View {
         }
     }
 
+    // MARK: Agent pill 标签区域
+
+    @ViewBuilder
+    private var agentPillsSection: some View {
+        let maxVisible = 4
+        let visible = Array(agents.prefix(maxVisible))
+        let overflow = agents.count - maxVisible
+
+        FlowLayout(spacing: 4) {
+            ForEach(visible) { agent in
+                Button {
+                    onAgentTap?(agent)
+                } label: {
+                    HStack(spacing: 3) {
+                        if !agent.emoji.isEmpty {
+                            Text(agent.emoji).font(.system(size: 10))
+                        }
+                        Text(agent.name)
+                            .font(.system(size: 9, weight: .medium))
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule().fill(Color.primary.opacity(0.06))
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            if overflow > 0 {
+                Text("+\(overflow)")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule().fill(Color.primary.opacity(0.04))
+                    )
+            }
+        }
+    }
+
     private func freezeSymbol(_ mode: FreezeMode) -> String {
         switch mode {
         case .pause: "pause.circle"
@@ -1824,14 +1775,16 @@ private struct AddClawCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 6) {
-                Text("🦞")
-                    .font(.system(size: 22))
+            VStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Text("\u{1F99E}")
+                    .font(.system(size: 28))
                 Text(L10n.k("views.user_list_view.adopt_shrimp", fallback: "领养虾苗"))
-                    .font(.system(size: 11))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(isHovered ? Color.accentColor : Color.secondary.opacity(0.6))
+                Spacer(minLength: 0)
             }
-            .frame(width: 88, height: 96)
+            .frame(width: 140, height: 160)
             .background(
                 isHovered
                     ? Color.accentColor.opacity(0.06)
