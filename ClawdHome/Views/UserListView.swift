@@ -127,6 +127,9 @@ struct ClawPoolView: View {
     @State private var windowOpenInFlightUsernames: Set<String> = []
     @State private var webUIOpenInFlightUsernames: Set<String> = []
     @State private var lastWindowOpenAtByUsername: [String: Date] = [:]
+    // MARK: Gateway 分组 — Agent 卡片
+    @State private var agentsByUser: [String: [AgentProfile]] = [:]
+    @State private var collapsedGateways: Set<String> = []
     private var currentUsername: String { NSUserName() }
     /// 默认仅展示标准用户；可在设置中显式开启当前管理员展示。
     private var displayedUsers: [ManagedUser] {
@@ -176,6 +179,16 @@ struct ClawPoolView: View {
             return nil
         }
         return description
+    }
+
+    private func loadAllAgents() async {
+        for user in pool.users where !user.isAdmin {
+            if user.isRunning, let rpcAgents = await gatewayHub.agentsList(username: user.username) {
+                agentsByUser[user.username] = rpcAgents
+            } else if let fileAgents = try? await helperClient.listAgents(username: user.username) {
+                agentsByUser[user.username] = fileAgents
+            }
+        }
     }
 
     @ViewBuilder
@@ -777,49 +790,237 @@ struct ClawPoolView: View {
         }
     }
 
-    // MARK: - 卡片视图
+    // MARK: - 卡片视图（按 Gateway 分组展开 Agent 卡片）
 
     private var cardContent: some View {
         ScrollView {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 12)],
-                spacing: 12
-            ) {
+            LazyVStack(spacing: 16) {
                 ForEach(displayedUsers) { claw in
-                    ClawCard(
-                        claw: claw,
-                        isSelected: false,
-                        isOpeningWebUI: webUIOpenInFlightUsernames.contains(claw.username.lowercased())
-                    ) {
-                        openPreferredWindow(for: claw)
-                    } onDoubleClick: {
-                        openPreferredWindow(for: claw)
-                    } onUpgrade: {
-                        openPreferredWindow(for: claw)
-                        // 延迟发送通知，等窗口打开后 UserDetailView 接收
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            NotificationCenter.default.post(
-                                name: .openUpgradeSheet,
-                                object: nil,
-                                userInfo: ["username": claw.username]
-                            )
-                        }
-                    } onOpenWebUI: {
-                        Task { await openWebUI(for: claw) }
-                    } onTerminal: {
-                        openTerminal(for: claw)
-                    } onOpenVault: {
-                        openVault(for: claw)
-                    } onDropFiles: { droppedURLs in
-                        handleQuickTransferDrop(for: claw, droppedURLs: droppedURLs)
-                    }
-                    .contextMenu { clawContextMenu(for: claw) }
+                    gatewayGroupCard(user: claw)
+                        .contextMenu { clawContextMenu(for: claw) }
                 }
-                // 新增虾卡片
+                // 领养虾苗按钮 — 保持现有实现
                 AddClawCard { showAddSheet = true }
+                    .frame(maxWidth: .infinity, minHeight: 80, maxHeight: 80)
             }
             .padding(16)
         }
+        .task { await loadAllAgents() }
+    }
+
+    // MARK: - Gateway 分组容器
+
+    @ViewBuilder
+    private func gatewayGroupCard(user: ManagedUser) -> some View {
+        let isCollapsed = collapsedGateways.contains(user.username)
+        let readiness = gatewayHub.readinessMap[user.username] ?? (user.isRunning ? .ready : .stopped)
+        let isRunning = readiness == .ready || readiness == .starting || user.isRunning
+
+        VStack(alignment: .leading, spacing: 0) {
+            // Header 行
+            gatewayGroupHeader(user: user, readiness: readiness, isCollapsed: isCollapsed)
+
+            // Body（非折叠时）
+            if !isCollapsed {
+                Divider()
+                    .padding(.horizontal, 12)
+                gatewayGroupBody(user: user, isRunning: isRunning)
+            }
+        }
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+        )
+        // 运行中的 Gateway：左边框用橙色
+        .overlay(alignment: .leading) {
+            if isRunning && !user.isFrozen {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.orange)
+                    .frame(width: 3)
+                    .padding(.vertical, 6)
+            }
+        }
+        // 冻结的 Gateway：降低不透明度 + 灰度
+        .saturation(user.isFrozen ? 0.15 : 1)
+        .opacity(user.isFrozen ? 0.55 : 1)
+    }
+
+    @ViewBuilder
+    private func gatewayGroupHeader(user: ManagedUser, readiness: GatewayReadiness, isCollapsed: Bool) -> some View {
+        HStack(spacing: 8) {
+            // 图标
+            if user.clawType == .macosUser {
+                Text("\u{1F99E}")
+                    .font(.system(size: 20))
+            } else {
+                Image(systemName: user.clawType.icon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(.secondary)
+            }
+
+            // 名称 + @username
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 5) {
+                    Text(user.fullName.isEmpty ? user.username : user.fullName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+                    if user.isAdmin {
+                        Text(L10n.k("views.user_list_view.admin", fallback: "管理员"))
+                            .font(.caption2).fontWeight(.medium)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.accentColor.opacity(0.85), in: Capsule())
+                    }
+                }
+                Text("@\(user.username)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 4)
+
+            // 状态指示
+            gatewayGroupStatusBadge(user: user, readiness: readiness)
+
+            // 版本号
+            if let v = user.openclawVersionLabel {
+                let outdated = updater.needsUpdate(user.openclawVersion)
+                Text(v)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(outdated ? .orange : .secondary)
+            }
+
+            // 折叠/展开按钮
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if collapsedGateways.contains(user.username) {
+                        collapsedGateways.remove(user.username)
+                    } else {
+                        collapsedGateways.insert(user.username)
+                    }
+                }
+            } label: {
+                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            openPreferredWindow(for: user)
+        }
+    }
+
+    @ViewBuilder
+    private func gatewayGroupStatusBadge(user: ManagedUser, readiness: GatewayReadiness) -> some View {
+        if let step = user.initStep {
+            HStack(spacing: 4) {
+                Image(systemName: "circle.fill")
+                    .foregroundStyle(.blue)
+                    .symbolEffect(.pulse, options: .repeating)
+                    .font(.system(size: 7))
+                Text(step)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.blue)
+                    .lineLimit(1)
+            }
+        } else if user.hasFreezeWarning {
+            HStack(spacing: 3) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .font(.system(size: 9))
+                Text(L10n.k("views.user_list_view.freeze_warning", fallback: "冻结异常"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+            }
+            .help(user.freezeWarning ?? "")
+        } else if user.isFrozen {
+            let mode = user.freezeMode ?? .normal
+            HStack(spacing: 3) {
+                Image(systemName: freezeSymbol(for: mode))
+                    .foregroundStyle(freezeColor(for: mode))
+                    .font(.system(size: 9))
+                Text(mode.statusLabel)
+                    .font(.system(size: 11))
+                    .foregroundStyle(freezeColor(for: mode))
+            }
+        } else {
+            HStack(spacing: 3) {
+                GatewayStatusDot(readiness: readiness)
+                Text(readiness.label)
+                    .font(.system(size: 11))
+                    .foregroundStyle(readiness == .ready ? .primary : .secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func gatewayGroupBody(user: ManagedUser, isRunning: Bool) -> some View {
+        let agents = agentsByUser[user.username] ?? []
+
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 100, maximum: 120), spacing: 8)],
+            alignment: .leading,
+            spacing: 8
+        ) {
+            if agents.isEmpty {
+                // 默认角色卡片
+                agentMiniCard(user: user, agent: AgentProfile(
+                    id: "main",
+                    name: user.fullName.isEmpty ? user.username : user.fullName,
+                    emoji: "\u{1F99E}",
+                    modelPrimary: nil,
+                    workspacePath: nil,
+                    isDefault: true
+                ))
+            } else {
+                ForEach(agents) { agent in
+                    agentMiniCard(user: user, agent: agent)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    // MARK: - Agent 小卡片
+
+    @ViewBuilder
+    private func agentMiniCard(user: ManagedUser, agent: AgentProfile) -> some View {
+        Button {
+            openPreferredWindow(for: user)
+        } label: {
+            VStack(spacing: 4) {
+                Text(agent.emoji.isEmpty ? "\u{1F916}" : agent.emoji)
+                    .font(.system(size: 28))
+                Text(agent.name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                if let model = agent.modelPrimary {
+                    Text(model.components(separatedBy: "/").last ?? model)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(width: 100, height: 90)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func handleQuickTransferDrop(for claw: ManagedUser, droppedURLs: [URL]) {
