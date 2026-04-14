@@ -630,7 +630,11 @@ struct UserDetailView: View {
             GatewayLogViewer(username: user.username, externalSearchQuery: $logSearchText)
         case .cron:      CronTabView(username: user.username)
         case .skills:    SkillsTabView(username: user.username, gatewayURL: gatewayURL)
-        case .characterDef: CharacterDefTabView(username: user.username)
+        case .characterDef: CharacterDefTabView(
+                username: user.username,
+                agentId: selectedAgentId,
+                agentLabel: selectedAgent != nil && selectedAgent?.isDefault != true ? selectedAgentLabel : nil
+            )
         case .sessions:  SessionsTabView(username: user.username)
         case .memory:    MemoryTabView(username: user.username)
         case .processes:
