@@ -192,7 +192,7 @@ struct FeishuChannelOnboardingSheet: View {
     }
 
     private var windowTitle: String {
-        "\(shrimpIdentityTitle) · \(flow.title) 通道配置 · \(stageTitle)"
+        L10n.f("views.channel_onboarding.window_title", fallback: "%@ · %@ 通道配置 · %@", shrimpIdentityTitle, flow.title, stageTitle)
     }
 
     /// 当前频道的账号快照（取第一个）
@@ -397,7 +397,7 @@ struct FeishuChannelOnboardingSheet: View {
 
         didDetectPairingDone = true
         pairingCompletedInCurrentSession = true
-        statusText = L10n.k("channel.runtime.pairing.detected_ready_config", fallback: "已检测到“配置成功/完成”提示，可继续配置下方选项。")
+        statusText = L10n.k("channel.runtime.pairing.detected_ready_config", fallback: "已检测到\u{201C}配置成功/完成\u{201D}提示，可继续配置下方选项。")
         NotificationCenter.default.post(
             name: .channelOnboardingAutoDetected,
             object: nil,
@@ -442,7 +442,7 @@ struct FeishuChannelOnboardingSheet: View {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(Color.accentColor)
                     .font(.subheadline)
-                Text("已配置")
+                Text(L10n.k("views.channel_onboarding.configured", fallback: "已配置"))
                     .font(.headline)
                 if let account = channelAccount, let name = account.name, !name.isEmpty {
                     Text("·")
@@ -456,38 +456,38 @@ struct FeishuChannelOnboardingSheet: View {
                 Button {
                     Task { await reloadConfig() }
                 } label: {
-                    Label("重新加载", systemImage: "arrow.clockwise")
+                    Label(L10n.k("views.channel_onboarding.reload", fallback: "重新加载"), systemImage: "arrow.clockwise")
                 }
                 .disabled(cfgLoading)
 
                 Button {
                     showRebindConfirm = true
                 } label: {
-                    Label("重新绑定", systemImage: "arrow.triangle.2.circlepath")
+                    Label(L10n.k("views.channel_onboarding.rebind", fallback: "重新绑定"), systemImage: "arrow.triangle.2.circlepath")
                 }
-                .alert("确认重新绑定？", isPresented: $showRebindConfirm) {
-                    Button("重新绑定", role: .destructive) { startInteractiveRun() }
-                    Button("取消", role: .cancel) { }
+                .alert(L10n.k("views.channel_onboarding.rebind_confirm_title", fallback: "确认重新绑定？"), isPresented: $showRebindConfirm) {
+                    Button(L10n.k("views.channel_onboarding.rebind", fallback: "重新绑定"), role: .destructive) { startInteractiveRun() }
+                    Button(L10n.k("views.channel_onboarding.cancel", fallback: "取消"), role: .cancel) { }
                 } message: {
-                    Text("将重新执行配对流程，生成新的二维码进行扫码绑定。")
+                    Text(L10n.k("views.channel_onboarding.rebind_confirm_message", fallback: "将重新执行配对流程，生成新的二维码进行扫码绑定。"))
                 }
             }
 
             if cfgLoading {
                 HStack {
                     ProgressView().controlSize(.small)
-                    Text("加载中…").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("views.channel_onboarding.loading", fallback: "加载中…")).font(.caption).foregroundStyle(.secondary)
                 }
             } else {
                 if flow == .feishu {
                     // App ID
                     channelEditableField(label: "App ID", text: $editAppId, placeholder: "cli_xxxxxxxx")
                     // Allow From
-                    channelEditableField(label: "Allow From", text: $editAllowFrom, placeholder: "每行一个用户 ID，如 ou_xxxx")
+                    channelEditableField(label: "Allow From", text: $editAllowFrom, placeholder: L10n.k("views.channel_onboarding.allow_from_placeholder", fallback: "每行一个用户 ID，如 ou_xxxx"))
                     // Group Allow From
-                    channelEditableField(label: "Group Allow From", text: $editGroupAllowFrom, placeholder: "每行一个群组 ID")
+                    channelEditableField(label: "Group Allow From", text: $editGroupAllowFrom, placeholder: L10n.k("views.channel_onboarding.group_allow_from_placeholder", fallback: "每行一个群组 ID"))
                 } else {
-                    Text("微信通道无需填写 App ID 或 Allowlist，扫码绑定成功后即可使用。")
+                    Text(L10n.k("views.channel_onboarding.weixin_no_config_needed", fallback: "微信通道无需填写 App ID 或 Allowlist，扫码绑定成功后即可使用。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 2)
@@ -500,7 +500,7 @@ struct FeishuChannelOnboardingSheet: View {
                     Button {
                         Task { await saveBindingConfig() }
                     } label: {
-                        Label(isSaving ? "保存中…" : "保存", systemImage: "square.and.arrow.down")
+                        Label(isSaving ? L10n.k("views.channel_onboarding.saving", fallback: "保存中…") : L10n.k("views.channel_onboarding.save", fallback: "保存"), systemImage: "square.and.arrow.down")
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(cfgLoading || isSaving)
@@ -508,7 +508,7 @@ struct FeishuChannelOnboardingSheet: View {
                     if let msg = saveMessage {
                         Text(msg)
                             .font(.caption)
-                            .foregroundStyle(msg.contains("失败") ? Color.red : Color.secondary)
+                            .foregroundStyle((msg.contains("失败") || msg.contains("fail")) ? Color.red : Color.secondary)
                     }
                     Spacer()
                 }
@@ -568,8 +568,8 @@ struct FeishuChannelOnboardingSheet: View {
     }
 
     private static let feishuConfigItems: [ChannelConfigItem] = [
-        .init(key: "streaming", label: "流式输出", detail: "消息以流式卡片实时更新，而非等待完成后一次性发送"),
-        .init(key: "topicSessionMode", label: "话题独立上下文", detail: "开启后话题群中的每个话题拥有独立上下文，支持多任务并行"),
+        .init(key: "streaming", label: L10n.k("views.channel_onboarding.config_streaming", fallback: "流式输出"), detail: L10n.k("views.channel_onboarding.config_streaming_detail", fallback: "消息以流式卡片实时更新，而非等待完成后一次性发送")),
+        .init(key: "topicSessionMode", label: L10n.k("views.channel_onboarding.config_topic_session", fallback: "话题独立上下文"), detail: L10n.k("views.channel_onboarding.config_topic_session_detail", fallback: "开启后话题群中的每个话题拥有独立上下文，支持多任务并行")),
     ]
 
     private static let weixinConfigItems: [ChannelConfigItem] = []
@@ -756,10 +756,10 @@ struct FeishuChannelOnboardingSheet: View {
 
         do {
             try await gatewayHub.configSetBatch(username: username, entries: entries)
-            saveMessage = "已保存"
+            saveMessage = L10n.k("views.channel_onboarding.saved", fallback: "已保存")
             await gatewayHub.channelStore(for: username).refresh()
         } catch {
-            saveMessage = "保存失败：\(error.localizedDescription)"
+            saveMessage = L10n.f("views.channel_onboarding.save_failed", fallback: "保存失败：%@", error.localizedDescription)
         }
     }
 

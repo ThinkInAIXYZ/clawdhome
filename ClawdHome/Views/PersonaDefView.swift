@@ -336,7 +336,7 @@ struct CharacterDefTabView: View {
 
             // 2. git commit（静默降级，写文件已成功）
             let isoDate = ISO8601DateFormatter().string(from: Date())
-            let commitMsg = "更新 \(file.rawValue) — \(isoDate)"
+            let commitMsg = L10n.f("views.persona_def.commit_message", fallback: "更新 %@ — %@", file.rawValue, isoDate)
             do {
                 try await helperClient.commitPersonaFile(username: username, filename: file.rawValue, message: commitMsg)
                 // 刷新历史面板
@@ -954,7 +954,7 @@ private struct PersonaHistoryView: View {
             )
             diffs[commit.hash] = diff
         } catch {
-            diffs[commit.hash] = "（读取 diff 失败：\(error.localizedDescription)）"
+            diffs[commit.hash] = L10n.f("views.persona_def.diff_load_failed", fallback: "（读取 diff 失败：%@）", error.localizedDescription)
         }
     }
 

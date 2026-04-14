@@ -706,7 +706,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
             username: username,
             command: command
         )
-        // 首次打开窗口时可能恰逢 XPC 连接未就绪：自动重试一次，减少“点重跑才成功”。
+        // 首次打开窗口时可能恰逢 XPC 连接未就绪：自动重试一次，减少"点重跑才成功"。
         let finalResult: (Bool, String, String?)
         if !startResult.0, startResult.2 == L10n.k("services.helper_client.disconnected", fallback: "未连接") {
             helperClient.connect()
@@ -773,7 +773,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
             if shouldRetryPoll(message: message), transientPollRetryCount < maxTransientPollRetries {
                 transientPollRetryCount += 1
                 helperClient.connect(reason: "maintenance poll retry")
-                feedToTerminal("会话连接中断，正在自动重试...\r\n")
+                feedToTerminal(L10n.k("views.terminal_log.session_interrupted", fallback: "会话连接中断，正在自动重试...") + "\r\n")
                 return
             }
             if let err, !err.isEmpty {

@@ -527,7 +527,7 @@ private struct MaintenanceTerminalWindowContent: View {
         let normalized = stripANSIEscapeSequences(chunk).lowercased()
         guard normalized.contains("configure complete.") else { return }
         didAutoCloseOnConfigureComplete = true
-        statusText = "检测到 Configure complete.，正在关闭窗口并刷新调用方…"
+        statusText = L10n.k("views.maintenance.configure_complete_closing", fallback: "检测到 Configure complete.，正在关闭窗口并刷新调用方…")
         postCloseNotificationIfNeeded()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             dismiss()

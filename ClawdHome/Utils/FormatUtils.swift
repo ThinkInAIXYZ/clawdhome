@@ -78,7 +78,7 @@ enum CustomModelConfigUtils {
 
     static func fetchModelIDs(baseURL: String, apiKey: String?) async throws -> [String] {
         guard let endpoint = modelsListURL(from: baseURL) else {
-            throw CustomModelConfigError(message: "Base URL 无效，无法拉取模型列表")
+            throw CustomModelConfigError(message: L10n.k("utils.custom_model.invalid_base_url", fallback: "Base URL 无效，无法拉取模型列表"))
         }
 
         var request = URLRequest(url: endpoint)
@@ -92,10 +92,10 @@ enum CustomModelConfigUtils {
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-            throw CustomModelConfigError(message: "模型列表请求失败：无响应状态")
+            throw CustomModelConfigError(message: L10n.k("utils.custom_model.no_response", fallback: "模型列表请求失败：无响应状态"))
         }
         guard (200 ... 299).contains(http.statusCode) else {
-            throw CustomModelConfigError(message: "模型列表请求失败：HTTP \(http.statusCode)")
+            throw CustomModelConfigError(message: L10n.f("utils.custom_model.http_error", fallback: "模型列表请求失败：HTTP %d", http.statusCode))
         }
 
         let payload = try JSONSerialization.jsonObject(with: data, options: [])

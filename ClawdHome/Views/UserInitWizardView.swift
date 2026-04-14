@@ -249,7 +249,7 @@ struct UserInitWizardView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text(L10n.k("wizard.gateway.node_missing.title", fallback: "检测到 Node.js 环境缺失"))
                     .font(.headline)
-                Text(L10n.k("wizard.gateway.node_missing.message", fallback: "将执行基础环境修复。修复完成后，请手动点击“再次启动 Gateway”。"))
+                Text(L10n.k("wizard.gateway.node_missing.message", fallback: "将执行基础环境修复。修复完成后，请手动点击\u{201C}再次启动 Gateway\u{201D}。"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -546,21 +546,21 @@ struct UserInitWizardView: View {
                 DNAFileEditor(
                     icon: "heart.text.square.fill",
                     iconColor: .pink,
-                    title: "核心价值观",
+                    title: L10n.k("views.wizard.role_soul_title", fallback: "核心价值观"),
                     subtitle: "SOUL",
                     text: $roleSoul
                 )
                 DNAFileEditor(
                     icon: "person.text.rectangle.fill",
                     iconColor: .purple,
-                    title: "身份设定",
+                    title: L10n.k("views.wizard.role_identity_title", fallback: "身份设定"),
                     subtitle: "IDENTITY",
                     text: $roleIdentity
                 )
                 DNAFileEditor(
                     icon: "person.crop.circle.fill",
                     iconColor: .orange,
-                    title: "我的画像",
+                    title: L10n.k("views.wizard.role_user_title", fallback: "我的画像"),
                     subtitle: "USER",
                     initiallyExpanded: true,
                     text: $roleUser
@@ -569,7 +569,7 @@ struct UserInitWizardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 12) {
-                Button(isSavingRole ? "保存中…" : "保存并继续") {
+                Button(isSavingRole ? L10n.k("views.wizard.role_saving", fallback: "保存中…") : L10n.k("views.wizard.role_save_continue", fallback: "保存并继续")) {
                     Task { await saveRoleAndContinue() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -795,7 +795,7 @@ struct UserInitWizardView: View {
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(.body, design: .monospaced))
                             HStack(spacing: 8) {
-                                Button(isFetchingCustomModels ? "拉取中…" : "从 API 拉取列表") {
+                                Button(isFetchingCustomModels ? L10n.k("views.wizard.custom_fetching_models", fallback: "拉取中…") : L10n.k("views.wizard.custom_fetch_models", fallback: "从 API 拉取列表")) {
                                     Task { await fetchCustomModelsForWizard() }
                                 }
                                 .buttonStyle(.bordered)
@@ -913,7 +913,7 @@ struct UserInitWizardView: View {
     private var modelValidationStatusView: some View {
         switch modelValidationState {
         case .idle:
-            Label(L10n.k("wizard.model_config.validation.idle", fallback: "未验证。点击“验证并继续”后会执行实时连通性检查。"), systemImage: "questionmark.circle")
+            Label(L10n.k("wizard.model_config.validation.idle", fallback: "未验证。点击\u{201C}验证并继续\u{201D}后会执行实时连通性检查。"), systemImage: "questionmark.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .validating:
@@ -1440,7 +1440,7 @@ struct UserInitWizardView: View {
             do {
                 try await helperClient.saveInitState(username: user.username, json: "{}")
             } catch {
-                appendLog(L10n.k("views.user_init_wizard_view.state_resetstatus_error_localizeddescription", fallback: "[state] 重置初始化状态失败：\(error.localizedDescription)\n"))
+                appendLog(L10n.f("views.wizard.log.state_reset_failed", fallback: "[state] Reset init state failed: %@\n", error.localizedDescription))
             }
         }
     }
@@ -1483,13 +1483,13 @@ struct UserInitWizardView: View {
         onSessionActiveChanged?(true)
 
         baseEnvProgressPhase = .homebrewRepair
-        appendLog("\n▶ \(String(localized: "wizard.homebrew.repair.start", defaultValue: "修复 Homebrew 权限（可选）"))\n")
+        appendLog("\n▶ \(L10n.k("views.wizard.log.homebrew_repair_start", fallback: "Repair Homebrew permissions (optional)"))\n")
         do {
             try await conn.repairHomebrewPermission(username: user.username)
-            appendLog("✓ \(String(localized: "wizard.homebrew.repair.done", defaultValue: "Homebrew 权限修复已完成"))\n")
+            appendLog("✓ \(L10n.k("views.wizard.log.homebrew_repair_done", fallback: "Homebrew permission repair complete"))\n")
         } catch {
             // best-effort：失败不阻断初始化
-            appendLog("⚠️ \(String(localized: "wizard.homebrew.repair.failed", defaultValue: "Homebrew 权限修复失败（已跳过，不影响初始化）"))：\(error.localizedDescription)\n")
+            appendLog("⚠️ \(L10n.f("views.wizard.log.homebrew_repair_failed", fallback: "Homebrew permission repair failed (skipped, does not affect init): %@", error.localizedDescription))\n")
         }
 
         let autoSteps: [(phase: BaseEnvProgressPhase, title: String, run: () async throws -> Void)] = [
@@ -1498,7 +1498,7 @@ struct UserInitWizardView: View {
             (.setNpmRegistry, L10n.k("views.user_init_wizard_view.settings_npm", fallback: "设置 npm 安装源"), {
                 try await conn.setNpmRegistry(username: user.username, registry: selectedNpmRegistry.rawValue)
             }),
-            (.installOpenclaw, L10n.k("views.user_init_wizard_view.openclaw_openclawversionlabelforui", fallback: "安装 openclaw (\(openclawVersionLabelForUI))"), {
+            (.installOpenclaw, L10n.f("views.wizard.step.install_openclaw_version", fallback: "Install openclaw (%@)", openclawVersionLabelForUI), {
                 try await conn.installOpenclaw(
                     username: user.username,
                     version: selectedOpenclawVersionForInstall
@@ -1542,26 +1542,9 @@ struct UserInitWizardView: View {
     }
 
     /// 默认 TOOLS.md 内容：告知虾共享文件夹的存在和使用规范
-    static let defaultToolsContent = """
-    ## 共享文件夹
-
-    你有两个文件共享空间，可通过以下路径访问：
-
-    ### 专属文件夹（私有）
-    - 路径：`~/clawdhome_shared/private/`
-    - 权限：仅你和管理员可访问，其他虾不可见
-    - 用途：所有工作产出物、生成的文件、导出的数据都应优先存放在此目录
-
-    ### 公共文件夹（共享）
-    - 路径：`~/clawdhome_shared/public/`
-    - 权限：所有虾和管理员共享
-    - 用途：读写通用资源、共享文件、公共数据集
-
-    ### 使用规范
-    - 当用户要求保存文件、导出结果、生成报告时，写入 `~/clawdhome_shared/private/`
-    - 需要引用公共资源时，从 `~/clawdhome_shared/public/` 读取
-    - 不要将敏感数据写入公共文件夹
-    """
+    static var defaultToolsContent: String {
+        L10n.k("views.wizard.tools_md_content", fallback: "## Shared Folders\n\nYou have two file sharing spaces accessible at the following paths:\n\n### Private Folder\n- Path: `~/clawdhome_shared/private/`\n- Access: Only you and the admin can access; other Shrimps cannot see it\n- Purpose: All work outputs, generated files, and exported data should be stored here first\n\n### Public Folder\n- Path: `~/clawdhome_shared/public/`\n- Access: Shared by all Shrimps and the admin\n- Purpose: Read/write common resources, shared files, and public datasets\n\n### Usage Guidelines\n- When asked to save files, export results, or generate reports, write to `~/clawdhome_shared/private/`\n- When referencing public resources, read from `~/clawdhome_shared/public/`\n- Do not write sensitive data to the public folder")
+    }
 
     private func saveRoleAndContinue() async {
         isSavingRole = true
@@ -1604,7 +1587,7 @@ struct UserInitWizardView: View {
             user.initStep = InitStep.configureModel.title
             await persistState()
         } catch {
-            appendLog("❌ [injectRole] 写入角色文件失败：\(error.localizedDescription)\n")
+            appendLog("❌ [injectRole] \(L10n.f("views.wizard.log.inject_role_failed", fallback: "Failed to write role files: %@", error.localizedDescription))\n")
         }
     }
 
@@ -1616,17 +1599,17 @@ struct UserInitWizardView: View {
         xcodeEnvStatus = status
         xcodeFixMessage = nil
         if !status.commandLineToolsInstalled {
-            throw HelperError.operationFailed(L10n.k("views.user_init_wizard_view.xcode_command_line_tools_done", fallback: "检测到缺少 Xcode Command Line Tools。请先在「开发环境修复」中点击“安装开发工具”，完成后再重试初始化。"))
+            throw HelperError.operationFailed(L10n.k("views.user_init_wizard_view.xcode_command_line_tools_done", fallback: "检测到缺少 Xcode Command Line Tools。请先在「开发环境修复」中点击\u{201C}安装开发工具\u{201D}，完成后再重试初始化。"))
         }
         if !status.licenseAccepted {
-            throw HelperError.operationFailed(L10n.k("views.user_init_wizard_view.xcode_license_not_accepted_open_development_environment_repair", fallback: "检测到 Xcode license 未接受。请先在「开发环境修复」中点击“同意 Xcode 许可”，完成后再重试初始化。"))
+            throw HelperError.operationFailed(L10n.k("views.user_init_wizard_view.xcode_license_not_accepted_open_development_environment_repair", fallback: "检测到 Xcode license 未接受。请先在「开发环境修复」中点击\u{201C}同意 Xcode 许可\u{201D}，完成后再重试初始化。"))
         }
         if !status.clangAvailable {
             let details = status.detail.trimmingCharacters(in: .whitespacesAndNewlines)
             if details.isEmpty {
                 throw HelperError.operationFailed(L10n.k("views.user_init_wizard_view.xcode_toolsready_doneretry", fallback: "检测到 Xcode 工具链未就绪。请先在「开发环境修复」中完成修复后再重试初始化。"))
             }
-            throw HelperError.operationFailed(L10n.k("views.user_init_wizard_view.xcode_details", fallback: "检测到 Xcode 工具链未就绪：\(details)"))
+            throw HelperError.operationFailed(L10n.f("views.wizard.xcode_toolchain_not_ready_details", fallback: "Xcode toolchain not ready: %@", details))
         }
     }
 
@@ -1648,12 +1631,12 @@ struct UserInitWizardView: View {
     }
 
     private func checkAndApplyProxySettingsForInit() async {
-        appendLog("\n▶ 检查代理配置\n")
+        appendLog("\n▶ \(L10n.k("views.wizard.log.check_proxy", fallback: "Check proxy settings"))\n")
 
         let defaults = UserDefaults.standard
         let enabled = defaults.bool(forKey: "proxyEnabled")
         guard enabled else {
-            appendLog("✓ 代理未启用：将使用直连网络\n")
+            appendLog("✓ \(L10n.k("views.wizard.log.proxy_disabled", fallback: "Proxy not enabled: using direct connection"))\n")
             return
         }
 
@@ -1662,16 +1645,16 @@ struct UserInitWizardView: View {
         let port = (defaults.string(forKey: "proxyPort") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !host.isEmpty, Int(port) != nil else {
-            appendLog("⚠️ 代理已启用，但 host/port 配置不完整：将跳过代理注入（不影响初始化继续）\n")
+            appendLog("⚠️ \(L10n.k("views.wizard.log.proxy_incomplete", fallback: "Proxy enabled but host/port incomplete: skipping proxy injection"))\n")
             return
         }
 
-        appendLog("✓ 代理已启用：\(scheme)://\(host):\(port)\n")
+        appendLog("✓ \(L10n.f("views.wizard.log.proxy_enabled", fallback: "Proxy enabled: %@://%@:%@", scheme, host, port))\n")
         do {
             try await helperClient.applySavedProxySettingsIfAny(username: user.username)
-            appendLog("✓ 已同步代理配置到当前虾环境\n")
+            appendLog("✓ \(L10n.k("views.wizard.log.proxy_synced", fallback: "Proxy settings synced to Shrimp environment"))\n")
         } catch {
-            appendLog("⚠️ 代理配置同步失败（不影响初始化继续）：\(error.localizedDescription)\n")
+            appendLog("⚠️ \(L10n.f("views.wizard.log.proxy_sync_failed", fallback: "Proxy sync failed (does not affect init): %@", error.localizedDescription))\n")
         }
     }
 
@@ -1706,7 +1689,7 @@ struct UserInitWizardView: View {
             return
         }
         NSWorkspace.shared.open(url)
-        xcodeFixMessage = L10n.k("views.user_init_wizard_view.open_settings_command_line_tools", fallback: "已打开“软件更新”。若弹窗未出现，可在系统设置中手动安装 Command Line Tools。")
+        xcodeFixMessage = L10n.k("views.user_init_wizard_view.open_settings_command_line_tools", fallback: "已打开\u{201C}软件更新\u{201D}。若弹窗未出现，可在系统设置中手动安装 Command Line Tools。")
     }
 
     private func resumePendingStep() async {
@@ -1744,7 +1727,7 @@ struct UserInitWizardView: View {
     }
 
     private func retryFromFailure() async {
-        // 终止后的失败属于“可恢复状态”，重试时先清理，避免被 hasFailure 持续拦截。
+        // 终止后的失败属于"可恢复状态"，重试时先清理，避免被 hasFailure 持续拦截。
         let cancelledMessage = L10n.k("views.user_init_wizard_view.terminated", fallback: "已终止")
         for step in InitStep.allCases {
             if case .failed(let message) = statuses[step.rawValue], message == cancelledMessage {
@@ -1882,10 +1865,10 @@ struct UserInitWizardView: View {
         }
 
         if customModelIdTrimmed.isEmpty {
-            return "请先填写 custom-model-id。"
+            return L10n.k("views.wizard.validation.empty_model_id", fallback: "Please fill in custom-model-id first.")
         }
         if customBaseURLTrimmed.isEmpty {
-            return "请先填写 custom-base-url。"
+            return L10n.k("views.wizard.validation.empty_base_url", fallback: "Please fill in custom-base-url first.")
         }
 
         switch selectedWizardAuthMethod {
@@ -1894,7 +1877,7 @@ struct UserInitWizardView: View {
             if key.isEmpty {
                 let existing = await helperClient.getConfig(username: user.username, key: "env.CUSTOM_API_KEY")
                 if existing == nil || existing?.isEmpty == true {
-                    return "未输入 custom API Key，且 env.CUSTOM_API_KEY 未配置。"
+                    return L10n.k("views.wizard.validation.no_custom_api_key", fallback: "No custom API Key entered and env.CUSTOM_API_KEY is not configured.")
                 }
             }
             return nil
@@ -1906,33 +1889,33 @@ struct UserInitWizardView: View {
     private func validateCustomSecretReference() async -> String? {
         let raw = customSecretReference.trimmingCharacters(in: .whitespacesAndNewlines)
         if raw.isEmpty {
-            return "Secret Reference 不能为空。"
+            return L10n.k("views.wizard.validation.empty_secret_ref", fallback: "Secret Reference cannot be empty.")
         }
         if raw.hasPrefix("${"), raw.hasSuffix("}") {
             let envName = String(raw.dropFirst(2).dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
-            if envName.isEmpty { return "环境变量引用格式错误。示例：${CUSTOM_API_KEY}" }
+            if envName.isEmpty { return L10n.k("views.wizard.validation.env_ref_format_error", fallback: "Environment variable reference format error. Example: ${CUSTOM_API_KEY}") }
             let existing = await helperClient.getConfig(username: user.username, key: "env.\(envName)")
             if existing == nil || existing?.isEmpty == true {
-                return "环境变量 \(envName) 未配置（预检失败）。"
+                return L10n.f("views.wizard.validation.env_not_configured", fallback: "Environment variable %@ is not configured (pre-check failed).", envName)
             }
             return nil
         }
         if raw.hasPrefix("env:") {
             let envName = String(raw.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
-            if envName.isEmpty { return "env 引用格式错误。示例：env:CUSTOM_API_KEY" }
+            if envName.isEmpty { return L10n.k("views.wizard.validation.env_prefix_format_error", fallback: "env reference format error. Example: env:CUSTOM_API_KEY") }
             let existing = await helperClient.getConfig(username: user.username, key: "env.\(envName)")
             if existing == nil || existing?.isEmpty == true {
-                return "环境变量 \(envName) 未配置（预检失败）。"
+                return L10n.f("views.wizard.validation.env_not_configured", fallback: "Environment variable %@ is not configured (pre-check failed).", envName)
             }
             return nil
         }
         if raw.contains(":") {
             if !GlobalSecretsStore.shared.has(secretKey: raw) {
-                return "provider ref \(raw) 不存在于全局 secrets（预检失败）。"
+                return L10n.f("views.wizard.validation.provider_ref_not_found", fallback: "Provider ref %@ not found in global secrets (pre-check failed).", raw)
             }
             return nil
         }
-        return "Secret Reference 格式不支持。请使用 env:VAR / ${VAR} / provider:account。"
+        return L10n.k("views.wizard.validation.unsupported_secret_format", fallback: "Secret Reference format not supported. Use env:VAR / ${VAR} / provider:account.")
     }
 
     private func resolvedCustomAPIKeyValue() -> String {
@@ -1951,7 +1934,7 @@ struct UserInitWizardView: View {
 
     private func fetchCustomModelsForWizard() async {
         guard !customBaseURLTrimmed.isEmpty else {
-            customModelFetchError = "请先填写有效的 Base URL"
+            customModelFetchError = L10n.k("views.wizard.custom_fetch_empty_url", fallback: "Please enter a valid Base URL first")
             customModelFetchMessage = nil
             return
         }
@@ -1969,7 +1952,7 @@ struct UserInitWizardView: View {
             let ids = try await CustomModelConfigUtils.fetchModelIDs(baseURL: customBaseURLTrimmed, apiKey: apiKey)
             if ids.isEmpty {
                 customModelSuggestions = []
-                customModelFetchMessage = "已请求成功，但未解析到可用模型 ID（该接口可能不支持标准 list）"
+                customModelFetchMessage = L10n.k("views.wizard.custom_fetch_no_models", fallback: "Request succeeded but no model IDs found (API may not support standard listing)")
                 return
             }
 
@@ -1977,7 +1960,7 @@ struct UserInitWizardView: View {
             if customModelIdTrimmed.isEmpty, let first = ids.first {
                 customModelId = first
             }
-            customModelFetchMessage = "已拉取 \(ids.count) 个模型"
+            customModelFetchMessage = L10n.f("views.wizard.custom_fetch_success", fallback: "Fetched %d models", ids.count)
         } catch {
             customModelFetchError = error.localizedDescription
         }
@@ -2349,7 +2332,7 @@ struct UserInitWizardView: View {
         appendFinishProgress(L10n.k("views.user_init_wizard_view.done_overview", fallback: "正在启动 OpenClaw Gateway…"))
 
         gatewayHub.markPendingStart(username: user.username)
-        appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在启动 Gateway…\n")
+        appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.k("views.wizard.log.starting_gateway", fallback: "Starting Gateway..."))\n")
 
         do {
             let startResult = try await helperClient.startGatewayDiagnoseNodeToolchain(username: user.username)
@@ -2363,8 +2346,8 @@ struct UserInitWizardView: View {
                 gatewayNodeRepairError = nil
                 gatewayNodeRepairReadyToRetryStart = false
                 showGatewayNodeRepairSheet = true
-                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 检测到 Node.js 环境缺失，等待修复确认。\n")
-                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 缺失原因：\(reason)\n")
+                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.k("views.wizard.log.node_missing_waiting_repair", fallback: "Node.js environment missing, waiting for repair."))\n")
+                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.f("views.wizard.log.node_missing_reason", fallback: "Reason: %@", reason))\n")
                 statuses[InitStep.finish.rawValue] = .pending
                 return
             }
@@ -2372,7 +2355,7 @@ struct UserInitWizardView: View {
             user.pid = nil
             user.startedAt = nil
             activationProgress = 1
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动成功。\n")
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.k("views.wizard.log.gateway_started", fallback: "Gateway started successfully."))\n")
             await syncGatewayStateAfterStart()
             try? await Task.sleep(for: .milliseconds(280))
             await completeWizardOnly()
@@ -2386,7 +2369,7 @@ struct UserInitWizardView: View {
             gatewayHub.markPendingStopped(username: user.username)
             activationProgress = 0.12
             statuses[InitStep.finish.rawValue] = .failed(error.localizedDescription)
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动失败：\(error.localizedDescription)\n")
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.f("views.wizard.log.gateway_start_failed", fallback: "Gateway failed to start: %@", error.localizedDescription))\n")
         }
     }
 
@@ -2396,30 +2379,34 @@ struct UserInitWizardView: View {
         gatewayNodeRepairError = nil
         gatewayNodeRepairReadyToRetryStart = false
         gatewayNodeRepairCompletedSteps = 0
-        gatewayNodeRepairCurrentStep = "修复 Homebrew 权限"
-        appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在执行基础环境修复…\n")
+        let _repairStep1 = L10n.k("views.wizard.repair.step_homebrew", fallback: "Repair Homebrew permissions")
+        let _repairStep2 = L10n.k("views.wizard.repair.step_node", fallback: "Install/repair Node.js")
+        let _repairStep3 = L10n.k("views.wizard.repair.step_npm_env", fallback: "Configure npm directory")
+        let _repairStep4 = L10n.k("views.wizard.repair.step_health_check", fallback: "Run health check repair")
+        gatewayNodeRepairCurrentStep = _repairStep1
+        appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.k("views.wizard.log.repair_running", fallback: "Running base environment repair..."))\n")
         do {
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [1/4] 修复 Homebrew 权限\n")
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [1/4] \(_repairStep1)\n")
             try? await helperClient.repairHomebrewPermission(username: user.username)
             gatewayNodeRepairCompletedSteps = 1
-            gatewayNodeRepairCurrentStep = "安装/修复 Node.js"
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [2/4] 安装/修复 Node.js\n")
+            gatewayNodeRepairCurrentStep = _repairStep2
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [2/4] \(_repairStep2)\n")
             try await helperClient.installNode(username: user.username, nodeDistURL: nodeDistURL)
             gatewayNodeRepairCompletedSteps = 2
-            gatewayNodeRepairCurrentStep = "配置 npm 目录"
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [3/4] 配置 npm 目录\n")
+            gatewayNodeRepairCurrentStep = _repairStep3
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [3/4] \(_repairStep3)\n")
             try await helperClient.setupNpmEnv(username: user.username)
             gatewayNodeRepairCompletedSteps = 3
-            gatewayNodeRepairCurrentStep = "执行体检修复"
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [4/4] 执行体检修复\n")
+            gatewayNodeRepairCurrentStep = _repairStep4
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [4/4] \(_repairStep4)\n")
             _ = await helperClient.runHealthCheck(username: user.username, fix: true)
             gatewayNodeRepairCompletedSteps = 4
-            gatewayNodeRepairCurrentStep = "修复完成，等待再次启动"
+            gatewayNodeRepairCurrentStep = L10n.k("views.wizard.repair.step_done_waiting", fallback: "Repair complete, waiting to restart")
             gatewayNodeRepairReadyToRetryStart = true
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 基础环境修复完成，等待手动再次启动。\n")
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.k("views.wizard.log.repair_done_waiting", fallback: "Base environment repair complete, waiting for manual restart."))\n")
         } catch {
             gatewayNodeRepairError = error.localizedDescription
-            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Node.js 修复失败：\(error.localizedDescription)\n")
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.f("views.wizard.log.repair_node_failed", fallback: "Node.js repair failed: %@", error.localizedDescription))\n")
         }
         isGatewayNodeRepairing = false
     }
@@ -2428,7 +2415,7 @@ struct UserInitWizardView: View {
         guard !isGatewayNodeRepairing else { return }
         isGatewayNodeRepairing = true
         gatewayNodeRepairError = nil
-        gatewayNodeRepairCurrentStep = "正在启动 Gateway"
+        gatewayNodeRepairCurrentStep = L10n.k("views.wizard.repair.step_starting_gateway", fallback: "Starting Gateway")
         defer { isGatewayNodeRepairing = false }
         await finishAndStartOpenclaw()
         if statuses[InitStep.finish.rawValue] == .done {
@@ -2441,19 +2428,17 @@ struct UserInitWizardView: View {
         if let flow, let channel = WizardChannelType(rawValue: flow) {
             selectedChannel = channel
         }
-        let channelName: String
-        if let flow, let channel = WizardChannelType(rawValue: flow) {
-            switch channel {
-            case .feishu: channelName = "飞书"
-            case .weixin: channelName = "微信"
-            }
+        channelPairingDetectedHint = buildPairingHint(flow: flow)
+    }
+
+    private func buildPairingHint(flow: String?) -> String {
+        let name: String
+        if let flow, let ch = WizardChannelType(rawValue: flow) {
+            name = ch.localizedName
         } else {
-            channelName = "当前频道"
+            name = WizardL10nKeys.currentChannelName
         }
-        channelPairingDetectedHint = L10n.k(
-            "wizard.channel.pairing_detected_continue_hint",
-            fallback: "已检测到\(channelName)配对成功。可继续检查“通道配置”选项，确认后点击「已完成，继续」。"
-        )
+        return String(format: WizardL10nKeys.pairingDetectedHint, name)
     }
 
     private func syncGatewayStateAfterStart(
@@ -2466,18 +2451,18 @@ struct UserInitWizardView: View {
                 user.isRunning = true
                 user.pid = pid > 0 ? pid : nil
                 user.startedAt = pid > 0 ? GatewayHub.processStartTime(pid: pid) : nil
-                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 运行状态已确认。\n")
+                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.k("views.wizard.log.gateway_confirmed", fallback: "Gateway running status confirmed."))\n")
                 _ = await helperClient.getGatewayURL(username: user.username)
                 return
             }
 
             if attempt < maxAttempts {
-                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 等待 Gateway 进入运行态（\(attempt)/\(maxAttempts)）…\n")
+                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.f("views.wizard.log.gateway_waiting", fallback: "Waiting for Gateway to enter running state (%d/%d)...", attempt, maxAttempts))\n")
                 try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
             }
         }
 
-        appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 状态同步超时，概览页会在后续轮询中继续刷新。\n")
+        appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.k("views.wizard.log.gateway_sync_timeout", fallback: "Gateway state sync timed out; the overview will refresh later."))\n")
     }
 
     private func appendFinishProgress(_ text: String) {
@@ -2533,7 +2518,7 @@ struct UserInitWizardView: View {
         do {
             try await helperClient.saveInitState(username: user.username, json: state.toJSON())
         } catch {
-            appendLog(L10n.k("views.user_init_wizard_view.state_savestatus_error_localizeddescription", fallback: "[state] 保存初始化状态失败：\(error.localizedDescription)\n"))
+            appendLog(L10n.f("views.wizard.log.state_save_failed", fallback: "[state] Save init state failed: %@\n", error.localizedDescription))
         }
     }
 
@@ -2608,7 +2593,7 @@ struct UserInitWizardView: View {
         await applyRuntimeStateFromPersistence(saved)
     }
 
-    /// 仅在首次加载阶段回填“可编辑草稿字段”。
+    /// 仅在首次加载阶段回填"可编辑草稿字段"。
     /// 轮询同步期间不覆盖用户正在界面上的实时选择。
     private func hydrateDraftSelectionsIfNeeded(from saved: InitWizardState) {
         // 仅在首次水合阶段回填 npm 源，避免轮询状态覆盖用户在界面上的实时选择。
@@ -2652,13 +2637,13 @@ struct UserInitWizardView: View {
             }
         }
 
-        // 仅在首次水合阶段回填频道草稿，避免未来多频道场景下出现“选择被弹回”。
+        // 仅在首次水合阶段回填频道草稿，避免未来多频道场景下出现"选择被弹回"。
         if isHydratingState {
             selectedChannel = WizardChannelType(rawValue: saved.channelType) ?? .feishu
         }
     }
 
-    /// 从持久化状态同步“运行态字段”（步骤状态、当前步骤、会话活跃态）。
+    /// 从持久化状态同步"运行态字段"（步骤状态、当前步骤、会话活跃态）。
     /// 该阶段允许在轮询期间持续更新。
     private func applyRuntimeStateFromPersistence(_ saved: InitWizardState) async {
         var restored: [Int: StepStatus] = [:]
@@ -2683,7 +2668,7 @@ struct UserInitWizardView: View {
             }
         }
 
-        // 迁移旧脏状态：active=true 但所有步骤 pending，会导致 UI 误判为“正在初始化”。
+        // 迁移旧脏状态：active=true 但所有步骤 pending，会导致 UI 误判为"正在初始化"。
         if saved.active && !saved.isCompleted && !hasRecoverableProgress {
             var repaired = saved
             repaired.active = false
@@ -2692,7 +2677,7 @@ struct UserInitWizardView: View {
             do {
                 try await helperClient.saveInitState(username: user.username, json: repaired.toJSON())
             } catch {
-                appendLog(L10n.k("views.user_init_wizard_view.state_status_error_localizeddescription", fallback: "[state] 迁移旧初始化状态失败：\(error.localizedDescription)\n"))
+                appendLog(L10n.f("views.wizard.log.state_migration_failed", fallback: "[state] Legacy init state migration failed: %@\n", error.localizedDescription))
             }
         }
 
@@ -2771,7 +2756,7 @@ struct UserInitWizardView: View {
         }
     }
 
-    /// 请求 Helper 终止初始化流程；等待取消完成，避免“重试”与“终止”发生竞态。
+    /// 请求 Helper 终止初始化流程；等待取消完成，避免"重试"与"终止"发生竞态。
     private func requestCancelInit() async {
         let username = user.username
         let conn = wizardConn

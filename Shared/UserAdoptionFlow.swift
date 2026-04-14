@@ -20,15 +20,15 @@ enum UserAdoptionValidationError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .emptyUsername:
-            return "系统用户名不能为空"
+            return String(localized: "adoption.error.empty_username", defaultValue: "系统用户名不能为空")
         case .invalidUsername:
-            return "用户名只能包含小写字母、数字和下划线，且须以字母开头"
+            return String(localized: "adoption.error.invalid_username", defaultValue: "用户名只能包含小写字母、数字和下划线，且须以字母开头")
         case .emptyFullName:
-            return "显示名不能为空"
+            return String(localized: "adoption.error.empty_fullname", defaultValue: "显示名不能为空")
         case .duplicateUsername(let username):
-            return "用户名 @\(username) 已存在，请换一个再试"
+            return String(format: String(localized: "adoption.error.duplicate_username", defaultValue: "用户名 @%@ 已存在，请换一个再试"), username)
         case .duplicateFullName(let fullName):
-            return "显示名“\(fullName)”已被使用，请换一个名字"
+            return String(format: String(localized: "adoption.error.duplicate_fullname", defaultValue: "显示名\u{201C}%@\u{201D}已被使用，请换一个名字"), fullName)
         }
     }
 }

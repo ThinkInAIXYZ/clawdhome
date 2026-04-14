@@ -25,7 +25,7 @@ final class UpdateChecker {
     private static let udKeyLatestVersion     = "updateChecker.latestVersion"
     private static let udKeyLatestReleaseURL  = "updateChecker.latestReleaseURL"
     private static let openclawApiURL         = "https://api.github.com/repos/openclaw/openclaw/releases/latest"
-    /// openclaw 发布节奏较快，缓存 24h 会导致“当天发版当天看不到”。
+    /// openclaw 发布节奏较快，缓存 24h 会导致"当天发版当天看不到"。
     /// 采用 1h 节流 + 后台轮询，兼顾及时性和 GitHub API 负载。
     private let openclawCacheInterval: TimeInterval = 3600
 
@@ -62,7 +62,7 @@ final class UpdateChecker {
     private static let appApiURL            = "https://clawdhome.app/api/version.json"
     private let appCacheInterval: TimeInterval = 24 * 3600
 
-    // MARK: - 初始化（从缓存恢复，避免启动时显示L10n.k("services.update_checker.text_f013ea9d", fallback: "加载中")）
+    // MARK: - 初始化（从缓存恢复，避免启动时显示"加载中"）
 
     init() {
         // openclaw 缓存
@@ -454,7 +454,7 @@ final class UpdateChecker {
         users.filter { needsUpdate($0.openclawVersion) }.count
     }
 
-    /// 逐段比较版本号（支持 "YYYY.M.DL10n.k("services.update_checker.text_ed4b80bf", fallback: " 和 ")1.0.180" 两种格式）
+    /// 逐段比较版本号（支持 "YYYY.M.D" 和 "1.0.180" 两种格式）
     private func compareVersions(_ a: String, _ b: String) -> ComparisonResult {
         let av = a.split(separator: ".").compactMap { Int($0) }
         let bv = b.split(separator: ".").compactMap { Int($0) }

@@ -88,7 +88,7 @@ let supportedProviderKeys: [ProviderKeyConfig] = [
         ]),
     ProviderKeyConfig(
         id: "zai",
-        displayName: "智谱 Z.AI",
+        displayName: L10n.k("model.provider.zai.name", fallback: "智谱 Z.AI"),
         configPath: "models.providers.zai.apiKey",
         placeholder: "sk-...",
         isUrlConfig: false, supportsOAuth: false,
