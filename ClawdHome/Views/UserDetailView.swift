@@ -722,6 +722,12 @@ struct UserDetailView: View {
         .sheet(isPresented: $showPassword) {
             UserPasswordSheet(username: user.username)
         }
+        .sheet(isPresented: $showCreateAgent) {
+            CreateAgentSheet(username: user.username) { _ in
+                Task { await loadAgents() }
+            }
+            .environment(helperClient)
+        }
         .sheet(isPresented: $showConfig) {
             ConfigEditorSheet(user: user)
         }
