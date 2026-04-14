@@ -1874,6 +1874,44 @@ final class HelperClient {
         }
         if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.restore_failed", fallback: "回滚失败")) }
     }
+
+    // MARK: - Agent Management
+
+    /// 获取指定用户的所有 agent 列表
+    func listAgents(username: String) async throws -> [AgentProfile] {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (json, err): (String?, String?) = try await xpcCall { done in
+            proxy.listAgents(username: username) { j, e in
+                done((j, e))
+            }
+        }
+        if let err { throw HelperError.operationFailed(err) }
+        guard let json, let data = json.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([AgentProfile].self, from: data)) ?? []
+    }
+
+    /// 创建新 agent
+    func createAgent(username: String, config: AgentProfile) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let configJSON = String(data: try JSONEncoder().encode(config), encoding: .utf8) ?? "{}"
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.createAgent(username: username, configJSON: configJSON) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.agent_create_failed", fallback: "创建 agent 失败")) }
+    }
+
+    /// 删除 agent
+    func removeAgent(username: String, agentId: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.removeAgent(username: username, agentId: agentId) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.agent_remove_failed", fallback: "删除 agent 失败")) }
+    }
 }
 
 // MARK: - Helper 健康状态
