@@ -741,8 +741,16 @@ struct UserDetailView: View {
             UserPasswordSheet(username: user.username)
         }
         .sheet(isPresented: $showCreateAgent) {
-            CreateAgentSheet(username: user.username) { _ in
-                Task { await loadAgents() }
+            CreateAgentSheet(username: user.username) { newAgent in
+                Task {
+                    // 重启 gateway 让新 agent 配置生效
+                    if isEffectivelyRunning {
+                        try? await helperClient.restartGateway(username: user.username)
+                    }
+                    await loadAgents()
+                    // 自动选中新创建的 agent
+                    selectedAgentId = newAgent.id
+                }
             }
             .environment(helperClient)
         }
