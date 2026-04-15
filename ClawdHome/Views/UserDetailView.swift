@@ -509,26 +509,11 @@ struct UserDetailView: View {
             .padding(.horizontal, detailSidebarShowsLabels ? 2 : 4)
             .frame(maxWidth: .infinity)
 
-            // Shrimp 信息区域
-            if detailSidebarShowsLabels {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(user.fullName)
-                        .font(.system(size: 14, weight: .semibold))
-                        .lineLimit(1)
-                    Text("@\(user.username)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 10)
+            // Shrimp 图标
+            Text("\u{1F99E}")
+                .font(.system(size: detailSidebarShowsLabels ? 32 : 24))
+                .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 4)
-            } else {
-                // 折叠时显示用户首字母缩略
-                Text(String(user.fullName.prefix(1)))
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(width: detailSidebarButtonSize, height: detailSidebarButtonSize)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            }
 
             // Agent 选择器
             if detailSidebarShowsLabels {

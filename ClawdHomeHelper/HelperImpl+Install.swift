@@ -468,6 +468,8 @@ extension ClawdHomeHelperImpl {
 
             // 防御性修正：避免历史 root 执行导致目录归属错误
             _ = try? FilePermissionHelper.chownRecursive("\(home)/.brew", owner: username)
+            // 确保 owner 对目录有 traverse 权限、对可执行文件有执行权限（修复 exit 126）
+            _ = try? FilePermissionHelper.chmodSymbolicRecursive("\(home)/.brew", expr: "u+rwX")
             reply(true, nil)
         } catch {
             helperLog("修复 Homebrew 权限失败 @\(username): \(error.localizedDescription)", level: .warn)
