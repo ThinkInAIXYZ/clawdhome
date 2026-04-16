@@ -58,6 +58,10 @@ do {
     case "chat":
         try ChatCommand.run(args, client: client)
 
+    // 引擎特定
+    case "hermes":
+        try HermesCommand.run(args, client: client)
+
     // 配置与系统
     case "config":
         try ConfigCommand.run(args, client: client)
@@ -97,6 +101,7 @@ func printGlobalUsage() {
       inspect <name>              查看实例详情
       chat <name> <message>       发送消息
       doctor <name> [--fix]       诊断检查
+      hermes <subcommand>         Hermes 引擎管理（install/start/stop/status/ls）
       config <get|set> [args]     配置管理
       version                     版本信息
 
