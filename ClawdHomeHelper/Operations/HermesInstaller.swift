@@ -79,10 +79,10 @@ struct HermesInstaller {
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    /// 以 sudo -u <user> 运行 hermes/pip/uv 时通用的环境变量前缀
-    static func sudoRuntimeArgs(for username: String) -> [String] {
+    /// Hermes 独立的 PATH（不含 npm/node 路径，与 OpenClaw 环境隔离）
+    static func buildPath(for username: String) -> String {
         let home = "/Users/\(username)"
-        let path = [
+        return [
             venvBin(for: username),
             "\(home)/.local/bin",
             "\(home)/.brew/bin",
@@ -91,12 +91,25 @@ struct HermesInstaller {
             "/usr/bin",
             "/bin",
         ].joined(separator: ":")
+    }
+
+    /// Hermes 运行时环境变量（有序 KV 对），用于维护终端 / LaunchDaemon 等场景。
+    /// 与 UserEnvContract.orderedRuntimeEnvironment 对称但完全独立，不含 npm/node 相关变量。
+    static func orderedRuntimeEnvironment(username: String) -> [(String, String)] {
+        let home = "/Users/\(username)"
         return [
-            "HOME=\(home)",
-            "USER=\(username)",
-            "PATH=\(path)",
-            "HERMES_HOME=\(hermesHome(for: username))",
+            ("HOME", home),
+            ("USER", username),
+            ("PATH", buildPath(for: username)),
+            ("HERMES_HOME", hermesHome(for: username)),
+            ("VIRTUAL_ENV", venvDir(for: username)),
         ]
+    }
+
+    /// 以 sudo -u <user> 运行 hermes/pip/uv 时通用的环境变量前缀
+    static func sudoRuntimeArgs(for username: String) -> [String] {
+        orderedRuntimeEnvironment(username: username)
+            .map { "\($0.0)=\($0.1)" }
     }
 
     // MARK: - 安装
