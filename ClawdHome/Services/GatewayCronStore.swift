@@ -72,8 +72,21 @@ final class GatewayCronStore {
 
     func toggleEnabled(job: GatewayCronJob) async throws {
         guard let client else { throw GatewayClientError.notConnected }
-        try await client.cronUpdate(jobId: job.id, enabled: !job.enabled)
-        await refresh()
+        let newEnabled = !job.enabled
+        // 乐观更新，避免 Toggle snap-back
+        if let idx = jobs.firstIndex(where: { $0.id == job.id }) {
+            jobs[idx].enabled = newEnabled
+        }
+        do {
+            try await client.cronUpdate(jobId: job.id, enabled: newEnabled)
+            await refresh()
+        } catch {
+            // 服务端失败，回滚
+            if let idx = jobs.firstIndex(where: { $0.id == job.id }) {
+                jobs[idx].enabled = job.enabled
+            }
+            throw error
+        }
     }
 
     func run(jobId: String) async throws {

@@ -86,6 +86,7 @@ struct CharacterDefTabView: View {
     var agentLabel: String? = nil    // 显示用的标签（如 "🎯 项目经理"）
 
     @Environment(HelperClient.self) private var helperClient
+    @Environment(GatewayHub.self) private var gatewayHub
 
     // 编辑器状态
     @State private var selection: PersonaSelection = .file(.soul)
@@ -473,9 +474,8 @@ struct CharacterDefTabView: View {
     private func deleteCurrentAgent() async {
         guard let agentId = agentId else { return }
         do {
-            try await helperClient.removeAgent(username: username, agentId: agentId)
-            // 重启 gateway 让删除生效
-            try? await helperClient.restartGateway(username: username)
+            // 通过 Gateway RPC 删除（自动清理配置 + workspace + sessions，无需 restart）
+            try await gatewayHub.agentsDelete(username: username, agentId: agentId)
             // 删除后的 UI 刷新由 UserDetailView 的 onChange 处理
         } catch {
             loadError = error.localizedDescription

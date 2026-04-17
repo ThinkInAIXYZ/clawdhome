@@ -54,6 +54,7 @@ struct AgentManager {
                 name: "默认角色",
                 emoji: "",
                 modelPrimary: nil,
+                modelFallbacks: [],
                 workspacePath: nil,
                 isDefault: true
             )
@@ -71,9 +72,10 @@ struct AgentManager {
                 ?? identity?["name"] as? String
                 ?? id
             let emoji = identity?["emoji"] as? String ?? ""
-            // model.primary
+            // model.primary + fallbacks
             let model = entry["model"] as? [String: Any]
             let modelPrimary = model?["primary"] as? String
+            let modelFallbacks = (model?["fallbacks"] as? [String]) ?? []
             // workspace
             let workspace = entry["workspace"] as? String
             let isDefault = (id == defaultId)
@@ -83,6 +85,7 @@ struct AgentManager {
                 name: name,
                 emoji: emoji,
                 modelPrimary: modelPrimary,
+                modelFallbacks: modelFallbacks,
                 workspacePath: workspace,
                 isDefault: isDefault
             ))
@@ -280,6 +283,7 @@ private struct AgentProfileDTO: Codable {
     var name: String
     var emoji: String
     var modelPrimary: String?
+    var modelFallbacks: [String]
     var workspacePath: String?
     var isDefault: Bool
 }

@@ -265,13 +265,15 @@ final class GatewayHub {
                 guard let id = entry["id"] as? String else { return nil }
                 let name = entry["name"] as? String ?? id
                 let emoji = entry["emoji"] as? String ?? ""
-                let modelPrimary = entry["modelPrimary"] as? String
+                // model 可能是字符串（旧格式）或字典（新格式）
+                let (modelPrimary, modelFallbacks) = Self.parseModelConfig(entry["model"])
                 let workspacePath = entry["workspacePath"] as? String
                 return AgentProfile(
                     id: id,
                     name: name,
                     emoji: emoji,
                     modelPrimary: modelPrimary,
+                    modelFallbacks: modelFallbacks,
                     workspacePath: workspacePath,
                     isDefault: id == defaultId
                 )
@@ -299,6 +301,90 @@ final class GatewayHub {
     func request(username: String, method: String, params: [String: Any]? = nil) async throws -> [String: Any]? {
         guard let client = clients[username] else { throw GatewayClientError.notConnected }
         return try await client.request(method: method, params: params)
+    }
+
+    // MARK: - Agent 管理（RPC）
+
+    /// 通过 Gateway RPC 创建 agent（自动创建 workspace + bootstrap 文件 + IDENTITY.md）
+    /// - Returns: 创建后的 AgentProfile（含服务端 normalize 后的 agentId）
+    func agentsCreate(username: String, name: String, workspace: String, emoji: String? = nil, modelPrimary: String? = nil, modelFallbacks: [String] = []) async throws -> AgentProfile {
+        var params: [String: Any] = ["name": name, "workspace": workspace]
+        if let emoji, !emoji.isEmpty { params["emoji"] = emoji }
+        if let model = modelPrimary, !model.isEmpty {
+            var modelConfig: [String: Any] = ["primary": model]
+            if !modelFallbacks.isEmpty { modelConfig["fallbacks"] = modelFallbacks }
+            params["model"] = modelConfig
+        }
+        appLog("GatewayHub agentsCreate @\(username) name=\(name) workspace=\(workspace)")
+        do {
+            guard let payload = try await request(username: username, method: "agents.create", params: params) else {
+                throw GatewayClientError.requestFailed(code: "empty_response", message: "agents.create 返回空")
+            }
+            let agentId = payload["agentId"] as? String ?? ""
+            let resolvedName = payload["name"] as? String ?? name
+            appLog("GatewayHub agentsCreate @\(username) success → agentId=\(agentId)")
+            return AgentProfile(
+                id: agentId,
+                name: resolvedName,
+                emoji: emoji ?? "",
+                modelPrimary: modelPrimary,
+                modelFallbacks: modelFallbacks,
+                workspacePath: payload["workspace"] as? String,
+                isDefault: false
+            )
+        } catch {
+            appLog("GatewayHub agentsCreate @\(username) failed: \(error.localizedDescription)", level: .error)
+            throw error
+        }
+    }
+
+    /// 通过 Gateway RPC 更新 agent（name/workspace/model/emoji/avatar 任意组合）
+    func agentsUpdate(username: String, agentId: String, name: String? = nil, workspace: String? = nil, emoji: String? = nil, modelPrimary: String? = nil, modelFallbacks: [String]? = nil) async throws {
+        var params: [String: Any] = ["agentId": agentId]
+        if let name, !name.isEmpty { params["name"] = name }
+        if let workspace, !workspace.isEmpty { params["workspace"] = workspace }
+        if let emoji, !emoji.isEmpty { params["emoji"] = emoji }
+        if let primary = modelPrimary {
+            var modelConfig: [String: Any] = ["primary": primary]
+            if let fallbacks = modelFallbacks, !fallbacks.isEmpty {
+                modelConfig["fallbacks"] = fallbacks
+            }
+            params["model"] = modelConfig
+        } else if let fallbacks = modelFallbacks {
+            params["model"] = ["fallbacks": fallbacks]
+        }
+        appLog("GatewayHub agentsUpdate @\(username) agentId=\(agentId) params=\(params.keys.joined(separator: ","))")
+        do {
+            _ = try await request(username: username, method: "agents.update", params: params)
+            appLog("GatewayHub agentsUpdate @\(username) agentId=\(agentId) success")
+        } catch {
+            appLog("GatewayHub agentsUpdate @\(username) agentId=\(agentId) failed: \(error.localizedDescription)", level: .error)
+            throw error
+        }
+    }
+
+    /// 通过 Gateway RPC 删除 agent（移除配置 + 清理 workspace/sessions）
+    func agentsDelete(username: String, agentId: String, deleteFiles: Bool = true) async throws {
+        appLog("GatewayHub agentsDelete @\(username) agentId=\(agentId) deleteFiles=\(deleteFiles)")
+        do {
+            _ = try await request(username: username, method: "agents.delete", params: [
+                "agentId": agentId,
+                "deleteFiles": deleteFiles
+            ])
+            appLog("GatewayHub agentsDelete @\(username) agentId=\(agentId) success")
+        } catch {
+            appLog("GatewayHub agentsDelete @\(username) agentId=\(agentId) failed: \(error.localizedDescription)", level: .error)
+            throw error
+        }
+    }
+
+    /// 通过 Gateway RPC 写入 agent workspace 文件（如 SOUL.md, IDENTITY.md, USER.md）
+    func agentsFileSet(username: String, agentId: String, fileName: String, content: String) async throws {
+        _ = try await request(username: username, method: "agents.files.set", params: [
+            "agentId": agentId,
+            "name": fileName,
+            "content": content
+        ])
     }
 
     /// 查询连接状态（非 UI 用途）
@@ -416,6 +502,22 @@ final class GatewayHub {
     }
 
     // MARK: - 工具
+
+    /// 解析 agent model 配置，兼容旧版字符串格式和新版对象格式
+    /// 旧格式: "model": "claude-3-5-sonnet"  → (primary: "claude-3-5-sonnet", fallbacks: [])
+    /// 新格式: "model": { "primary": "...", "fallbacks": [...] }
+    private static func parseModelConfig(_ raw: Any?) -> (primary: String?, fallbacks: [String]) {
+        guard let raw else { return (nil, []) }
+        if let str = raw as? String {
+            return (str.isEmpty ? nil : str, [])
+        }
+        if let dict = raw as? [String: Any] {
+            let primary = dict["primary"] as? String
+            let fallbacks = (dict["fallbacks"] as? [String]) ?? []
+            return (primary?.isEmpty == true ? nil : primary, fallbacks)
+        }
+        return (nil, [])
+    }
 
     /// openclaw gateway 端口分配规则：18000 + UID（与 GatewayManager.port(for:) 一致）
     static func gatewayPort(for uid: Int) -> Int? {

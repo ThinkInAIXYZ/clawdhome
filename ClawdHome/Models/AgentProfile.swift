@@ -6,6 +6,8 @@ struct AgentProfile: Identifiable, Codable, Hashable {
     var name: String
     var emoji: String
     var modelPrimary: String?
+    /// 备用模型列表（按优先级排序，主模型不可用时依次尝试）
+    var modelFallbacks: [String]
     var workspacePath: String?
     var isDefault: Bool
 
