@@ -7,10 +7,14 @@ import SystemConfiguration
 
 struct InstallManager {
 
-    /// sudo -H 会 reset PATH；openclaw 是 node shebang 脚本，需要显式传 PATH
-    /// 必须优先使用目标用户隔离环境（~/.brew + ~/.npm-global），避免全局 Node/npm 串用。
-    static func sudoNodePath(for username: String) -> String {
-        "PATH=\(ConfigWriter.buildNodePath(username: username))"
+    /// sudo -H 会 reset PATH；npm/openclaw 都依赖用户隔离环境，同时共享下载缓存。
+    static func sudoRuntimeEnvironmentArgs(for username: String) -> [String] {
+        UserEnvContract
+            .orderedRuntimeEnvironment(
+                username: username,
+                nodePath: ConfigWriter.buildNodePath(username: username)
+            )
+            .map { "\($0.0)=\($0.1)" }
     }
 
     /// 用户 npm 全局目录（结构：bin/ lib/node_modules/）
@@ -31,6 +35,8 @@ struct InstallManager {
     static func install(username: String, version: String?, logURL: URL? = nil) throws -> String {
         try ensureNpmBuildToolchainReady()
         try normalizeNpmUserOwnership(username: username)
+        try ensureSharedNpmCacheReady()
+        defer { repairSharedNpmCachePermissions() }
         let npmPath = try findNpmBinary(for: username)
         let packageArg = version.map { "openclaw@\($0)" } ?? "openclaw@latest"
         let prefix = npmGlobalDir(for: username)
@@ -43,12 +49,14 @@ struct InstallManager {
                 helperLog("chownRecursive pre-install \(openclawDirPre) failed for @\(username): \(error.localizedDescription)", level: .warn)
             }
         }
-        let args = ["-u", username, "-H",
-                    "env", sudoNodePath(for: username),
-                    npmPath, "install", "-g", "--prefix", prefix,
-                    "--include=optional",
-                    "--loglevel", "verbose",
-                    packageArg]
+        let args = ["-u", username, "-H", "env"]
+            + sudoRuntimeEnvironmentArgs(for: username)
+            + [
+                npmPath, "install", "-g", "--prefix", prefix,
+                "--include=optional",
+                "--loglevel", "verbose",
+                packageArg,
+            ]
         let output: String
         if let logURL {
             output = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
@@ -81,10 +89,12 @@ struct InstallManager {
             throw InstallError.unsupportedNpmRegistry(registry)
         }
         try normalizeNpmUserOwnership(username: username)
+        try ensureSharedNpmCacheReady()
+        defer { repairSharedNpmCachePermissions() }
         let npmPath = try findNpmBinary(for: username)
-        let args = ["-u", username, "-H",
-                    "env", sudoNodePath(for: username),
-                    npmPath, "config", "set", "registry", option.rawValue, "--location=user"]
+        let args = ["-u", username, "-H", "env"]
+            + sudoRuntimeEnvironmentArgs(for: username)
+            + [npmPath, "config", "set", "registry", option.rawValue, "--location=user"]
         do {
             if let logURL {
                 _ = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
@@ -112,9 +122,11 @@ struct InstallManager {
         guard let npmPath = try? findNpmBinary(for: username) else {
             return NpmRegistryOption.npmOfficial.rawValue
         }
-        let args = ["-u", username, "-H",
-                    "env", sudoNodePath(for: username),
-                    npmPath, "config", "get", "registry", "--location=user"]
+        try? ensureSharedNpmCacheReady()
+        defer { repairSharedNpmCachePermissions() }
+        let args = ["-u", username, "-H", "env"]
+            + sudoRuntimeEnvironmentArgs(for: username)
+            + [npmPath, "config", "get", "registry", "--location=user"]
         let raw = (try? run("/usr/bin/sudo", args: args)) ?? NpmRegistryOption.npmOfficial.rawValue
         if let option = NpmRegistryOption.fromRegistryURL(raw) {
             return option.rawValue
@@ -139,7 +151,12 @@ struct InstallManager {
         //    避免将管理机上的全局安装版本错误地报告为用户已安装版本
         let userBin = "\(npmGlobalBin(for: username))/openclaw"
         if FileManager.default.isExecutableFile(atPath: userBin) {
-            return try? run("/usr/bin/sudo", args: ["-u", username, "-H", "env", sudoNodePath(for: username), userBin, "--version"])
+            return try? run(
+                "/usr/bin/sudo",
+                args: ["-u", username, "-H", "env"]
+                    + sudoRuntimeEnvironmentArgs(for: username)
+                    + [userBin, "--version"]
+            )
         }
         return nil
     }
@@ -223,6 +240,26 @@ struct InstallManager {
             // 确保 owner 对目录有 traverse 权限、对可执行文件有执行权限
             try? FilePermissionHelper.chmodSymbolicRecursive(brewRoot, expr: "u+rwX")
         }
+    }
+
+    private static func ensureSharedNpmCacheReady() throws {
+        let sharedRoot = "/var/lib/clawdhome/cache"
+        let sharedNpmCache = UserEnvContract.npmSharedCacheDir()
+        try FileManager.default.createDirectory(
+            atPath: sharedNpmCache,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        _ = try? FilePermissionHelper.chmod(sharedRoot, mode: "1777")
+        repairSharedNpmCachePermissions()
+    }
+
+    private static func repairSharedNpmCachePermissions() {
+        let sharedNpmCache = UserEnvContract.npmSharedCacheDir()
+        guard FileManager.default.fileExists(atPath: sharedNpmCache) else { return }
+        // npm 的内容寻址缓存会递归建目录；这里统一放宽 cache 树权限，避免首个用户写入后其余用户无法复用。
+        _ = try? FilePermissionHelper.chmodSymbolicRecursive(sharedNpmCache, expr: "a+rwX")
+        _ = try? FilePermissionHelper.chmod(sharedNpmCache, mode: "1777")
     }
 
     private static func isNpmPermissionError(_ error: Error) -> Bool {
@@ -347,10 +384,12 @@ struct InstallManager {
                 fixable: true))
         } else {
             // 2. openclaw --version 能正常输出
-            let versionResult = try? run("/usr/bin/sudo", args: [
-                "-u", username, "-H", "env", sudoNodePath(for: username),
-                openclawBin, "--version"
-            ])
+            let versionResult = try? run(
+                "/usr/bin/sudo",
+                args: ["-u", username, "-H", "env"]
+                    + sudoRuntimeEnvironmentArgs(for: username)
+                    + [openclawBin, "--version"]
+            )
             if versionResult == nil || versionResult!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 issues.append(EnvIssue(
                     id: "openclaw-not-runnable",

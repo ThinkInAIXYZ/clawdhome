@@ -709,6 +709,44 @@ import Foundation
         commitHash: String,
         withReply reply: @escaping (Bool, String?) -> Void
     )
+
+    // MARK: - Hermes Agent 引擎（双引擎支持）
+    // 与 openclaw 并列的另一种 AI 代理运行时，基于 Python 3.11+ venv 安装。
+    // 设计文档：docs/design-hermes-agent-integration.md
+
+    /// 为指定用户安装 Hermes Agent（创建 Python venv + pip/uv install hermes-agent）
+    /// - Parameter version: nil 表示最新版，否则安装指定版本（如 "0.1.0"）
+    /// - 运行时要求：目标用户家目录下或系统存在 Python 3.11+
+    func installHermes(
+        username: String,
+        version: String?,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 查询指定用户已安装的 Hermes 版本（未安装返回空字符串）
+    func getHermesVersion(
+        username: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 以指定用户身份启动 hermes gateway（LaunchDaemon：ai.clawdhome.hermes.<user>）
+    func startHermesGateway(
+        username: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 停止指定用户的 hermes gateway
+    func stopHermesGateway(
+        username: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 查询 hermes gateway 运行状态，返回 (isRunning, pid)
+    /// Hermes 不绑定 HTTP 端口，只能根据 launchd 注册态判断是否在跑
+    func getHermesGatewayStatus(
+        username: String,
+        withReply reply: @escaping (Bool, Int32) -> Void
+    )
 }
 
 /// XPC Mach Service 名称（App 与 Helper 均引用此常量）

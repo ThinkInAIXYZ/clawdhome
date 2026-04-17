@@ -643,6 +643,60 @@ final class HelperClient {
         } catch { return nil }
     }
 
+    // MARK: - Hermes Agent 引擎
+
+    /// 为指定用户安装 Hermes Agent（Python venv + pip/uv）
+    func installHermes(username: String, version: String? = nil) async throws {
+        guard let proxy = installProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.installHermes(username: username, version: version) { ok, msg in
+                done((ok, msg))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "Hermes 安装失败") }
+    }
+
+    /// 查询指定用户已安装的 Hermes 版本，未安装返回 nil
+    func getHermesVersion(username: String) async -> String? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            let v: String = try await xpcCall { done in
+                proxy.getHermesVersion(username: username) { version in done(version) }
+            }
+            return v.isEmpty ? nil : v
+        } catch { return nil }
+    }
+
+    /// 启动 Hermes gateway
+    func startHermesGateway(username: String) async throws {
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.startHermesGateway(username: username) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "Hermes 启动失败") }
+    }
+
+    /// 停止 Hermes gateway
+    func stopHermesGateway(username: String) async throws {
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.stopHermesGateway(username: username) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "Hermes 停止失败") }
+    }
+
+    /// 查询 Hermes gateway 状态
+    func getHermesGatewayStatus(username: String) async -> (running: Bool, pid: Int32) {
+        guard let proxy = controlProxy else { return (false, -1) }
+        do {
+            return try await xpcCall { done in
+                proxy.getHermesGatewayStatus(username: username) { running, pid in
+                    done((running, pid))
+                }
+            }
+        } catch { return (false, -1) }
+    }
+
     // MARK: - 用户环境初始化
 
     private static func hasLocalNodeBinary(username: String) -> Bool {
