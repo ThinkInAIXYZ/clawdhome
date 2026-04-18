@@ -1178,6 +1178,13 @@ final class HelperClient {
     func setConfigDirect(username: String, path: String, value: Any) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
         let valueJSON = try serializeJSONValue(value)
+        try await setConfigDirectJSON(username: username, path: path, valueJSON: valueJSON)
+    }
+
+    /// 直接写入 ~/.openclaw/openclaw.json 指定 dot-path（不启动 CLI）
+    /// valueJSON 必须是合法 JSON（可为 fragment）
+    func setConfigDirectJSON(username: String, path: String, valueJSON: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = try await xpcCall { done in
             proxy.setConfigDirect(username: username, path: path, valueJSON: valueJSON) { ok, msg in
                 done((ok, msg))
@@ -1350,6 +1357,62 @@ final class HelperClient {
             appLog("[feishu] request timeout @\(username)", level: .error)
             return (false, error.localizedDescription)
         }
+    }
+
+    // MARK: - OpenClaw 插件管理 (v2)
+
+    /// 安装 openclaw plugin（plugins install <packageSpec>），仅插件安装，不执行 bot 绑定
+    func installOpenclawPlugin(username: String, packageSpec: String) async -> (Bool, String?) {
+        guard let proxy = installProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        do {
+            return try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+                proxy.installOpenclawPlugin(username: username, packageSpec: packageSpec) { ok, err in
+                    done((ok, err))
+                }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 列出已安装的 openclaw plugins，返回 JSON 编码的 [String]
+    func listOpenclawPlugins(username: String) async -> (String?, String?) {
+        guard let proxy = controlProxy else { return (nil, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        do {
+            return try await xpcCall { done in
+                proxy.listOpenclawPlugins(username: username) { json, err in done((json, err)) }
+            }
+        } catch { return (nil, error.localizedDescription) }
+    }
+
+    /// 移除 openclaw plugin
+    func removeOpenclawPlugin(username: String, packageSpec: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        do {
+            return try await xpcCall { done in
+                proxy.removeOpenclawPlugin(username: username, packageSpec: packageSpec) { ok, err in done((ok, err)) }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 执行 openclaw channels login（标准通道登录，微信/WhatsApp/Tlon）
+    /// args 示例：["--channel", "openclaw-weixin", "--account", "wechat-work"]
+    func runChannelLogin(username: String, args: [String]) async -> (Bool, String) {
+        guard let proxy = installProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        let argsJSON = (try? String(data: JSONEncoder().encode(args), encoding: .utf8)) ?? "[]"
+        do {
+            return try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+                proxy.runChannelLogin(username: username, argsJSON: argsJSON) { ok, out in done((ok, out)) }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 批量写入 ShrimpConfigV2 JSON 到指定用户的 openclaw.json（v2）
+    func applyV2Config(username: String, configJSON: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        do {
+            return try await xpcCall { done in
+                proxy.applyV2Config(username: username, configJSON: configJSON) { ok, err in done((ok, err)) }
+            }
+        } catch { return (false, error.localizedDescription) }
     }
 
     /// 启动通用维护终端会话（Helper 侧 PTY）
