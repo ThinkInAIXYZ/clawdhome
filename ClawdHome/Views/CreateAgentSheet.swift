@@ -33,9 +33,11 @@ struct CreateAgentSheet: View {
     /// OpenClaw 服务端保留的 agentId（见 openclaw/src/routing/session-key.ts DEFAULT_AGENT_ID）
     private static let reservedAgentIds: Set<String> = ["main"]
 
-    /// Agent ID 规则：小写字母/数字/下划线/短横线，1-32 位；不在保留字黑名单
+    /// Agent ID 规则与服务端 normalizeAgentId 对齐：
+    /// 小写字母/数字/下划线/短横线，首字符必须是字母或数字，1-64 位
+    /// 参考：openclaw/src/routing/session-key.ts VALID_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i
     private static func validateAgentId(_ id: String) -> Bool {
-        guard id.range(of: #"^[a-z][a-z0-9_-]{0,31}$"#, options: .regularExpression) != nil else { return false }
+        guard id.range(of: #"^[a-z0-9][a-z0-9_-]{0,63}$"#, options: .regularExpression) != nil else { return false }
         if reservedAgentIds.contains(id) { return false }
         return true
     }
@@ -48,8 +50,8 @@ struct CreateAgentSheet: View {
         if reservedAgentIds.contains(id) {
             return L10n.k("agent.create.validation.id_reserved", fallback: "ID \"\(id)\" 是系统保留字，请换一个")
         }
-        if id.range(of: #"^[a-z][a-z0-9_-]{0,31}$"#, options: .regularExpression) == nil {
-            return L10n.k("agent.create.validation.id_format", fallback: "仅限小写字母开头，字母/数字/下划线/短横线，1-32 位")
+        if id.range(of: #"^[a-z0-9][a-z0-9_-]{0,63}$"#, options: .regularExpression) == nil {
+            return L10n.k("agent.create.validation.id_format", fallback: "仅限字母或数字开头，小写字母/数字/下划线/短横线，1-64 位")
         }
         return nil
     }
@@ -60,32 +62,14 @@ struct CreateAgentSheet: View {
 
     private var effectiveAgentId: String {
         if !agentId.isEmpty { return agentId }
-        // 从名称生成 ID：取拼音/ASCII 字符，非 ASCII 字符用下划线替代
-        let base = name.lowercased()
-            .replacingOccurrences(of: " ", with: "_")
-            .unicodeScalars
-            .map { CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-" ? String($0) : "" }
-            .joined()
-        // 如果全是非 ASCII（如纯中文），用 "agent" 前缀 + 时间戳后 4 位
-        if base.isEmpty || base.first?.isLetter != true {
-            return "agent_\(base.isEmpty ? String(Int(Date().timeIntervalSince1970) % 10000) : base)"
-        }
-        return String(base.prefix(32))
+        return ASCIIIdentifier.agentID(from: name, fallbackPrefix: "agent", maxLength: 64)
     }
 
     /// DNA 导入时的 agent ID
     private var effectiveDNAAgentId: String {
         if !dnaAgentId.isEmpty { return dnaAgentId }
         guard let dna = selectedDNA else { return "" }
-        let base = dna.id.lowercased()
-            .replacingOccurrences(of: " ", with: "_")
-            .unicodeScalars
-            .map { CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-" ? String($0) : "" }
-            .joined()
-        if base.isEmpty || base.first?.isLetter != true {
-            return "agent_\(base.isEmpty ? String(Int(Date().timeIntervalSince1970) % 10000) : base)"
-        }
-        return String(base.prefix(32))
+        return ASCIIIdentifier.agentID(from: dna.id, fallbackPrefix: "agent", maxLength: 64)
     }
 
     private var dnaAgentIdValid: Bool {
@@ -377,12 +361,7 @@ struct CreateAgentSheet: View {
             marketCoordinator.onAdoptAgent = { dna in
                 self.selectedDNA = dna
                 // 根据 DNA 预填 agent ID
-                let base = dna.id.lowercased()
-                    .replacingOccurrences(of: " ", with: "_")
-                    .unicodeScalars
-                    .map { CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-" ? String($0) : "" }
-                    .joined()
-                self.dnaAgentId = String(base.prefix(32))
+                self.dnaAgentId = ASCIIIdentifier.agentID(from: dna.id, fallbackPrefix: "agent", maxLength: 32)
                 withAnimation(.easeInOut(duration: 0.2)) {
                     step = .confirmDNA
                 }

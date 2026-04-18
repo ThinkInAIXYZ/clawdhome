@@ -1,5 +1,7 @@
 // ClawdHome/Views/AdoptTeamSheet.swift
-// 领养团队弹窗：确认 Shrimp 名 → 创建 Shrimp → 写入待导入 agent 列表 → 进初始化向导
+// 领养团队弹窗：确认 Shrimp 名 → 创建 Shrimp → 暂存团队草稿 → 进初始化向导
+// ⚠️ DEPRECATED (v2): 团队初始化入口已集成到 ShrimpInitWizardV2（模板选择步骤）。
+// 本文件保留在 git 历史中，不删除。
 
 import SwiftUI
 
@@ -14,20 +16,17 @@ struct AdoptTeamSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var shrimpName: String = ""
+    @State private var usernameInput: String = ""
     @State private var isCreating = false
     @State private var error: String?
 
-    // username 从 shrimpName 自动派生
+    // 实例 ID 优先使用可编辑输入；为空时回退到 shrimpName 自动派生
     private var derivedUsername: String {
-        let base = shrimpName.lowercased()
-            .replacingOccurrences(of: " ", with: "_")
-            .unicodeScalars
-            .map { CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-" ? String($0) : "" }
-            .joined()
-        if base.isEmpty || base.first?.isLetter != true {
-            return "team_\(Int(Date().timeIntervalSince1970) % 10000)"
+        let preferred = usernameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !preferred.isEmpty {
+            return ASCIIIdentifier.username(from: preferred, fallbackPrefix: "team", maxLength: 30)
         }
-        return String(base.prefix(30))
+        return ASCIIIdentifier.username(from: shrimpName, fallbackPrefix: "team", maxLength: 30)
     }
 
     private var usernameConflict: Bool {
@@ -69,7 +68,8 @@ struct AdoptTeamSheet: View {
                         HStack(spacing: 8) {
                             Text(member.emoji)
                                 .font(.system(size: 20))
-                            VStack(alignment: .leading, spacing: 1) {
+                                .frame(width: 28, alignment: .center)
+                            VStack(alignment: .leading, spacing: 2) {
                                 Text(member.name)
                                     .font(.caption)
                                     .fontWeight(.semibold)
@@ -80,12 +80,12 @@ struct AdoptTeamSheet: View {
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
                                     .truncationMode(.tail)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
-                            .frame(maxHeight: .infinity, alignment: .top)
-                            Spacer(minLength: 0)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(8)
-                        .frame(maxHeight: .infinity, alignment: .top)
+                        .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading)
                         .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
                     }
                 }
@@ -105,6 +105,16 @@ struct AdoptTeamSheet: View {
 
                 TextField(L10n.k("adopt_team.shrimp_name.placeholder", fallback: "例如：我的创业班底"), text: $shrimpName)
                     .textFieldStyle(.roundedBorder)
+
+                Text(L10n.k("adopt_team.instance_id", fallback: "实例 ID（@ID，可修改）"))
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 6)
+
+                TextField(L10n.k("adopt_team.instance_id.placeholder", fallback: "例如：startup_core_team"), text: $usernameInput)
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
 
                 HStack(spacing: 4) {
                     Text("@\(derivedUsername)")
@@ -151,7 +161,12 @@ struct AdoptTeamSheet: View {
         }
         .padding(24)
         .onAppear {
-            shrimpName = teamDNA.suggestedShrimpName
+            if shrimpName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                shrimpName = teamDNA.teamName
+            }
+            if usernameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                usernameInput = teamDNA.suggestedInstanceID
+            }
         }
     }
 
@@ -161,7 +176,7 @@ struct AdoptTeamSheet: View {
         isCreating = true
         defer { isCreating = false }
 
-        let fullName = shrimpName.trimmingCharacters(in: .whitespaces)
+        let fullName = shrimpName.trimmingCharacters(in: .whitespacesAndNewlines)
         let username = derivedUsername
 
         guard !fullName.isEmpty else {
@@ -195,18 +210,7 @@ struct AdoptTeamSheet: View {
             try? await helperClient.createDirectory(username: username, relativePath: workspaceDir)
             try? await helperClient.applySavedProxySettingsIfAny(username: username)
 
-            // 4. 写入 pending_team_agents.json，供 gateway 就绪后批量导入
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            if let pendingData = try? encoder.encode(teamDNA.members) {
-                try? await helperClient.writeFile(
-                    username: username,
-                    relativePath: "\(workspaceDir)/pending_team_agents.json",
-                    data: pendingData
-                )
-            }
-
-            // 5. 注入 TOOLS.md
+            // 4. 注入 TOOLS.md
             let toolsPath = "\(workspaceDir)/TOOLS.md"
             let toolsExists = (try? await helperClient.readFile(username: username, relativePath: toolsPath)) != nil
             if !toolsExists {
@@ -217,10 +221,13 @@ struct AdoptTeamSheet: View {
                 )
             }
 
-            // 6. 建立 shared/ 符号链接
+            // 5. 建立 shared/ 符号链接
             try? await helperClient.setupVault(username: username)
 
-            // 7. 刷新列表并进初始化向导
+            // 6. 暂存团队草稿（由 v2 初始化向导一次性消费）
+            pool.stageInitTeam(teamDNA, for: username)
+
+            // 7. 刷新列表并进入初始化向导
             pool.loadUsers()
             pool.setDescription(teamDNA.teamName, for: username)
             pool.markNeedsOnboarding(username: username)

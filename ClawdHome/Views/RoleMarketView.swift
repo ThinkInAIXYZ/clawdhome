@@ -19,15 +19,15 @@ struct AgentDNA: Codable, Identifiable {
     let fileIdentity: String?   // 身份设定 (IDENTITY)
     let fileUser: String?       // 我的画像 (USER)
     // OS 用户名建议值（由模板预填充，用户可修改）
-    let suggestedUsername: String?
+    let suggestedAgentID: String?
 }
 
 /// 团队 DNA：由 roles.html 通过 adoptTeam bridge 消息发送过来
-struct TeamDNA: Identifiable {
+struct TeamDNA: Codable, Identifiable {
     let id: String
     let teamName: String
     let teamEmoji: String
-    let suggestedShrimpName: String
+    let suggestedInstanceID: String
     let members: [AgentDNA]
 }
 
@@ -163,7 +163,9 @@ final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigatio
                 appLog("[Bridge] Failed to parse TeamDNA: \(body)", level: .warn)
                 return
             }
-            let shrimpName = body["suggestedShrimpName"] as? String ?? teamName
+            let teamID = (body["suggestedInstanceID"] as? String)
+                ?? (body["suggestedTeamID"] as? String)
+                ?? teamName
             let members: [AgentDNA] = membersRaw.compactMap { dict in
                 guard let data = try? JSONSerialization.data(withJSONObject: dict),
                       let dna = try? JSONDecoder().decode(AgentDNA.self, from: data)
@@ -174,7 +176,7 @@ final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigatio
                 id: teamId,
                 teamName: teamName,
                 teamEmoji: teamEmoji,
-                suggestedShrimpName: shrimpName,
+                suggestedInstanceID: teamID,
                 members: members
             )
             appLog("[Bridge] Received TeamDNA: \(teamName) (\(members.count) members)")
@@ -233,7 +235,7 @@ private func javaScriptStringLiteral(_ value: String) -> String {
     return String(encoded.dropFirst().dropLast())
 }
 
-private func makeRoleMarketConfiguration(coordinator: RoleMarketCoordinator, localeIdentifier: String) -> WKWebViewConfiguration {
+func makeRoleMarketConfiguration(coordinator: RoleMarketCoordinator, localeIdentifier: String) -> WKWebViewConfiguration {
     let config = WKWebViewConfiguration()
     let localeLiteral = javaScriptStringLiteral(localeIdentifier)
     let bootstrap = "window.__clawdhomeLocale = \(localeLiteral);"
