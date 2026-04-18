@@ -98,9 +98,13 @@ private func directChildPIDs(of parentPID: Int32) -> [Int32] {
 }
 
 /// 同步运行外部命令，返回 stdout 字符串
+/// - Parameters:
+///   - executable: 可执行文件路径
+///   - args: 参数数组
+///   - timeout: 可选超时秒数；超时会终止进程树并抛出 `ShellError.timeout`
 /// - Throws: ShellError.nonZeroExit 若退出码非 0
 @discardableResult
-func run(_ executable: String, args: [String] = []) throws -> String {
+func run(_ executable: String, args: [String] = [], timeout: TimeInterval? = nil) throws -> String {
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: executable)
     proc.arguments = args
@@ -110,15 +114,31 @@ func run(_ executable: String, args: [String] = []) throws -> String {
     proc.standardOutput = stdout
     proc.standardError = stderr
 
+    let command = ([executable] + args).joined(separator: " ")
+    let completion = DispatchSemaphore(value: 0)
+    proc.terminationHandler = { _ in
+        completion.signal()
+    }
+
     try proc.run()
-    proc.waitUntilExit()
+    if let timeout, timeout > 0 {
+        if completion.wait(timeout: .now() + timeout) == .timedOut {
+            if proc.isRunning {
+                terminateProcessTree(proc.processIdentifier)
+            }
+            _ = completion.wait(timeout: .now() + 0.5)
+            throw ShellError.timeout(command: command, seconds: timeout)
+        }
+    } else {
+        completion.wait()
+    }
 
     let out = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 
     guard proc.terminationStatus == 0 else {
         throw ShellError.nonZeroExit(
-            command: ([executable] + args).joined(separator: " "),
+            command: command,
             status: proc.terminationStatus,
             stderr: err.trimmingCharacters(in: .whitespacesAndNewlines)
         )
@@ -234,6 +254,7 @@ func dscl(auth: DirectoryAdminAuth?, _ args: [String]) throws -> String {
 enum ShellError: LocalizedError {
     case nonZeroExit(command: String, status: Int32, stderr: String)
     case processAlreadyRunning(logPath: String)
+    case timeout(command: String, seconds: TimeInterval)
 
     var errorDescription: String? {
         switch self {
@@ -241,6 +262,8 @@ enum ShellError: LocalizedError {
             return "命令失败 (exit \(status)): \(cmd)\n\(stderr)"
         case .processAlreadyRunning:
             return "已有初始化命令正在运行，请等待当前步骤完成或先终止初始化"
+        case .timeout(let cmd, let seconds):
+            return "命令超时 (\(String(format: "%.1f", seconds))s): \(cmd)"
         }
     }
 }

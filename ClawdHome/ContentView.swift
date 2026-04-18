@@ -7,6 +7,7 @@ enum NavDestination: Hashable {
     case dashboard
     case clawPool
     case vaultFiles
+    case notes
     case network
     case aiLab
     case models
@@ -41,6 +42,8 @@ struct ContentView: View {
                             .tag(NavDestination.clawPool)
                         Label(L10n.k("auto.content_view.vault_files", fallback: "文件共享"), systemImage: "folder.badge.person.crop")
                             .tag(NavDestination.vaultFiles)
+                        Label(L10n.k("content_view.notes_center", fallback: "笔记"), systemImage: "book.closed")
+                            .tag(NavDestination.notes)
                     }
                     Section(L10n.k("auto.content_view.services", fallback: "服务")) {
                         Label { Text(L10n.k("auto.content_view.role_market", fallback: "角色中心")) } icon: { Text("🎭") }
@@ -119,6 +122,10 @@ struct ContentView: View {
                     .environment(helperClient)
                 case .vaultFiles:
                     VaultFilesView()
+                        .environment(helperClient)
+                        .environment(pool)
+                case .notes:
+                    NotesCenterView()
                         .environment(helperClient)
                         .environment(pool)
                 case .network:

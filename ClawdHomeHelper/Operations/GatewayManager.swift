@@ -311,9 +311,17 @@ struct GatewayManager {
     /// - Returns: 占用者描述（如 "test5(pid=12345)"），未占用返回 nil
     static func portOccupant(port: Int, ignorePIDs: Set<Int32> = []) -> String? {
         // lsof -iTCP:<port> -sTCP:LISTEN -nP -Fp -Fu
-        guard let output = try? run("/usr/sbin/lsof", args: [
-            "-iTCP:\(port)", "-sTCP:LISTEN", "-nP", "-Fp", "-Fu"
-        ]) else { return nil }
+        let output: String
+        do {
+            output = try run(
+                "/usr/sbin/lsof",
+                args: ["-iTCP:\(port)", "-sTCP:LISTEN", "-nP", "-Fp", "-Fu"],
+                timeout: 2.5
+            )
+        } catch {
+            helperLog("[GatewayManager] START_WARN: lsof 端口检查失败 port=\(port): \(error.localizedDescription)", level: .warn)
+            return nil
+        }
 
         // 解析 lsof 输出：p<pid>\nu<user>（可能有多组）
         var currentPID: Int32?

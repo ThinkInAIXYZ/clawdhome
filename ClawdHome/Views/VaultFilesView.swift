@@ -123,9 +123,6 @@ struct VaultFilesView: View {
         openInFinder(path: publicPath)
     }
 
-    /// 共享文件夹指引的标记，用于判断 TOOLS.md 中是否已包含
-    private static let sharedFolderMarker = "~/clawdhome_shared/"
-
     private let logger = AppLogger.shared
 
     /// 为所有老虾补全 TOOLS.md 和 vault 目录（后台静默执行）
@@ -139,19 +136,15 @@ struct VaultFilesView: View {
             let existingData = try? await helperClient.readFile(username: user.username, relativePath: toolsRelPath)
             let existingContent = existingData.flatMap { String(data: $0, encoding: .utf8) } ?? ""
 
-            if !existingContent.contains(Self.sharedFolderMarker) {
-                logger.log("[文件共享] @\(user.username) TOOLS.md 缺少共享文件夹指引，追加写入")
-                // 不存在或不含共享文件夹指引 → 追加
-                let newContent = existingContent.isEmpty
-                    ? UserInitWizardView.defaultToolsContent
-                    : existingContent + "\n\n" + UserInitWizardView.defaultToolsContent
+            if let mergedToolsContent = LLMWikiWorkspaceGuidance.mergedToolsContent(existing: existingContent) {
+                logger.log("[文件共享] @\(user.username) TOOLS.md 缺少共享文件夹或 LLM Wiki skill 指引，追加写入")
                 try? await helperClient.writeFile(
                     username: user.username,
                     relativePath: toolsRelPath,
-                    data: newContent.data(using: .utf8) ?? Data()
+                    data: mergedToolsContent.data(using: .utf8) ?? Data()
                 )
                 try? await helperClient.initPersonaGitRepo(username: user.username)
-                try? await helperClient.commitPersonaFile(username: user.username, filename: "TOOLS.md", message: "Add shared folder guidance")
+                try? await helperClient.commitPersonaFile(username: user.username, filename: "TOOLS.md", message: "Update workspace guidance")
                 logger.log("[文件共享] @\(user.username) TOOLS.md 已更新并提交")
             }
 

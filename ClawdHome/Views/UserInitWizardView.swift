@@ -1968,27 +1968,8 @@ struct UserInitWizardView: View {
         await persistState()
     }
 
-    /// 默认 TOOLS.md 内容：告知虾共享文件夹的存在和使用规范
-    static let defaultToolsContent = """
-    ## 共享文件夹
-
-    你有两个文件共享空间，可通过以下路径访问：
-
-    ### 专属文件夹（私有）
-    - 路径：`~/clawdhome_shared/private/`
-    - 权限：仅你和管理员可访问，其他虾不可见
-    - 用途：所有工作产出物、生成的文件、导出的数据都应优先存放在此目录
-
-    ### 公共文件夹（共享）
-    - 路径：`~/clawdhome_shared/public/`
-    - 权限：所有虾和管理员共享
-    - 用途：读写通用资源、共享文件、公共数据集
-
-    ### 使用规范
-    - 当用户要求保存文件、导出结果、生成报告时，写入 `~/clawdhome_shared/private/`
-    - 需要引用公共资源时，从 `~/clawdhome_shared/public/` 读取
-    - 不要将敏感数据写入公共文件夹
-    """
+    /// 默认 TOOLS.md 内容：告知虾共享文件夹规则和 LLM Wiki skill 用法
+    static let defaultToolsContent = LLMWikiWorkspaceGuidance.defaultToolsContent
 
     private func saveRoleAndContinue() async {
         isSavingRole = true
@@ -2007,23 +1988,37 @@ struct UserInitWizardView: View {
                 try await helperClient.writeFile(username: user.username, relativePath: "\(workspaceDir)/USER.md", data: roleUser.data(using: .utf8) ?? Data())
             }
 
-            // 注入 TOOLS.md：告知虾共享文件夹的存在和用途（仅在文件不存在时写入，避免覆盖用户自定义内容）
+            // 注入 TOOLS.md：合并共享文件夹规则和 LLM Wiki skill 用法，不覆盖已有自定义内容
             let toolsPath = "\(workspaceDir)/TOOLS.md"
-            let toolsExists = (try? await helperClient.readFile(username: user.username, relativePath: toolsPath)) != nil
-            if !toolsExists {
-                let toolsContent = Self.defaultToolsContent
-                try await helperClient.writeFile(username: user.username, relativePath: toolsPath, data: toolsContent.data(using: .utf8) ?? Data())
+            let existingToolsData = try? await helperClient.readFile(username: user.username, relativePath: toolsPath)
+            let existingToolsContent = existingToolsData.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            let toolsExists = existingToolsData != nil
+            if let mergedToolsContent = LLMWikiWorkspaceGuidance.mergedToolsContent(existing: existingToolsContent) {
+                try await helperClient.writeFile(
+                    username: user.username,
+                    relativePath: toolsPath,
+                    data: mergedToolsContent.data(using: .utf8) ?? Data()
+                )
             }
 
             // workspace 已创建，触发 setupVault 在 workspace 中建立 shared/ 符号链接
             try? await helperClient.setupVault(username: user.username)
+            try? await helperClient.setupLlmWikiNotes(username: user.username)
+            try? await helperClient.repairLlmWikiProject()
+            try? await helperClient.repairLlmWikiMapping(username: user.username)
+            try? await helperClient.repairBundledLlmWikiSkill(username: user.username)
 
             // Try init git repo silently, won't block if fails
             try? await helperClient.initPersonaGitRepo(username: user.username)
             if !roleSoul.isEmpty { try? await helperClient.commitPersonaFile(username: user.username, filename: "SOUL.md", message: "Initial commit") }
             if !roleIdentity.isEmpty { try? await helperClient.commitPersonaFile(username: user.username, filename: "IDENTITY.md", message: "Initial commit") }
             if !roleUser.isEmpty { try? await helperClient.commitPersonaFile(username: user.username, filename: "USER.md", message: "Initial commit") }
-            if !toolsExists { try? await helperClient.commitPersonaFile(username: user.username, filename: "TOOLS.md", message: "Initial commit") }
+            if let mergedToolsContent = LLMWikiWorkspaceGuidance.mergedToolsContent(existing: existingToolsContent) {
+                let commitMessage = toolsExists ? "Update workspace guidance" : "Initial commit"
+                if !mergedToolsContent.isEmpty {
+                    try? await helperClient.commitPersonaFile(username: user.username, filename: "TOOLS.md", message: commitMessage)
+                }
+            }
 
             statuses[InitStep.injectRole.rawValue] = .done
             currentStep = .configureModel

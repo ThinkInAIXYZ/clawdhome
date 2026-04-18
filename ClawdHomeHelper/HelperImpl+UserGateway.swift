@@ -20,6 +20,10 @@ extension ClawdHomeHelperImpl {
             // 初始化安全文件夹（非阻塞：失败仅记录日志，可通过 setupVault 重试）
             do { try VaultManager.setupVault(username: username) }
             catch { helperLog("Vault 自动初始化失败 @\(username): \(error.localizedDescription)", level: .warn) }
+            do { try LlmWikiManager.setupLlmWikiNotes(username: username) }
+            catch { helperLog("LLM Wiki notes 自动初始化失败 @\(username): \(error.localizedDescription)", level: .warn) }
+            do { try LlmWikiManager.repairMapping(username: username) }
+            catch { helperLog("LLM Wiki mapping 自动初始化失败 @\(username): \(error.localizedDescription)", level: .warn) }
             // 新建虾默认关闭用户级自启：初始化完成后由用户手动启动，避免后台自动拉起。
             let autostartDisabledPath = ClawdHomeHelperImpl.userAutostartDisabledPath(username: username)
             try? FileManager.default.createDirectory(
@@ -99,6 +103,8 @@ extension ClawdHomeHelperImpl {
         helperLog("Vault 初始化 @\(username)")
         do {
             try VaultManager.setupVault(username: username)
+            try LlmWikiManager.setupLlmWikiNotes(username: username)
+            try LlmWikiManager.repairMapping(username: username)
             reply(true, nil)
         } catch {
             helperLog("Vault 初始化失败 @\(username): \(error.localizedDescription)", level: .error)
