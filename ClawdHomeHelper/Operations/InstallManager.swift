@@ -49,10 +49,12 @@ struct InstallManager {
                 helperLog("chownRecursive pre-install \(openclawDirPre) failed for @\(username): \(error.localizedDescription)", level: .warn)
             }
         }
+        let npmCache = UserEnvContract.npmSharedCacheDir()
         let args = ["-u", username, "-H", "env"]
             + sudoRuntimeEnvironmentArgs(for: username)
             + [
                 npmPath, "install", "-g", "--prefix", prefix,
+                "--cache", npmCache,
                 "--include=optional",
                 "--loglevel", "verbose",
                 packageArg,

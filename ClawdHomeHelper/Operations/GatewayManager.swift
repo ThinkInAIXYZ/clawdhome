@@ -136,7 +136,7 @@ struct GatewayManager {
                 }
                 Thread.sleep(forTimeInterval: 0.5)
                 try writePlist(newPlist, to: plistPath)
-                try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
+                try bootstrapSystem(label: label, plistPath: plistPath)
             } else if existingPlist != newPlist {
                 helperLog("[GatewayManager] START_STEP: plist 变更，bootout 后重新 bootstrap @\(username)")
                 if (try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])) == nil {
@@ -144,7 +144,7 @@ struct GatewayManager {
                 }
                 Thread.sleep(forTimeInterval: 0.5)
                 try writePlist(newPlist, to: plistPath)
-                try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
+                try bootstrapSystem(label: label, plistPath: plistPath)
             } else {
                 helperLog("[GatewayManager] START_STEP: plist 未变，kickstart 重启 @\(username)")
                 if (try? run("/bin/launchctl", args: ["kickstart", "system/\(label)"])) == nil {
@@ -154,7 +154,7 @@ struct GatewayManager {
         } else {
             helperLog("[GatewayManager] START_STEP: 首次注册，bootstrap @\(username)")
             try writePlist(newPlist, to: plistPath)
-            try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
+            try bootstrapSystem(label: label, plistPath: plistPath)
         }
 
         guard let startedPID = waitForGatewayRunning(username: username, uid: uid, timeout: 8) else {
@@ -518,6 +518,40 @@ struct GatewayManager {
             .replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "\"", with: "&quot;")
             .replacingOccurrences(of: "'", with: "&apos;")
+    }
+
+    private static func bootstrapSystem(label: String, plistPath: String) throws {
+        var lastError: Error?
+        for attempt in 1...3 {
+            do {
+                try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
+                return
+            } catch {
+                lastError = error
+                guard shouldRetryBootstrap(error), attempt < 3 else { throw error }
+
+                let lintResult = (try? run("/usr/bin/plutil", args: ["-lint", plistPath])) ?? "(plutil failed)"
+                let printResult = (try? run("/bin/launchctl", args: ["print", "system/\(label)"])) ?? "(service not found)"
+                helperLog(
+                    "[GatewayManager] START_WARN: bootstrap attempt \(attempt)/3 失败，准备重试 label=\(label) plist=\(plistPath) lint=\(clampLog(lintResult)) print=\(clampLog(printResult))",
+                    level: .warn
+                )
+
+                _ = try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])
+                Thread.sleep(forTimeInterval: 0.5 * Double(attempt))
+            }
+        }
+        if let lastError { throw lastError }
+    }
+
+    private static func shouldRetryBootstrap(_ error: Error) -> Bool {
+        guard case let ShellError.nonZeroExit(command, status, _) = error else { return false }
+        return status == 5 && command.contains("/bin/launchctl bootstrap system ")
+    }
+
+    private static func clampLog(_ text: String, max: Int = 240) -> String {
+        guard text.count > max else { return text }
+        return String(text.prefix(max)) + "...(truncated)"
     }
 
     /// openclaw CLI 可能包含 ANSI 控制码或包裹文本，这里做鲁棒解析。

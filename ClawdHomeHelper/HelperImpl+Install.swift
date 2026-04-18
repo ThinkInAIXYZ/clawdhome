@@ -145,7 +145,7 @@ extension ClawdHomeHelperImpl {
     // MARK: 用户环境初始化
 
     /// 初始化日志路径，world-readable，供 app 实时读取
-    private func initLogURL(username: String) -> URL {
+    func initLogURL(username: String) -> URL {
         let path = "/tmp/clawdhome-init-\(username).log"
         // 确保文件存在且 world-readable（Helper 以 root 运行）
         if !FileManager.default.fileExists(atPath: path) {
