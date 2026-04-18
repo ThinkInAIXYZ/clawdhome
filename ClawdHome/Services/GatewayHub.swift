@@ -236,15 +236,26 @@ final class GatewayHub {
                 guard let id = entry["id"] as? String,
                       let provider = entry["provider"] as? String else { continue }
                 let name = entry["name"] as? String ?? id
+                // gateway 返回的 id 不含 provider 前缀，拼为 "provider/id" 与 builtInModelGroups 格式一致
+                let qualifiedId = id.contains("/") ? id : "\(provider)/\(id)"
+                let contextWindow = entry["contextWindow"] as? Int
+                let reasoning = entry["reasoning"] as? Bool
                 if groupMap[provider] == nil {
                     groupMap[provider] = []
                     order.append(provider)
                 }
-                groupMap[provider]!.append(ModelEntry(id: id, label: name))
+                var modelEntry = ModelEntry(id: qualifiedId, label: name)
+                if let contextWindow { modelEntry.contextWindow = contextWindow }
+                if let reasoning { modelEntry.reasoning = reasoning }
+                groupMap[provider]!.append(modelEntry)
             }
             let groups = order.compactMap { key -> ModelGroup? in
                 guard let models = groupMap[key] else { return nil }
-                return ModelGroup(id: key, provider: key, models: models)
+                // 优先使用 builtInModelGroups / supportedProviderKeys 的友好名，否则直接用 provider id
+                let displayName = builtInModelGroups.first(where: { $0.id == key })?.provider
+                    ?? supportedProviderKeys.first(where: { $0.id == key })?.displayName
+                    ?? key
+                return ModelGroup(id: key, provider: displayName, models: models)
             }
             return groups.isEmpty ? nil : groups
         } catch {
