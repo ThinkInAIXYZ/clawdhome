@@ -437,7 +437,7 @@ struct RoleMarketView: View {
                     let toolsPath = "\(workspaceDir)/TOOLS.md"
                     let toolsExists = (try? await helperClient.readFile(username: normalizedUsername, relativePath: toolsPath)) != nil
                     if !toolsExists {
-                        try? await helperClient.writeFile(username: normalizedUsername, relativePath: toolsPath, data: UserInitWizardView.defaultToolsContent.data(using: .utf8) ?? Data())
+                        try? await helperClient.writeFile(username: normalizedUsername, relativePath: toolsPath, data: defaultToolsContent.data(using: .utf8) ?? Data())
                     }
 
                     // workspace 已创建，触发 setupVault 在 workspace 中建立 shared/ 符号链接

@@ -217,7 +217,7 @@ struct AdoptTeamSheet: View {
                 try? await helperClient.writeFile(
                     username: username,
                     relativePath: toolsPath,
-                    data: UserInitWizardView.defaultToolsContent.data(using: .utf8) ?? Data()
+                    data: defaultToolsContent.data(using: .utf8) ?? Data()
                 )
             }
 
