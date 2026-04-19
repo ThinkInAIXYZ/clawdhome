@@ -2,13 +2,6 @@
 
 import SwiftUI
 
-// MARK: - 删除进度阶段
-
-enum DeleteStep {
-    case deleting
-    case done
-}
-
 // MARK: - 删除家目录选项
 
 enum DeleteHomeOption: Hashable {
@@ -23,13 +16,11 @@ struct DeleteUserSheet: View {
     let adminUser: String
     @Binding var option: DeleteHomeOption
     @Binding var adminPassword: String
-    let success: Bool
     @State private var showAdminPassword = false
     @FocusState private var isAdminPasswordFocused: Bool
     let isDeleting: Bool
     let error: String?
     let onConfirm: () -> Void
-    let onCloseSuccess: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
@@ -54,18 +45,6 @@ struct DeleteUserSheet: View {
                 .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
             }
 
-            if success {
-                HStack(alignment: .center, spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                    Text(L10n.k("views.user_detail_view.delete_success_closing", fallback: "删除成功，即将关闭…"))
-                        .font(.subheadline)
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
-            }
-
             if isDeleting {
                 HStack(alignment: .top, spacing: 8) {
                     ProgressView()
@@ -84,8 +63,7 @@ struct DeleteUserSheet: View {
                 .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
             }
 
-            if !success {
-                // 选项
+            // 选项
                 VStack(alignment: .leading, spacing: 0) {
                     optionRow(
                         value: .keepHome,
@@ -168,21 +146,11 @@ struct DeleteUserSheet: View {
                         .keyboardShortcut(.defaultAction)
                         .disabled(adminPassword.isEmpty || isDeleting)
                 }
-            } else {
-                HStack {
-                    Spacer()
-                    Button(L10n.k("user.detail.auto.close", fallback: "关闭"), action: onCloseSuccess)
-                        .keyboardShortcut(.defaultAction)
-                }
-            }
         }
         .padding(24)
         .frame(width: 440)
         .onChange(of: isDeleting) { _, deleting in
             if deleting { isAdminPasswordFocused = false }
-        }
-        .onChange(of: success) { _, didSucceed in
-            if didSucceed { isAdminPasswordFocused = false }
         }
     }
 

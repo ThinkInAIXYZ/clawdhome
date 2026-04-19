@@ -119,7 +119,6 @@ struct ClawPoolView: View {
     @State private var contextDeleteOption: DeleteHomeOption = .deleteHome
     @State private var contextDeleteAdminPassword = ""
     @State private var contextDeleteError: String?
-    @State private var contextDeleteStep: DeleteStep?
     @State private var contextIsDeleting = false
     @State private var pendingFlashFreezeClawID: ManagedUser.ID?
     @State private var quickTransferAlertMessage: String?
@@ -208,25 +207,15 @@ struct ClawPoolView: View {
                     adminUser: NSUserName(),
                     option: $contextDeleteOption,
                     adminPassword: $contextDeleteAdminPassword,
-                    success: contextDeleteStep == .done,
                     isDeleting: contextIsDeleting,
                     error: contextDeleteError,
                     onConfirm: {
                         Task { await performContextDelete(for: claw) }
                     },
-                    onCloseSuccess: {
-                        if selectedClaw == claw.id { selectedClaw = nil }
-                        pool.removeUser(username: claw.username)
-                        contextMenuUser = nil
-                        contextDeleteStep = nil
-                        contextDeleteError = nil
-                        contextDeleteAdminPassword = ""
-                    },
                     onCancel: {
                         contextMenuUser = nil
                         contextDeleteError = nil
                         contextDeleteAdminPassword = ""
-                        contextDeleteStep = nil
                     }
                 )
                 .interactiveDismissDisabled(contextIsDeleting)
@@ -1013,7 +1002,6 @@ struct ClawPoolView: View {
         contextIsDeleting = true
         contextDeleteError = nil
 
-        contextDeleteStep = .deleting
         let keepHome = contextDeleteOption == .keepHome
         let adminPassword = contextDeleteAdminPassword
         contextDeleteAdminPassword = ""
@@ -1023,11 +1011,14 @@ struct ClawPoolView: View {
             // 直接执行 sysadminctl 删除（使用管理员凭据）
             try await UserDeleteService.deleteUserViaSysadminctl(username: targetUsername, keepHome: keepHome, adminPassword: adminPassword)
 
-            contextDeleteStep = .done
             contextIsDeleting = false
+            if selectedClaw == claw.id { selectedClaw = nil }
+            pool.removeUser(username: claw.username)
+            contextMenuUser = nil
+            contextDeleteError = nil
+            contextDeleteAdminPassword = ""
         } catch {
             contextDeleteError = error.localizedDescription
-            contextDeleteStep = nil
             contextIsDeleting = false
             contextMenuUser = claw   // 重新打开 sheet 显示错误
         }
@@ -1671,7 +1662,7 @@ private struct AddClawCard: View {
                     .foregroundStyle(isHovered ? Color.accentColor : Color.secondary.opacity(0.6))
                 Spacer(minLength: 0)
             }
-            .frame(width: 140, height: 160)
+            .frame(width: 160, height: 160)
             .background(
                 isHovered
                     ? Color.accentColor.opacity(0.06)
