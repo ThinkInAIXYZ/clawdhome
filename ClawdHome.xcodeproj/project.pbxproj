@@ -119,6 +119,7 @@
 		7D0B2DAB8F9133C3EDAEA400 /* SessionsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB940018E9820EB6455FA34C /* SessionsTabView.swift */; };
 		7F1931508A7DA6D48319500F /* ShellRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6C76557D6C46315D058A794 /* ShellRunner.swift */; };
 		7F83623861E786A9D271CECA /* HelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 467287AC8BE705E07CE3C366 /* HelperProtocol.swift */; };
+		831F2BBC6DF8FB6800FF026E /* DefaultToolsContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BF64A33B0B8F2D56B654B5 /* DefaultToolsContent.swift */; };
 		83A90CD423D6367CB0BDF071 /* IMBotProvisioner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6499789FC14381687CB547E1 /* IMBotProvisioner.swift */; };
 		844ED367CC5266A513A5FADE /* UserInitPresentationRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */; };
 		84C8DA8A847353DF24E6FECC /* AgentProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BADB9554D643220091AA3A3E /* AgentProfile.swift */; };
@@ -215,7 +216,6 @@
 		F7301DCF176A07CEF3E14128 /* UserAdoptionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */; };
 		F7840BAD3978447C9CF012D5 /* AgentListEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7642815724059E4D93CC56E0 /* AgentListEditor.swift */; };
 		F7E5A9A08C640A5E7684F7B1 /* UserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */; };
-		FA4AA7F683A3E8C096CFCCC8 /* UserInitWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EE6965A7DA630D46B4F1B50 /* UserInitWizardView.swift */; };
 		FB35463F40D9D7B9C7166E4E /* OpenDirectory.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 05980B1012E839BAA33AD8CE /* OpenDirectory.framework */; };
 		FBCAA5C027073F120856AC08 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6474BB5EEF5B87B65666E978 /* NetworkModels.swift */; };
 		FC9E4F1ABDB750EFB88AFA36 /* UserDetailWindowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54777C27B432E10D49786DE9 /* UserDetailWindowLayout.swift */; };
@@ -243,7 +243,6 @@
 		0BCB213B1B4677F1FBAC5433 /* SecurityAuditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityAuditView.swift; sourceTree = "<group>"; };
 		0DFA0D3288E6276A9630CE4B /* AppLockScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockScreen.swift; sourceTree = "<group>"; };
 		0EB9584EDF129A0295EBB14A /* BackupManagerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManagerSheet.swift; sourceTree = "<group>"; };
-		0EE6965A7DA630D46B4F1B50 /* UserInitWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInitWizardView.swift; sourceTree = "<group>"; };
 		13F07CE9D25F72DDB11AB739 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		14984A3D87B04508056F24CF /* UserManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserManager.swift; sourceTree = "<group>"; };
 		155680EF2A850BB4215754A8 /* LLMManagerTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMManagerTab.swift; sourceTree = "<group>"; };
@@ -263,6 +262,7 @@
 		33B505153AFE9BDEFAF27F0D /* Output.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Output.swift; sourceTree = "<group>"; };
 		34938F121B712D4BEADB0796 /* UpdateCheckPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheckPolicy.swift; sourceTree = "<group>"; };
 		3551CFADD2A6045F6096E2DD /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		35BF64A33B0B8F2D56B654B5 /* DefaultToolsContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultToolsContent.swift; sourceTree = "<group>"; };
 		3793B8613E7B9D05787DDB8B /* ConfigEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigEditorSheet.swift; sourceTree = "<group>"; };
 		37C2B17425B19E3FD55EC7AF /* PersonaGitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonaGitManager.swift; sourceTree = "<group>"; };
 		38A912F0A5514717350027B5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -470,6 +470,7 @@
 				4B639FCB2D3020F3E95F7EFC /* AppLockStore.swift */,
 				81E5226083EF9356F8C51363 /* AppLogger.swift */,
 				304E3BEE50A0653474FF27FC /* DaemonInstaller.swift */,
+				35BF64A33B0B8F2D56B654B5 /* DefaultToolsContent.swift */,
 				6482AE0816A0181D42B69AB4 /* DeviceIdentity.swift */,
 				AD59CE8ED9E05145D8207B3D /* GatewayChannelStore.swift */,
 				BA77A80C488C3D16C1BD4243 /* GatewayClient.swift */,
@@ -753,7 +754,6 @@
 				AEDDABB73D85CDE4CFFBDDC8 /* UserDetailHelpers.swift */,
 				E46E3226FB170F1C35BB73B5 /* UserDetailView.swift */,
 				A623F9F0DFBC22F900B5ACED /* UserFilesView.swift */,
-				0EE6965A7DA630D46B4F1B50 /* UserInitWizardView.swift */,
 				DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */,
 				B60647F2C674DA123E7DA59A /* UserPasswordSheet.swift */,
 				B2FCA2FCC5FE69859F138BFD /* VaultFilesView.swift */,
@@ -1002,6 +1002,7 @@
 				1EF1D1156BEAC282AC695473 /* DaemonSetupBanner.swift in Sources */,
 				6E8E862B9D09268ABD86C619 /* DashboardModels.swift in Sources */,
 				E0CEA96A5FE7483DCDA6DC57 /* DashboardView.swift in Sources */,
+				831F2BBC6DF8FB6800FF026E /* DefaultToolsContent.swift in Sources */,
 				294C7A76A05ACB79E34D56AB /* DeleteUserSheet.swift in Sources */,
 				ACE028DB32C34188A8C47EA4 /* DeviceIdentity.swift in Sources */,
 				D6EF58593D4B981753E3AA4D /* DiagnosticsSheet.swift in Sources */,
@@ -1077,7 +1078,6 @@
 				BC5CEE02450C97178238E88A /* UserDirectoryService.swift in Sources */,
 				A19DC0FB0FB2383088C47E80 /* UserFilesView.swift in Sources */,
 				D53CB1F3E94D9A56F97653A9 /* UserInitPresentationRouting.swift in Sources */,
-				FA4AA7F683A3E8C096CFCCC8 /* UserInitWizardView.swift in Sources */,
 				F7E5A9A08C640A5E7684F7B1 /* UserListView.swift in Sources */,
 				41526F31288D5BF4B5D5E8FC /* UserPasswordSheet.swift in Sources */,
 				346939ADEDF99620B1967823 /* UserPasswordStore.swift in Sources */,
