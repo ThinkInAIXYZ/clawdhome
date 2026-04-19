@@ -293,10 +293,18 @@ private struct MaintenanceTerminalWindow: View {
 }
 
 private struct MaintenanceTerminalWindowContent: View {
+    private struct OutputSearchMatch: Identifiable {
+        let id: Int
+        let range: NSRange
+        let preview: String
+    }
+
     let request: MaintenanceTerminalWindowRequest
 
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
     @Environment(ShrimpPool.self) private var pool
+    @Environment(MaintenanceWindowRegistry.self) private var maintenanceWindowRegistry
     @StateObject private var terminalControl = LocalTerminalControl()
     @State private var terminalRunID = 0
     @State private var exitCode: Int32? = nil
@@ -308,8 +316,19 @@ private struct MaintenanceTerminalWindowContent: View {
     @State private var didStart = false
     @State private var didPostCloseNotification = false
     @State private var didAutoCloseOnConfigureComplete = false
+    @State private var terminalTheme: MaintenanceTerminalTheme = .system
+    @State private var searchText = ""
+    @State private var searchMatches: [OutputSearchMatch] = []
+    @State private var selectedSearchMatchIndex = 0
+    @State private var outputRateWindowStartedAt = Date()
+    @State private var outputBytesInRateWindow = 0
+    @State private var droppedOutputBytes = 0
+    @State private var didNotifyRateLimit = false
+    @AppStorage("app.maintenance.outputRateLimitEnabled") private var outputRateLimitEnabled = true
+    @AppStorage("app.maintenance.fontSize") private var terminalFontSize = 12.0
 
     private let waitingThreshold: TimeInterval = 8
+    private let outputRateLimitBytesPerSecond = 80 * 1024
     private let uiTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var windowTitle: String {
@@ -354,6 +373,26 @@ private struct MaintenanceTerminalWindowContent: View {
         guard let last = all.last, last.numberOfRanges >= 2 else { return nil }
         return ns.substring(with: last.range(at: 1))
     }
+    private var selectedSearchMatch: OutputSearchMatch? {
+        guard selectedSearchMatchIndex >= 0, selectedSearchMatchIndex < searchMatches.count else { return nil }
+        return searchMatches[selectedSearchMatchIndex]
+    }
+    private var searchSummaryText: String {
+        guard !searchMatches.isEmpty else {
+            return L10n.k("app.maintenance.search.no_hits", fallback: "0 项")
+        }
+        return String(
+            format: L10n.k("app.maintenance.search.hit_count", fallback: "%d/%d"),
+            selectedSearchMatchIndex + 1,
+            searchMatches.count
+        )
+    }
+    private var droppedOutputText: String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .binary
+        let dropped = formatter.string(fromByteCount: Int64(max(0, droppedOutputBytes)))
+        return L10n.f("app.maintenance.output_limited", fallback: "已限流（丢弃 %@）", dropped)
+    }
 
     @ViewBuilder
     private var topBar: some View {
@@ -377,15 +416,150 @@ private struct MaintenanceTerminalWindowContent: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Button(L10n.k("common.action.interrupt", fallback: "中断")) { terminalControl.sendInterrupt() }
+                .keyboardShortcut(".", modifiers: .command)
                 .disabled(!isRunning)
             Button(L10n.k("common.action.rerun", fallback: "重跑")) { startRun() }
+                .keyboardShortcut("r", modifiers: .command)
+            Button(L10n.k("common.action.clone_terminal", fallback: "复制终端")) { cloneTerminalWindow() }
             Button(L10n.k("common.action.copy_output", fallback: "复制输出")) { copyTerminalOutput() }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(outputBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button(L10n.k("common.action.clear_screen", fallback: "清屏")) { clearTerminalOutput() }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled(outputBuffer.isEmpty)
 
             Spacer(minLength: 0)
 
+            outputMenu
+            typographyMenu
+            terminalThemeMenu
             quickCommandMenu
         }
+    }
+
+    @ViewBuilder
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(L10n.k("app.maintenance.search.placeholder", fallback: "搜索输出"), text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption)
+                .frame(width: 220)
+                .onSubmit {
+                    jumpToSearchMatch(direction: .forward)
+                }
+                .onChange(of: searchText) { _, _ in
+                    rebuildSearchMatches()
+                }
+            Button {
+                jumpToSearchMatch(direction: .backward)
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(.borderless)
+            .keyboardShortcut("g", modifiers: [.command, .shift])
+            .disabled(searchMatches.isEmpty)
+            Button {
+                jumpToSearchMatch(direction: .forward)
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.borderless)
+            .keyboardShortcut("g", modifiers: .command)
+            .disabled(searchMatches.isEmpty)
+            Text(searchSummaryText)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if let selectedSearchMatch {
+                Text(selectedSearchMatch.preview)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+            if outputRateLimitEnabled, droppedOutputBytes > 0 {
+                Text(droppedOutputText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    @ViewBuilder
+    private var outputMenu: some View {
+        Menu {
+            Button(L10n.k("common.action.export_output", fallback: "导出输出…")) {
+                exportTerminalOutput()
+            }
+            Divider()
+            Button {
+                outputRateLimitEnabled.toggle()
+            } label: {
+                if outputRateLimitEnabled {
+                    Label(L10n.k("app.maintenance.output_rate_limit_enabled", fallback: "限流输出：开"), systemImage: "checkmark")
+                } else {
+                    Text(L10n.k("app.maintenance.output_rate_limit_disabled", fallback: "限流输出：关"))
+                }
+            }
+        } label: {
+            Label(L10n.k("app.maintenance.output_menu", fallback: "输出"), systemImage: "doc.text.magnifyingglass")
+        }
+        .menuIndicator(.visible)
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private var typographyMenu: some View {
+        Menu {
+            Button(L10n.k("app.maintenance.font.decrease", fallback: "减小字号")) {
+                terminalFontSize = max(10, terminalFontSize - 1)
+            }
+            .disabled(terminalFontSize <= 10)
+            Button(L10n.k("app.maintenance.font.increase", fallback: "增大字号")) {
+                terminalFontSize = min(16, terminalFontSize + 1)
+            }
+            .disabled(terminalFontSize >= 16)
+            Button(L10n.k("app.maintenance.font.reset", fallback: "恢复默认")) {
+                terminalFontSize = 12
+            }
+        } label: {
+            Label(
+                String(format: L10n.k("app.maintenance.font.current", fallback: "字号 %.0f"), terminalFontSize),
+                systemImage: "textformat.size"
+            )
+        }
+        .menuIndicator(.visible)
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private var terminalThemeMenu: some View {
+        Menu {
+            ForEach(MaintenanceTerminalTheme.allCases) { theme in
+                Button {
+                    terminalTheme = theme
+                } label: {
+                    if theme == terminalTheme {
+                        Label(theme.title, systemImage: "checkmark")
+                    } else {
+                        Text(theme.title)
+                    }
+                }
+            }
+        } label: {
+            Label(
+                L10n.k("app.maintenance.terminal_background", fallback: "背景"),
+                systemImage: "paintpalette"
+            )
+        }
+        .menuIndicator(.visible)
+        .fixedSize()
     }
 
     @ViewBuilder
@@ -412,6 +586,7 @@ private struct MaintenanceTerminalWindowContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             topBar
+            searchBar
             authAssistBar
             terminalPanel
             statusBar
@@ -480,6 +655,8 @@ private struct MaintenanceTerminalWindowContent: View {
             username: request.username,
             command: request.command,
             minHeight: isModelConfigureCommand ? 420 : 280,
+            theme: terminalTheme,
+            fontSize: CGFloat(terminalFontSize),
             onOutput: { chunk in
                 handleTerminalOutput(chunk)
             },
@@ -494,10 +671,17 @@ private struct MaintenanceTerminalWindowContent: View {
 
     @ViewBuilder
     private var statusBar: some View {
-        if let st = statusText {
-            Text(st)
-                .font(.caption)
-                .foregroundStyle(exitCode == 0 ? Color.secondary : Color.red)
+        VStack(alignment: .leading, spacing: 4) {
+            if let st = statusText {
+                Text(st)
+                    .font(.caption)
+                    .foregroundStyle(exitCode == 0 ? Color.secondary : Color.red)
+            }
+            if outputRateLimitEnabled, droppedOutputBytes > 0 {
+                Text(droppedOutputText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -509,17 +693,60 @@ private struct MaintenanceTerminalWindowContent: View {
         lastOutputAt = Date()
         now = Date()
         outputBuffer = ""
+        searchMatches = []
+        selectedSearchMatchIndex = 0
+        droppedOutputBytes = 0
+        didNotifyRateLimit = false
+        outputRateWindowStartedAt = Date()
+        outputBytesInRateWindow = 0
         terminalRunID += 1
     }
 
     private func handleTerminalOutput(_ chunk: String) {
         lastOutputAt = Date()
-        outputBuffer += chunk
+        let accepted = applyOutputRateLimitIfNeeded(chunk)
+        if !accepted.isEmpty {
+            outputBuffer += accepted
+        }
         let maxChars = 300_000
         if outputBuffer.count > maxChars {
             outputBuffer.removeFirst(outputBuffer.count - maxChars)
         }
+        if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            rebuildSearchMatches()
+        }
         autoCloseIfConfigureCompleted(chunk)
+    }
+
+    private func applyOutputRateLimitIfNeeded(_ chunk: String) -> String {
+        guard outputRateLimitEnabled else { return chunk }
+        let now = Date()
+        if now.timeIntervalSince(outputRateWindowStartedAt) >= 1 {
+            outputRateWindowStartedAt = now
+            outputBytesInRateWindow = 0
+        }
+        let bytes = Array(chunk.utf8)
+        guard !bytes.isEmpty else { return "" }
+        let remaining = max(0, outputRateLimitBytesPerSecond - outputBytesInRateWindow)
+        guard remaining > 0 else {
+            registerDroppedOutput(bytes.count)
+            return ""
+        }
+        let acceptedCount = min(remaining, bytes.count)
+        outputBytesInRateWindow += acceptedCount
+        if acceptedCount < bytes.count {
+            registerDroppedOutput(bytes.count - acceptedCount)
+        }
+        if acceptedCount == bytes.count { return chunk }
+        return String(decoding: bytes.prefix(acceptedCount), as: UTF8.self)
+    }
+
+    private func registerDroppedOutput(_ droppedBytes: Int) {
+        guard droppedBytes > 0 else { return }
+        droppedOutputBytes += droppedBytes
+        guard !didNotifyRateLimit else { return }
+        didNotifyRateLimit = true
+        statusText = L10n.k("app.maintenance.output_rate_limit_notice", fallback: "输出过快，已启用限流。可在“输出”菜单关闭。")
     }
 
     private func autoCloseIfConfigureCompleted(_ chunk: String) {
@@ -556,6 +783,127 @@ private struct MaintenanceTerminalWindowContent: View {
             return
         }
         copyText(text, success: L10n.k("app.clawd_home_app.output_copied", fallback: "命令输出已复制。"))
+    }
+
+    private func clearTerminalOutput() {
+        outputBuffer = ""
+        searchMatches = []
+        selectedSearchMatchIndex = 0
+        droppedOutputBytes = 0
+        didNotifyRateLimit = false
+        outputRateWindowStartedAt = Date()
+        outputBytesInRateWindow = 0
+        terminalControl.clearDisplay()
+        statusText = L10n.k("app.maintenance.output_cleared", fallback: "终端输出已清空。")
+    }
+
+    private func exportTerminalOutput() {
+        let text = outputBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            statusText = L10n.k("app.clawd_home_app.no_output_to_copy", fallback: "暂无可复制的命令输出。")
+            return
+        }
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "maintenance-\(request.username)-\(timestampString()).log"
+        panel.allowedFileTypes = ["log", "txt"]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            statusText = L10n.f("app.maintenance.output_exported", fallback: "输出已导出：%@", url.lastPathComponent)
+        } catch {
+            statusText = L10n.f(
+                "app.maintenance.output_export_failed",
+                fallback: "导出失败：%@",
+                error.localizedDescription
+            )
+        }
+    }
+
+    private func cloneTerminalWindow() {
+        // 与虾详情页入口保持一致：始终打开默认登录 shell 维护终端。
+        let payload = maintenanceWindowRegistry.makePayload(
+            username: request.username,
+            title: L10n.k("user.detail.auto.cli_maintenance_advanced", fallback: "命令行维护（高级）"),
+            command: ["zsh", "-l"]
+        )
+        openWindow(id: "maintenance-terminal", value: payload)
+        statusText = L10n.k("app.maintenance.terminal_cloned", fallback: "已打开新的维护终端窗口。")
+    }
+
+    private enum SearchJumpDirection {
+        case forward
+        case backward
+    }
+
+    private func rebuildSearchMatches() {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            searchMatches = []
+            selectedSearchMatchIndex = 0
+            return
+        }
+        let nsText = sanitizedOutput as NSString
+        let previousLocation = selectedSearchMatch?.range.location
+        var ranges: [NSRange] = []
+        var scanLocation = 0
+        while scanLocation < nsText.length {
+            let searchRange = NSRange(location: scanLocation, length: nsText.length - scanLocation)
+            let found = nsText.range(of: query, options: [.caseInsensitive], range: searchRange)
+            guard found.location != NSNotFound else { break }
+            ranges.append(found)
+            let step = max(found.length, 1)
+            scanLocation = found.location + step
+        }
+        searchMatches = ranges.enumerated().map { idx, range in
+            OutputSearchMatch(id: idx, range: range, preview: searchPreview(in: nsText, at: range))
+        }
+        guard !searchMatches.isEmpty else {
+            selectedSearchMatchIndex = 0
+            return
+        }
+        if let previousLocation,
+           let nearest = searchMatches.lastIndex(where: { $0.range.location <= previousLocation })
+        {
+            selectedSearchMatchIndex = nearest
+        } else {
+            selectedSearchMatchIndex = min(selectedSearchMatchIndex, searchMatches.count - 1)
+        }
+    }
+
+    private func jumpToSearchMatch(direction: SearchJumpDirection) {
+        guard !searchMatches.isEmpty else {
+            statusText = L10n.k("app.maintenance.search.not_found", fallback: "没有匹配项。")
+            return
+        }
+        switch direction {
+        case .forward:
+            selectedSearchMatchIndex = (selectedSearchMatchIndex + 1) % searchMatches.count
+        case .backward:
+            selectedSearchMatchIndex = (selectedSearchMatchIndex - 1 + searchMatches.count) % searchMatches.count
+        }
+        statusText = String(
+            format: L10n.k("app.maintenance.search.jumped", fallback: "已跳转到匹配 %d/%d。"),
+            selectedSearchMatchIndex + 1,
+            searchMatches.count
+        )
+    }
+
+    private func searchPreview(in text: NSString, at range: NSRange) -> String {
+        let context = 36
+        let start = max(0, range.location - context)
+        let end = min(text.length, NSMaxRange(range) + context)
+        let previewRange = NSRange(location: start, length: max(0, end - start))
+        let raw = text.substring(with: previewRange)
+        return raw
+            .replacingOccurrences(of: "\n", with: " ⏎ ")
+            .replacingOccurrences(of: "\r", with: " ")
+    }
+
+    private func timestampString() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter.string(from: Date())
     }
 
     private func copyText(_ text: String, success: String) {
@@ -841,11 +1189,14 @@ private struct ClawDetailWindow: View {
     }
 }
 
+// v2 入口：使用 ShrimpInitWizardV2 替换 UserInitWizardView
+// 保留 UserInitWizardWindow 名称避免修改 WindowGroup 注册
 private struct UserInitWizardWindow: View {
     let username: String
 
     @Environment(ShrimpPool.self) private var pool
     @Environment(\.dismiss) private var dismiss
+    @State private var initialTeamDNA: TeamDNA? = nil
 
     private var user: ManagedUser? {
         pool.users.first { $0.username == username }
@@ -853,9 +1204,12 @@ private struct UserInitWizardWindow: View {
 
     var body: some View {
         if let user {
-            UserInitWizardView(user: user) { sessionVisible in
-                if !sessionVisible {
-                    dismiss()
+            ShrimpInitWizardV2(user: user, initialTeamDNA: initialTeamDNA) {
+                dismiss()
+            }
+            .task {
+                if initialTeamDNA == nil {
+                    initialTeamDNA = pool.consumeInitTeam(for: username)
                 }
             }
         } else {
