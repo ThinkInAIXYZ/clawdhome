@@ -304,6 +304,8 @@ struct UserDetailView: View {
     @State private var hasOpenedStandaloneInitWindow = false
     @State private var detailAutoRefreshActive = false
     @StateObject private var embeddedOverviewConsoleStore = EmbeddedGatewayConsoleStore()
+    @State private var promptMemoryCurrentInput = ""
+    @State private var promptMemoryRequestedQuery: String?
     private var shouldPinWindowTopmost: Bool {
         !user.isAdmin
         && user.clawType == .macosUser
@@ -529,6 +531,20 @@ struct UserDetailView: View {
             Divider()
             tabContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .overlay {
+            if shouldEmbedOverviewConsole, embeddedOverviewConsoleURL != nil {
+                PromptMemoryOverlay(
+                    username: user.username,
+                    currentInput: promptMemoryCurrentInput,
+                    requestedQuery: promptMemoryRequestedQuery,
+                    onConsumeRequest: { promptMemoryRequestedQuery = nil },
+                    onInsert: { text, mode in
+                        embeddedOverviewConsoleStore.insertPromptText(text, mode: mode)
+                    }
+                )
+                .zIndex(4000)
+            }
         }
         .task { await refreshStatus() }
         .task(id: detailAutoRefreshActive) {
@@ -874,6 +890,15 @@ struct UserDetailView: View {
         if shouldEmbedOverviewConsole,
            let url = embeddedOverviewConsoleURL {
             EmbeddedGatewayConsoleView(url: url, store: embeddedOverviewConsoleStore)
+            .onAppear {
+                embeddedOverviewConsoleStore.onPromptMemoryRequest = { text in
+                    promptMemoryCurrentInput = text
+                    promptMemoryRequestedQuery = text
+                }
+                embeddedOverviewConsoleStore.onPromptInputChanged = { text in
+                    promptMemoryCurrentInput = text
+                }
+            }
         } else if shouldEmbedOverviewConsole, isEffectivelyRunning {
             ContentUnavailableView {
                 Label(L10n.k("user.detail.auto.waiting_token", fallback: "等待 Token…"), systemImage: "network")
@@ -7753,6 +7778,8 @@ private final class EmbeddedGatewayConsoleCoordinator: NSObject, WKNavigationDel
     weak var webView: WKWebView?
     private var pendingFileInputAccept = ""
     var onNavigationStateChanged: ((Bool) -> Void)?
+    var onPromptMemoryRequest: ((String) -> Void)?
+    var onPromptInputChanged: ((String) -> Void)?
 
     func webView(
         _ webView: WKWebView,
@@ -7843,6 +7870,12 @@ private final class EmbeddedGatewayConsoleStore: ObservableObject {
 
     let coordinator = EmbeddedGatewayConsoleCoordinator()
     private(set) var webView: WKWebView?
+    var onPromptMemoryRequest: ((String) -> Void)? {
+        didSet { coordinator.onPromptMemoryRequest = onPromptMemoryRequest }
+    }
+    var onPromptInputChanged: ((String) -> Void)? {
+        didSet { coordinator.onPromptInputChanged = onPromptInputChanged }
+    }
     private var loadedURL: String?
     private var loadState: LoadState = .idle
     private var lastRetryAt: Date = .distantPast
@@ -7859,7 +7892,9 @@ private final class EmbeddedGatewayConsoleStore: ObservableObject {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.userContentController.add(coordinator, name: "fileInputAccept")
+        configuration.userContentController.add(coordinator, name: "promptMemory")
         configuration.userContentController.addUserScript(.fileInputAcceptCapture)
+        configuration.userContentController.addUserScript(.promptMemoryBridge)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.setValue(false, forKey: "drawsBackground")
@@ -7909,6 +7944,17 @@ private final class EmbeddedGatewayConsoleStore: ObservableObject {
         lastRetryAt = .distantPast
         webView?.stopLoading()
     }
+
+    func insertPromptText(_ text: String, mode: PromptInsertionMode) {
+        guard let webView else { return }
+        let payload: [String: Any] = ["text": text, "mode": mode.rawValue]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript(
+            "window.__clawdPromptMemory && window.__clawdPromptMemory.insert(\(json));",
+            completionHandler: nil
+        )
+    }
 }
 
 private struct EmbeddedGatewayConsoleView: NSViewRepresentable {
@@ -7949,10 +7995,26 @@ private struct EmbeddedGatewayConsoleView: NSViewRepresentable {
 
 extension EmbeddedGatewayConsoleCoordinator: WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "fileInputAccept" else { return }
-        guard let body = message.body as? [String: Any],
-              let accept = body["accept"] as? String else { return }
-        pendingFileInputAccept = accept
+        if message.name == "fileInputAccept" {
+            guard let body = message.body as? [String: Any],
+                  let accept = body["accept"] as? String else { return }
+            pendingFileInputAccept = accept
+            return
+        }
+
+        if message.name == "promptMemory" {
+            guard let body = message.body as? [String: Any],
+                  let action = body["action"] as? String else { return }
+            let text = body["text"] as? String ?? ""
+            switch action {
+            case "open":
+                onPromptMemoryRequest?(text)
+            case "input":
+                onPromptInputChanged?(text)
+            default:
+                break
+            }
+        }
     }
 }
 
@@ -7969,6 +8031,119 @@ private extension WKUserScript {
           document.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' || event.key === ' ') sendAccept(event.target);
           }, true);
+        })();
+        """,
+        injectionTime: .atDocumentEnd,
+        forMainFrameOnly: false
+    )
+
+    static let promptMemoryBridge = WKUserScript(
+        source: """
+        (() => {
+          if (window.__clawdPromptMemoryInstalled) return;
+          window.__clawdPromptMemoryInstalled = true;
+
+          var lastEditable = null;
+          var lastTabAt = 0;
+          var pendingInputTimer = null;
+
+          const isEditable = (el) => {
+            if (!el) return false;
+            if (el.isContentEditable) return true;
+            const tag = (el.tagName || '').toLowerCase();
+            if (tag === 'textarea') return true;
+            if (tag !== 'input') return false;
+            const type = (el.getAttribute('type') || 'text').toLowerCase();
+            return ['text', 'search', 'url', 'email', 'tel', 'password'].includes(type);
+          };
+
+          const editableFrom = (target) => {
+            if (!target) return null;
+            if (isEditable(target)) return target;
+            return target.closest ? target.closest('textarea,input,[contenteditable="true"],[contenteditable=""]') : null;
+          };
+
+          const resolveEditable = () => {
+            if (isEditable(document.activeElement)) return document.activeElement;
+            if (isEditable(lastEditable)) return lastEditable;
+            const candidates = Array.from(document.querySelectorAll('textarea, input[type="text"], input:not([type]), [contenteditable="true"], [contenteditable=""]'));
+            return candidates.find((node) => {
+              const style = window.getComputedStyle(node);
+              return style.display !== 'none' && style.visibility !== 'hidden' && !node.disabled && !node.readOnly;
+            }) || null;
+          };
+
+          const getText = (el) => {
+            if (!el) return '';
+            if (el.isContentEditable) return el.innerText || el.textContent || '';
+            return typeof el.value === 'string' ? el.value : '';
+          };
+
+          const setText = (el, text) => {
+            if (!el) return false;
+            el.focus();
+            if (el.isContentEditable) {
+              el.innerText = text;
+            } else {
+              el.value = text;
+            }
+            el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+          };
+
+          const post = (body) => {
+            try { window.webkit.messageHandlers.promptMemory.postMessage(body); } catch (_) {}
+          };
+
+          const remember = (el) => {
+            if (isEditable(el)) lastEditable = el;
+          };
+
+          const sendInput = (el) => {
+            const text = getText(el);
+            window.clearTimeout(pendingInputTimer);
+            pendingInputTimer = window.setTimeout(() => post({ action: 'input', text }), 450);
+          };
+
+          document.addEventListener('focusin', (event) => remember(editableFrom(event.target)), true);
+          document.addEventListener('input', (event) => {
+            const el = editableFrom(event.target);
+            if (!el) return;
+            remember(el);
+            sendInput(el);
+          }, true);
+          document.addEventListener('keydown', (event) => {
+            const el = editableFrom(event.target);
+            if (!el) return;
+            remember(el);
+            if (event.key !== 'Tab') return;
+            const now = Date.now();
+            if (now - lastTabAt < 1500) {
+              event.preventDefault();
+              event.stopPropagation();
+              post({ action: 'open', text: getText(el) });
+            }
+            lastTabAt = now;
+          }, true);
+
+          window.__clawdPromptMemory = {
+            insert(payload) {
+              const el = resolveEditable();
+              if (!el) return false;
+              const current = getText(el);
+              const incoming = payload && payload.text ? String(payload.text) : '';
+              const mode = payload && payload.mode === 'replace' ? 'replace' : 'append';
+              const next = mode === 'replace'
+                ? incoming
+                : (current.trim().length ? current + '\\n\\n' + incoming : incoming);
+              return setText(el, next);
+            },
+            currentText() {
+              const el = resolveEditable();
+              return getText(el);
+            }
+          };
         })();
         """,
         injectionTime: .atDocumentEnd,
