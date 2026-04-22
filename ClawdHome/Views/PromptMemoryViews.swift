@@ -2,6 +2,12 @@ import AppKit
 import SwiftUI
 
 struct PromptMemoryOverlay: View {
+    private enum ActiveSurface: Equatable {
+        case menu
+        case prompt
+        case note
+    }
+
     let username: String?
     let currentInput: String
     let requestedQuery: String?
@@ -9,10 +15,11 @@ struct PromptMemoryOverlay: View {
     let onInsert: (String, PromptInsertionMode) -> Void
 
     @Environment(PromptLibraryStore.self) private var store
-    @State private var isPanelOpen = false
+    @State private var activeSurface: ActiveSurface?
     @State private var query = ""
     @State private var titleDraft = ""
     @State private var tagsDraft = ""
+    @State private var noteDraft = ""
     @State private var showQuickCreate = false
     @State private var suggestions: [PromptSearchResult] = []
     @State private var pendingPrompt: PromptItem?
@@ -22,6 +29,7 @@ struct PromptMemoryOverlay: View {
     @State private var showReplaceConfirm = false
     @State private var bubbleDragOffset: CGSize = .zero
     @State private var bubbleDragMoved = false
+    @State private var bubbleHovered = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -30,31 +38,40 @@ struct PromptMemoryOverlay: View {
                     bubbleLayer(in: proxy)
                 }
 
-                if isPanelOpen {
-                    panel
-                        .frame(width: min(520, max(360, proxy.size.width * 0.42)))
-                        .frame(maxHeight: min(620, proxy.size.height - 40))
-                        .position(panelPosition(in: proxy))
+                if let activeSurface {
+                    surfaceView(activeSurface, in: proxy)
+                        .position(panelPosition(in: proxy, surface: activeSurface))
                         .zIndex(1003)
-                        .transition(panelTransition)
+                        .transition(panelTransition(for: activeSurface))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .zIndex(1000)
         }
-        .allowsHitTesting(isPanelOpen || !suggestions.isEmpty || store.settings.floatingBubbleEnabled)
+        .allowsHitTesting(activeSurface != nil || !suggestions.isEmpty || store.settings.floatingBubbleEnabled)
         .zIndex(1000)
+        .onExitCommand {
+            handleEscape()
+        }
         .onAppear {
             store.loadIfNeeded()
+            noteDraft = store.quickNoteText
             updateSuggestion()
         }
         .onChange(of: currentInput) { _, _ in updateSuggestion() }
         .onChange(of: requestedQuery) { _, value in
             guard let value else { return }
-            query = value.hasPrefix("__manual_open__#") ? currentInput : value
-            isPanelOpen = true
-            suggestions = []
+            query = value
+            withAnimation(panelAnimation) {
+                activeSurface = .prompt
+                suggestions = []
+            }
             onConsumeRequest()
+        }
+        .onChange(of: store.quickNoteText) { _, value in
+            if value != noteDraft {
+                noteDraft = value
+            }
         }
         .sheet(item: $pendingPrompt) { prompt in
             variableSheet(prompt: prompt)
@@ -76,28 +93,35 @@ struct PromptMemoryOverlay: View {
         let bubbleSize: CGFloat = 42
         let bubblePosition = bubblePosition(in: proxy, size: bubbleSize)
         return ZStack {
-            if !suggestions.isEmpty, !isPanelOpen {
+            if !suggestions.isEmpty, activeSurface == nil {
                 suggestionList
                     .frame(width: suggestionListWidth(in: proxy))
                     .position(suggestionListPosition(from: bubblePosition, in: proxy))
                     .zIndex(1002)
+                    .transition(.offset(y: 10).combined(with: .opacity).combined(with: .scale(scale: 0.96, anchor: .bottom)))
             }
 
             Circle()
-                .fill(Color.accentColor.opacity(isPanelOpen ? 0.95 : 0.82))
+                .fill(Color.accentColor.opacity(bubbleFillOpacity))
                 .frame(width: bubbleSize, height: bubbleSize)
                 .overlay {
                     Image(systemName: "text.bubble.fill")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                 }
-                .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                .shadow(color: .black.opacity(bubbleShadowOpacity), radius: bubbleShadowRadius, y: bubbleShadowYOffset)
                 .contentShape(Circle())
                 .help("Prompt 记忆")
+                .scaleEffect(bubbleScale)
                 .position(
                     x: bubblePosition.x + bubbleDragOffset.width,
                     y: bubblePosition.y + bubbleDragOffset.height
                 )
+                .onHover { hovering in
+                    withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
+                        bubbleHovered = hovering
+                    }
+                }
                 .highPriorityGesture(
                     DragGesture(minimumDistance: 2)
                         .onChanged { value in
@@ -115,15 +139,39 @@ struct PromptMemoryOverlay: View {
                             return
                         }
                         query = currentInput
-                        isPanelOpen.toggle()
-                        suggestions = []
+                        withAnimation(panelAnimation) {
+                            activeSurface = activeSurface == nil ? .menu : nil
+                            suggestions = []
+                        }
                     }
                 )
         }
+        .animation(.spring(response: 0.24, dampingFraction: 0.8), value: bubbleHovered)
+        .animation(.spring(response: 0.28, dampingFraction: 0.78), value: bubbleDragOffset)
+        .animation(.spring(response: 0.28, dampingFraction: 0.78), value: store.settings.floatingBubbleEdge)
+        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: suggestions.map(\.id))
     }
 
     private func bubbleLayer(in proxy: GeometryProxy) -> some View {
         bubble(in: proxy)
+    }
+
+    private func handleEscape() {
+        if pendingPrompt != nil {
+            pendingPrompt = nil
+            return
+        }
+        if showReplaceConfirm {
+            showReplaceConfirm = false
+            replaceConfirmPrompt = nil
+            return
+        }
+        if activeSurface != nil || !suggestions.isEmpty {
+            withAnimation(panelAnimation) {
+                activeSurface = nil
+                suggestions = []
+            }
+        }
     }
 
     private var panelPinned: Bool {
@@ -140,6 +188,7 @@ struct PromptMemoryOverlay: View {
         if query.isEmpty {
             query = currentInput
         }
+        activeSurface = .prompt
     }
 
     private func inferDraftTitle() -> String {
@@ -148,12 +197,38 @@ struct PromptMemoryOverlay: View {
         return String(trimmed.prefix(18))
     }
 
-    private var panel: some View {
+    @ViewBuilder
+    private func surfaceView(_ surface: ActiveSurface, in proxy: GeometryProxy) -> some View {
+        switch surface {
+        case .menu:
+            launcherMenu
+                .frame(width: launcherWidth(in: proxy))
+        case .prompt:
+            promptPanel
+                .frame(width: promptPanelWidth(in: proxy))
+                .frame(maxHeight: min(620, proxy.size.height - 40))
+        case .note:
+            notePanel
+                .frame(width: notePanelWidth(in: proxy))
+                .frame(maxHeight: min(560, proxy.size.height - 40))
+        }
+    }
+
+    private var promptPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Text("Prompt 记忆")
                     .font(.headline)
                 Spacer()
+                Button {
+                    withAnimation(panelAnimation) {
+                        activeSurface = .menu
+                    }
+                } label: {
+                    Image(systemName: "square.grid.2x2")
+                }
+                .buttonStyle(.plain)
+                .help("快捷菜单")
                 Button {
                     openQuickCreate()
                 } label: {
@@ -166,11 +241,16 @@ struct PromptMemoryOverlay: View {
                 } label: {
                     Image(systemName: panelPinned ? "pin.fill" : "pin")
                         .foregroundStyle(panelPinned ? Color.accentColor : Color.secondary)
+                        .rotationEffect(.degrees(panelPinned ? 0 : -12))
+                        .scaleEffect(panelPinned ? 1.08 : 1)
                 }
                 .buttonStyle(.plain)
                 .help(panelPinned ? "取消固定" : "固定面板")
+                .animation(.spring(response: 0.24, dampingFraction: 0.76), value: panelPinned)
                 Button {
-                    isPanelOpen = false
+                    withAnimation(panelAnimation) {
+                        activeSurface = nil
+                    }
                 } label: {
                     Image(systemName: "xmark")
                 }
@@ -203,6 +283,175 @@ struct PromptMemoryOverlay: View {
 
             Divider()
             settingsStrip
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .shadow(color: .black.opacity(0.18), radius: 20, y: 10)
+    }
+
+    private var launcherMenu: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("快捷入口")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    withAnimation(panelAnimation) {
+                        activeSurface = nil
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+            }
+
+            Text("一个入口，切换 Prompt 和随手记。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 8) {
+                launcherItem(
+                    title: "Prompt",
+                    subtitle: "搜索、收藏、插入模板",
+                    systemImage: "text.bubble",
+                    badge: suggestions.isEmpty ? nil : "\(suggestions.count)"
+                ) {
+                    query = currentInput
+                    withAnimation(panelAnimation) {
+                        activeSurface = .prompt
+                    }
+                }
+
+                launcherItem(
+                    title: "随手记",
+                    subtitle: noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "随手记录，关闭不丢" : notePreviewText,
+                    systemImage: "note.text",
+                    badge: noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : "已保存"
+                ) {
+                    withAnimation(panelAnimation) {
+                        activeSurface = .note
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.96),
+                    Color(nsColor: .windowBackgroundColor).opacity(0.96)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.55), lineWidth: 0.8)
+        )
+        .shadow(color: .black.opacity(0.14), radius: 18, y: 8)
+    }
+
+    private func launcherItem(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        badge: String?,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.12))
+                    Image(systemName: systemImage)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .frame(width: 34, height: 34)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        if let badge {
+                            Text(badge)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.accentColor.opacity(0.08), in: Capsule())
+                        }
+                    }
+
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(10)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var notePanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("随手记")
+                        .font(.headline)
+                    Text("Markdown 自动保存")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    withAnimation(panelAnimation) {
+                        activeSurface = .menu
+                    }
+                } label: {
+                    Image(systemName: "square.grid.2x2")
+                }
+                .buttonStyle(.plain)
+                .help("快捷菜单")
+                Button {
+                    withAnimation(panelAnimation) {
+                        activeSurface = nil
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+                .help("关闭")
+            }
+
+            LiveMarkdownEditor(text: $noteDraft, placeholder: "支持 Markdown，输入时直接渲染。")
+                .frame(minHeight: 300)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.84), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .onChange(of: noteDraft) { _, value in
+                    store.updateQuickNote(value)
+                }
+
+            HStack {
+                Text(noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "暂无内容" : "已自动保存")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("清空") {
+                    noteDraft = ""
+                    store.updateQuickNote("")
+                }
+            }
         }
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -313,8 +562,8 @@ struct PromptMemoryOverlay: View {
 
     private var suggestionList: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(suggestions) { result in
-                suggestionRow(result)
+            ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, result in
+                suggestionRow(result, index: index)
             }
         }
         .padding(8)
@@ -326,7 +575,7 @@ struct PromptMemoryOverlay: View {
         .shadow(color: .black.opacity(0.10), radius: 10, y: 4)
     }
 
-    private func suggestionRow(_ result: PromptSearchResult) -> some View {
+    private func suggestionRow(_ result: PromptSearchResult, index: Int) -> some View {
         HStack(spacing: 8) {
             Button {
                 beginUse(result.item, mode: .append)
@@ -380,6 +629,8 @@ struct PromptMemoryOverlay: View {
             }
             .buttonStyle(.plain)
         }
+        .transition(.offset(y: 8).combined(with: .opacity).combined(with: .scale(scale: 0.98, anchor: .top)))
+        .animation(.spring(response: 0.28, dampingFraction: 0.84).delay(Double(index) * 0.03), value: suggestions.map(\.id))
     }
 
     private func variableSheet(prompt: PromptItem) -> some View {
@@ -403,10 +654,12 @@ struct PromptMemoryOverlay: View {
                     onInsert(body, pendingMode)
                     store.recordUse(prompt: prompt, action: pendingMode == .replace ? .replace : .append, query: query, shrimpUsername: username)
                     pendingPrompt = nil
-                    if !panelPinned {
-                        isPanelOpen = false
+                    withAnimation(panelAnimation) {
+                        if !panelPinned {
+                            activeSurface = nil
+                        }
+                        suggestions = []
                     }
-                    suggestions = []
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -425,21 +678,27 @@ struct PromptMemoryOverlay: View {
         }
         onInsert(prompt.body, mode)
         store.recordUse(prompt: prompt, action: mode == .replace ? .replace : .append, query: query.isEmpty ? currentInput : query, shrimpUsername: username)
-        if !panelPinned {
-            isPanelOpen = false
+        withAnimation(panelAnimation) {
+            if !panelPinned {
+                activeSurface = nil
+            }
+            suggestions = []
         }
-        suggestions = []
     }
 
     private func updateSuggestion() {
-        guard !isPanelOpen else { return }
+        guard activeSurface == nil else { return }
         let trimmed = currentInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let minimumLength = requiresShorterTrigger(for: trimmed) ? 2 : 4
         guard trimmed.count >= minimumLength else {
-            suggestions = []
+            withAnimation(.easeOut(duration: 0.18)) {
+                suggestions = []
+            }
             return
         }
-        suggestions = store.suggestions(for: trimmed, limit: 3)
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+            suggestions = store.suggestions(for: trimmed, limit: 3)
+        }
     }
 
     private func defaultVariableValues() -> [String: String] {
@@ -508,27 +767,309 @@ struct PromptMemoryOverlay: View {
         }
     }
 
-    private func panelPosition(in proxy: GeometryProxy) -> CGPoint {
-        let width = min(520, max(360, proxy.size.width * 0.42))
+    private func promptPanelWidth(in proxy: GeometryProxy) -> CGFloat {
+        min(520, max(360, proxy.size.width * 0.42))
+    }
+
+    private func launcherWidth(in proxy: GeometryProxy) -> CGFloat {
+        min(280, max(220, proxy.size.width * 0.22))
+    }
+
+    private func notePanelWidth(in proxy: GeometryProxy) -> CGFloat {
+        min(420, max(320, proxy.size.width * 0.32))
+    }
+
+    private func panelPosition(in proxy: GeometryProxy, surface: ActiveSurface) -> CGPoint {
+        let width: CGFloat
+        let panelHeight: CGFloat
+        switch surface {
+        case .menu:
+            width = launcherWidth(in: proxy)
+            panelHeight = 212
+        case .prompt:
+            width = promptPanelWidth(in: proxy)
+            panelHeight = min(620, proxy.size.height - 40)
+        case .note:
+            width = notePanelWidth(in: proxy)
+            panelHeight = min(560, proxy.size.height - 40)
+        }
         let halfWidth = width / 2
-        let panelHeight = min(620, proxy.size.height - 40)
         let halfHeight = panelHeight / 2
-        let y = min(max(proxy.size.height * 0.26, halfHeight + 12), proxy.size.height - halfHeight - 12)
-        let margin: CGFloat = 18
+        let bubbleCenter = bubblePosition(in: proxy, size: 42)
+        let edgePadding: CGFloat = 12
+        let gapFromBubble: CGFloat = 18
+        let bubbleRadius: CGFloat = 21
+        let y = min(max(bubbleCenter.y, halfHeight + edgePadding), proxy.size.height - halfHeight - edgePadding)
         let proposedX: CGFloat
         if store.settings.floatingBubbleEdge == .trailing {
-            proposedX = proxy.size.width - halfWidth - margin
+            proposedX = bubbleCenter.x - bubbleRadius - gapFromBubble - halfWidth
         } else {
-            proposedX = halfWidth + margin
+            proposedX = bubbleCenter.x + bubbleRadius + gapFromBubble + halfWidth
         }
-        let x = min(max(proposedX, halfWidth + 12), proxy.size.width - halfWidth - 12)
+        let x = min(max(proposedX, halfWidth + edgePadding), proxy.size.width - halfWidth - edgePadding)
         return CGPoint(x: x, y: y)
     }
 
-    private var panelTransition: AnyTransition {
-        store.settings.floatingBubbleEdge == .trailing
-            ? .move(edge: .trailing).combined(with: .opacity)
-            : .move(edge: .leading).combined(with: .opacity)
+    private func panelTransition(for surface: ActiveSurface) -> AnyTransition {
+        let anchor: UnitPoint = store.settings.floatingBubbleEdge == .trailing ? .trailing : .leading
+        let edge: Edge = store.settings.floatingBubbleEdge == .trailing ? .trailing : .leading
+        let insertionScale: CGFloat = surface == .menu ? 0.94 : 0.97
+        return .asymmetric(
+            insertion: .move(edge: edge)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: insertionScale, anchor: anchor)),
+            removal: .opacity.combined(with: .scale(scale: 0.98, anchor: anchor))
+        )
+    }
+
+    private var bubbleScale: CGFloat {
+        if bubbleDragOffset != .zero { return 1.08 }
+        if bubbleHovered || activeSurface != nil { return 1.04 }
+        return 1
+    }
+
+    private var bubbleFillOpacity: Double {
+        if bubbleDragOffset != .zero { return 0.96 }
+        if activeSurface != nil || bubbleHovered { return 0.92 }
+        return 0.82
+    }
+
+    private var bubbleShadowOpacity: Double {
+        if bubbleDragOffset != .zero { return 0.24 }
+        if bubbleHovered || activeSurface != nil { return 0.2 }
+        return 0.16
+    }
+
+    private var bubbleShadowRadius: CGFloat {
+        bubbleDragOffset != .zero ? 16 : (bubbleHovered || activeSurface != nil ? 12 : 9)
+    }
+
+    private var bubbleShadowYOffset: CGFloat {
+        bubbleDragOffset != .zero ? 8 : 4
+    }
+
+    private var panelAnimation: Animation {
+        .spring(response: 0.32, dampingFraction: 0.82)
+    }
+
+    private var notePreviewText: String {
+        let trimmed = noteDraft
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n", with: " ")
+        guard !trimmed.isEmpty else { return "随手记录，关闭不丢" }
+        return String(trimmed.prefix(28))
+    }
+}
+
+private struct LiveMarkdownEditor: NSViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, placeholder: placeholder)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .noBorder
+
+        let textView = PlaceholderTextView()
+        textView.delegate = context.coordinator
+        textView.isRichText = true
+        textView.importsGraphics = false
+        textView.allowsUndo = true
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDataDetectionEnabled = false
+        textView.isAutomaticLinkDetectionEnabled = false
+        textView.isAutomaticTextCompletionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.drawsBackground = false
+        textView.textContainerInset = NSSize(width: 14, height: 14)
+        textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        textView.placeholder = placeholder
+
+        scrollView.documentView = textView
+        context.coordinator.textView = textView
+        context.coordinator.apply(to: textView, string: text, preserveSelection: false)
+        return scrollView
+    }
+
+    func updateNSView(_ nsView: NSScrollView, context: Context) {
+        guard let textView = context.coordinator.textView else { return }
+        textView.placeholder = placeholder
+        if context.coordinator.isApplying { return }
+        if textView.string != text {
+            context.coordinator.apply(to: textView, string: text, preserveSelection: true)
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        @Binding private var text: String
+        private let placeholder: String
+        weak var textView: PlaceholderTextView?
+        var isApplying = false
+
+        init(text: Binding<String>, placeholder: String) {
+            _text = text
+            self.placeholder = placeholder
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView else { return }
+            text = textView.string
+            apply(to: textView, string: textView.string, preserveSelection: true)
+        }
+
+        func apply(to textView: PlaceholderTextView, string: String, preserveSelection: Bool) {
+            isApplying = true
+            let selectedRanges = preserveSelection ? textView.selectedRanges : []
+            textView.textStorage?.setAttributedString(Self.makeAttributedString(from: string))
+            if preserveSelection, !selectedRanges.isEmpty {
+                textView.selectedRanges = selectedRanges
+            }
+            textView.placeholder = placeholder
+            textView.needsDisplay = true
+            isApplying = false
+        }
+
+        private static func makeAttributedString(from text: String) -> NSAttributedString {
+            let attributed = NSMutableAttributedString(
+                string: text,
+                attributes: baseAttributes
+            )
+
+            let fullRange = NSRange(location: 0, length: attributed.length)
+            let nsText = text as NSString
+
+            applyBlockStyles(to: attributed, text: nsText)
+            applyInlinePatterns(to: attributed, text: nsText, range: fullRange)
+            return attributed
+        }
+
+        private static var baseAttributes: [NSAttributedString.Key: Any] {
+            [
+                .font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular),
+                .foregroundColor: NSColor.labelColor
+            ]
+        }
+
+        private static func applyBlockStyles(to attributed: NSMutableAttributedString, text: NSString) {
+            let source = text as String
+            let lines = source.components(separatedBy: .newlines)
+            var location = 0
+            var inCodeBlock = false
+
+            for line in lines {
+                let range = NSRange(location: location, length: line.count)
+                defer { location += line.count + 1 }
+
+                if line.hasPrefix("```") {
+                    inCodeBlock.toggle()
+                    attributed.addAttributes(codeBlockAttributes, range: range)
+                    continue
+                }
+
+                if inCodeBlock {
+                    attributed.addAttributes(codeBlockAttributes, range: range)
+                    continue
+                }
+
+                if line.hasPrefix("# ") {
+                    attributed.addAttributes(headerAttributes(size: 22), range: range)
+                } else if line.hasPrefix("## ") {
+                    attributed.addAttributes(headerAttributes(size: 19), range: range)
+                } else if line.hasPrefix("### ") {
+                    attributed.addAttributes(headerAttributes(size: 17), range: range)
+                } else if line.hasPrefix("> ") {
+                    attributed.addAttributes(quoteAttributes, range: range)
+                } else if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("1. ") {
+                    attributed.addAttributes(listAttributes, range: range)
+                }
+            }
+        }
+
+        private static func applyInlinePatterns(to attributed: NSMutableAttributedString, text: NSString, range: NSRange) {
+            let source = text as String
+            let patterns: [(String, [NSAttributedString.Key: Any])] = [
+                (#"\*\*(.+?)\*\*"#, [.font: NSFont.systemFont(ofSize: 14, weight: .bold)]),
+                (#"`([^`]+)`"#, [
+                    .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+                    .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.10)
+                ]),
+                (#"\[(.+?)\]\((.+?)\)"#, [
+                    .foregroundColor: NSColor.linkColor,
+                    .underlineStyle: NSUnderlineStyle.single.rawValue
+                ])
+            ]
+
+            for (pattern, attrs) in patterns {
+                guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+                let matches = regex.matches(in: source, range: range)
+                for match in matches {
+                    attributed.addAttributes(attrs, range: match.range)
+                    if match.numberOfRanges > 0 {
+                        attributed.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: match.range(at: 0))
+                    }
+                    if match.numberOfRanges > 1 {
+                        attributed.addAttributes(attrs, range: match.range(at: 1))
+                        attributed.addAttribute(.foregroundColor, value: NSColor.labelColor, range: match.range(at: 1))
+                    }
+                }
+            }
+        }
+
+        private static func headerAttributes(size: CGFloat) -> [NSAttributedString.Key: Any] {
+            [
+                .font: NSFont.systemFont(ofSize: size, weight: .semibold),
+                .foregroundColor: NSColor.labelColor
+            ]
+        }
+
+        private static var quoteAttributes: [NSAttributedString.Key: Any] {
+            [
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .font: NSFont.systemFont(ofSize: 14, weight: .regular)
+            ]
+        }
+
+        private static var listAttributes: [NSAttributedString.Key: Any] {
+            [
+                .font: NSFont.systemFont(ofSize: 14, weight: .medium),
+                .foregroundColor: NSColor.labelColor
+            ]
+        }
+
+        private static var codeBlockAttributes: [NSAttributedString.Key: Any] {
+            [
+                .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+                .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.08),
+                .foregroundColor: NSColor.labelColor
+            ]
+        }
+    }
+}
+
+private final class PlaceholderTextView: NSTextView {
+    var placeholder = ""
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard string.isEmpty, !placeholder.isEmpty else { return }
+        let rect = NSRect(
+            x: textContainerInset.width + 3,
+            y: textContainerInset.height + 1,
+            width: bounds.width - textContainerInset.width * 2,
+            height: 22
+        )
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 14),
+            .foregroundColor: NSColor.placeholderTextColor
+        ]
+        placeholder.draw(in: rect, withAttributes: attributes)
     }
 }
 
