@@ -24,6 +24,13 @@ extension ClawdHomeHelperImpl {
         }
     }
 
+    func cancelHermesInstall(username: String, withReply reply: @escaping (Bool) -> Void) {
+        let logPath = hermesInitLogURL(username: username).path
+        terminateManagedProcess(logPath: logPath)
+        helperLog("Hermes 安装已取消 @\(username)")
+        reply(true)
+    }
+
     func getHermesVersion(username: String, withReply reply: @escaping (String) -> Void) {
         reply(HermesInstaller.installedVersion(username: username) ?? "")
     }
@@ -59,6 +66,105 @@ extension ClawdHomeHelperImpl {
         reply(running, pid)
     }
 
+    // MARK: - 初始化配置
+
+    func applyHermesInitConfig(
+        username: String,
+        payloadJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        helperLog("Hermes apply init config @\(username) bytes=\(payloadJSON.utf8.count)")
+        do {
+            try HermesConfigWriter.apply(username: username, payloadJSON: payloadJSON)
+            reply(true, nil)
+        } catch {
+            helperLog("Hermes apply init config 失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func getHermesInitSummary(username: String, withReply reply: @escaping (String) -> Void) {
+        helperLog("Hermes get init summary @\(username)")
+        reply(HermesConfigWriter.initSummaryJSON(username: username))
+    }
+
+    func validateHermesInitConfig(
+        username: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    ) {
+        helperLog("Hermes validate init config @\(username)")
+        reply(true, HermesConfigWriter.validateJSON(username: username))
+    }
+
+    // MARK: - Hermes profiles
+
+    func listHermesProfiles(
+        username: String,
+        withReply reply: @escaping (String?, String?) -> Void
+    ) {
+        helperLog("Hermes list profiles @\(username)")
+        do {
+            let json = try HermesProfileManager.listProfiles(username: username)
+            reply(json, nil)
+        } catch {
+            helperLog("Hermes list profiles 失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(nil, error.localizedDescription)
+        }
+    }
+
+    func createHermesProfile(
+        username: String,
+        configJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        helperLog("Hermes create profile @\(username)")
+        do {
+            try HermesProfileManager.createProfile(username: username, configJSON: configJSON)
+            reply(true, nil)
+        } catch {
+            helperLog("Hermes create profile 失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func getHermesActiveProfile(
+        username: String,
+        withReply reply: @escaping (String) -> Void
+    ) {
+        helperLog("Hermes get active profile @\(username)")
+        reply(HermesProfileManager.activeProfileID(username: username))
+    }
+
+    func setHermesActiveProfile(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        helperLog("Hermes set active profile @\(username): \(profileID)")
+        do {
+            try HermesProfileManager.setActiveProfile(username: username, profileID: profileID)
+            reply(true, nil)
+        } catch {
+            helperLog("Hermes set active profile 失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func removeHermesProfile(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        helperLog("Hermes remove profile @\(username): \(profileID)")
+        do {
+            try HermesProfileManager.removeProfile(username: username, profileID: profileID)
+            reply(true, nil)
+        } catch {
+            helperLog("Hermes remove profile 失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
     // MARK: - 辅助
 
     /// Hermes 安装日志路径（world-readable，供 App/CLI 实时读取）
@@ -68,7 +174,7 @@ extension ClawdHomeHelperImpl {
             FileManager.default.createFile(
                 atPath: path,
                 contents: nil,
-                attributes: [.posixPermissions: 0o644]
+                attributes: [.posixPermissions: 0o640]
             )
         }
         return URL(fileURLWithPath: path)

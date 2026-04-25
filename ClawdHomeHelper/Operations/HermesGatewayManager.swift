@@ -122,6 +122,12 @@ struct HermesGatewayManager {
                 return (true, pid)
             }
         }
+        if output.contains("state = running") {
+            if let pid = hermesProcessPIDs(username: username).first {
+                return (true, pid)
+            }
+            return (true, -1)
+        }
         return (false, -1)
     }
 
@@ -220,6 +226,27 @@ struct HermesGatewayManager {
     private static func clampLog(_ text: String, max: Int = 240) -> String {
         guard text.count > max else { return text }
         return String(text.prefix(max)) + "...(truncated)"
+    }
+
+    /// 兜底扫描 Hermes gateway 进程，防止 launchctl print 短暂缺失 pid 字段导致状态抖动
+    private static func hermesProcessPIDs(username: String) -> [Int32] {
+        guard let output = try? run("/bin/ps", args: ["-axo", "pid=,user=,command="]) else {
+            return []
+        }
+        return output
+            .split(separator: "\n")
+            .compactMap { rawLine -> Int32? in
+                let line = rawLine.trimmingCharacters(in: .whitespaces)
+                guard !line.isEmpty else { return nil }
+                let fields = line.split(maxSplits: 2, whereSeparator: { $0 == " " || $0 == "\t" })
+                guard fields.count == 3 else { return nil }
+                guard let pid = Int32(fields[0]) else { return nil }
+                let userField = String(fields[1])
+                let commandField = String(fields[2])
+                guard userField == username else { return nil }
+                guard commandField.contains("hermes"), commandField.contains(" gateway") else { return nil }
+                return pid
+            }
     }
 }
 

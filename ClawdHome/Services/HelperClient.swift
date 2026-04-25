@@ -645,7 +645,7 @@ final class HelperClient {
 
     // MARK: - Hermes Agent 引擎
 
-    /// 为指定用户安装 Hermes Agent（Python venv + pip/uv）
+    /// 为指定用户安装 Hermes Agent（通过 Helper 调用官方 install.sh）
     func installHermes(username: String, version: String? = nil) async throws {
         guard let proxy = installProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
@@ -654,6 +654,14 @@ final class HelperClient {
             }
         }
         if !ok { throw HelperError.operationFailed(msg ?? "Hermes 安装失败") }
+    }
+
+    /// 取消正在进行的 Hermes 安装
+    func cancelHermesInstall(username: String) async {
+        guard let proxy = controlProxy else { return }
+        _ = try? await xpcCall { (done: @escaping (Bool) -> Void) in
+            proxy.cancelHermesInstall(username: username) { done($0) }
+        }
     }
 
     /// 查询指定用户已安装的 Hermes 版本，未安装返回 nil
@@ -695,6 +703,105 @@ final class HelperClient {
                 }
             }
         } catch { return (false, -1) }
+    }
+
+    /// 应用 Hermes 初始化配置（写入 ~/.hermes/config.yaml + ~/.hermes/.env）
+    func applyHermesInitConfig(username: String, payloadJSON: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else {
+            return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
+        }
+        do {
+            return try await xpcCall { done in
+                proxy.applyHermesInitConfig(username: username, payloadJSON: payloadJSON) { ok, err in
+                    done((ok, err))
+                }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 读取 Hermes 初始化摘要（JSON 编码字符串）
+    func getHermesInitSummary(username: String) async -> String? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            return try await xpcCall { done in
+                proxy.getHermesInitSummary(username: username) { json in
+                    done(json)
+                }
+            }
+        } catch { return nil }
+    }
+
+    /// 校验 Hermes 初始化配置，Bool 仅表示 RPC 是否成功执行
+    func validateHermesInitConfig(username: String) async -> (Bool, String)? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            return try await xpcCall { done in
+                proxy.validateHermesInitConfig(username: username) { ok, report in
+                    done((ok, report))
+                }
+            }
+        } catch { return nil }
+    }
+
+    /// 列出 Hermes profiles（映射为 [AgentProfile]，main=default profile）
+    func listHermesProfiles(username: String) async throws -> [AgentProfile] {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (json, err): (String?, String?) = try await xpcCall { done in
+            proxy.listHermesProfiles(username: username) { j, e in
+                done((j, e))
+            }
+        }
+        if let err { throw HelperError.operationFailed(err) }
+        guard let json, let data = json.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([AgentProfile].self, from: data)) ?? []
+    }
+
+    /// 创建/更新 Hermes profile（id="main" 时更新 default profile 元信息）
+    func createHermesProfile(username: String, config: AgentProfile) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let configJSON = String(data: try JSONEncoder().encode(config), encoding: .utf8) ?? "{}"
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.createHermesProfile(username: username, configJSON: configJSON) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? "创建 Hermes profile 失败") }
+    }
+
+    /// 获取当前 Hermes 活跃 profile（返回 profile id；默认 "main"）
+    func getHermesActiveProfile(username: String) async -> String {
+        guard let proxy = controlProxy else { return "main" }
+        do {
+            let value: String = try await xpcCall { done in
+                proxy.getHermesActiveProfile(username: username) { done($0) }
+            }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "main" : trimmed
+        } catch {
+            return "main"
+        }
+    }
+
+    /// 设置 Hermes 活跃 profile（profileID: main 或命名 profile）
+    func setHermesActiveProfile(username: String, profileID: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.setHermesActiveProfile(username: username, profileID: profileID) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? "切换 Hermes profile 失败") }
+    }
+
+    /// 删除 Hermes profile（不允许删除 main）
+    func removeHermesProfile(username: String, profileID: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.removeHermesProfile(username: username, profileID: profileID) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? "删除 Hermes profile 失败") }
     }
 
     // MARK: - 用户环境初始化
@@ -1563,12 +1670,18 @@ final class HelperClient {
     // MARK: - 统一诊断
 
     /// 对指定用户执行统一诊断（环境 + 权限 + 配置 + 安全 + Gateway + 网络）
-    func runDiagnostics(username: String, fix: Bool) async -> DiagnosticsResult? {
+    func runDiagnostics(username: String, fix: Bool, engine: String? = nil) async -> DiagnosticsResult? {
         guard let proxy = controlProxy else { return nil }
         do {
             let (_, json): (Bool, String) = try await xpcCall(timeout: .seconds(60)) { done in
-                proxy.runDiagnostics(username: username, fix: fix) { ok, json in
-                    done((ok, json))
+                if let engine, !engine.isEmpty {
+                    proxy.runDiagnosticsForEngine(username: username, fix: fix, engine: engine) { ok, json in
+                        done((ok, json))
+                    }
+                } else {
+                    proxy.runDiagnostics(username: username, fix: fix) { ok, json in
+                        done((ok, json))
+                    }
                 }
             }
             guard let data = json.data(using: .utf8) else { return nil }
@@ -1577,12 +1690,28 @@ final class HelperClient {
     }
 
     /// 单组诊断（逐组调用，实时展示进度）
-    func runDiagnosticGroup(username: String, group: DiagnosticGroup, fix: Bool) async -> [DiagnosticItem] {
+    func runDiagnosticGroup(
+        username: String,
+        group: DiagnosticGroup,
+        fix: Bool,
+        engine: String? = nil
+    ) async -> [DiagnosticItem] {
         guard let proxy = controlProxy else { return [] }
         do {
             let (_, json): (Bool, String) = try await xpcCall(timeout: .seconds(30)) { done in
-                proxy.runDiagnosticGroup(username: username, groupName: group.rawValue, fix: fix) { ok, json in
-                    done((ok, json))
+                if let engine, !engine.isEmpty {
+                    proxy.runDiagnosticGroupForEngine(
+                        username: username,
+                        groupName: group.rawValue,
+                        fix: fix,
+                        engine: engine
+                    ) { ok, json in
+                        done((ok, json))
+                    }
+                } else {
+                    proxy.runDiagnosticGroup(username: username, groupName: group.rawValue, fix: fix) { ok, json in
+                        done((ok, json))
+                    }
                 }
             }
             guard let data = json.data(using: .utf8) else { return [] }
