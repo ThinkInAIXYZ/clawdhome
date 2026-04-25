@@ -675,72 +675,119 @@ final class HelperClient {
         } catch { return nil }
     }
 
-    /// 启动 Hermes gateway
-    func startHermesGateway(username: String) async throws {
+    /// 启动 Hermes gateway（profile-aware）
+    func startHermesGateway(username: String, profileID: String) async throws {
         guard let proxy = gatewayProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = try await xpcCall { done in
-            proxy.startHermesGateway(username: username) { ok, msg in done((ok, msg)) }
+            proxy.startHermesGateway(username: username, profileID: profileID) { ok, msg in done((ok, msg)) }
         }
         if !ok { throw HelperError.operationFailed(msg ?? "Hermes 启动失败") }
     }
 
-    /// 停止 Hermes gateway
-    func stopHermesGateway(username: String) async throws {
+    /// 启动 Hermes gateway（main profile，向后兼容）
+    func startHermesGateway(username: String) async throws {
+        try await startHermesGateway(username: username, profileID: "main")
+    }
+
+    /// 停止 Hermes gateway（profile-aware）
+    func stopHermesGateway(username: String, profileID: String) async throws {
         guard let proxy = gatewayProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = try await xpcCall { done in
-            proxy.stopHermesGateway(username: username) { ok, msg in done((ok, msg)) }
+            proxy.stopHermesGateway(username: username, profileID: profileID) { ok, msg in done((ok, msg)) }
         }
         if !ok { throw HelperError.operationFailed(msg ?? "Hermes 停止失败") }
     }
 
-    /// 查询 Hermes gateway 状态
-    func getHermesGatewayStatus(username: String) async -> (running: Bool, pid: Int32) {
+    /// 停止 Hermes gateway（main profile，向后兼容）
+    func stopHermesGateway(username: String) async throws {
+        try await stopHermesGateway(username: username, profileID: "main")
+    }
+
+    /// 查询 Hermes gateway 状态（profile-aware）
+    func getHermesGatewayStatus(username: String, profileID: String) async -> (running: Bool, pid: Int32) {
         guard let proxy = controlProxy else { return (false, -1) }
         do {
             return try await xpcCall { done in
-                proxy.getHermesGatewayStatus(username: username) { running, pid in
+                proxy.getHermesGatewayStatus(username: username, profileID: profileID) { running, pid in
                     done((running, pid))
                 }
             }
         } catch { return (false, -1) }
     }
 
-    /// 应用 Hermes 初始化配置（写入 ~/.hermes/config.yaml + ~/.hermes/.env）
-    func applyHermesInitConfig(username: String, payloadJSON: String) async -> (Bool, String?) {
+    /// 查询 Hermes gateway 状态（main profile，向后兼容）
+    func getHermesGatewayStatus(username: String) async -> (running: Bool, pid: Int32) {
+        await getHermesGatewayStatus(username: username, profileID: "main")
+    }
+
+    /// 卸载 Hermes gateway plist（profile-aware）
+    func uninstallHermesGateway(username: String, profileID: String) async -> (Bool, String?) {
         guard let proxy = controlProxy else {
             return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
         }
         do {
             return try await xpcCall { done in
-                proxy.applyHermesInitConfig(username: username, payloadJSON: payloadJSON) { ok, err in
+                proxy.uninstallHermesGateway(username: username, profileID: profileID) { ok, err in
                     done((ok, err))
                 }
             }
         } catch { return (false, error.localizedDescription) }
     }
 
-    /// 读取 Hermes 初始化摘要（JSON 编码字符串）
-    func getHermesInitSummary(username: String) async -> String? {
+    /// 应用 Hermes 初始化配置（profile-aware）
+    /// TODO(PR-3): profileID 路径分发待 HermesConfigWriter 支持后生效
+    func applyHermesInitConfig(username: String, profileID: String, payloadJSON: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else {
+            return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
+        }
+        do {
+            return try await xpcCall { done in
+                proxy.applyHermesInitConfig(username: username, profileID: profileID, payloadJSON: payloadJSON) { ok, err in
+                    done((ok, err))
+                }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 应用 Hermes 初始化配置（main profile，向后兼容）
+    func applyHermesInitConfig(username: String, payloadJSON: String) async -> (Bool, String?) {
+        await applyHermesInitConfig(username: username, profileID: "main", payloadJSON: payloadJSON)
+    }
+
+    /// 读取 Hermes 初始化摘要（profile-aware）
+    /// TODO(PR-3): profileID 路径分发待 HermesConfigWriter 支持后生效
+    func getHermesInitSummary(username: String, profileID: String) async -> String? {
         guard let proxy = controlProxy else { return nil }
         do {
             return try await xpcCall { done in
-                proxy.getHermesInitSummary(username: username) { json in
+                proxy.getHermesInitSummary(username: username, profileID: profileID) { json in
                     done(json)
                 }
             }
         } catch { return nil }
     }
 
-    /// 校验 Hermes 初始化配置，Bool 仅表示 RPC 是否成功执行
-    func validateHermesInitConfig(username: String) async -> (Bool, String)? {
+    /// 读取 Hermes 初始化摘要（main profile，向后兼容）
+    func getHermesInitSummary(username: String) async -> String? {
+        await getHermesInitSummary(username: username, profileID: "main")
+    }
+
+    /// 校验 Hermes 初始化配置（profile-aware），Bool 仅表示 RPC 是否成功执行
+    /// TODO(PR-3): profileID 路径分发待 HermesConfigWriter 支持后生效
+    func validateHermesInitConfig(username: String, profileID: String) async -> (Bool, String)? {
         guard let proxy = controlProxy else { return nil }
         do {
             return try await xpcCall { done in
-                proxy.validateHermesInitConfig(username: username) { ok, report in
+                proxy.validateHermesInitConfig(username: username, profileID: profileID) { ok, report in
                     done((ok, report))
                 }
             }
         } catch { return nil }
+    }
+
+    /// 校验 Hermes 初始化配置（main profile，向后兼容）
+    func validateHermesInitConfig(username: String) async -> (Bool, String)? {
+        await validateHermesInitConfig(username: username, profileID: "main")
     }
 
     /// 列出 Hermes profiles（映射为 [AgentProfile]，main=default profile）

@@ -35,65 +35,123 @@ extension ClawdHomeHelperImpl {
         reply(HermesInstaller.installedVersion(username: username) ?? "")
     }
 
-    // MARK: - 生命周期
+    // MARK: - 生命周期（profile-aware）
 
+    func startHermesGateway(username: String, profileID: String,
+                            withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("Hermes 启动 profile=\(profileID) @\(username)")
+        do {
+            let uid = try UserManager.uid(for: username)
+            try HermesGatewayManager.startGateway(username: username, profileID: profileID, uid: uid)
+            reply(true, nil)
+        } catch {
+            helperLog("Hermes 启动失败 profile=\(profileID) @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    /// 向后兼容：转发到 profileID="main"
     func startHermesGateway(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
-        helperLog("Hermes 启动 @\(username)")
+        startHermesGateway(username: username, profileID: "main", withReply: reply)
+    }
+
+    func stopHermesGateway(username: String, profileID: String,
+                           withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("Hermes 停止 profile=\(profileID) @\(username)")
         do {
             let uid = try UserManager.uid(for: username)
-            try HermesGatewayManager.startGateway(username: username, uid: uid)
+            try HermesGatewayManager.stopGateway(username: username, profileID: profileID, uid: uid)
             reply(true, nil)
         } catch {
-            helperLog("Hermes 启动失败 @\(username): \(error.localizedDescription)", level: .error)
+            helperLog("Hermes 停止失败 profile=\(profileID) @\(username): \(error.localizedDescription)", level: .error)
             reply(false, error.localizedDescription)
         }
     }
 
+    /// 向后兼容：转发到 profileID="main"
     func stopHermesGateway(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
-        helperLog("Hermes 停止 @\(username)")
-        do {
-            let uid = try UserManager.uid(for: username)
-            try HermesGatewayManager.stopGateway(username: username, uid: uid)
-            reply(true, nil)
-        } catch {
-            helperLog("Hermes 停止失败 @\(username): \(error.localizedDescription)", level: .error)
-            reply(false, error.localizedDescription)
-        }
+        stopHermesGateway(username: username, profileID: "main", withReply: reply)
     }
 
-    func getHermesGatewayStatus(username: String, withReply reply: @escaping (Bool, Int32) -> Void) {
-        let (running, pid) = HermesGatewayManager.status(username: username)
+    func getHermesGatewayStatus(username: String, profileID: String,
+                                withReply reply: @escaping (Bool, Int32) -> Void) {
+        let (running, pid) = HermesGatewayManager.status(username: username, profileID: profileID)
         reply(running, pid)
     }
 
-    // MARK: - 初始化配置
+    /// 向后兼容：转发到 profileID="main"
+    func getHermesGatewayStatus(username: String, withReply reply: @escaping (Bool, Int32) -> Void) {
+        getHermesGatewayStatus(username: username, profileID: "main", withReply: reply)
+    }
 
+    func uninstallHermesGateway(username: String, profileID: String,
+                                withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("Hermes 卸载 gateway profile=\(profileID) @\(username)")
+        do {
+            try HermesGatewayManager.uninstallGateway(username: username, profileID: profileID)
+            reply(true, nil)
+        } catch {
+            helperLog("Hermes 卸载 gateway 失败 profile=\(profileID) @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    // MARK: - 初始化配置（profile-aware，PR-3 完整实现 profileID 路径分发）
+
+    func applyHermesInitConfig(
+        username: String,
+        profileID: String,
+        payloadJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        helperLog("Hermes apply init config profile=\(profileID) @\(username) bytes=\(payloadJSON.utf8.count)")
+        // TODO(PR-3): HermesConfigWriter.apply 尚未 profile-aware，profileID 参数当前忽略
+        do {
+            try HermesConfigWriter.apply(username: username, payloadJSON: payloadJSON)
+            reply(true, nil)
+        } catch {
+            helperLog("Hermes apply init config 失败 profile=\(profileID) @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    /// 向后兼容：转发到 profileID="main"
     func applyHermesInitConfig(
         username: String,
         payloadJSON: String,
         withReply reply: @escaping (Bool, String?) -> Void
     ) {
-        helperLog("Hermes apply init config @\(username) bytes=\(payloadJSON.utf8.count)")
-        do {
-            try HermesConfigWriter.apply(username: username, payloadJSON: payloadJSON)
-            reply(true, nil)
-        } catch {
-            helperLog("Hermes apply init config 失败 @\(username): \(error.localizedDescription)", level: .error)
-            reply(false, error.localizedDescription)
-        }
+        applyHermesInitConfig(username: username, profileID: "main", payloadJSON: payloadJSON, withReply: reply)
     }
 
-    func getHermesInitSummary(username: String, withReply reply: @escaping (String) -> Void) {
-        helperLog("Hermes get init summary @\(username)")
+    func getHermesInitSummary(username: String, profileID: String,
+                              withReply reply: @escaping (String) -> Void) {
+        helperLog("Hermes get init summary profile=\(profileID) @\(username)")
+        // TODO(PR-3): HermesConfigWriter.initSummaryJSON 尚未 profile-aware，profileID 参数当前忽略
         reply(HermesConfigWriter.initSummaryJSON(username: username))
+    }
+
+    /// 向后兼容：转发到 profileID="main"
+    func getHermesInitSummary(username: String, withReply reply: @escaping (String) -> Void) {
+        getHermesInitSummary(username: username, profileID: "main", withReply: reply)
     }
 
     func validateHermesInitConfig(
         username: String,
+        profileID: String,
         withReply reply: @escaping (Bool, String) -> Void
     ) {
-        helperLog("Hermes validate init config @\(username)")
+        helperLog("Hermes validate init config profile=\(profileID) @\(username)")
+        // TODO(PR-3): HermesConfigWriter.validateJSON 尚未 profile-aware，profileID 参数当前忽略
         reply(true, HermesConfigWriter.validateJSON(username: username))
+    }
+
+    /// 向后兼容：转发到 profileID="main"
+    func validateHermesInitConfig(
+        username: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    ) {
+        validateHermesInitConfig(username: username, profileID: "main", withReply: reply)
     }
 
     // MARK: - Hermes profiles

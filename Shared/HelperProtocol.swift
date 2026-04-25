@@ -790,41 +790,103 @@ import Foundation
         withReply reply: @escaping (String) -> Void
     )
 
-    /// 以指定用户身份启动 hermes gateway（LaunchDaemon：ai.clawdhome.hermes.<user>）
+    // MARK: - Hermes Gateway 生命周期（profile-aware）
+    // label 规则：main → ai.clawdhome.hermes.<user>；named → ai.clawdhome.hermes.<user>.<profileID>
+    // 老接口（不带 profileID）保留，内部转发到 profileID="main"（向后兼容，至少一个版本）
+
+    /// 以指定用户身份启动 hermes gateway（profile-aware）
+    /// profileID="main" 时 label = ai.clawdhome.hermes.<user>（向后兼容）
+    func startHermesGateway(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 以指定用户身份启动 hermes gateway（main profile，向后兼容）
+    /// 内部转发到 startHermesGateway(username:profileID:"main":)
     func startHermesGateway(
         username: String,
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
-    /// 停止指定用户的 hermes gateway
+    /// 停止指定用户的指定 profile 的 hermes gateway
+    func stopHermesGateway(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 停止指定用户的 hermes gateway（main profile，向后兼容）
     func stopHermesGateway(
         username: String,
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
-    /// 查询 hermes gateway 运行状态，返回 (isRunning, pid)
-    /// Hermes 不绑定 HTTP 端口，只能根据 launchd 注册态判断是否在跑
+    /// 查询指定 profile 的 hermes gateway 运行状态，返回 (isRunning, pid)
+    func getHermesGatewayStatus(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, Int32) -> Void
+    )
+
+    /// 查询 hermes gateway 运行状态（main profile，向后兼容）
     func getHermesGatewayStatus(
         username: String,
         withReply reply: @escaping (Bool, Int32) -> Void
     )
 
-    /// 应用 Hermes 初始化配置（写入 ~/.hermes/config.yaml + ~/.hermes/.env）
-    /// payloadJSON 结构由 App 侧定义并序列化，Helper 仅做字段提取和落盘。
+    /// 卸载指定 profile 的 hermes gateway（bootout + 删除 plist）
+    func uninstallHermesGateway(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    // MARK: - Hermes 配置写入（profile-aware）
+    // applyHermesInitConfig / getHermesInitSummary / validateHermesInitConfig
+    // 老接口保留，内部转发到 profileID="main"（PR-3 会完整实现 profileID 路径分发）
+
+    /// 应用 Hermes 初始化配置（profile-aware；payloadJSON 由 App 侧序列化）
+    /// - profileID="main" 写入 ~/.hermes/；named 写入 ~/.hermes/profiles/<profileID>/
+    /// - TODO(PR-3): HermesConfigWriter.apply 尚未 profile-aware，当前 profileID 参数接收但忽略
+    func applyHermesInitConfig(
+        username: String,
+        profileID: String,
+        payloadJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 应用 Hermes 初始化配置（main profile，向后兼容）
     func applyHermesInitConfig(
         username: String,
         payloadJSON: String,
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
-    /// 读取 Hermes 初始化摘要（JSON 编码字符串，失败返回 "{}"）
+    /// 读取指定 profile 的 Hermes 初始化摘要（JSON 编码字符串，失败返回 "{}"）
+    /// - TODO(PR-3): HermesConfigWriter.initSummaryJSON 尚未 profile-aware，当前 profileID 忽略
+    func getHermesInitSummary(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 读取 Hermes 初始化摘要（main profile，向后兼容）
     func getHermesInitSummary(
         username: String,
         withReply reply: @escaping (String) -> Void
     )
 
-    /// 校验 Hermes 初始化配置完整性（返回 JSON 编码报告）
+    /// 校验指定 profile 的 Hermes 初始化配置完整性（返回 JSON 编码报告）
     /// withReply 第一个 Bool 仅表示 RPC 是否成功执行，配置是否通过请看返回 JSON 的 valid 字段。
+    /// - TODO(PR-3): HermesConfigWriter.validateJSON 尚未 profile-aware，当前 profileID 忽略
+    func validateHermesInitConfig(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 校验 Hermes 初始化配置完整性（main profile，向后兼容）
     func validateHermesInitConfig(
         username: String,
         withReply reply: @escaping (Bool, String) -> Void

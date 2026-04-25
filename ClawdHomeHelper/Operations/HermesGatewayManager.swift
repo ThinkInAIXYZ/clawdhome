@@ -4,27 +4,57 @@
 // 与 OpenClaw GatewayManager 的关键差异：
 //   - Hermes gateway 默认不绑定 HTTP 端口，直接连消息平台，因此无需端口分配 / 冲突检测
 //   - 进程启动命令：`hermes gateway`（参考 hermes-agent README）
-//   - LaunchDaemon Label 使用独立命名空间：ai.clawdhome.hermes.<user>，避免与 openclaw 冲突
+//   - LaunchDaemon Label 使用独立命名空间：
+//       main profile → ai.clawdhome.hermes.<user>（向后兼容）
+//       named profile → ai.clawdhome.hermes.<user>.<profileID>
 
 import Foundation
 
 struct HermesGatewayManager {
     private static let gatewayLabel = "ai.clawdhome.hermes"
 
-    /// /Library/LaunchDaemons/ai.clawdhome.hermes.<user>.plist
+    // MARK: - Label / 路径计算
+
+    /// 计算 launchd label
+    /// - main profile → ai.clawdhome.hermes.<user>（向后兼容旧 label）
+    /// - named profile → ai.clawdhome.hermes.<user>.<profileID>
+    static func daemonLabel(username: String, profileID: String) -> String {
+        if profileID == "main" {
+            return "\(gatewayLabel).\(username)"
+        }
+        return "\(gatewayLabel).\(username).\(profileID)"
+    }
+
+    /// HERMES_HOME 环境变量路径
+    /// - main → ~/.hermes
+    /// - named → ~/.hermes/profiles/<profileID>
+    static func hermesHomeForProfile(username: String, profileID: String) -> String {
+        let base = HermesInstaller.hermesHome(for: username)
+        if profileID == "main" {
+            return base
+        }
+        return "\(base)/profiles/\(profileID)"
+    }
+
+    /// /Library/LaunchDaemons/<label>.plist
+    static func launchDaemonPath(username: String, profileID: String) -> String {
+        "/Library/LaunchDaemons/\(daemonLabel(username: username, profileID: profileID)).plist"
+    }
+
+    /// 向后兼容重载：profileID 默认为 "main"
     static func launchDaemonPath(username: String) -> String {
-        "/Library/LaunchDaemons/\(gatewayLabel).\(username).plist"
+        launchDaemonPath(username: username, profileID: "main")
     }
 
     // MARK: - 启动
 
-    /// 为指定用户写入 LaunchDaemon plist 并启动 hermes gateway（幂等）
+    /// 为指定用户的指定 profile 写入 LaunchDaemon plist 并启动 hermes gateway（幂等）
     /// 注：`uid` 当前仅用于日志，保留参数以便后续对齐 openclaw 接口
-    static func startGateway(username: String, uid: Int) throws {
-        let label = "\(gatewayLabel).\(username)"
-        let plistPath = launchDaemonPath(username: username)
+    static func startGateway(username: String, profileID: String, uid: Int) throws {
+        let label = daemonLabel(username: username, profileID: profileID)
+        let plistPath = launchDaemonPath(username: username, profileID: profileID)
 
-        helperLog("[HermesGateway] START_BEGIN: uid=\(uid) @\(username)")
+        helperLog("[HermesGateway] START_BEGIN: uid=\(uid) profile=\(profileID) @\(username)")
 
         // 1. 前置检查：hermes 可执行文件必须存在
         let hermesBin = HermesInstaller.hermesExecutable(for: username)
@@ -35,7 +65,8 @@ struct HermesGatewayManager {
         }
 
         // 2. 确保日志目录存在（归属目标用户，权限 700）
-        let logsDir = "\(HermesInstaller.hermesHome(for: username))/logs"
+        let profileHome = hermesHomeForProfile(username: username, profileID: profileID)
+        let logsDir = "\(profileHome)/logs"
         if !FileManager.default.fileExists(atPath: logsDir) {
             try? FileManager.default.createDirectory(
                 atPath: logsDir, withIntermediateDirectories: true, attributes: nil
@@ -45,7 +76,7 @@ struct HermesGatewayManager {
         }
 
         // 3. 生成期望的 plist 内容
-        let newPlist = makePlist(username: username, hermesBin: hermesBin)
+        let newPlist = makePlist(username: username, profileID: profileID, hermesBin: hermesBin)
 
         // 4. 根据 launchd 注册状态选择操作
         let isRegistered = (try? run("/bin/launchctl", args: ["print", "system/\(label)"])) != nil
@@ -53,11 +84,11 @@ struct HermesGatewayManager {
             let existingPlist = (try? String(contentsOfFile: plistPath, encoding: .utf8)) ?? ""
             if existingPlist == newPlist {
                 // 已注册 + plist 未变：kickstart 确保 job 处于运行态（幂等）
-                helperLog("[HermesGateway] START_STEP: 已注册 + plist 未变，kickstart @\(username)")
+                helperLog("[HermesGateway] START_STEP: 已注册 + plist 未变，kickstart profile=\(profileID) @\(username)")
                 _ = try? run("/bin/launchctl", args: ["kickstart", "-k", "system/\(label)"])
             } else {
                 // plist 变更：bootout → 写新 plist → bootstrap
-                helperLog("[HermesGateway] START_STEP: plist 变更，bootout + bootstrap @\(username)")
+                helperLog("[HermesGateway] START_STEP: plist 变更，bootout + bootstrap profile=\(profileID) @\(username)")
                 if (try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])) == nil {
                     helperLog("launchctl bootout system/\(label) failed for @\(username)", level: .warn)
                 }
@@ -66,7 +97,7 @@ struct HermesGatewayManager {
                 try bootstrapSystem(label: label, plistPath: plistPath)
             }
         } else {
-            helperLog("[HermesGateway] START_STEP: 首次注册，bootstrap @\(username)")
+            helperLog("[HermesGateway] START_STEP: 首次注册，bootstrap profile=\(profileID) @\(username)")
             try writePlist(newPlist, to: plistPath)
             try bootstrapSystem(label: label, plistPath: plistPath)
         }
@@ -74,26 +105,36 @@ struct HermesGatewayManager {
         helperLog("[HermesGateway] START_OK: label=\(label) @\(username)")
     }
 
+    /// 向后兼容重载：profileID 默认为 "main"
+    static func startGateway(username: String, uid: Int) throws {
+        try startGateway(username: username, profileID: "main", uid: uid)
+    }
+
     // MARK: - 停止
 
-    static func stopGateway(username: String, uid: Int) throws {
-        let label = "\(gatewayLabel).\(username)"
-        helperLog("[HermesGateway] STOP: label=\(label) uid=\(uid) @\(username)")
+    static func stopGateway(username: String, profileID: String, uid: Int) throws {
+        let label = daemonLabel(username: username, profileID: profileID)
+        helperLog("[HermesGateway] STOP: label=\(label) uid=\(uid) profile=\(profileID) @\(username)")
         do {
             try run("/bin/launchctl", args: ["bootout", "system/\(label)"])
         } catch {
             if !isIgnorableLaunchctlBootoutError(error) { throw error }
-            helperLog("[HermesGateway] STOP_SKIP: job 不存在，视为已停止 @\(username)")
+            helperLog("[HermesGateway] STOP_SKIP: job 不存在，视为已停止 profile=\(profileID) @\(username)")
         }
-        helperLog("[HermesGateway] STOP_OK @\(username)")
+        helperLog("[HermesGateway] STOP_OK profile=\(profileID) @\(username)")
+    }
+
+    /// 向后兼容重载：profileID 默认为 "main"
+    static func stopGateway(username: String, uid: Int) throws {
+        try stopGateway(username: username, profileID: "main", uid: uid)
     }
 
     // MARK: - 卸载
 
     /// 移除 LaunchDaemon 注册并删除 plist
-    static func uninstallGateway(username: String) throws {
-        let label = "\(gatewayLabel).\(username)"
-        let plistPath = launchDaemonPath(username: username)
+    static func uninstallGateway(username: String, profileID: String) throws {
+        let label = daemonLabel(username: username, profileID: profileID)
+        let plistPath = launchDaemonPath(username: username, profileID: profileID)
 
         do {
             try run("/bin/launchctl", args: ["bootout", "system/\(label)"])
@@ -103,15 +144,20 @@ struct HermesGatewayManager {
         if FileManager.default.fileExists(atPath: plistPath) {
             try FileManager.default.removeItem(atPath: plistPath)
         }
-        helperLog("[HermesGateway] UNINSTALL_OK: plist=\(plistPath) @\(username)")
+        helperLog("[HermesGateway] UNINSTALL_OK: plist=\(plistPath) profile=\(profileID) @\(username)")
+    }
+
+    /// 向后兼容重载：profileID 默认为 "main"
+    static func uninstallGateway(username: String) throws {
+        try uninstallGateway(username: username, profileID: "main")
     }
 
     // MARK: - 状态查询
 
-    /// 查询 launchd 中 hermes gateway 的运行状态
+    /// 查询 launchd 中指定 profile 的 hermes gateway 运行状态
     /// - Returns: (isRunning, pid) — pid 为 -1 表示未运行
-    static func status(username: String) -> (running: Bool, pid: Int32) {
-        let label = "\(gatewayLabel).\(username)"
+    static func status(username: String, profileID: String) -> (running: Bool, pid: Int32) {
+        let label = daemonLabel(username: username, profileID: profileID)
         guard let output = try? run("/bin/launchctl", args: ["print", "system/\(label)"]) else {
             return (false, -1)
         }
@@ -123,6 +169,8 @@ struct HermesGatewayManager {
             }
         }
         if output.contains("state = running") {
+            // 兜底：launchctl print 短暂缺失 pid 字段时，按 username 维度扫进程
+            // （多 profile 进程都会匹配 hermes + gateway，无法按 profileID 区分，属降级路径）
             if let pid = hermesProcessPIDs(username: username).first {
                 return (true, pid)
             }
@@ -131,13 +179,18 @@ struct HermesGatewayManager {
         return (false, -1)
     }
 
+    /// 向后兼容重载：profileID 默认为 "main"
+    static func status(username: String) -> (running: Bool, pid: Int32) {
+        status(username: username, profileID: "main")
+    }
+
     // MARK: - plist 生成
 
-    private static func makePlist(username: String, hermesBin: String) -> String {
-        let label = "\(gatewayLabel).\(username)"
+    private static func makePlist(username: String, profileID: String, hermesBin: String) -> String {
+        let label = daemonLabel(username: username, profileID: profileID)
         let home = "/Users/\(username)"
-        let hermesHome = HermesInstaller.hermesHome(for: username)
-        let logPath = "\(hermesHome)/logs/gateway.log"
+        let profileHome = hermesHomeForProfile(username: username, profileID: profileID)
+        let logPath = "\(profileHome)/logs/gateway.log"
         let path = [
             HermesInstaller.venvBin(for: username),
             "\(home)/.local/bin",
@@ -147,6 +200,22 @@ struct HermesGatewayManager {
             "/usr/bin",
             "/bin",
         ].joined(separator: ":")
+
+        // named profile 需要在 ProgramArguments 中追加 --profile <id>
+        let programArgumentsXML: String
+        if profileID == "main" {
+            programArgumentsXML = """
+                    <string>\(hermesBin)</string>
+                    <string>gateway</string>
+            """
+        } else {
+            programArgumentsXML = """
+                    <string>\(hermesBin)</string>
+                    <string>--profile</string>
+                    <string>\(profileID)</string>
+                    <string>gateway</string>
+            """
+        }
 
         return """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -160,8 +229,7 @@ struct HermesGatewayManager {
             <string>\(username)</string>
             <key>ProgramArguments</key>
             <array>
-                <string>\(hermesBin)</string>
-                <string>gateway</string>
+        \(programArgumentsXML)
             </array>
             <key>WorkingDirectory</key>
             <string>\(home)</string>
@@ -174,7 +242,7 @@ struct HermesGatewayManager {
                 <key>PATH</key>
                 <string>\(path)</string>
                 <key>HERMES_HOME</key>
-                <string>\(hermesHome)</string>
+                <string>\(profileHome)</string>
             </dict>
             <key>RunAtLoad</key>
             <true/>
