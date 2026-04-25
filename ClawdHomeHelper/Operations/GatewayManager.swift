@@ -164,15 +164,38 @@ struct GatewayManager {
         }
 
         cleanupOrphanGateways(username: username, keepPID: startedPID)
-        Thread.sleep(forTimeInterval: 0.8)
-        let stabilizedStatus = status(username: username, uid: uid)
-        if !stabilizedStatus.running || stabilizedStatus.pid <= 0 {
+
+        // 稳定性检查：容忍首次启动时进程短暂退出后被 launchd 拉回来
+        // 轮询最多 6 秒（覆盖 ThrottleInterval 3s + 余量），连续 0.8s 存活视为稳定
+        let stabilityDeadline = Date().addingTimeInterval(6)
+        var lastAliveTime: Date?
+        var stabilized = false
+        while Date() < stabilityDeadline {
+            let st = status(username: username, uid: uid)
+            if st.running, st.pid > 0 {
+                if let alive = lastAliveTime, Date().timeIntervalSince(alive) >= 0.8 {
+                    stabilized = true
+                    break
+                }
+                if lastAliveTime == nil { lastAliveTime = Date() }
+            } else {
+                lastAliveTime = nil  // 进程消失，重置计时
+            }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        // 循环结束后再做一次最终检查（可能刚好卡在边界）
+        if !stabilized {
+            let finalStatus = status(username: username, uid: uid)
+            stabilized = finalStatus.running && finalStatus.pid > 0
+        }
+        if !stabilized {
             let err = GatewayError.startVerificationFailed(reason: "启动后进程未保持存活，疑似循环重启")
             helperLog("[GatewayManager] START_FAIL: \(err.localizedDescription) @\(username)", level: .error)
             throw err
         }
 
-        helperLog("[GatewayManager] START_OK: port=\(resolvedPort) label=\(label) pid=\(stabilizedStatus.pid) @\(username)")
+        let finalPid = status(username: username, uid: uid).pid
+        helperLog("[GatewayManager] START_OK: port=\(resolvedPort) label=\(label) pid=\(finalPid) @\(username)")
     }
 
     private static func writePlist(_ content: String, to path: String) throws {
@@ -502,6 +525,8 @@ struct GatewayManager {
             <true/>
             <key>KeepAlive</key>
             <true/>
+            <key>ThrottleInterval</key>
+            <integer>3</integer>
             <key>StandardErrorPath</key>
             <string>\(logPath)</string>
             <key>StandardOutPath</key>

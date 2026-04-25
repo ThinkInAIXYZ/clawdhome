@@ -175,6 +175,7 @@ final class OutputObservingLocalProcessTerminalView: LocalProcessTerminalView {
 
 struct TerminalLogPanel: View {
     let username: String
+    var logPath: String? = nil
     var logHeight: CGFloat? = 180
 
     @State private var autoScroll = true
@@ -215,6 +216,7 @@ struct TerminalLogPanel: View {
             Divider()
             LogTextNSView(
                 username: username,
+                logPath: logPath,
                 autoScroll: $autoScroll,
                 searchText: $searchText,
                 searchRequest: $searchRequest
@@ -245,12 +247,16 @@ private struct LogSearchRequest: Equatable {
 
 private struct LogTextNSView: NSViewRepresentable {
     let username: String
+    let logPath: String?
     @Binding var autoScroll: Bool
     @Binding var searchText: String
     @Binding var searchRequest: LogSearchRequest
 
     func makeCoordinator() -> LogFeedCoordinator {
-        LogFeedCoordinator(username: username)
+        LogFeedCoordinator(
+            username: username,
+            logPath: logPath ?? "/tmp/clawdhome-init-\(username).log"
+        )
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -293,6 +299,7 @@ private struct LogTextNSView: NSViewRepresentable {
 
 final class LogFeedCoordinator: NSObject {
     let username: String
+    let logPath: String
     var autoScroll = true
 
     private var fileOffset = 0
@@ -306,8 +313,9 @@ final class LogFeedCoordinator: NSObject {
         .foregroundColor: NSColor.labelColor
     ]
 
-    init(username: String) {
+    init(username: String, logPath: String) {
         self.username = username
+        self.logPath = logPath
     }
 
     deinit { timer?.invalidate() }
@@ -345,7 +353,7 @@ final class LogFeedCoordinator: NSObject {
     }
 
     private func pollLog() {
-        let path = "/tmp/clawdhome-init-\(username).log"
+        let path = logPath
         if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
            let size = attrs[.size] as? NSNumber,
            size.intValue < fileOffset {
