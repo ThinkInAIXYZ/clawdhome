@@ -30,12 +30,12 @@ private enum UserEntryWindowResolver {
 
     private static func shouldTreatAsUnfinishedWizardState(
         _ state: InitWizardState,
-        hasInstalledOpenClaw: Bool
+        hasInstalledRuntime: Bool
     ) -> Bool {
         guard !state.isCompleted else { return false }
         if hasRecoverableWizardProgress(state) { return true }
-        // 全 pending 的 pre-start 会话仅在未安装 openclaw 时才视为"待初始化"。
-        return !hasInstalledOpenClaw
+        // 全 pending 的 pre-start 会话仅在未安装任何运行时（OpenClaw/Hermes）时才视为"待初始化"。
+        return !hasInstalledRuntime
     }
 
     static func resolve(
@@ -56,10 +56,13 @@ private enum UserEntryWindowResolver {
             return .detail
         }
 
-        async let versionResult = helperClient.getOpenclawVersion(username: user.username)
+        async let openclawVersionResult = helperClient.getOpenclawVersion(username: user.username)
+        async let hermesVersionResult = helperClient.getHermesVersion(username: user.username)
         async let stateJSONResult = helperClient.loadInitState(username: user.username)
 
-        let hasInstalledOpenClaw = await versionResult != nil
+        let hasOpenclawRuntime = await openclawVersionResult != nil
+        let hasHermesRuntime = await hermesVersionResult != nil
+        let hasInstalledRuntime = hasOpenclawRuntime || hasHermesRuntime
         let isGatewayOperational = user.isRunning || readiness == .starting || readiness == .ready
         let state = InitWizardState.from(json: await stateJSONResult)
 
@@ -67,14 +70,14 @@ private enum UserEntryWindowResolver {
             hasRecoverableWizardProgress(state)
         } ?? false
         let hasUnfinishedWizardState = state.map {
-            shouldTreatAsUnfinishedWizardState($0, hasInstalledOpenClaw: hasInstalledOpenClaw)
+            shouldTreatAsUnfinishedWizardState($0, hasInstalledRuntime: hasInstalledRuntime)
         } ?? false
 
         return shouldOpenUserInitWizardFromEntry(
             hasForcedOnboarding: hasForcedOnboarding,
             hasUnfinishedWizardState: hasUnfinishedWizardState,
             hasRecoverableWizardProgress: hasRecoverableProgress,
-            hasInstalledOpenClaw: hasInstalledOpenClaw,
+            hasInstalledOpenClaw: hasInstalledRuntime,
             isGatewayOperational: isGatewayOperational,
             isAdmin: user.isAdmin,
             isMacOSUser: user.clawType == .macosUser
@@ -182,6 +185,14 @@ struct ClawPoolView: View {
 
     private func loadAllAgents() async {
         for user in pool.users where !user.isAdmin {
+            let hermesInstalled = await helperClient.getHermesVersion(username: user.username) != nil
+            if hermesInstalled {
+                if let profiles = try? await helperClient.listHermesProfiles(username: user.username) {
+                    agentsByUser[user.username] = profiles
+                }
+                continue
+            }
+
             if user.isRunning, let rpcAgents = await gatewayHub.agentsList(username: user.username) {
                 agentsByUser[user.username] = rpcAgents
             } else if let fileAgents = try? await helperClient.listAgents(username: user.username) {
@@ -193,7 +204,7 @@ struct ClawPoolView: View {
     @ViewBuilder
     private func toolSheetContent(_ sheet: ToolSheet) -> some View {
         switch sheet {
-        case .log(let u):      LogViewerSheet(username: u)
+        case .log(let u, let runtime): LogViewerSheet(username: u, runtime: runtime)
         case .password(let u): UserPasswordSheet(username: u)
         }
     }
@@ -224,15 +235,7 @@ struct ClawPoolView: View {
 
     // 主体内容（拆出来避免 body 类型检查超时）
     private var baseContent: some View {
-        Group {
-            if pool.didFinishInitialUserLoad && displayedUsers.isEmpty {
-                emptyStateContent
-            } else if isCardView {
-                cardContent
-            } else {
-                tableContent
-            }
-        }
+        mainContentBody
         // 点击行/卡片时打开独立详情窗口（同一用户已开则置前）
         .onChange(of: selectedClaw) { _, newValue in
             guard let id = newValue,
@@ -305,10 +308,6 @@ struct ClawPoolView: View {
                     // 新建同名账号时，清理可能遗留的初始化进度，避免向导误跳步骤。
                     try? await helperClient.saveInitState(username: normalized.username, json: "{}")
 
-                    try? await helperClient.createDirectory(
-                        username: normalized.username,
-                        relativePath: ".openclaw/workspace"
-                    )
                     try? await helperClient.applySavedProxySettingsIfAny(username: normalized.username)
 
                     pool.loadUsers()
@@ -359,9 +358,7 @@ struct ClawPoolView: View {
             Button(L10n.k("views.user_list_view.cancel", fallback: "取消"), role: .cancel) {
                 pendingFlashFreezeClawID = nil
             }
-        } message: {
-            Text(L10n.k("views.user_list_view.userprocess_openclaw_process_start", fallback: "将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。"))
-        }
+        } message: { Text(flashFreezeConfirmMessage) }
         .alert(
             L10n.k("views.user_list_view.file", fallback: "文件快传结果"),
             isPresented: Binding(
@@ -438,6 +435,26 @@ struct ClawPoolView: View {
         }
     }
 
+    private var flashFreezeConfirmMessage: String {
+        guard let id = pendingFlashFreezeClawID,
+              let claw = displayedUsers.first(where: { $0.id == id }) else {
+            return L10n.k(
+                "views.user_list_view.userprocess_openclaw_process_start",
+                fallback: "将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。"
+            )
+        }
+        if runtime(for: claw) == .hermes {
+            return L10n.k(
+                "views.user_list_view.userprocess_hermes_process_start",
+                fallback: "将紧急终止该虾的用户空间进程（优先 Hermes 相关），已终止进程不可恢复，只能重新启动。"
+            )
+        }
+        return L10n.k(
+            "views.user_list_view.userprocess_openclaw_process_start",
+            fallback: "将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。"
+        )
+    }
+
     private var emptyStateContent: some View {
         ZStack {
             LinearGradient(
@@ -476,10 +493,27 @@ struct ClawPoolView: View {
 
     // MARK: - 右键菜单内容
 
+    private func runtime(for claw: ManagedUser) -> ProcessEmergencyFreezeResolver.Runtime? {
+        if claw.hermesVersion != nil { return .hermes }
+        if claw.openclawVersion != nil { return .openclaw }
+        return nil
+    }
+
+    private func effectiveReadiness(for claw: ManagedUser) -> GatewayReadiness {
+        guard runtime(for: claw) != .hermes else {
+            return claw.isRunning ? .ready : .stopped
+        }
+        return gatewayHub.readinessMap[claw.username] ?? (claw.isRunning ? .ready : .stopped)
+    }
+
+    private func isRunning(for claw: ManagedUser) -> Bool {
+        let readiness = effectiveReadiness(for: claw)
+        return readiness == .ready || readiness == .starting || claw.isRunning
+    }
+
     @ViewBuilder
     private func clawContextMenu(for claw: ManagedUser) -> some View {
-        let readiness = gatewayHub.readinessMap[claw.username]
-        let isRunning = readiness == .ready || readiness == .starting || claw.isRunning
+        let isRunning = isRunning(for: claw)
         gatewayMenuItems(for: claw, isRunning: isRunning, isFrozen: claw.isFrozen)
         Divider()
         sessionMenuItems(for: claw)
@@ -493,7 +527,9 @@ struct ClawPoolView: View {
 
     @ViewBuilder
     private func gatewayMenuItems(for claw: ManagedUser, isRunning: Bool, isFrozen: Bool) -> some View {
-        if claw.openclawVersion != nil {
+        let runtime = runtime(for: claw)
+
+        if let runtime {
             if isFrozen {
                 Button { Task { await unfreezeClaw(claw) } } label: {
                     Label(L10n.k("views.user_list_view.freeze", fallback: "解除冻结"), systemImage: "snowflake.slash")
@@ -517,21 +553,26 @@ struct ClawPoolView: View {
                 if !isRunning {
                     Button {
                         Task {
-                            gatewayHub.markPendingStart(username: claw.username)
                             do {
-                                let result = try await helperClient.startGatewayDiagnoseNodeToolchain(username: claw.username)
-                                switch result {
-                                case .started:
+                                if runtime == .hermes {
+                                    try await helperClient.startHermesGateway(username: claw.username)
                                     claw.isRunning = true
-                                case .needsNodeRepair(let reason):
-                                    appLog("[gateway-repair] detected missing base env user=\(claw.username) reason=\(reason)", level: .warn)
-                                    gatewayNodeRepairUsername = claw.username
-                                    gatewayNodeRepairReason = reason
-                                    gatewayNodeRepairCompletedSteps = 0
-                                    gatewayNodeRepairCurrentStep = ""
-                                    gatewayNodeRepairError = nil
-                                    gatewayNodeRepairReadyToRetryStart = false
-                                    showGatewayNodeRepairSheet = true
+                                } else {
+                                    gatewayHub.markPendingStart(username: claw.username)
+                                    let result = try await helperClient.startGatewayDiagnoseNodeToolchain(username: claw.username)
+                                    switch result {
+                                    case .started:
+                                        claw.isRunning = true
+                                    case .needsNodeRepair(let reason):
+                                        appLog("[gateway-repair] detected missing base env user=\(claw.username) reason=\(reason)", level: .warn)
+                                        gatewayNodeRepairUsername = claw.username
+                                        gatewayNodeRepairReason = reason
+                                        gatewayNodeRepairCompletedSteps = 0
+                                        gatewayNodeRepairCurrentStep = ""
+                                        gatewayNodeRepairError = nil
+                                        gatewayNodeRepairReadyToRetryStart = false
+                                        showGatewayNodeRepairSheet = true
+                                    }
                                 }
                             } catch {
                                 quickActionError = String(format: L10n.k("views.user_list_view.start_failed_detail", fallback: "启动失败：%@"), error.localizedDescription)
@@ -542,7 +583,11 @@ struct ClawPoolView: View {
                     Button {
                         Task {
                             do {
-                                try await helperClient.stopGateway(username: claw.username)
+                                if runtime == .hermes {
+                                    try await helperClient.stopHermesGateway(username: claw.username)
+                                } else {
+                                    try await helperClient.stopGateway(username: claw.username)
+                                }
                                 claw.isRunning = false
                             } catch { quickActionError = String(format: L10n.k("views.user_list_view.stop_failed_detail", fallback: "停止失败：%@"), error.localizedDescription) }
                         }
@@ -550,7 +595,14 @@ struct ClawPoolView: View {
 
                     Button {
                         Task {
-                            do { try await helperClient.restartGateway(username: claw.username) }
+                            do {
+                                if runtime == .hermes {
+                                    try await helperClient.stopHermesGateway(username: claw.username)
+                                    try await helperClient.startHermesGateway(username: claw.username)
+                                } else {
+                                    try await helperClient.restartGateway(username: claw.username)
+                                }
+                            }
                             catch { quickActionError = String(format: L10n.k("views.user_list_view.restart_failed_detail", fallback: "重启失败：%@"), error.localizedDescription) }
                         }
                     } label: { Label(L10n.k("views.user_list_view.restart_gateway", fallback: "重启 Gateway"), systemImage: "arrow.clockwise") }
@@ -569,14 +621,27 @@ struct ClawPoolView: View {
                     } label: { Label(L10n.k("views.user_list_view.flash_freeze_emergency_kill", fallback: "速冻（紧急终止进程）"), systemImage: "bolt.fill") }
                 }
             }
-            Button { Task { await openWebUI(for: claw) } } label: {
-                if webUIOpenInFlightUsernames.contains(claw.username.lowercased()) {
-                    Label(L10n.k("views.user_list.opening", fallback: "打开中…"), systemImage: "hourglass")
-                } else {
-                    Label(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"), systemImage: "globe")
+            if runtime == .openclaw {
+                Button { Task { await openWebUI(for: claw) } } label: {
+                    if webUIOpenInFlightUsernames.contains(claw.username.lowercased()) {
+                        Label(L10n.k("views.user_list.opening", fallback: "打开中…"), systemImage: "hourglass")
+                    } else {
+                        Label(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"), systemImage: "globe")
+                    }
                 }
+                .disabled(claw.isFrozen || webUIOpenInFlightUsernames.contains(claw.username.lowercased()))
             }
-            .disabled(claw.isFrozen || webUIOpenInFlightUsernames.contains(claw.username.lowercased()))
+        }
+    }
+
+    @ViewBuilder
+    private var mainContentBody: some View {
+        if pool.didFinishInitialUserLoad && displayedUsers.isEmpty {
+            emptyStateContent
+        } else if isCardView {
+            cardContent
+        } else {
+            tableContent
         }
     }
 
@@ -593,7 +658,9 @@ struct ClawPoolView: View {
 
     @ViewBuilder
     private func toolMenuItems(for claw: ManagedUser) -> some View {
-        Button { toolSheet = .log(claw.username)      } label: { Label(L10n.k("views.user_list_view.logs", fallback: "查看日志"), systemImage: "doc.text")      }
+        Button {
+            toolSheet = .log(claw.username, runtime(for: claw) == .hermes ? .hermes : .openclaw)
+        } label: { Label(L10n.k("views.user_list_view.logs", fallback: "查看日志"), systemImage: "doc.text") }
         Button { toolSheet = .password(claw.username) } label: { Label(L10n.k("views.user_list_view.password", fallback: "查看密码"), systemImage: "key")           }
         if NSEvent.modifierFlags.contains(.control) {
             Button {
@@ -632,7 +699,13 @@ struct ClawPoolView: View {
         Table(displayedUsers, selection: $selectedClaw) {
             TableColumn("") { claw in
                 if claw.clawType == .macosUser {
-                    Text("🦞")
+                    if claw.prefersHermesRuntime {
+                        HermesLogoMark()
+                            .frame(width: 16, height: 16)
+                    } else {
+                        OpenClawLogoMark()
+                            .frame(width: 16, height: 16)
+                    }
                 } else {
                     Image(systemName: claw.clawType.icon)
                         .foregroundStyle(.secondary)
@@ -680,17 +753,19 @@ struct ClawPoolView: View {
             .width(min: 80, ideal: 120)
 
             TableColumn(L10n.k("views.user_list_view.version", fallback: "版本")) { claw in
-                if let v = claw.openclawVersionLabel {
+                if let v = claw.runtimeVersionLabel {
                     HStack(spacing: 3) {
+                        Text(claw.runtimeDisplayName)
+                            .foregroundStyle(.secondary)
                         Text(v).monospacedDigit()
-                            .foregroundStyle(updater.needsUpdate(claw.openclawVersion) ? .orange : .primary)
-                        if updater.needsUpdate(claw.openclawVersion) {
+                            .foregroundStyle((!claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion)) ? .orange : .primary)
+                        if !claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion) {
                             Image(systemName: "arrow.up.circle.fill")
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
                         }
                     }
-                    .help(updater.needsUpdate(claw.openclawVersion)
+                    .help((!claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion))
                           ? L10n.k("views.user_list_view.upgrade_v_updater_latestversion", fallback: "可升级到 v\(updater.latestVersion ?? "")")
                           : "")
                 } else {
@@ -749,7 +824,7 @@ struct ClawPoolView: View {
             TableColumn(L10n.k("views.user_list_view.actions", fallback: "操作")) { claw in
                 let isOpeningWebUI = webUIOpenInFlightUsernames.contains(claw.username.lowercased())
                 HStack(spacing: 10) {
-                    if claw.openclawVersion != nil {
+                    if claw.openclawVersion != nil, !claw.prefersHermesRuntime {
                         Button { Task { await openWebUI(for: claw) } } label: {
                             if isOpeningWebUI {
                                 ProgressView()
@@ -987,7 +1062,7 @@ struct ClawPoolView: View {
                     .foregroundStyle(freezeColor(for: mode))
             }
         } else {
-            let readiness = gatewayHub.readinessMap[claw.username] ?? (claw.isRunning ? .ready : .stopped)
+            let readiness = effectiveReadiness(for: claw)
             HStack(spacing: 5) {
                 GatewayStatusDot(readiness: readiness)
                 Text(readiness.label)
@@ -1008,8 +1083,12 @@ struct ClawPoolView: View {
         let targetUsername = claw.username
 
         do {
-            // 直接执行 sysadminctl 删除（使用管理员凭据）
+            // 删除前预清理：停止/卸载 gateway、移除群组、归档 vault
+            try? await helperClient.prepareDeleteUser(username: targetUsername)
+            // 执行 sysadminctl 删除（使用管理员凭据）
             try await UserDeleteService.deleteUserViaSysadminctl(username: targetUsername, keepHome: keepHome, adminPassword: adminPassword)
+            // 删除后清理：移除状态文件
+            try? await helperClient.cleanupDeletedUser(username: targetUsername)
 
             contextIsDeleting = false
             if selectedClaw == claw.id { selectedClaw = nil }
@@ -1190,12 +1269,16 @@ struct ClawPoolView: View {
         quickActionError = nil
         appLog("freeze start user=\(claw.username) mode=\(mode.statusLabel)")
         do {
-            let previousAutostart = await helperClient.getUserAutostart(username: claw.username)
-            try? await helperClient.setUserAutostart(username: claw.username, enabled: false)
+            let freezeRuntime: ProcessEmergencyFreezeResolver.Runtime =
+                (claw.hermesVersion != nil) ? .hermes : .openclaw
             if mode != .pause {
                 gatewayHub.markPendingStopped(username: claw.username)
                 do {
-                    try await helperClient.stopGateway(username: claw.username)
+                    if freezeRuntime == .hermes {
+                        try await helperClient.stopHermesGateway(username: claw.username)
+                    } else {
+                        try await helperClient.stopGateway(username: claw.username)
+                    }
                 } catch {
                     // 速冻为兜底路径：即使 stopGateway 失败也继续强制终止进程。
                     if mode != .flash { throw error }
@@ -1204,7 +1287,10 @@ struct ClawPoolView: View {
 
             if mode == .pause {
                 let processes = await helperClient.getProcessList(username: claw.username)
-                let targets = ProcessEmergencyFreezeResolver.resolvePauseTargets(processes: processes)
+                let targets = ProcessEmergencyFreezeResolver.resolvePauseTargets(
+                    processes: processes,
+                    runtime: freezeRuntime
+                )
                 var pausedPIDs: [Int32] = []
                 var failedPIDs: [Int32] = []
                 for proc in targets {
@@ -1223,7 +1309,7 @@ struct ClawPoolView: View {
                     true,
                     mode: mode,
                     pausedPIDs: pausedPIDs,
-                    previousAutostartEnabled: previousAutostart,
+                    previousAutostartEnabled: nil,
                     for: claw.username
                 )
                 appLog("freeze success user=\(claw.username) mode=\(mode.statusLabel) paused=\(pausedPIDs.count)")
@@ -1232,7 +1318,10 @@ struct ClawPoolView: View {
 
             if mode == .flash {
                 let processes = await helperClient.getProcessList(username: claw.username)
-                let targets = ProcessEmergencyFreezeResolver.resolveTargets(processes: processes)
+                let targets = ProcessEmergencyFreezeResolver.resolveTargets(
+                    processes: processes,
+                    runtime: freezeRuntime
+                )
                 var failedPIDs: [Int32] = []
                 for proc in targets {
                     do {
@@ -1246,11 +1335,15 @@ struct ClawPoolView: View {
                     throw HelperError.operationFailed(L10n.k("views.user_list_view.claw_username_pid_pidlist", fallback: "@\(claw.username) 速冻部分失败，未终止 PID: \(pidList)"))
                 }
                 // 二次 stop，防止状态滞后导致 launchd/job 被重新拉起。
-                try? await helperClient.stopGateway(username: claw.username)
+                if freezeRuntime == .hermes {
+                    try? await helperClient.stopHermesGateway(username: claw.username)
+                } else {
+                    try? await helperClient.stopGateway(username: claw.username)
+                }
                 // 速冻后立即复核：若关键进程被外部拉起，给出明确提示。
                 try? await Task.sleep(for: .milliseconds(250))
                 let remaining = await helperClient.getProcessList(username: claw.username)
-                    .filter(ProcessEmergencyFreezeResolver.isOpenclawRelated)
+                    .filter { ProcessEmergencyFreezeResolver.isRuntimeRelated($0, runtime: freezeRuntime) }
                 if !remaining.isEmpty {
                     let pidList = remaining.prefix(8).map { String($0.pid) }.joined(separator: ",")
                     throw HelperError.operationFailed(L10n.k("views.user_list_view.claw_username_processes_still_running_after_flash_freeze", fallback: "@\(claw.username) 速冻后检测到进程仍在运行（可能被自动拉起），PID: \(pidList)"))
@@ -1260,7 +1353,7 @@ struct ClawPoolView: View {
                 true,
                 mode: mode,
                 pausedPIDs: [],
-                previousAutostartEnabled: previousAutostart,
+                previousAutostartEnabled: nil,
                 for: claw.username
             )
             appLog("freeze success user=\(claw.username) mode=\(mode.statusLabel)")
@@ -1289,9 +1382,6 @@ struct ClawPoolView: View {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
                     throw HelperError.operationFailed(L10n.k("views.user_list_view.unpause_partial_failed_pid_list", fallback: "@\(claw.username) 解除暂停部分失败，未恢复 PID: \(pidList)"))
                 }
-            }
-            if let restoreAutostart = claw.freezePreviousAutostartEnabled {
-                try? await helperClient.setUserAutostart(username: claw.username, enabled: restoreAutostart)
             }
             pool.setFrozen(false, for: claw.username)
             appLog("unfreeze success user=\(claw.username)")
@@ -1322,12 +1412,12 @@ struct ClawPoolView: View {
 // MARK: - 右键工具 Sheet 枚举
 
 private enum ToolSheet: Identifiable {
-    case log(String)
+    case log(String, GatewayLogRuntime)
     case password(String)
 
     var id: String {
         switch self {
-        case .log(let u):      "log-\(u)"
+        case .log(let u, let runtime): "log-\(runtime.rawValue)-\(u)"
         case .password(let u): "pw-\(u)"
         }
     }
@@ -1361,9 +1451,15 @@ private struct ClawCard: View {
                 // 图标 + 状态角标
                 ZStack(alignment: .bottomTrailing) {
                     if claw.clawType == .macosUser {
-                        Text("\u{1F99E}")
-                            .font(.system(size: 32))
-                            .frame(width: 44, height: 44)
+                        if claw.prefersHermesRuntime {
+                            HermesLogoMark()
+                                .frame(width: 32, height: 32)
+                                .frame(width: 44, height: 44)
+                        } else {
+                            OpenClawLogoMark()
+                                .frame(width: 32, height: 32)
+                                .frame(width: 44, height: 44)
+                        }
                     } else {
                         Image(systemName: claw.clawType.icon)
                             .font(.system(size: 32))
@@ -1397,10 +1493,10 @@ private struct ClawCard: View {
                             .foregroundStyle(freezeColor(mode))
                     } else if let step = claw.initStep {
                         Text(step).foregroundStyle(.blue)
-                    } else if let v = claw.openclawVersionLabel {
-                        let outdated = updater.needsUpdate(claw.openclawVersion)
+                    } else if let v = claw.runtimeVersionLabel {
+                        let outdated = !claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion)
                         HStack(spacing: 2) {
-                            Text(v).monospacedDigit()
+                            Text("\(claw.runtimeDisplayName) \(v)").monospacedDigit()
                                 .foregroundStyle(outdated ? Color.orange : Color.secondary.opacity(0.6))
                             if outdated {
                                 Image(systemName: "arrow.up.circle.fill")
@@ -1428,7 +1524,7 @@ private struct ClawCard: View {
 
                 // 操作按钮行
                 HStack(spacing: 8) {
-                    if claw.openclawVersion != nil {
+                    if claw.openclawVersion != nil, !claw.prefersHermesRuntime {
                         Button { onOpenWebUI() } label: {
                             if isOpeningWebUI {
                                 ProgressView()
@@ -1547,7 +1643,11 @@ private struct ClawCard: View {
                 .symbolEffect(.pulse, options: .repeating)
                 .font(.system(size: 9))
         } else {
-            let readiness = gatewayHub.readinessMap[claw.username] ?? (claw.isRunning ? .ready : .stopped)
+            let readiness: GatewayReadiness = if claw.prefersHermesRuntime {
+                claw.isRunning ? .ready : .stopped
+            } else {
+                gatewayHub.readinessMap[claw.username] ?? (claw.isRunning ? .ready : .stopped)
+            }
             GatewayStatusDot(readiness: readiness)
         }
     }
@@ -1708,8 +1808,8 @@ private struct ClawPoolEmptyStateCard: View {
                     .shadow(color: Color.accentColor.opacity(0.10), radius: 28, x: 0, y: 14)
                     .frame(width: 160, height: 160)
 
-                Text("🦞")
-                    .font(.system(size: 68))
+                OpenClawLogoMark()
+                    .frame(width: 68, height: 68)
             }
 
             VStack(spacing: 12) {
@@ -1772,8 +1872,8 @@ private struct AddClawSheet: View {
         VStack(spacing: 0) {
             // 标题区
             VStack(spacing: 6) {
-                Text("🦞")
-                    .font(.system(size: 40))
+                OpenClawLogoMark()
+                    .frame(width: 40, height: 40)
                 Text(L10n.k("views.user_list_view.adopt_shrimp", fallback: "领养虾苗"))
                     .font(.system(size: 20, weight: .bold))
                 Text(L10n.k("views.user_list_view.adopt_sheet_subtitle", fallback: "从角色中心挑选一个数字生命，或直接创建空白账号"))

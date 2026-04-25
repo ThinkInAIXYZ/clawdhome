@@ -821,11 +821,11 @@ private struct MaintenanceTerminalWindowContent: View {
     }
 
     private func cloneTerminalWindow() {
-        // 与虾详情页入口保持一致：始终打开默认登录 shell 维护终端。
+        // 克隆窗口时继承当前命令，避免跨运行时环境漂移。
         let payload = maintenanceWindowRegistry.makePayload(
             username: request.username,
             title: L10n.k("user.detail.auto.cli_maintenance_advanced", fallback: "命令行维护（高级）"),
-            command: ["zsh", "-l"]
+            command: request.command
         )
         openWindow(id: "maintenance-terminal", value: payload)
         statusText = L10n.k("app.maintenance.terminal_cloned", fallback: "已打开新的维护终端窗口。")
@@ -1169,15 +1169,26 @@ private struct ClawDetailWindow: View {
     }
 
     var body: some View {
-        NavigationStack {
-            if let user {
-                UserDetailView(user: user, onDeleted: {
+        if let user {
+            if user.prefersHermesRuntime {
+                HermesDetailContainer(user: user, onDeleted: {
                     dismiss()
                     Task { @MainActor in
                         pool.removeUser(username: username)
                     }
                 })
             } else {
+                NavigationStack {
+                    UserDetailView(user: user, onDeleted: {
+                        dismiss()
+                        Task { @MainActor in
+                            pool.removeUser(username: username)
+                        }
+                    })
+                }
+            }
+        } else {
+            NavigationStack {
                 ContentUnavailableView(
                     "@\(username)",
                     systemImage: "person.slash",
@@ -1196,7 +1207,10 @@ private struct UserInitWizardWindow: View {
 
     @Environment(ShrimpPool.self) private var pool
     @Environment(\.dismiss) private var dismiss
-    @State private var initialTeamDNA: TeamDNA? = nil
+    // 先消费 pool.pendingInitTeams 再渲染 wizard，保证 wizard 首帧 onAppear 就能
+    // 在 hydrateInitialRolesIfNeeded() 里看到 teamDNA，避免 agents 被预填成 solo
+    // 之后再 onChange 回来就被 `agents.isEmpty` guard 挡掉（只剩主 Agent 的 bug）。
+    @State private var resolvedInitialRoles: WizardV2InitialRoles? = nil
 
     private var user: ManagedUser? {
         pool.users.first { $0.username == username }
@@ -1204,13 +1218,19 @@ private struct UserInitWizardWindow: View {
 
     var body: some View {
         if let user {
-            ShrimpInitWizardV2(user: user, initialTeamDNA: initialTeamDNA) {
-                dismiss()
-            }
-            .task {
-                if initialTeamDNA == nil {
-                    initialTeamDNA = pool.consumeInitTeam(for: username)
+            if let resolvedInitialRoles {
+                ShrimpInitWizardV2(user: user, initialRoles: resolvedInitialRoles) {
+                    dismiss()
                 }
+            } else {
+                Color.clear
+                    .task {
+                        guard resolvedInitialRoles == nil else { return }
+                        resolvedInitialRoles = WizardV2InitialRoles(
+                            teamDNA: pool.consumeInitTeam(for: username),
+                            agents: WizardV2InitialRoles.solo.agents
+                        )
+                    }
             }
         } else {
             ContentUnavailableView(

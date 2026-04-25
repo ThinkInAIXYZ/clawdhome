@@ -45,6 +45,58 @@ struct UserDetailWindowLevelBinder: NSViewRepresentable {
     }
 }
 
+struct UserDetailWindowWidthBinder: NSViewRepresentable {
+    let shouldApplyHermesPreset: Bool
+
+    final class Coordinator {
+        var lastAppliedPreset: Bool?
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            apply(window: view.window, context: context)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            apply(window: nsView.window, context: context)
+        }
+    }
+
+    private func apply(window: NSWindow?, context: Context) {
+        guard let window else { return }
+        let minimumSize = NSSize(
+            width: UserDetailWindowLayout.detailWindowMinimumWidth,
+            height: UserDetailWindowLayout.detailWindowMinimumHeight
+        )
+        if window.contentMinSize != minimumSize {
+            window.contentMinSize = minimumSize
+        }
+
+        let changed = context.coordinator.lastAppliedPreset != shouldApplyHermesPreset
+        context.coordinator.lastAppliedPreset = shouldApplyHermesPreset
+        guard shouldApplyHermesPreset, changed else { return }
+
+        let visibleFrame = window.screen?.visibleFrame ?? window.frame
+        let targetWidth = min(
+            max(UserDetailWindowLayout.hermesDetailWindowPreferredWidth, window.frame.width),
+            visibleFrame.width
+        )
+        guard abs(window.frame.width - targetWidth) > 0.5 else { return }
+        var frame = window.frame
+        frame.size.width = targetWidth
+        frame.origin.x = min(max(frame.origin.x, visibleFrame.minX), visibleFrame.maxX - targetWidth)
+        window.setFrame(frame, display: true, animate: true)
+    }
+}
+
 // MARK: - Alerts Modifier（拆分减轻类型检查压力）
 
 struct MainContentAlertsModifier: ViewModifier {

@@ -88,9 +88,9 @@ enum FreezeMode: String, Sendable, Equatable, Codable {
 
     var shortDescription: String {
         switch self {
-        case .pause:  L10n.k("models.managed_user.suspend_openclaw_processes_resume_later_without_releasing_memory", fallback: "挂起 openclaw 进程，可恢复继续执行（不释放内存）")
+        case .pause:  L10n.k("models.managed_user.suspend_runtime_processes_resume_later_without_releasing_memory", fallback: "挂起运行时相关进程，可恢复继续执行（不释放内存）")
         case .normal: L10n.k("models.managed_user.stop_gateway_userprocess", fallback: "停止 Gateway，保留用户空间其他进程")
-        case .flash:  L10n.k("models.managed_user.userprocess_openclaw", fallback: "紧急终止用户空间进程（openclaw 优先）")
+        case .flash:  L10n.k("models.managed_user.userprocess_runtime_priority", fallback: "紧急终止用户空间进程（运行时相关优先）")
         }
     }
 }
@@ -166,6 +166,7 @@ final class ManagedUser: Identifiable, Hashable {
     var hasFreezeWarning: Bool { freezeWarning != nil }
     var pid: Int32?
     var openclawVersion: String?
+    var hermesVersion: String?
     /// 版本是否已检查过（区分"加载中"与"未初始化"）
     var versionChecked: Bool = false
     var startedAt: Date?
@@ -197,6 +198,24 @@ final class ManagedUser: Identifiable, Hashable {
 
     /// 版本号展示字符串，带 v 前缀（如 "v2026.2.15"）
     var openclawVersionLabel: String? { openclawVersion.map { "v\($0)" } }
+    var hermesVersionLabel: String? { hermesVersion.map { "v\($0)" } }
+
+    /// 运行时优先级：Hermes > OpenClaw（与详情页保持一致）
+    var runtimeDisplayName: String {
+        if hermesVersion != nil { return "Hermes" }
+        if openclawVersion != nil { return "OpenClaw" }
+        return "—"
+    }
+
+    var runtimeVersionLabel: String? {
+        if let hermesVersionLabel { return hermesVersionLabel }
+        if let openclawVersionLabel { return openclawVersionLabel }
+        return nil
+    }
+
+    var prefersHermesRuntime: Bool {
+        hermesVersion != nil
+    }
 
     /// 状态文字，用于 UI 展示
     var statusLabel: String {
