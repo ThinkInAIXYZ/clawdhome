@@ -851,6 +851,30 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(err ?? "删除 Hermes profile 失败") }
     }
 
+    // MARK: - Hermes 自启白名单（F2）
+
+    /// 读取指定用户的 Hermes profile 自启白名单（JSON 字符串）
+    /// 失败或未连接时返回 nil
+    func getHermesAutostartWhitelist(username: String) async -> String? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            return try await xpcCall { done in
+                proxy.getHermesAutostartWhitelist(username: username) { json in done(json) }
+            }
+        } catch { return nil }
+    }
+
+    /// 设置指定 profile 的开机自启开关（enabled=true 加入白名单，false 移除）
+    func setHermesAutostartProfile(username: String, profileID: String, enabled: Bool) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.setHermesAutostartProfile(username: username, profileID: profileID, enabled: enabled) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? "设置 Hermes 自启失败") }
+    }
+
     // MARK: - 用户环境初始化
 
     private static func hasLocalNodeBinary(username: String) -> Bool {
