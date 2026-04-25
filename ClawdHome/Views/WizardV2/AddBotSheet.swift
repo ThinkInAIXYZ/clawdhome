@@ -16,6 +16,7 @@ struct AddBotSheet: View {
     var onAdded: ((IMAccount) -> Void)? = nil
 
     @Environment(HelperClient.self) private var helperClient
+    @Environment(GatewayHub.self) private var gatewayHub
     @Environment(\.dismiss) private var dismiss
 
     @State private var step: Step = .selectPlatform
@@ -30,6 +31,12 @@ struct AddBotSheet: View {
     @State private var provisionError: String?
     @State private var provisioner: (any IMBotProvisioner)?
     @State private var channelFlow: ChannelOnboardingFlow?
+    @State private var isCheckingBinding = false
+    @State private var channelBindError: String?
+    @State private var didDetectPairingCompletion = false
+    @State private var baselineBoundAccountIDs: Set<String> = []
+    @State private var selectableBoundSnapshots: [ChannelAccountSnapshot] = []
+    @State private var pendingChooserFlow: ChannelOnboardingFlow?
 
     enum Step {
         case selectPlatform
@@ -73,10 +80,61 @@ struct AddBotSheet: View {
                         dismiss()
                     }
                 }
+                if step == .channelOnboarding {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(L10n.k("common.done", fallback: "完成")) {
+                            Task { await finishChannelOnboarding() }
+                        }
+                        .disabled(isCheckingBinding)
+                    }
+                }
             }
         }
         .frame(minWidth: step == .channelOnboarding ? 900 : 480,
                minHeight: step == .channelOnboarding ? 500 : 360)
+        .onReceive(NotificationCenter.default.publisher(for: .channelOnboardingAutoDetected)) { note in
+            guard let payloadUsername = note.userInfo?["username"] as? String,
+                  let payloadFlow = note.userInfo?["flow"] as? String,
+                  payloadUsername == username,
+                  payloadFlow == channelFlow?.rawValue else {
+                return
+            }
+            didDetectPairingCompletion = true
+        }
+        .alert(L10n.k("add_bot.bind_check_failed", fallback: "绑定确认"), isPresented: Binding(
+            get: { channelBindError != nil },
+            set: { if !$0 { channelBindError = nil } }
+        )) {
+            Button(L10n.k("common.ok", fallback: "好"), role: .cancel) { }
+        } message: {
+            Text(channelBindError ?? "")
+        }
+        .confirmationDialog(
+            L10n.k("add_bot.choose_bound_account_title", fallback: "选择要绑定的 Bot 账号"),
+            isPresented: Binding(
+                get: { !selectableBoundSnapshots.isEmpty },
+                set: { shown in
+                    if !shown {
+                        selectableBoundSnapshots = []
+                        pendingChooserFlow = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            ForEach(selectableBoundSnapshots, id: \.accountId) { snapshot in
+                Button(boundAccountChoiceLabel(snapshot)) {
+                    guard let flow = pendingChooserFlow else { return }
+                    finalizeChannelBinding(snapshot: snapshot, flow: flow)
+                }
+            }
+            Button(L10n.k("common.cancel", fallback: "取消"), role: .cancel) {
+                selectableBoundSnapshots = []
+                pendingChooserFlow = nil
+            }
+        } message: {
+            Text(L10n.k("add_bot.choose_bound_account_hint", fallback: "检测到多个已绑定账号，请选择本次要绑定到当前 Agent 的账号。"))
+        }
     }
 
     // MARK: - Step 1: select platform
@@ -86,9 +144,11 @@ struct AddBotSheet: View {
             List(IMPlatform.allCases, id: \.rawValue) { platform in
                 Button(action: {
                     selectedPlatform = platform
+                    didDetectPairingCompletion = false
                     if let flow = channelOnboardingFlow(for: platform) {
                         channelFlow = flow
                         step = .channelOnboarding
+                        Task { await snapshotExistingBoundAccounts(for: flow) }
                     } else {
                         step = .configAccount
                     }
@@ -366,6 +426,167 @@ struct AddBotSheet: View {
         else { return nil }
         let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func finishChannelOnboarding() async {
+        guard let flow = channelFlow else { return }
+        isCheckingBinding = true
+        defer { isCheckingBinding = false }
+
+        let store = gatewayHub.channelStore(for: username)
+        let snapshots = await waitForBoundSnapshots(store: store, flow: flow, allowDelayedSync: didDetectPairingCompletion)
+        guard !snapshots.isEmpty else {
+            channelBindError = L10n.k("add_bot.no_binding_detected", fallback: "未检测到已绑定的账号，请先完成扫码配对")
+            return
+        }
+        let newlyBound = snapshots.filter { !baselineBoundAccountIDs.contains($0.accountId) }
+        if newlyBound.count == 1, let snapshot = newlyBound.first {
+            finalizeChannelBinding(snapshot: snapshot, flow: flow)
+            return
+        }
+        if newlyBound.count > 1 {
+            pendingChooserFlow = flow
+            selectableBoundSnapshots = newlyBound
+            return
+        }
+        if snapshots.count == 1, let snapshot = snapshots.first {
+            finalizeChannelBinding(snapshot: snapshot, flow: flow)
+            return
+        }
+        pendingChooserFlow = flow
+        selectableBoundSnapshots = snapshots
+    }
+
+    private func waitForBoundSnapshots(
+        store: GatewayChannelStore,
+        flow: ChannelOnboardingFlow,
+        allowDelayedSync: Bool
+    ) async -> [ChannelAccountSnapshot] {
+        let maxAttempts = allowDelayedSync ? 12 : 2
+        for attempt in 0..<maxAttempts {
+            await store.refresh()
+            let snapshots = await detectBoundSnapshots(store: store, flow: flow)
+            if !snapshots.isEmpty { return snapshots }
+            guard allowDelayedSync, attempt < (maxAttempts - 1) else { break }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        return []
+    }
+
+    private func detectBoundSnapshots(
+        store: GatewayChannelStore,
+        flow: ChannelOnboardingFlow
+    ) async -> [ChannelAccountSnapshot] {
+        let runtimeSnapshots = collectBoundSnapshotsFromRuntime(store: store, flow: flow)
+        let configSnapshots = await collectBoundSnapshotsFromConfigFile(flow: flow)
+        return mergeSnapshots(runtimeSnapshots, configSnapshots)
+    }
+
+    private func collectBoundSnapshotsFromRuntime(store: GatewayChannelStore, flow: ChannelOnboardingFlow) -> [ChannelAccountSnapshot] {
+        var seen = Set<String>()
+        var snapshots: [ChannelAccountSnapshot] = []
+        for channelId in flow.candidateChannelIds {
+            for account in store.boundAccounts(channelId) where seen.insert(account.accountId).inserted {
+                snapshots.append(account)
+            }
+        }
+        return snapshots
+    }
+
+    private func collectBoundSnapshotsFromConfigFile(flow: ChannelOnboardingFlow) async -> [ChannelAccountSnapshot] {
+        let config = await helperClient.getConfigJSON(username: username)
+        guard let channels = config["channels"] as? [String: Any] else { return [] }
+
+        var snapshots: [ChannelAccountSnapshot] = []
+        for channelId in flow.candidateChannelIds {
+            guard let section = channels[channelId] as? [String: Any],
+                  let accounts = section["accounts"] as? [String: Any] else { continue }
+            for (accountId, accountValue) in accounts {
+                guard let account = accountValue as? [String: Any] else { continue }
+                if accountId == "default", account.isEmpty { continue }
+
+                let appId = (account["appId"] as? String) ?? (section["appId"] as? String)
+                let name = (account["botName"] as? String) ?? (account["name"] as? String)
+                let allowFrom = (account["allowFrom"] as? [String]) ?? (section["allowFrom"] as? [String])
+                let domain = (account["domain"] as? String) ?? (section["domain"] as? String)
+
+                snapshots.append(ChannelAccountSnapshot(
+                    accountId: accountId,
+                    name: name,
+                    enabled: true,
+                    configured: true,
+                    linked: true,
+                    running: nil,
+                    connected: nil,
+                    lastConnectedAt: nil,
+                    lastError: nil,
+                    healthState: nil,
+                    lastInboundAt: nil,
+                    lastOutboundAt: nil,
+                    allowFrom: allowFrom,
+                    appId: appId,
+                    domain: domain
+                ))
+            }
+        }
+        return snapshots
+    }
+
+    private func mergeSnapshots(_ lhs: [ChannelAccountSnapshot], _ rhs: [ChannelAccountSnapshot]) -> [ChannelAccountSnapshot] {
+        var merged: [String: ChannelAccountSnapshot] = [:]
+        for snapshot in lhs + rhs {
+            if let existing = merged[snapshot.accountId] {
+                merged[snapshot.accountId] = preferSnapshot(existing, snapshot)
+            } else {
+                merged[snapshot.accountId] = snapshot
+            }
+        }
+        return merged.values.sorted { $0.accountId < $1.accountId }
+    }
+
+    private func preferSnapshot(_ a: ChannelAccountSnapshot, _ b: ChannelAccountSnapshot) -> ChannelAccountSnapshot {
+        func score(_ s: ChannelAccountSnapshot) -> Int {
+            var value = 0
+            if s.name?.isEmpty == false { value += 2 }
+            if s.appId?.isEmpty == false { value += 2 }
+            if !(s.allowFrom ?? []).isEmpty { value += 1 }
+            if s.domain?.isEmpty == false { value += 1 }
+            if s.configured == true || s.linked == true { value += 1 }
+            return value
+        }
+        return score(b) >= score(a) ? b : a
+    }
+
+    private func snapshotExistingBoundAccounts(for flow: ChannelOnboardingFlow) async {
+        let store = gatewayHub.channelStore(for: username)
+        await store.refresh()
+        let existing = await detectBoundSnapshots(store: store, flow: flow)
+        await MainActor.run {
+            baselineBoundAccountIDs = Set(existing.map(\.accountId))
+        }
+    }
+
+    private func boundAccountChoiceLabel(_ snapshot: ChannelAccountSnapshot) -> String {
+        let name = (snapshot.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = name.isEmpty ? snapshot.accountId : "\(name) (\(snapshot.accountId))"
+        guard let appId = snapshot.appId, !appId.isEmpty else { return title }
+        return "\(title) · \(appId)"
+    }
+
+    private func finalizeChannelBinding(snapshot: ChannelAccountSnapshot, flow: ChannelOnboardingFlow) {
+        selectableBoundSnapshots = []
+        pendingChooserFlow = nil
+        let account = IMAccount(
+            id: snapshot.accountId,
+            platform: selectedPlatform,
+            displayName: snapshot.name ?? flow.title,
+            appId: snapshot.appId,
+            allowFrom: snapshot.allowFrom ?? [],
+            domain: snapshot.domain,
+            createdAt: Date()
+        )
+        onAdded?(account)
+        dismiss()
     }
 
     private func channelOnboardingFlow(for platform: IMPlatform) -> ChannelOnboardingFlow? {
