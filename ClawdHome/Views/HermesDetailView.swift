@@ -1390,6 +1390,9 @@ struct HermesDetailContainer: View {
     @State private var showHealthCheck = false
     @State private var showHermesSetup = false
     @State private var showTeamWizard = false
+    @State private var showPendingBindings = false
+    @State private var pendingBindingItems: [PendingBindingItem] = []
+    @State private var hasPendingDeferred: Bool = false
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
     @State private var deleteHomeOption: DeleteHomeOption = .deleteHome
@@ -1462,6 +1465,20 @@ struct HermesDetailContainer: View {
         .sheet(isPresented: $showTeamWizard) {
             HermesTeamWizard(username: user.username)
         }
+        .sheet(isPresented: $showPendingBindings) {
+            // PR-5 T5.3：待完成扫码绑定 sheet
+            HermesPendingBindingsSheet(
+                username: user.username,
+                pendingItems: pendingBindingItems,
+                onBindingDone: { profileID, platformKey in
+                    Task { await handleBindingDone(profileID: profileID, platformKey: platformKey) }
+                },
+                onBindingDeferred: { _, _ in
+                    // 保持 deferred，刷新列表
+                    Task { await scanDeferredBindings() }
+                }
+            )
+        }
         .sheet(isPresented: $showHealthCheck) {
             DiagnosticsSheet(user: user, engineHint: "hermes")
         }
@@ -1480,7 +1497,10 @@ struct HermesDetailContainer: View {
         } message: {
             Text("停止 Hermes 将终止所有打开的终端会话，无法恢复。")
         }
-        .task { await refreshAll() }
+        .task {
+            await refreshAll()
+            await scanDeferredBindings()
+        }
         .onAppear { pool.addLiveSnapshotConsumer() }
         .onDisappear { pool.removeLiveSnapshotConsumer() }
     }
@@ -1598,6 +1618,21 @@ struct HermesDetailContainer: View {
                         .padding(.vertical, 6)
                 }
                 .buttonStyle(.plain)
+
+                // PR-5 T5.3：继续绑定入口（仅在有 deferred 平台时显示）
+                if hasPendingDeferred {
+                    Button {
+                        showPendingBindings = true
+                    } label: {
+                        Label("继续绑定 (\(pendingBindingItems.count))", systemImage: "clock.badge.exclamationmark")
+                            .font(.system(size: 12))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.orange)
+                }
 
                 Button(role: .destructive) {
                     showDeleteConfirm = true
@@ -1812,6 +1847,65 @@ struct HermesDetailContainer: View {
             command: ["zsh", "-l"]
         )
         openWindow(id: "maintenance-terminal", value: payload)
+    }
+
+    // MARK: - PR-5 T5.3：扫描 deferred 绑定
+
+    /// 扫描所有 profile 的向导状态，收集 deferred 平台列表
+    private func scanDeferredBindings() async {
+        var items: [PendingBindingItem] = []
+
+        for profile in profiles {
+            let jsonStr = await helperClient.getHermesWizardState(username: user.username, profileID: profile.id)
+            guard let jsonStr,
+                  let data = jsonStr.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let steps = obj["steps"] as? [String: Any],
+                  let bindingsObj = steps["imBindings"] as? [String: [String: Any]] else { continue }
+
+            for (platformKey, val) in bindingsObj {
+                let statusRaw = val["status"] as? String ?? ""
+                guard statusRaw == "deferred" else { continue }
+                guard let platformInfo = HermesIMPlatformDirectory.find(key: platformKey) else { continue }
+                items.append(PendingBindingItem(
+                    id: "\(profile.id)_\(platformKey)",
+                    profileID: profile.id,
+                    profileDisplayName: profile.name,
+                    profileEmoji: profile.emoji,
+                    platform: platformInfo
+                ))
+            }
+        }
+
+        pendingBindingItems = items
+        hasPendingDeferred = !items.isEmpty
+    }
+
+    /// 某个绑定完成后更新位图状态并刷新列表
+    private func handleBindingDone(profileID: String, platformKey: String) async {
+        // 构造 patch 将该平台状态更新为 done
+        let doneAt = ISO8601DateFormatter().string(from: Date())
+        let patch: [String: Any] = [
+            "steps": [
+                "imBindings": [
+                    platformKey: [
+                        "status": "done",
+                        "doneAt": doneAt,
+                        "error": NSNull()
+                    ]
+                ]
+            ]
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: patch),
+           let patchJSON = String(data: data, encoding: .utf8) {
+            _ = await helperClient.updateHermesWizardState(
+                username: user.username,
+                profileID: profileID,
+                patchJSON: patchJSON
+            )
+        }
+        // 刷新列表
+        await scanDeferredBindings()
     }
 
     // MARK: - 删除确认

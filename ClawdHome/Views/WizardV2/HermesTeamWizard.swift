@@ -872,43 +872,41 @@ private struct Step4IMBindingView: View {
                 .font(.subheadline.weight(.semibold))
 
             if platform.needsTerminalQR {
-                // PR-4 扫码 placeholder（PR-5 接入）
-                qrPlaceholder(platform: platform, member: member)
+                // PR-5：真实扫码终端子视图（替换 PR-4 placeholder）
+                qrBindingStep(platform: platform, member: member)
             } else {
                 tokenForm(platform: platform, member: member)
             }
         }
     }
 
-    private func qrPlaceholder(platform: HermesIMPlatformInfo, member: TeamMember) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            GroupBox {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("扫码绑定 - 待 PR-5 实现", systemImage: "qrcode")
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    Text("\(platform.displayName) 需要扫码 QR 配对，当前版本尚未支持扫码流程。您可以选择稍后完成或跳过此平台。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 10) {
-                        Button("稍后完成") {
-                            setBinding(for: member.id, platform: platform.key, status: .deferred)
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button("跳过此平台") {
-                            setBinding(for: member.id, platform: platform.key, status: .skipped)
-                        }
-                        .buttonStyle(.bordered)
-                        .foregroundStyle(.secondary)
-                    }
+    private func qrBindingStep(platform: HermesIMPlatformInfo, member: TeamMember) -> some View {
+        // PR-5：替换 PR-4 的 placeholder，嵌入真实的 HermesQRBindingStep 子视图
+        VStack(alignment: .leading, spacing: 8) {
+            HermesQRBindingStep(
+                username: wizardState.username,
+                profileID: member.id,
+                platform: platform,
+                onCompleted: {
+                    // 扫码验收通过 → 标为 done，持久化
+                    setBinding(for: member.id, platform: platform.key, status: .done)
+                    selectedPlatformKey = nil
+                },
+                onDeferred: {
+                    // 用户选择稍后完成 → 标为 deferred，持久化
+                    setBinding(for: member.id, platform: platform.key, status: .deferred)
+                    selectedPlatformKey = nil
                 }
-                .padding(4)
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             )
+
+            // 补充"跳过此平台"按钮（不同于 deferred：跳过 = 永不绑定）
+            Button("跳过此平台（永不绑定）") {
+                setBinding(for: member.id, platform: platform.key, status: .skipped)
+                selectedPlatformKey = nil
+            }
+            .buttonStyle(.plain)
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 
