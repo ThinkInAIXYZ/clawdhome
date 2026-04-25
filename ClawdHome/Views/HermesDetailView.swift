@@ -43,6 +43,19 @@ struct HermesDetailView: View {
     let onUpdateProfile: (String, String, String) -> Void
     let onDeleteProfile: (String) -> Void
     let onShowChat: () -> Void
+    // T6.1 per-profile 状态
+    let profileStatuses: [String: (running: Bool, pid: Int32)]
+    let onStartProfile: (String) -> Void
+    let onStopProfile: (String) -> Void
+    let onRestartProfile: (String) -> Void
+    // T6.3 自启白名单
+    let autostartWhitelist: Set<String>
+    let onToggleAutostart: (String, Bool) -> Void
+    // T6 per-profile 继续绑定
+    let pendingBindingItems: [PendingBindingItem]
+    let onShowProfileBindings: ([PendingBindingItem]) -> Void
+    // T6.1 轮询回调（profileID → status）
+    let onRefreshProfileStatus: (String) async -> Void
 
     @Environment(HelperClient.self) private var helperClient
 
@@ -381,10 +394,18 @@ struct HermesDetailView: View {
         }
     }
 
+    @ViewBuilder
     private func profileCard(_ profile: AgentProfile) -> some View {
         let isActive = profile.id == selectedProfileID
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        let status = profileStatuses[profile.id]
+        let isRunning = status?.running ?? false
+        let pid = status?.pid
+        let isAutostart = autostartWhitelist.contains(profile.id)
+        let profileDeferredItems = pendingBindingItems.filter { $0.profileID == profile.id }
+
+        VStack(alignment: .leading, spacing: 10) {
+            // --- 第一行：头像 + 名称 + 状态胶囊 ---
+            HStack(alignment: .top, spacing: 8) {
                 Text(profile.emoji.isEmpty ? "🤖" : profile.emoji)
                     .font(.title3)
                     .frame(width: 32, height: 32)
@@ -401,31 +422,74 @@ struct HermesDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if isActive {
-                    Text("Active")
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.15), in: Capsule())
-                }
+                // T6.1 状态胶囊
+                HermesProfileStatusPill(isRunning: isRunning, pid: pid, profileID: profile.id, loaded: profileStatuses[profile.id] != nil)
             }
 
-            HStack(spacing: 8) {
+            // --- T6.1 启停按钮行（三个图标按钮） ---
+            HStack(spacing: 6) {
+                // ▶ 启动
+                Button {
+                    onStartProfile(profile.id)
+                } label: {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .disabled(isRunning)
+                .help("启动")
+
+                // ■ 停止
+                Button {
+                    onStopProfile(profile.id)
+                } label: {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .disabled(!isRunning)
+                .help("停止")
+
+                // ↻ 重启
+                Button {
+                    onRestartProfile(profile.id)
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .disabled(!isRunning)
+                .help("重启")
+
+                Spacer()
+
+                // 原有"设为当前"
                 Button {
                     onSelectProfile(profile.id)
                 } label: {
                     Label("设为当前", systemImage: "checkmark.circle")
+                        .font(.system(size: 11))
                 }
                 .buttonStyle(.bordered)
+                .controlSize(.mini)
                 .disabled(isActive)
 
+                // 原有"Chat"
                 Button {
                     onShowChat()
                     chatTabManager.addTab(for: profile)
                 } label: {
                     Label("Chat", systemImage: "message")
+                        .font(.system(size: 11))
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.mini)
 
                 Menu {
                     Button {
@@ -446,9 +510,9 @@ struct HermesDetailView: View {
                     Image(systemName: "ellipsis.circle")
                 }
                 .menuStyle(.borderlessButton)
-                Spacer()
             }
 
+            // --- Model 信息行 ---
             HStack(spacing: 8) {
                 if let provider = profile.modelProvider, !provider.isEmpty {
                     Text(provider.capitalized)
@@ -463,15 +527,35 @@ struct HermesDetailView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            HStack(spacing: 8) {
-                Text("\(profile.skillCount ?? 0) skills")
-                Text("•")
-                    .foregroundStyle(.tertiary)
-                Text((profile.gatewayRunning ?? false) ? "Gateway on" : "Gateway off")
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
+            // --- T6.3 开机启动 + T6 继续绑定 ---
+            HStack(spacing: 0) {
+                // T6.3 开机启动 Toggle
+                Toggle(isOn: Binding(
+                    get: { isAutostart },
+                    set: { newVal in onToggleAutostart(profile.id, newVal) }
+                )) {
+                    Text("开机启动")
+                        .font(.caption)
+                }
+                .toggleStyle(.checkbox)
+                .controlSize(.mini)
 
+                Spacer()
+
+                // T6 per-profile 继续绑定按钮
+                if !profileDeferredItems.isEmpty {
+                    Button {
+                        onShowProfileBindings(profileDeferredItems)
+                    } label: {
+                        Label("继续绑定 (\(profileDeferredItems.count))", systemImage: "clock.badge.exclamationmark")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.orange)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // --- 重命名编辑区 ---
             if editingProfileID == profile.id {
                 HStack(spacing: 8) {
                     TextField("名称", text: $editingProfileName)
@@ -505,6 +589,13 @@ struct HermesDetailView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(isActive ? Color.accentColor.opacity(0.7) : Color.primary.opacity(0.1), lineWidth: isActive ? 1.5 : 1)
         )
+        // T6.1 per-profile 5s 轮询（卡片可见时驱动）
+        .task(id: profile.id) {
+            while !Task.isCancelled {
+                await onRefreshProfileStatus(profile.id)
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
     }
 
     private var selectedProfile: AgentProfile? {
@@ -1129,6 +1220,55 @@ private func openHermesExternalURL(_ url: URL) {
     }
 }
 
+// MARK: - T6.1 状态胶囊
+
+/// Hermes profile 运行状态胶囊：● 运行中 PID 12345 / ○ 已停止 / ⏳ 加载中
+private struct HermesProfileStatusPill: View {
+    let isRunning: Bool
+    let pid: Int32?
+    let profileID: String
+    let loaded: Bool
+
+    var body: some View {
+        if !loaded {
+            // 尚未拿到首次状态
+            Label("", systemImage: "clock.arrow.circlepath")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.primary.opacity(0.06), in: Capsule())
+        } else if isRunning {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 7, height: 7)
+                if let pid, pid > 0 {
+                    Text("运行中 PID \(pid)")
+                } else {
+                    Text("运行中")
+                }
+            }
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.green)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.green.opacity(0.1), in: Capsule())
+        } else {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(Color.secondary.opacity(0.5))
+                    .frame(width: 7, height: 7)
+                Text("已停止")
+            }
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.primary.opacity(0.06), in: Capsule())
+        }
+    }
+}
 
 // MARK: - 终端 Tab 管理器
 
@@ -1393,6 +1533,20 @@ struct HermesDetailContainer: View {
     @State private var showPendingBindings = false
     @State private var pendingBindingItems: [PendingBindingItem] = []
     @State private var hasPendingDeferred: Bool = false
+    // T6.1 – per-profile 运行状态缓存
+    @State private var profileStatuses: [String: (running: Bool, pid: Int32)] = [:]
+    // T6.3 – 自启白名单（profile ID 集合）
+    @State private var autostartWhitelist: Set<String> = ["main"]
+    // T6.2 – 批量操作进度
+    @State private var batchInProgress = false
+    @State private var batchProcessed = 0
+    @State private var batchTotal = 0
+    // T6.1 – 卡片操作 alert
+    @State private var profileActionError: String? = nil
+    @State private var showProfileActionError = false
+    // T6 – per-profile 继续绑定 sheet
+    @State private var showProfileBindings = false
+    @State private var profileBindingsItems: [PendingBindingItem] = []
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
     @State private var deleteHomeOption: DeleteHomeOption = .deleteHome
@@ -1450,7 +1604,19 @@ struct HermesDetailContainer: View {
                     onCreateProfile: { name, emoji in Task { await createProfile(name: name, emoji: emoji) } },
                     onUpdateProfile: { id, name, emoji in Task { await updateProfile(id: id, name: name, emoji: emoji) } },
                     onDeleteProfile: { id in Task { await deleteProfile(id: id) } },
-                    onShowChat: { mode = .chat }
+                    onShowChat: { mode = .chat },
+                    profileStatuses: profileStatuses,
+                    onStartProfile: { id in Task { await startProfile(id) } },
+                    onStopProfile: { id in Task { await stopProfile(id) } },
+                    onRestartProfile: { id in Task { await restartProfile(id) } },
+                    autostartWhitelist: autostartWhitelist,
+                    onToggleAutostart: { id, enabled in Task { await toggleAutostart(profileID: id, enabled: enabled) } },
+                    pendingBindingItems: pendingBindingItems,
+                    onShowProfileBindings: { items in
+                        profileBindingsItems = items
+                        showProfileBindings = true
+                    },
+                    onRefreshProfileStatus: { id in await refreshProfileStatus(id) }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -1479,11 +1645,32 @@ struct HermesDetailContainer: View {
                 }
             )
         }
+        .sheet(isPresented: $showProfileBindings) {
+            // T6 卡片内 per-profile "继续绑定" — 外层过滤好 items，不改 PR-5 Sheet
+            HermesPendingBindingsSheet(
+                username: user.username,
+                pendingItems: profileBindingsItems,
+                onBindingDone: { profileID, platformKey in
+                    Task { await handleBindingDone(profileID: profileID, platformKey: platformKey) }
+                },
+                onBindingDeferred: { _, _ in
+                    Task { await scanDeferredBindings() }
+                }
+            )
+        }
         .sheet(isPresented: $showHealthCheck) {
             DiagnosticsSheet(user: user, engineHint: "hermes")
         }
         .sheet(isPresented: $showDeleteConfirm) {
             deleteConfirmSheet
+        }
+        .alert(
+            "操作失败",
+            isPresented: $showProfileActionError
+        ) {
+            Button("确定", role: .cancel) { showProfileActionError = false }
+        } message: {
+            Text(profileActionError ?? "未知错误")
         }
         .alert(
             "有 \(shellTabManager.tabs.count) 个终端会话正在运行",
@@ -1500,6 +1687,7 @@ struct HermesDetailContainer: View {
         .task {
             await refreshAll()
             await scanDeferredBindings()
+            await loadAutostartWhitelist()
         }
         .onAppear { pool.addLiveSnapshotConsumer() }
         .onDisappear { pool.removeLiveSnapshotConsumer() }
@@ -1534,6 +1722,11 @@ struct HermesDetailContainer: View {
             }
             .padding(.horizontal, detailSidebarShowsLabels ? 2 : 4)
             .frame(maxWidth: .infinity)
+
+            // T6.2 聚合徽章 + 批量按钮（仅展开态显示）
+            if detailSidebarShowsLabels {
+                hermesBatchBar
+            }
 
             // Hermes logo
             Image("HermesLogo")
@@ -1659,6 +1852,80 @@ struct HermesDetailContainer: View {
         .background(.bar)
     }
 
+    // MARK: T6.2 – 聚合徽章 + 批量按钮
+
+    private var runningProfileCount: Int {
+        profiles.filter { profileStatuses[$0.id]?.running == true }.count
+    }
+
+    private var hermesBadgeColor: SwiftUI.Color {
+        let running = runningProfileCount
+        let total = profiles.count
+        if total == 0 { return .gray }
+        if running == total { return .green }
+        if running == 0 { return .gray }
+        return .orange
+    }
+
+    @ViewBuilder
+    private var hermesBatchBar: some View {
+        VStack(spacing: 6) {
+            // 聚合徽章
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(hermesBadgeColor)
+                    .frame(width: 8, height: 8)
+                Text("Hermes · \(runningProfileCount)/\(profiles.count) 运行中")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+
+            // 批量按钮行
+            if batchInProgress {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.mini)
+                    Text("\(batchProcessed)/\(batchTotal)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+            } else {
+                HStack(spacing: 6) {
+                    Button {
+                        Task { await batchStartAll() }
+                    } label: {
+                        Label("全部启动", systemImage: "play.fill")
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .disabled(profiles.filter { autostartWhitelist.contains($0.id) && !(profileStatuses[$0.id]?.running ?? false) }.isEmpty)
+
+                    Button {
+                        Task { await batchStopAll() }
+                    } label: {
+                        Label("全部停止", systemImage: "stop.fill")
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .disabled(profiles.filter { profileStatuses[$0.id]?.running == true }.isEmpty)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
     @ViewBuilder
     private func hermesSidebarButton(_ tab: HermesDetailMode, label: String, icon: String) -> some View {
         let selected = mode == tab
@@ -1688,6 +1955,120 @@ struct HermesDetailContainer: View {
     }
 
     // MARK: - 操作
+
+    // MARK: T6.1 per-profile 启停
+
+    /// 刷新单个 profile 的运行状态
+    private func refreshProfileStatus(_ profileID: String) async {
+        let status = await helperClient.getHermesGatewayStatus(username: user.username, profileID: profileID)
+        profileStatuses[profileID] = status
+    }
+
+    /// 启动指定 profile 的 gateway
+    private func startProfile(_ profileID: String) async {
+        do {
+            try await helperClient.startHermesGateway(username: user.username, profileID: profileID)
+            try? await Task.sleep(for: .milliseconds(500))
+            await refreshProfileStatus(profileID)
+        } catch {
+            profileActionError = error.localizedDescription
+            showProfileActionError = true
+        }
+    }
+
+    /// 停止指定 profile 的 gateway
+    private func stopProfile(_ profileID: String) async {
+        do {
+            try await helperClient.stopHermesGateway(username: user.username, profileID: profileID)
+            try? await Task.sleep(for: .milliseconds(500))
+            await refreshProfileStatus(profileID)
+        } catch {
+            profileActionError = error.localizedDescription
+            showProfileActionError = true
+        }
+    }
+
+    /// 重启指定 profile 的 gateway（串行 stop → start）
+    private func restartProfile(_ profileID: String) async {
+        do {
+            try await helperClient.stopHermesGateway(username: user.username, profileID: profileID)
+            try? await Task.sleep(for: .milliseconds(800))
+            try await helperClient.startHermesGateway(username: user.username, profileID: profileID)
+            try? await Task.sleep(for: .milliseconds(500))
+            await refreshProfileStatus(profileID)
+        } catch {
+            profileActionError = error.localizedDescription
+            showProfileActionError = true
+        }
+    }
+
+    // MARK: T6.2 白名单加载 + 批量操作
+
+    /// 读取自启白名单并更新本地状态
+    private func loadAutostartWhitelist() async {
+        guard let json = await helperClient.getHermesAutostartWhitelist(username: user.username),
+              let data = json.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let arr = obj["profiles"] as? [String] else {
+            // 缺失文件时默认 ["main"]
+            autostartWhitelist = ["main"]
+            return
+        }
+        autostartWhitelist = Set(arr)
+    }
+
+    /// 全部启动：仅启动白名单中当前已停止的 profile
+    private func batchStartAll() async {
+        guard !batchInProgress else { return }
+        let targets = profiles.filter { autostartWhitelist.contains($0.id) && !(profileStatuses[$0.id]?.running ?? false) }
+        guard !targets.isEmpty else { return }
+        batchInProgress = true
+        batchProcessed = 0
+        batchTotal = targets.count
+        for profile in targets {
+            await startProfile(profile.id)
+            batchProcessed += 1
+        }
+        batchInProgress = false
+    }
+
+    /// 全部停止：停止所有当前运行中的 profile
+    private func batchStopAll() async {
+        guard !batchInProgress else { return }
+        let targets = profiles.filter { profileStatuses[$0.id]?.running == true }
+        guard !targets.isEmpty else { return }
+        batchInProgress = true
+        batchProcessed = 0
+        batchTotal = targets.count
+        for profile in targets {
+            await stopProfile(profile.id)
+            batchProcessed += 1
+        }
+        batchInProgress = false
+    }
+
+    // MARK: T6.3 自启 Toggle
+
+    /// 切换某个 profile 的开机启动状态
+    private func toggleAutostart(profileID: String, enabled: Bool) async {
+        do {
+            try await helperClient.setHermesAutostartProfile(username: user.username, profileID: profileID, enabled: enabled)
+            if enabled {
+                autostartWhitelist.insert(profileID)
+            } else {
+                autostartWhitelist.remove(profileID)
+            }
+        } catch {
+            // 失败时还原本地状态
+            profileActionError = error.localizedDescription
+            showProfileActionError = true
+            if enabled {
+                autostartWhitelist.remove(profileID)
+            } else {
+                autostartWhitelist.insert(profileID)
+            }
+        }
+    }
 
     private func startOrRestart() async {
         isLoading = true
