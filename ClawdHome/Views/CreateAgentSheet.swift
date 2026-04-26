@@ -255,18 +255,22 @@ struct CreateAgentSheet: View {
                 }
 
                 Section {
-                    TextField(L10n.k("agent.create.form.model", fallback: "主模型（可选）"), text: $modelPrimary)
+                    LabeledContent(L10n.k("agent.create.form.model", fallback: "主模型")) {
+                        ModelPicker(username: username, selection: $modelPrimary, allowsInheritDefault: true)
+                    }
 
                     ForEach(modelFallbacks.indices, id: \.self) { idx in
-                        HStack {
-                            TextField(L10n.f("agent.create.form.fallback_model", fallback: "备用模型 %d", idx + 1), text: $modelFallbacks[idx])
-                            Button {
-                                modelFallbacks.remove(at: idx)
-                            } label: {
-                                Image(systemName: "minus.circle.fill")
-                                    .foregroundStyle(.red)
+                        LabeledContent(L10n.f("agent.create.form.fallback_model", fallback: "备用模型 %d", idx + 1)) {
+                            HStack(spacing: 6) {
+                                ModelPicker(username: username, selection: $modelFallbacks[idx], allowsInheritDefault: false)
+                                Button {
+                                    modelFallbacks.remove(at: idx)
+                                } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                        .foregroundStyle(.red)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
 
@@ -281,7 +285,7 @@ struct CreateAgentSheet: View {
                 } header: {
                     Text(L10n.k("agent.create.form.model_config", fallback: "模型配置"))
                 } footer: {
-                    Text(L10n.k("agent.create.form.model.hint", fallback: "留空则使用默认模型。例如：kimi-coding/k2p5"))
+                    Text(L10n.k("agent.create.form.model.hint", fallback: "留空主模型则使用虾的全局默认。从下拉里选已配置的模型，或先去「模型」tab 添加。"))
                         .font(.caption)
                 }
             }
