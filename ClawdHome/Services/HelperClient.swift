@@ -1474,6 +1474,10 @@ final class HelperClient {
     func applySavedProxySettingsIfAny(username: String) async throws {
         let defaults = UserDefaults.standard
         let enabled = defaults.bool(forKey: "proxyEnabled")
+        // 未启用代理时，新用户无任何代理设置需清除，直接返回。
+        // 这也避免了对无活跃 launchd 会话的新用户执行 launchctl asuser，防止进程挂起。
+        guard enabled else { return }
+
         let scheme = (defaults.string(forKey: "proxyScheme") ?? "http").trimmingCharacters(in: .whitespacesAndNewlines)
         let host = (defaults.string(forKey: "proxyHost") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let port = (defaults.string(forKey: "proxyPort") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1481,19 +1485,15 @@ final class HelperClient {
         let proxyUsername = (defaults.string(forKey: "proxyUsername") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let proxyPassword = (defaults.string(forKey: "proxyPassword") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
-        var proxyValue = ""
-        if enabled {
-            guard !host.isEmpty, Int(port) != nil else { return }
-            let auth = proxyUsername.isEmpty ? "" : "\(proxyUsername):\(proxyPassword)@"
-            proxyValue = "\(scheme)://\(auth)\(host):\(port)"
-        }
-        let noProxyValue = enabled ? noProxy : ""
+        guard !host.isEmpty, Int(port) != nil else { return }
+        let auth = proxyUsername.isEmpty ? "" : "\(proxyUsername):\(proxyPassword)@"
+        let proxyValue = "\(scheme)://\(auth)\(host):\(port)"
 
         try await applyProxySettings(
             username: username,
-            enabled: enabled,
+            enabled: true,
             proxyURL: proxyValue,
-            noProxy: noProxyValue,
+            noProxy: noProxy,
             restartGatewayIfRunning: false
         )
     }

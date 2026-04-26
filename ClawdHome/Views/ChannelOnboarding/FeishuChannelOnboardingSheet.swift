@@ -719,9 +719,9 @@ struct FeishuChannelOnboardingSheet: View {
     /// 重新加载配置
     private func reloadConfig() async {
         saveMessage = nil
-        await loadAllConfig()
-        // 同时刷新 channel store
+        // 先刷新 channel store，让 loadAllConfig 能读到最新的 isBound 状态
         await gatewayHub.channelStore(for: username).refresh()
+        await loadAllConfig()
     }
 
     /// 保存所有配置（绑定信息 + 开关，一次 config.patch）

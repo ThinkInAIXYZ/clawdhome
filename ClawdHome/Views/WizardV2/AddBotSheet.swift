@@ -38,6 +38,11 @@ struct AddBotSheet: View {
     @State private var selectableBoundSnapshots: [ChannelAccountSnapshot] = []
     @State private var pendingChooserFlow: ChannelOnboardingFlow?
 
+    // 飞书多账号检测
+    @State private var isDetectingFeishu = false
+    @State private var feishuHasDefaultAccount = false
+    @State private var selectedFeishuBrand: FeishuBrand = .feishu
+
     enum Step {
         case selectPlatform
         case configAccount     // 填 accountKey + displayName
@@ -72,7 +77,7 @@ struct AddBotSheet: View {
                     doneView
                 }
             }
-            .navigationTitle(L10n.k("add_bot.title", fallback: "添加 Bot"))
+            .navigationTitle(sheetNavigationTitle)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L10n.k("common.cancel", fallback: "取消")) {
@@ -141,16 +146,44 @@ struct AddBotSheet: View {
 
     private var selectPlatformView: some View {
         VStack(spacing: 0) {
+            if isDetectingFeishu {
+                ProgressView(L10n.k("add_bot.detecting_feishu", fallback: "正在检测飞书配置…"))
+                    .padding()
+            }
             List(IMPlatform.allCases, id: \.rawValue) { platform in
                 Button(action: {
+                    guard !isDetectingFeishu else { return }
                     selectedPlatform = platform
                     didDetectPairingCompletion = false
-                    if let flow = channelOnboardingFlow(for: platform) {
+                    if platform == .feishu {
+                        isDetectingFeishu = true
+                        Task {
+                            let config = await helperClient.getConfigJSON(username: username)
+                            let feishu = (config["channels"] as? [String: Any])?["feishu"] as? [String: Any]
+                            let hasDefault = (feishu?["appId"] as? String).map { !$0.isEmpty } ?? false
+                                         || ((feishu?["accounts"] as? [String: Any]).map { !$0.isEmpty } ?? false)
+                            await MainActor.run {
+                                isDetectingFeishu = false
+                                feishuHasDefaultAccount = hasDefault
+                                if hasDefault {
+                                    // 命名账号：需要用户给出有意义的 accountKey
+                                    step = .configAccount
+                                } else {
+                                    channelFlow = .feishu
+                                    step = .channelOnboarding
+                                    Task { await snapshotExistingBoundAccounts(for: .feishu) }
+                                }
+                            }
+                        }
+                    } else if let flow = channelOnboardingFlow(for: platform) {
                         channelFlow = flow
                         step = .channelOnboarding
                         Task { await snapshotExistingBoundAccounts(for: flow) }
                     } else {
-                        step = .configAccount
+                        // 其他平台（Discord / Slack / ...）：单账号，自动用 "default"，直接进凭证填写
+                        accountKey = "default"
+                        displayName = ""
+                        startProvisioning()
                     }
                 }) {
                     HStack {
@@ -243,6 +276,9 @@ struct AddBotSheet: View {
 
     private var manualTokenView: some View {
         Form {
+            if selectedPlatform == .feishu && feishuHasDefaultAccount {
+                feishuNamedAccountGuidanceSection
+            }
             Section {
                 HStack {
                     Text("App ID")
@@ -250,7 +286,7 @@ struct AddBotSheet: View {
                         .textFieldStyle(.roundedBorder)
                 }
                 HStack {
-                    Text("App Secret / Token")
+                    Text("App Secret")
                     SecureField("", text: $manualAppSecret)
                         .textFieldStyle(.roundedBorder)
                 }
@@ -269,6 +305,38 @@ struct AddBotSheet: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private var feishuNamedAccountGuidanceSection: some View {
+        Section {
+            Picker(L10n.k("add_bot.feishu_domain", fallback: "域名"), selection: $selectedFeishuBrand) {
+                Text("飞书 (feishu.cn)").tag(FeishuBrand.feishu)
+                Text("Lark (larksuite.com)").tag(FeishuBrand.lark)
+            }
+            Button(action: { openFeishuCreatePage() }) {
+                Label(
+                    selectedFeishuBrand == .feishu
+                        ? L10n.k("add_bot.open_feishu_platform", fallback: "打开飞书开放平台创建应用")
+                        : L10n.k("add_bot.open_lark_platform", fallback: "打开 Lark 开放平台创建应用"),
+                    systemImage: "arrow.up.right.circle"
+                )
+            }
+        } header: {
+            Text(L10n.k("add_bot.feishu_named_account_title", fallback: "创建新飞书应用"))
+        } footer: {
+            Text(L10n.k("add_bot.feishu_named_account_hint",
+                        fallback: "此账号将作为命名账号加入多账号配置。点击上方按钮在飞书开放平台创建自建应用，创建完成后将 App ID 和 App Secret 填入下方。"))
+        }
+    }
+
+    private func openFeishuCreatePage() {
+        let urlStr = selectedFeishuBrand == .feishu
+            ? "https://open.feishu.cn/page/openclaw?form=multiAgent"
+            : "https://open.larksuite.com/page/openclaw?form=multiAgent"
+        if let url = URL(string: urlStr) {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     // MARK: - Step 4: done
@@ -297,6 +365,12 @@ struct AddBotSheet: View {
         let name = displayName.isEmpty ? selectedPlatform.displayName : displayName
         provisionError = nil
         provisionProgress = ""
+
+        // 飞书命名账号（已有默认账号）：走手动填写，不启动 npx
+        if selectedPlatform == .feishu && feishuHasDefaultAccount {
+            step = .manualToken
+            return
+        }
 
         // 不支持自动绑定的平台直接跳到手动 token
         guard selectedPlatform.supportsStandardChannelLogin || selectedPlatform == .feishu else {
@@ -342,6 +416,27 @@ struct AddBotSheet: View {
 
     private func finishManual() {
         guard !isProvisioning else { return }
+
+        // 飞书命名账号：appSecret 直接附在 IMAccount 上，由 applyV2Config 写入 JSON
+        if selectedPlatform == .feishu && feishuHasDefaultAccount {
+            let key = accountKey.trimmingCharacters(in: .whitespaces)
+            let name = displayName.isEmpty ? selectedPlatform.displayName : displayName
+            guard !key.isEmpty, !manualAppId.isEmpty, !manualAppSecret.isEmpty else { return }
+            let account = IMAccount(
+                id: key,
+                platform: .feishu,
+                displayName: name,
+                appId: manualAppId,
+                appSecret: manualAppSecret,
+                brand: selectedFeishuBrand,
+                domain: selectedFeishuBrand == .lark ? "lark" : nil,
+                createdAt: Date()
+            )
+            onAdded?(account)
+            dismiss()
+            return
+        }
+
         isProvisioning = true
         provisionError = nil
         let key = accountKey.trimmingCharacters(in: .whitespaces)
@@ -499,20 +594,45 @@ struct AddBotSheet: View {
 
         var snapshots: [ChannelAccountSnapshot] = []
         for channelId in flow.candidateChannelIds {
-            guard let section = channels[channelId] as? [String: Any],
-                  let accounts = section["accounts"] as? [String: Any] else { continue }
-            for (accountId, accountValue) in accounts {
-                guard let account = accountValue as? [String: Any] else { continue }
-                if accountId == "default", account.isEmpty { continue }
+            guard let section = channels[channelId] as? [String: Any] else { continue }
 
-                let appId = (account["appId"] as? String) ?? (section["appId"] as? String)
-                let name = (account["botName"] as? String) ?? (account["name"] as? String)
-                let allowFrom = (account["allowFrom"] as? [String]) ?? (section["allowFrom"] as? [String])
-                let domain = (account["domain"] as? String) ?? (section["domain"] as? String)
+            if let accounts = section["accounts"] as? [String: Any] {
+                // v2 格式：accounts 字典
+                for (accountId, accountValue) in accounts {
+                    guard let account = accountValue as? [String: Any] else { continue }
+                    if accountId == "default", account.isEmpty { continue }
 
+                    let appId = (account["appId"] as? String) ?? (section["appId"] as? String)
+                    let name = (account["botName"] as? String) ?? (account["name"] as? String)
+                    let allowFrom = (account["allowFrom"] as? [String]) ?? (section["allowFrom"] as? [String])
+                    let domain = (account["domain"] as? String) ?? (section["domain"] as? String)
+
+                    snapshots.append(ChannelAccountSnapshot(
+                        accountId: accountId,
+                        name: name,
+                        enabled: true,
+                        configured: true,
+                        linked: true,
+                        running: nil,
+                        connected: nil,
+                        lastConnectedAt: nil,
+                        lastError: nil,
+                        healthState: nil,
+                        lastInboundAt: nil,
+                        lastOutboundAt: nil,
+                        allowFrom: allowFrom,
+                        appId: appId,
+                        domain: domain
+                    ))
+                }
+            }
+            // v1 兜底：accounts 字典为空或所有 entry 都被跳过时，读顶层 appId；
+            // 用 snapshots.isEmpty 判断（而非 else if）避免 accounts: {} 空字典导致 appId 被忽略。
+            if snapshots.isEmpty, let appId = section["appId"] as? String, !appId.isEmpty {
+                // v1 格式：appId 在 channel 顶层（npx 工具直接写入时的格式）
                 snapshots.append(ChannelAccountSnapshot(
-                    accountId: accountId,
-                    name: name,
+                    accountId: "default",
+                    name: section["botName"] as? String,
                     enabled: true,
                     configured: true,
                     linked: true,
@@ -523,9 +643,9 @@ struct AddBotSheet: View {
                     healthState: nil,
                     lastInboundAt: nil,
                     lastOutboundAt: nil,
-                    allowFrom: allowFrom,
+                    allowFrom: section["allowFrom"] as? [String],
                     appId: appId,
-                    domain: domain
+                    domain: section["domain"] as? String
                 ))
             }
         }
@@ -587,6 +707,15 @@ struct AddBotSheet: View {
         )
         onAdded?(account)
         dismiss()
+    }
+
+    private var sheetNavigationTitle: String {
+        switch step {
+        case .selectPlatform, .done:
+            return L10n.k("add_bot.title", fallback: "添加 Bot")
+        default:
+            return L10n.f("add_bot.title_with_platform", fallback: "添加 %@ Bot", selectedPlatform.displayName)
+        }
     }
 
     private func channelOnboardingFlow(for platform: IMPlatform) -> ChannelOnboardingFlow? {
