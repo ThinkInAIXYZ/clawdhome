@@ -55,7 +55,7 @@ struct ShrimpSettingsV2View: View {
     }
 
     var body: some View {
-        NavigationStack {
+        Group {
             if isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -66,78 +66,99 @@ struct ShrimpSettingsV2View: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                tabContent
+                splitContent
             }
         }
-        .frame(minWidth: 680, minHeight: 520)
         .onAppear { loadConfig() }
     }
 
-    // MARK: - Tab content
+    // MARK: - 内嵌布局：左侧二级 sidebar + 右侧 content
 
-    private var tabContent: some View {
+    private var splitContent: some View {
         VStack(spacing: 0) {
-            // Tab bar
             HStack(spacing: 0) {
-                ForEach(SettingsTab.allCases, id: \.rawValue) { tab in
-                    tabBarItem(tab)
+                // 二级 sidebar
+                secondarySidebar
+                Divider()
+                // 右侧 content
+                Group {
+                    switch selectedTab {
+                    case .agents:   agentsTab
+                    case .model:    modelTab
+                    case .advanced: advancedTab
+                    case .plugins:  pluginsTab
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(.horizontal)
-            .background(Color(nsColor: .controlBackgroundColor))
-            Divider()
 
-            // Content
-            Group {
-                switch selectedTab {
-                case .agents:   agentsTab
-                case .model:    modelTab
-                case .advanced: advancedTab
-                case .plugins:  pluginsTab
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Divider()
-            // Bottom save bar
+            // 底部保存条（dirty 时出现）
             if isDirty {
-                HStack {
-                    if let err = saveError {
-                        Text(err).foregroundStyle(.red).font(.caption)
-                    }
-                    Spacer()
-                    Button(L10n.k("common.discard", fallback: "放弃修改")) {
-                        loadConfig()
-                        isDirty = false
-                    }
-                    .buttonStyle(.plain)
-                    Button(isSaving ? L10n.k("common.saving", fallback: "保存中…") : L10n.k("common.save", fallback: "保存")) {
-                        saveConfig()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isSaving)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(Color(nsColor: .windowBackgroundColor))
+                Divider()
+                bottomSaveBar
             }
         }
     }
 
-    private func tabBarItem(_ tab: SettingsTab) -> some View {
-        let selected = selectedTab == tab
-        return Button(action: { selectedTab = tab }) {
-            VStack(spacing: 4) {
-                Image(systemName: tab.icon)
-                Text(tab.title)
-                    .font(.caption2)
+    private var secondarySidebar: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(SettingsTab.allCases, id: \.rawValue) { tab in
+                sidebarRow(tab)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+            Spacer()
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
+        .frame(width: 160, alignment: .topLeading)
+        .background(.bar)
+    }
+
+    @ViewBuilder
+    private func sidebarRow(_ tab: SettingsTab) -> some View {
+        let selected = selectedTab == tab
+        Button { selectedTab = tab } label: {
+            HStack(spacing: 8) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 14, weight: selected ? .semibold : .regular))
+                    .frame(width: 20, height: 20)
+                Text(tab.title)
+                    .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(selected ? Color.primary : Color.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(selected ? Color.primary.opacity(0.08) : Color.clear)
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(selected ? Color.accentColor.opacity(0.08) : Color.clear)
+    }
+
+    private var bottomSaveBar: some View {
+        HStack {
+            if let err = saveError {
+                Text(err).foregroundStyle(.red).font(.caption)
+            }
+            Spacer()
+            Button(L10n.k("common.discard", fallback: "放弃修改")) {
+                loadConfig()
+                isDirty = false
+            }
+            .buttonStyle(.plain)
+            Button(isSaving ? L10n.k("common.saving", fallback: "保存中…") : L10n.k("common.save", fallback: "保存")) {
+                saveConfig()
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isSaving)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     // MARK: - Tab 1: Agents（agent 卡片 + 模型 picker + IM 绑定 一站式管理）
@@ -260,14 +281,13 @@ struct ShrimpSettingsV2View: View {
         isLoading = true
         loadError = nil
         Task {
+            // openclaw.json 的实际结构是嵌套的（agents.list / channels.<id>.accounts / bindings[]…），
+            // 不能直接 JSONDecoder 解码到扁平 ShrimpConfigV2，必须走 parseShrimpConfig 平铺逻辑。
             let jsonDict = await helperClient.getConfigJSON(username: user.username)
             await MainActor.run {
                 isLoading = false
                 guard !jsonDict.isEmpty else { return }
-                if let data = try? JSONSerialization.data(withJSONObject: jsonDict),
-                   let parsed = try? JSONDecoder().decode(ShrimpConfigV2.self, from: data) {
-                    config = parsed
-                }
+                config = OpenclawConfigSerializerV2.parseShrimpConfig(jsonDict)
             }
         }
     }
