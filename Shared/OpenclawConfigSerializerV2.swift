@@ -33,8 +33,12 @@ public enum OpenclawConfigSerializerV2 {
 
     /// 读出 ShrimpConfigV2（部分字段——不包含 providers，那部分在别处管理）。
     public static func readShrimpConfig(username: String) -> ShrimpConfigV2 {
-        let root = readRaw(username: username)
+        parseShrimpConfig(readRaw(username: username))
+    }
 
+    /// 纯解析入口：把 openclaw.json 反序列化得到的根字典转成扁平 ShrimpConfigV2。
+    /// app 端通过 helperClient.getConfigJSON 拿到字典后调用本方法（avoid I/O 依赖）。
+    public static func parseShrimpConfig(_ root: [String: Any]) -> ShrimpConfigV2 {
         let agents = parseAgents(root)
         let imAccounts = parseImAccounts(root)
         let bindings = parseBindings(root)
