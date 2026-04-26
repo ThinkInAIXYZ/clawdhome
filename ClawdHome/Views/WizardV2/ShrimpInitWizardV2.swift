@@ -14,13 +14,6 @@
 import SwiftUI
 import WebKit
 
-// MARK: - AddBotTarget (sheet(item:) wrapper)
-
-private struct AddBotTarget: Identifiable {
-    let id = UUID()
-    let agentId: String
-}
-
 private enum WizardEngine: String, CaseIterable {
     case openclaw
     case hermes
@@ -217,7 +210,6 @@ struct ShrimpInitWizardV2: View {
     // Step 5: IM bindings
     @State private var imAccounts: [IMAccount] = []
     @State private var bindings: [IMBinding] = []
-    @State private var addBotTarget: AddBotTarget? = nil  // non-nil 时弹出 AddBotSheet
 
     // Step 6: done
     @State private var isSaving = false
@@ -920,12 +912,18 @@ struct ShrimpInitWizardV2: View {
                 Spacer()
             }
 
+            // banner：降低用户"必须为每个 agent 都绑 IM"的负担感知
+            wizardIMBanner
+
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(agents) { agent in
-                        agentIMSection(agent: agent)
-                    }
-                }
+                AgentBotListEditor(
+                    agents: $agents,
+                    imAccounts: $imAccounts,
+                    bindings: $bindings,
+                    username: user.username,
+                    showModelPicker: false,    // Step 4 已经填过模型；这里 IM-only
+                    allowAddAgent: false       // 向导这一步不让加 agent，引导用户回 Step 4
+                )
                 .padding(.horizontal, 4)
             }
 
@@ -936,75 +934,30 @@ struct ShrimpInitWizardV2: View {
         }
         .padding(24)
         .task { await loadExistingChannelBindings() }
-        .sheet(item: $addBotTarget) { target in
-            AddBotSheet(username: user.username, agentId: target.agentId) { newAccount in
-                if !imAccounts.contains(where: { $0.id == newAccount.id && $0.platform == newAccount.platform }) {
-                    imAccounts.append(newAccount)
-                }
-                // 使用 sheet 打开时捕获的 agentId，避免异步竞态
-                let binding = IMBinding(
-                    agentId: target.agentId,
-                    channel: newAccount.platform.openclawChannelId,
-                    accountId: newAccount.id
-                )
-                bindings.append(binding)
-            }
-        }
     }
 
-    private func agentIMSection(agent: AgentDef) -> some View {
-        let agentBindings = bindings.filter { $0.agentId == agent.id }
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(agent.displayName)
-                    .fontWeight(.semibold)
-                if agent.isDefault {
-                    Text(L10n.k("agents.default_badge", fallback: "默认"))
-                        .font(.caption2)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Color.accentColor.opacity(0.15))
-                        .clipShape(Capsule())
-                }
-                Spacer()
-                Button(action: {
-                    addBotTarget = AddBotTarget(agentId: agent.id)
-                }) {
-                    Label(L10n.k("wizard_v2.im.add_bot", fallback: "绑定 Bot"), systemImage: "plus")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-
-            if agentBindings.isEmpty {
-                Text(L10n.k("wizard_v2.im.no_binding", fallback: "可选，主 Agent 调度时不需要绑定"))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            } else {
-                ForEach(agentBindings) { binding in
-                    let account = imAccounts.first { $0.id == binding.accountId }
-                    HStack(spacing: 6) {
-                        Image(systemName: "link")
-                            .foregroundStyle(Color.accentColor)
-                            .font(.caption)
-                        Text("\(account?.platform.displayName ?? binding.channel) · \(account?.displayName ?? binding.accountId ?? "通配")")
-                            .font(.caption)
-                        Spacer()
-                        Button(action: {
-                            bindings.removeAll { $0.id == binding.id }
-                        }) {
-                            Image(systemName: "minus.circle")
-                                .foregroundStyle(.red)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
+    /// Step 5 顶部的"降负担"提示横幅 — 一直显示，不做"我知道了"折叠
+    private var wizardIMBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "lightbulb.fill")
+                .foregroundStyle(Color.yellow)
+                .font(.callout)
+            Text(L10n.k("wizard_v2.im.banner",
+                        fallback: "只绑默认 Agent 就够用了 — 可以通过主 Agent 分派任务给其他 Agent，也可以后面在设置中按需绑定 / 更新 IM。"))
+                .font(.callout)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
         }
-        .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.yellow.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.yellow.opacity(0.3), lineWidth: 0.5)
+        )
     }
 
     // MARK: - Step 6: done
