@@ -59,9 +59,9 @@ final class GatewayHub {
             let skills = skillsStore(for: username)
             let channels = channelStore(for: username)
             Task {
-                await cron.start(client: connectedClient)
-                await skills.start(client: connectedClient)
-                await channels.start(client: connectedClient)
+                await cron.start(client: connectedClient, shrimpName: username)
+                await skills.start(client: connectedClient, shrimpName: username)
+                await channels.start(client: connectedClient, shrimpName: username)
             }
         } catch {
             appLog("GatewayHub connect(\(username)) failed: \(error.localizedDescription)", level: .error)
@@ -123,7 +123,7 @@ final class GatewayHub {
         guard let client = clients[username] else { return }
         let connected = await client.connected
         guard connected else { return }
-        await cronStore(for: username).startIfNeeded(client: client)
+        await cronStore(for: username).startIfNeeded(client: client, shrimpName: username)
     }
 
     /// View 出现或连接状态变化时调用，确保 SkillsStore 已与 client 关联
@@ -131,7 +131,7 @@ final class GatewayHub {
         guard let client = clients[username] else { return }
         let connected = await client.connected
         guard connected else { return }
-        await skillsStore(for: username).startIfNeeded(client: client)
+        await skillsStore(for: username).startIfNeeded(client: client, shrimpName: username)
     }
 
     /// View 出现或连接状态变化时调用，确保 ChannelStore 已与 client 关联
@@ -139,7 +139,7 @@ final class GatewayHub {
         guard let client = clients[username] else { return }
         let connected = await client.connected
         guard connected else { return }
-        await channelStore(for: username).startIfNeeded(client: client)
+        await channelStore(for: username).startIfNeeded(client: client, shrimpName: username)
     }
 
     // MARK: - 配置读写

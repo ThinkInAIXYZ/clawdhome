@@ -17,23 +17,26 @@ final class GatewayCronStore {
     private var client: GatewayClient?
     private var eventTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
+    private var shrimpName: String = ""
 
     // MARK: - 生命周期
 
-    func start(client: GatewayClient) async {
+    func start(client: GatewayClient, shrimpName: String) async {
         self.client = client
+        self.shrimpName = shrimpName
         await refresh()
         startEventSubscription(client: client)
         startPolling()
     }
 
     /// 幂等启动：仅在 client 尚未设置时执行完整启动；已有 client 时仅 refresh
-    func startIfNeeded(client: GatewayClient) async {
+    func startIfNeeded(client: GatewayClient, shrimpName: String) async {
+        self.shrimpName = shrimpName
         if self.client != nil {
             await refresh()
             return
         }
-        await start(client: client)
+        await start(client: client, shrimpName: shrimpName)
     }
 
     func stop() {
@@ -56,7 +59,7 @@ final class GatewayCronStore {
             jobs = try await client.cronList()
             error = nil
         } catch {
-            appLog("GatewayCronStore refresh error: \(error.localizedDescription)", level: .error)
+            appLog("GatewayCronStore refresh error [@\(shrimpName)]: \(error.localizedDescription)", level: .error)
             self.error = error.localizedDescription
         }
     }
@@ -66,7 +69,7 @@ final class GatewayCronStore {
         do {
             runEntries = try await client.cronRuns(jobId: jobId)
         } catch {
-            appLog("GatewayCronStore refreshRuns(\(jobId)) error: \(error.localizedDescription)", level: .error)
+            appLog("GatewayCronStore refreshRuns(\(jobId)) error [@\(shrimpName)]: \(error.localizedDescription)", level: .error)
         }
     }
 

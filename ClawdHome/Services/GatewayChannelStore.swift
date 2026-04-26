@@ -18,6 +18,7 @@ final class GatewayChannelStore {
 
     private var client: GatewayClient?
     private var pollTask: Task<Void, Never>?
+    private var shrimpName: String = ""
 
     // MARK: - 查询接口
 
@@ -38,20 +39,22 @@ final class GatewayChannelStore {
 
     // MARK: - 生命周期
 
-    func start(client: GatewayClient) async {
+    func start(client: GatewayClient, shrimpName: String) async {
         self.client = client
+        self.shrimpName = shrimpName
         await refresh()
         startPolling()
     }
 
-    func startIfNeeded(client: GatewayClient) async {
+    func startIfNeeded(client: GatewayClient, shrimpName: String) async {
+        self.shrimpName = shrimpName
         if self.client != nil {
             self.client = client
             if pollTask == nil { startPolling() }
             await refresh()
             return
         }
-        await start(client: client)
+        await start(client: client, shrimpName: shrimpName)
     }
 
     func stop() {
@@ -77,7 +80,7 @@ final class GatewayChannelStore {
             channelAccounts = result.channelAccounts
             error = nil
         } catch {
-            appLog("GatewayChannelStore refresh error: \(error.localizedDescription)", level: .error)
+            appLog("GatewayChannelStore refresh error [@\(shrimpName)]: \(error.localizedDescription)", level: .error)
             self.error = error.localizedDescription
         }
     }
