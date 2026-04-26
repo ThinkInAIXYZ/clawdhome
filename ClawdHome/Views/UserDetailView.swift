@@ -123,6 +123,8 @@ struct UserDetailView: View {
     @State private var showNormalFreezeConfirm = false
     // Hermes
     @State private var showHermesSetup = false
+    // 设置面板（v2：模型 / IM / Agents / 高级 / 插件）
+    @State private var showShrimpSettings = false
     // 密码
     @State private var showPassword = false
     @State private var logSearchText = ""
@@ -433,6 +435,12 @@ struct UserDetailView: View {
             ForEach(gatewayTabs, id: \.self) { sidebarButton($0) }
 
             Spacer(minLength: 0)
+
+            // 底部固定区：设置入口（不进 tab 切换，弹 sheet）
+            Divider()
+                .padding(.horizontal, detailSidebarShowsLabels ? 10 : 4)
+                .padding(.vertical, 2)
+            sidebarSettingsButton
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 14)
@@ -444,6 +452,29 @@ struct UserDetailView: View {
             alignment: .topLeading
         )
         .background(.bar)
+    }
+
+    /// sidebar 底部的"设置"按钮 — 打开 ShrimpSettingsV2View（包含模型 / IM / Agents / 高级 / 插件 5 个 tab）
+    @ViewBuilder private var sidebarSettingsButton: some View {
+        Button { showShrimpSettings = true } label: {
+            HStack(spacing: detailSidebarShowsLabels ? 8 : 0) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 18))
+                    .frame(width: detailSidebarButtonSize, height: detailSidebarButtonSize)
+                if detailSidebarShowsLabels {
+                    Text(L10n.k("user.detail.sidebar.settings", fallback: "设置"))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, detailSidebarShowsLabels ? 10 : 0)
+            .padding(.vertical, detailSidebarShowsLabels ? 4 : 0)
+            .frame(maxWidth: .infinity, alignment: detailSidebarShowsLabels ? .leading : .center)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder private var tabContent: some View {
@@ -633,6 +664,11 @@ struct UserDetailView: View {
             DiagnosticsSheet(user: user, engineHint: defaultModel) { diagResult in
                 lastHealthCheck = diagResult
             }
+        }
+        .sheet(isPresented: $showShrimpSettings) {
+            ShrimpSettingsV2View(user: user)
+                .environment(helperClient)
+                .environment(gatewayHub)
         }
     }
 
