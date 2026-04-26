@@ -91,7 +91,7 @@ struct CLIConfigStep: View {
                 .font(.caption)
                 .foregroundStyle(.orange)
 
-            ModelConfigWizard(user: user, embedded: true) {
+            ModelConfigWizard(user: user, presentation: .wizardStep) {
                 onDone?()
             }
 
