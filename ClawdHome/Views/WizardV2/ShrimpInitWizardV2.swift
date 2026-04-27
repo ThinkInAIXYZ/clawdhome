@@ -1413,12 +1413,14 @@ struct ShrimpInitWizardV2: View {
             export HOMEBREW_PREFIX="$HOME/.brew"
             export HOMEBREW_CELLAR="$HOME/.brew/Cellar"
             export HOMEBREW_REPOSITORY="$HOME/.brew"
-            export PATH="$HOME/.brew/bin:$HOME/.brew/sbin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            export PATH="$HOME/.brew/bin:$HOME/.brew/sbin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            export UV_INSTALL_DIR="$HOME/.local/bin"
+            mkdir -p "$HOME/.local/bin"
             hash -r 2>/dev/null || true
             mkdir -p "$HERMES_HOME"
             curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | /bin/bash -s -- --skip-setup --hermes-home "$HERMES_HOME"
             """
-        return ["bash", "-lc", script]
+        return ["bash", "-c", script]
     }
 
     private func openclawLogTailCommand() -> [String] {
