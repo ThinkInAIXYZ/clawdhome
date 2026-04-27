@@ -186,6 +186,9 @@ final class ManagedUser: Identifiable, Hashable {
     /// 当前初始化步骤（向导运行中时非 nil，供列表实时显示进度）
     var initStep: String?
 
+    /// 向导是否已完成（nil = 尚未检测，true = 已完成/进入详情，false = 待完成/进入向导）
+    var isWizardCompleted: Bool? = nil
+
     init(username: String, fullName: String, isAdmin: Bool = false,
          clawType: ClawType = .macosUser, identifier: String = "") {
         self.id = UUID()

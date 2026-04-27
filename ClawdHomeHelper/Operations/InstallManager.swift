@@ -81,6 +81,8 @@ struct InstallManager {
         } catch {
             helperLog("chownRecursive npm prefix \(prefix) failed for @\(username): \(error.localizedDescription)", level: .warn)
         }
+        // 写入运行时声明，固定识别引擎
+        HermesInstaller.writeRuntimeConfig(runtime: "openclaw", username: username)
         return output
     }
 
@@ -140,6 +142,12 @@ struct InstallManager {
     /// 查询指定用户当前安装的 openclaw 版本（未安装返回 nil）
     /// 优先从 package.json 读取版本（毫秒级），避免启动 Node 子进程（2~3s 延迟）
     static func installedVersion(username: String) -> String? {
+        // 0. 有运行时配置且明确声明为 hermes → 跳过 openclaw 检测，防止误报
+        if let config = HermesInstaller.readRuntimeConfig(username: username),
+           config.runtime == "hermes" {
+            return nil
+        }
+
         // 1. 优先读 npm 全局包的 package.json（~/.npm-global/lib/node_modules/openclaw/package.json）
         let pkgPath = "\(npmGlobalDir(for: username))/lib/node_modules/openclaw/package.json"
         if let data = FileManager.default.contents(atPath: pkgPath),
@@ -238,9 +246,9 @@ struct InstallManager {
         // 或后续 root 操作污染了归属，此处补偿修正以确保 sudo -u 能正常执行 npm。
         let brewRoot = "\(home)/.brew"
         if FileManager.default.fileExists(atPath: brewRoot) {
-            try? FilePermissionHelper.chownRecursive(brewRoot, owner: username)
+            _ = try? FilePermissionHelper.chownRecursive(brewRoot, owner: username)
             // 确保 owner 对目录有 traverse 权限、对可执行文件有执行权限
-            try? FilePermissionHelper.chmodSymbolicRecursive(brewRoot, expr: "u+rwX")
+            _ = try? FilePermissionHelper.chmodSymbolicRecursive(brewRoot, expr: "u+rwX")
         }
     }
 
@@ -260,7 +268,7 @@ struct InstallManager {
         let sharedNpmCache = UserEnvContract.npmSharedCacheDir()
         guard FileManager.default.fileExists(atPath: sharedNpmCache) else { return }
         // npm 的内容寻址缓存会递归建目录；这里统一放宽 cache 树权限，避免首个用户写入后其余用户无法复用。
-        _ = try? FilePermissionHelper.chmodSymbolicRecursive(sharedNpmCache, expr: "a+rwX")
+        _ = _ = try? FilePermissionHelper.chmodSymbolicRecursive(sharedNpmCache, expr: "a+rwX")
         _ = try? FilePermissionHelper.chmod(sharedNpmCache, mode: "1777")
     }
 

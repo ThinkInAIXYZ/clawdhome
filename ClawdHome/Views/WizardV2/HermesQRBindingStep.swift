@@ -255,7 +255,8 @@ struct HermesQRBindingStep: View {
         let payload = maintenanceWindowRegistry.makePayload(
             username: username,
             title: "扫码绑定 \(platform.displayName) · @\(username)",
-            command: command
+            command: command,
+            engine: .hermes
         )
         openWindow(id: "maintenance-terminal", value: payload)
 

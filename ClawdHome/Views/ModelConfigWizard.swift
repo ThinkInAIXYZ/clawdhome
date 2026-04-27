@@ -1796,7 +1796,7 @@ struct ModelPicker: View {
         if let status {
             inheritedDefault = status.resolvedDefault ?? status.defaultModel
         }
-        modelGroups = models ?? builtInModelGroups
+        modelGroups = models ?? []
         hasLoaded = true
     }
 }

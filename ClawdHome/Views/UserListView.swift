@@ -1188,7 +1188,8 @@ struct ClawPoolView: View {
         let payload = maintenanceWindowRegistry.makePayload(
             username: claw.username,
             title: L10n.k("views.user_list_view.cli_maintenance_advanced", fallback: "命令行维护（高级）"),
-            command: ["zsh", "-l"]
+            command: ["zsh", "-l"],
+            engine: claw.prefersHermesRuntime ? .hermes : .openclaw
         )
         openWindow(id: "maintenance-terminal", value: payload)
     }
@@ -1493,6 +1494,8 @@ private struct ClawCard: View {
                             .foregroundStyle(freezeColor(mode))
                     } else if let step = claw.initStep {
                         Text(step).foregroundStyle(.blue)
+                    } else if claw.isWizardCompleted == false {
+                        Text(L10n.k("views.user_list_view.init_pending", fallback: "初始化待完成")).foregroundStyle(.secondary)
                     } else if let v = claw.runtimeVersionLabel {
                         let outdated = !claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion)
                         HStack(spacing: 2) {
@@ -1519,8 +1522,10 @@ private struct ClawCard: View {
                 .font(.caption2)
                 .lineLimit(1)
 
-                // 角色摘要（单 agent 显示名称，多 agent 显示数量 + 展开入口）
-                agentSummarySection
+                // 角色摘要（向导未完成时隐藏，避免误导）
+                if claw.initStep == nil && claw.isWizardCompleted != false {
+                    agentSummarySection
+                }
 
                 // 操作按钮行
                 HStack(spacing: 8) {
@@ -1642,6 +1647,8 @@ private struct ClawCard: View {
                 .foregroundStyle(.blue)
                 .symbolEffect(.pulse, options: .repeating)
                 .font(.system(size: 9))
+        } else if claw.isWizardCompleted == false {
+            EmptyView()
         } else {
             let readiness: GatewayReadiness = if claw.prefersHermesRuntime {
                 claw.isRunning ? .ready : .stopped
@@ -1762,7 +1769,8 @@ private struct AddClawCard: View {
                     .foregroundStyle(isHovered ? Color.accentColor : Color.secondary.opacity(0.6))
                 Spacer(minLength: 0)
             }
-            .frame(width: 160, height: 160)
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160)
             .background(
                 isHovered
                     ? Color.accentColor.opacity(0.06)

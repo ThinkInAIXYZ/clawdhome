@@ -778,6 +778,7 @@ struct ProviderModelConfigCore: View {
             username: user.username,
             title: L10n.k("wizard.model_config.command.window_title", fallback: "模型配置命令行"),
             command: ["openclaw", "configure", "--section", "model"],
+            engine: .openclaw,
             completionToken: completionToken,
             completionContext: userDetailModelConfigMaintenanceContext
         )

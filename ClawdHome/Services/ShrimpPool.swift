@@ -347,6 +347,7 @@ final class ShrimpPool {
                 group.addTask {
                     async let openclawVersionResult = self.helperClient.getOpenclawVersion(username: user.username)
                     async let hermesVersionResult = self.helperClient.getHermesVersion(username: user.username)
+                    async let wizardStateResult = self.helperClient.loadInitState(username: user.username)
 
                     let openclawVersion = await openclawVersionResult
                     let hermesVersion = await hermesVersionResult
@@ -373,10 +374,30 @@ final class ShrimpPool {
                             user.startedAt = (running && pid > 0) ? GatewayHub.processStartTime(pid: pid) : nil
                         }
                     }
+
+                    let wizardJSON = await wizardStateResult
+                    let hasRuntime = openclawVersion != nil || hermesVersion != nil
+                    user.isWizardCompleted = Self.resolveWizardCompleted(stateJSON: wizardJSON, hasRuntime: hasRuntime)
                     user.versionChecked = true
                 }
             }
         }
+    }
+
+    /// 根据向导 JSON 和运行时安装状态判断向导是否"已完成"（即点击进详情而非向导）。
+    /// 与 UserEntryWindowResolver.shouldTreatAsUnfinishedWizardState 保持同等逻辑。
+    private nonisolated static func resolveWizardCompleted(stateJSON: String, hasRuntime: Bool) -> Bool {
+        guard !stateJSON.isEmpty, let state = InitWizardState.from(json: stateJSON) else {
+            // 无 state 文件：无运行时则仍需进向导
+            return hasRuntime
+        }
+        if state.isCompleted { return true }
+        let hasProgress = state.active || InitStep.allCases.contains { step in
+            let raw = state.steps[step.key] ?? state.steps[step.title] ?? "pending"
+            return raw != "pending"
+        }
+        // 未完成 + (有进度 或 无运行时) → 需进向导
+        return !(hasProgress || !hasRuntime)
     }
 
     private func evaluateFreezeWarning(user: ManagedUser, gatewayRunning: Bool) async -> String? {

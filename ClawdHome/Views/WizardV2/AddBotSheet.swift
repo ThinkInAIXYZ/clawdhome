@@ -648,6 +648,27 @@ struct AddBotSheet: View {
                     domain: section["domain"] as? String
                 ))
             }
+            // v3 兜底：微信等使用顶层 token 字段（非 appId / accounts）的插件通道。
+            // openclaw-weixin 绑定成功后写入 token，无 appId / accounts，v1/v2 均无法命中。
+            if snapshots.isEmpty, let token = section["token"] as? String, !token.isEmpty {
+                snapshots.append(ChannelAccountSnapshot(
+                    accountId: "default",
+                    name: section["botName"] as? String ?? section["name"] as? String,
+                    enabled: true,
+                    configured: true,
+                    linked: true,
+                    running: nil,
+                    connected: nil,
+                    lastConnectedAt: nil,
+                    lastError: nil,
+                    healthState: nil,
+                    lastInboundAt: nil,
+                    lastOutboundAt: nil,
+                    allowFrom: section["allowFrom"] as? [String],
+                    appId: nil,
+                    domain: section["domain"] as? String
+                ))
+            }
         }
         return snapshots
     }

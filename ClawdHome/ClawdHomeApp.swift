@@ -141,6 +141,28 @@ struct ClawdHomeApp: App {
         .windowResizability(.automatic)
         .defaultSize(width: 860, height: 560)
 
+        WindowGroup(id: "maintenance-files", for: String.self) { $payload in
+            MaintenanceFilesWindow(payload: payload)
+                .environment(helperClient)
+                .environment(shrimpPool)
+                .environment(maintenanceWindowRegistry)
+                .environment(\.locale, appLanguage.locale)
+        }
+        .windowStyle(.titleBar)
+        .windowResizability(.automatic)
+        .defaultSize(width: 960, height: 640)
+
+        WindowGroup(id: "maintenance-processes", for: String.self) { $payload in
+            MaintenanceProcessesWindow(payload: payload)
+                .environment(helperClient)
+                .environment(shrimpPool)
+                .environment(maintenanceWindowRegistry)
+                .environment(\.locale, appLanguage.locale)
+        }
+        .windowStyle(.titleBar)
+        .windowResizability(.automatic)
+        .defaultSize(width: 920, height: 620)
+
         WindowGroup(id: "clone-claw", for: String.self) { $sourceUsername in
             if let username = sourceUsername {
                 CloneClawSheet(sourceUsername: username)
@@ -177,6 +199,7 @@ final class MaintenanceWindowRegistry {
         username: String,
         title: String,
         command: [String],
+        engine: MaintenanceTerminalEngine? = nil,
         completionToken: String? = nil,
         completionContext: String? = nil
     ) -> String {
@@ -186,12 +209,50 @@ final class MaintenanceWindowRegistry {
             token: UUID().uuidString,
             username: username,
             title: title,
-            command: command,
+            command: MaintenanceTerminalCommandPolicy.commandForRuntime(
+                command: command,
+                runtime: engine?.managedHomeRuntime
+            ),
             index: next,
+            engine: engine,
             completionToken: completionToken,
             completionContext: completionContext
         )
         return req.payload
+    }
+
+    func makeToolWindowPayload(
+        username: String,
+        title: String,
+        kind: MaintenanceToolWindowKind,
+        scope: UserFilesScope = .home
+    ) -> String {
+        let next = (nextIndexByUser[username] ?? 0) + 1
+        nextIndexByUser[username] = next
+        let req = MaintenanceToolWindowRequest(
+            token: UUID().uuidString,
+            username: username,
+            title: title,
+            kind: kind,
+            scope: scope,
+            index: next
+        )
+        return req.payload
+    }
+}
+
+/// 终端所属的 Agent 引擎；未指定时不显示任何引擎相关的快捷指令菜单
+enum MaintenanceTerminalEngine: String, Codable {
+    case openclaw
+    case hermes
+
+    var managedHomeRuntime: ManagedHomeRuntime {
+        switch self {
+        case .openclaw:
+            return .openclaw
+        case .hermes:
+            return .hermes
+        }
     }
 }
 
@@ -201,6 +262,7 @@ struct MaintenanceTerminalWindowRequest: Codable {
     let title: String
     let command: [String]
     let index: Int
+    let engine: MaintenanceTerminalEngine?
     let completionToken: String?
     let completionContext: String?
 
@@ -215,6 +277,7 @@ struct MaintenanceTerminalWindowRequest: Codable {
         title: String,
         command: [String],
         index: Int,
+        engine: MaintenanceTerminalEngine? = nil,
         completionToken: String? = nil,
         completionContext: String? = nil
     ) {
@@ -223,6 +286,7 @@ struct MaintenanceTerminalWindowRequest: Codable {
         self.title = title
         self.command = command
         self.index = index
+        self.engine = engine
         self.completionToken = completionToken
         self.completionContext = completionContext
     }
@@ -231,6 +295,50 @@ struct MaintenanceTerminalWindowRequest: Codable {
         guard let payload,
               let data = Data(base64Encoded: payload),
               let req = try? JSONDecoder().decode(MaintenanceTerminalWindowRequest.self, from: data) else {
+            return nil
+        }
+        self = req
+    }
+}
+
+enum MaintenanceToolWindowKind: String, Codable {
+    case files
+    case processes
+}
+
+struct MaintenanceToolWindowRequest: Codable {
+    let token: String
+    let username: String
+    let title: String
+    let kind: MaintenanceToolWindowKind
+    let scope: UserFilesScope
+    let index: Int
+
+    var payload: String {
+        guard let data = try? JSONEncoder().encode(self) else { return "" }
+        return data.base64EncodedString()
+    }
+
+    init(
+        token: String,
+        username: String,
+        title: String,
+        kind: MaintenanceToolWindowKind,
+        scope: UserFilesScope = .home,
+        index: Int
+    ) {
+        self.token = token
+        self.username = username
+        self.title = title
+        self.kind = kind
+        self.scope = scope
+        self.index = index
+    }
+
+    init?(payload: String?) {
+        guard let payload,
+              let data = Data(base64Encoded: payload),
+              let req = try? JSONDecoder().decode(MaintenanceToolWindowRequest.self, from: data) else {
             return nil
         }
         self = req
@@ -249,6 +357,28 @@ private struct OpenClawQuickCommand: Identifiable {
     let label: String
     let command: String
 }
+
+private let hermesQuickCommandSections: [(section: String, items: [OpenClawQuickCommand])] = [
+    (L10n.k("app.maintenance.quick.section.query_diagnose", fallback: "查询 / 诊断"), [
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.version", fallback: "版本查询"), command: "hermes --version"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.status", fallback: "状态概览"), command: "hermes status"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.profile_list", fallback: "角色列表"), command: "hermes profile list"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.gateway_status", fallback: "网关状态"), command: "hermes gateway status"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.doctor", fallback: "系统体检"), command: "hermes doctor"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.logs", fallback: "实时日志"), command: "hermes logs --follow"),
+    ]),
+    (L10n.k("app.maintenance.quick.section.config_control", fallback: "配置 / 控制"), [
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.setup", fallback: "交互配置"), command: "hermes setup"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.gateway_restart", fallback: "重启网关"), command: "hermes gateway restart"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.channels_list", fallback: "频道列表"), command: "hermes channels list"),
+    ]),
+    (L10n.k("app.maintenance.quick.section.upgrade_maintenance", fallback: "升级 / 维护"), [
+        OpenClawQuickCommand(
+            label: L10n.k("app.maintenance.quick.hermes.upgrade_latest", fallback: "升级到最新"),
+            command: "hermes --version; npm install -g @nousresearch/hermes-agent@latest; hermes --version"
+        ),
+    ]),
+]
 
 private let openClawQuickCommandSections: [(section: String, items: [OpenClawQuickCommand])] = [
     (L10n.k("app.maintenance.quick.section.query_diagnose", fallback: "查询 / 诊断"), [
@@ -282,6 +412,50 @@ private struct MaintenanceTerminalWindow: View {
     var body: some View {
         if let request = MaintenanceTerminalWindowRequest(payload: payload) {
             MaintenanceTerminalWindowContent(request: request)
+        } else {
+            ContentUnavailableView(
+                L10n.k("app.maintenance.invalid_params", fallback: "维护终端参数无效"),
+                systemImage: "exclamationmark.triangle",
+                description: Text(L10n.k("app.maintenance.invalid_params.desc", fallback: "请从虾详情页或初始化向导重新打开维护终端。"))
+            )
+        }
+    }
+}
+
+private struct MaintenanceFilesWindow: View {
+    let payload: String?
+    @Environment(ShrimpPool.self) private var pool
+
+    var body: some View {
+        if let request = MaintenanceToolWindowRequest(payload: payload),
+           request.kind == .files,
+           let user = pool.users.first(where: { $0.username == request.username }) {
+            NavigationStack {
+                UserFilesView(users: [user], preselectedUser: user, scope: request.scope)
+            }
+            .navigationTitle(request.title)
+        } else {
+            ContentUnavailableView(
+                L10n.k("app.maintenance.invalid_params", fallback: "维护终端参数无效"),
+                systemImage: "exclamationmark.triangle",
+                description: Text(L10n.k("app.maintenance.invalid_params.desc", fallback: "请从虾详情页或初始化向导重新打开维护终端。"))
+            )
+        }
+    }
+}
+
+private struct MaintenanceProcessesWindow: View {
+    let payload: String?
+    @Environment(ShrimpPool.self) private var pool
+
+    var body: some View {
+        if let request = MaintenanceToolWindowRequest(payload: payload),
+           request.kind == .processes,
+           pool.users.contains(where: { $0.username == request.username }) {
+            NavigationStack {
+                ProcessTabView(username: request.username)
+            }
+            .navigationTitle(request.title)
         } else {
             ContentUnavailableView(
                 L10n.k("app.maintenance.invalid_params", fallback: "维护终端参数无效"),
@@ -564,23 +738,47 @@ private struct MaintenanceTerminalWindowContent: View {
 
     @ViewBuilder
     private var quickCommandMenu: some View {
-        Menu {
-            ForEach(openClawQuickCommandSections, id: \.section) { group in
-                Section(group.section) {
-                    ForEach(group.items) { cmd in
-                        Button {
-                            terminalControl.sendLine(cmd.command)
-                        } label: {
-                            Text(cmd.label)
+        // 仅当请求方明确指定了 engine 时才显示对应引擎的快捷指令；否则隐藏菜单。
+        switch request.engine {
+        case .openclaw:
+            Menu {
+                ForEach(openClawQuickCommandSections, id: \.section) { group in
+                    Section(group.section) {
+                        ForEach(group.items) { cmd in
+                            Button {
+                                terminalControl.sendLine(cmd.command)
+                            } label: {
+                                Text(cmd.label)
+                            }
                         }
                     }
                 }
+            } label: {
+                Text(L10n.k("app.maintenance.quick.menu_title", fallback: "🦞openclaw 指令"))
             }
-        } label: {
-            Text(L10n.k("app.maintenance.quick.menu_title", fallback: "🦞openclaw 指令"))
+            .menuIndicator(.visible)
+            .fixedSize()
+        case .hermes:
+            Menu {
+                ForEach(hermesQuickCommandSections, id: \.section) { group in
+                    Section(group.section) {
+                        ForEach(group.items) { cmd in
+                            Button {
+                                terminalControl.sendLine(cmd.command)
+                            } label: {
+                                Text(cmd.label)
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Text(L10n.k("app.maintenance.quick.hermes.menu_title", fallback: "🪽hermes 指令"))
+            }
+            .menuIndicator(.visible)
+            .fixedSize()
+        case .none:
+            EmptyView()
         }
-        .menuIndicator(.visible)
-        .fixedSize()
     }
 
     var body: some View {
@@ -821,11 +1019,12 @@ private struct MaintenanceTerminalWindowContent: View {
     }
 
     private func cloneTerminalWindow() {
-        // 克隆窗口时继承当前命令，避免跨运行时环境漂移。
+        // 克隆窗口时继承当前命令与 engine，避免跨运行时环境漂移。
         let payload = maintenanceWindowRegistry.makePayload(
             username: request.username,
             title: L10n.k("user.detail.auto.cli_maintenance_advanced", fallback: "命令行维护（高级）"),
-            command: request.command
+            command: request.command,
+            engine: request.engine
         )
         openWindow(id: "maintenance-terminal", value: payload)
         statusText = L10n.k("app.maintenance.terminal_cloned", fallback: "已打开新的维护终端窗口。")

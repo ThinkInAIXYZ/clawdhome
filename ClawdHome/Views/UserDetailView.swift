@@ -453,7 +453,7 @@ struct UserDetailView: View {
     @ViewBuilder private var tabContent: some View {
         switch selectedTab {
         case .overview:  overviewTabContent
-        case .files:     UserFilesView(users: [user], preselectedUser: user)
+        case .files:     UserFilesView(users: [user], preselectedUser: user, scope: .runtime(.openclaw))
         case .logs:
             GatewayLogViewer(username: user.username, externalSearchQuery: $logSearchText)
         case .cron:      CronTabView(username: user.username, agentId: selectedAgentId)
@@ -3262,7 +3262,8 @@ struct UserDetailView: View {
         let payload = maintenanceWindowRegistry.makePayload(
             username: user.username,
             title: L10n.k("user.detail.auto.cli_maintenance_advanced", fallback: "命令行维护（高级）"),
-            command: ["zsh", "-l"]
+            command: ["zsh", "-l"],
+            engine: user.prefersHermesRuntime ? .hermes : .openclaw
         )
         openWindow(id: "maintenance-terminal", value: payload)
     }

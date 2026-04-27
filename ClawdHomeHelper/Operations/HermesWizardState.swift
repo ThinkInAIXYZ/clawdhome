@@ -123,8 +123,8 @@ struct HermesWizardState {
         // 替换目标文件
         _ = try? fm.removeItem(atPath: path)
         try fm.moveItem(atPath: tmp, toPath: path)
-        try? FilePermissionHelper.chown(path, owner: username)
-        try? FilePermissionHelper.chmod(path, mode: "600")
+        _ = try? FilePermissionHelper.chown(path, owner: username)
+        _ = try? FilePermissionHelper.chmod(path, mode: "600")
     }
 
     private static func iso8601Now() -> String {

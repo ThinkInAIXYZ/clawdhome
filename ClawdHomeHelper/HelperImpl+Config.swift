@@ -644,10 +644,6 @@ extension ClawdHomeHelperImpl {
             reply(false, "", error)
             return
         }
-        let home = "/Users/\(username)"
-        let normalizedCommand = normalizedMaintenanceExecutable(command.first ?? "")
-        let isHermesCommand = (normalizedCommand == "hermes" || normalizedCommand == "hermes-shell")
-
         // 权限修复在安装/体检阶段完成，终端启动不再执行 chown
         let nodePath = ConfigWriter.buildNodePath(username: username)
 

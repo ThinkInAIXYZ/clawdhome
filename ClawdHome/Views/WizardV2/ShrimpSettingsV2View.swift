@@ -38,14 +38,13 @@ struct ShrimpSettingsV2View: View {
     @State private var pluginError: String?
 
     enum SettingsTab: String, CaseIterable {
-        case agents, model, advanced, plugins
+        case agents, model, advanced
 
         var title: String {
             switch self {
             case .agents:   return L10n.k("settings_v2.tab.agents", fallback: "Agents")
             case .model:    return L10n.k("settings_v2.tab.model", fallback: "模型")
             case .advanced: return L10n.k("settings_v2.tab.advanced", fallback: "高级")
-            case .plugins:  return L10n.k("settings_v2.tab.plugins", fallback: "插件")
             }
         }
 
@@ -54,7 +53,6 @@ struct ShrimpSettingsV2View: View {
             case .agents:   return "person.2"
             case .model:    return "cpu"
             case .advanced: return "slider.horizontal.3"
-            case .plugins:  return "puzzlepiece.extension"
             }
         }
     }
@@ -91,7 +89,6 @@ struct ShrimpSettingsV2View: View {
                     case .agents:   agentsTab
                     case .model:    modelTab
                     case .advanced: advancedTab
-                    case .plugins:  pluginsTab
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

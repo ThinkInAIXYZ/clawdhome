@@ -67,6 +67,26 @@ enum WizardV2Step: Int, CaseIterable {
         case .done:           return "checkmark.seal"
         }
     }
+
+    var persistenceKey: String {
+        switch self {
+        case .selectEngine: return "selectEngine"
+        case .basicEnv: return "basicEnv"
+        case .hermesSetup: return "hermesSetup"
+        case .configModel: return "configModel"
+        case .configAgents: return "configAgents"
+        case .configIM: return "configIM"
+        case .done: return "done"
+        }
+    }
+
+    static func fromPersistenceKey(_ raw: String?) -> WizardV2Step? {
+        guard let raw else { return nil }
+        let normalized = raw
+            .replacingOccurrences(of: "v2:", with: "")
+            .replacingOccurrences(of: "v2_", with: "")
+        return allCases.first { $0.persistenceKey == normalized }
+    }
 }
 
 private enum WizardV2BasicEnvPhase: Int, CaseIterable {
@@ -103,6 +123,7 @@ private enum WizardV2HermesEnvPhase: Int, CaseIterable {
     case repairHomebrew = 1
     case installHermes
     case verifyInstall
+    case startGateway
 
     var title: String {
         switch self {
@@ -112,6 +133,8 @@ private enum WizardV2HermesEnvPhase: Int, CaseIterable {
             return "安装 Hermes"
         case .verifyInstall:
             return "验证安装"
+        case .startGateway:
+            return "启动 Gateway"
         }
     }
 }
@@ -171,6 +194,8 @@ struct ShrimpInitWizardV2: View {
     @Environment(HelperClient.self) private var helperClient
     @Environment(GatewayHub.self) private var gatewayHub
     @Environment(GlobalModelStore.self) private var modelStore
+    @Environment(MaintenanceWindowRegistry.self) private var maintenanceWindowRegistry
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
 
     // Navigation
@@ -226,6 +251,10 @@ struct ShrimpInitWizardV2: View {
     private var hasDirtyState: Bool {
         guard !saveSuccess else { return false }
         return selectedEngine != nil || selectedTeamDNA != nil || !agents.isEmpty || !imAccounts.isEmpty || !bindings.isEmpty
+    }
+
+    private var hasTeamSummonPayload: Bool {
+        initialRoles.teamDNA != nil || selectedTeamDNA != nil
     }
 
     var body: some View {
@@ -290,9 +319,49 @@ struct ShrimpInitWizardV2: View {
                 sidebarRow(step: step)
             }
             Spacer()
+            maintenanceMenu
         }
         .frame(width: 180)
         .padding(.top, 20)
+        .padding(.bottom, 16)
+    }
+
+    private var maintenanceMenu: some View {
+        HStack {
+            Menu {
+                Button {
+                    openFilesWindow()
+                } label: {
+                    Label(L10n.k("wizard.maintenance.files", fallback: "文件"), systemImage: "folder")
+                }
+
+                Button {
+                    openProcessesWindow()
+                } label: {
+                    Label(L10n.k("wizard.maintenance.processes", fallback: "进程"), systemImage: "cpu")
+                }
+
+                Button {
+                    openMaintenanceTerminal()
+                } label: {
+                    Label(L10n.k("wizard.maintenance.terminal", fallback: "终端"), systemImage: "terminal")
+                }
+            } label: {
+                Image(systemName: "wrench.and.screwdriver")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.75))
+                    )
+            }
+            .menuStyle(.borderlessButton)
+            .help(L10n.k("wizard.maintenance.section_title", fallback: "维护工具"))
+
+            Spacer()
+        }
+        .padding(.horizontal, 12)
     }
 
     private func sidebarRow(step: WizardV2Step) -> some View {
@@ -341,7 +410,10 @@ struct ShrimpInitWizardV2: View {
 
             HStack(spacing: 12) {
                 ForEach(WizardEngine.allCases, id: \.rawValue) { engine in
+                    let hermesTeamUnavailable = engine == .hermes
+                        && !HermesFeaturePolicy.canSelectHermesForTeamSummon(hasTeamDNA: hasTeamSummonPayload)
                     Button {
+                        guard !hermesTeamUnavailable else { return }
                         let previous = selectedEngine
                         selectedEngine = engine
                         if previous != nil && previous != engine {
@@ -360,6 +432,12 @@ struct ShrimpInitWizardV2: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(3)
+                            if hermesTeamUnavailable {
+                                Label(HermesFeaturePolicy.nextVersionHint, systemImage: "clock")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                                    .lineLimit(2)
+                            }
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, minHeight: 130, alignment: .topLeading)
@@ -376,6 +454,8 @@ struct ShrimpInitWizardV2: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .disabled(hermesTeamUnavailable)
+                    .opacity(hermesTeamUnavailable ? 0.62 : 1)
                 }
             }
 
@@ -1051,14 +1131,14 @@ struct ShrimpInitWizardV2: View {
         isCancellingWizard = true
         defer { isCancellingWizard = false }
 
-        // 显式标记当前向导会话已结束，避免外层按“未完成初始化”立即重开窗口。
+        // 显式标记当前向导会话已结束，但不要标记 completedAt；
+        // 未安装 runtime 的账号下次入口仍应被识别为未初始化。
         var cancelledState = InitWizardState()
         cancelledState.schemaVersion = 2
         cancelledState.mode = .onboarding
         cancelledState.active = false
         cancelledState.currentStep = "v2:cancelled"
         cancelledState.updatedAt = Date()
-        cancelledState.completedAt = Date()
 
         do {
             try await helperClient.saveInitState(username: user.username, json: cancelledState.toJSON())
@@ -1068,7 +1148,7 @@ struct ShrimpInitWizardV2: View {
 
         // 放弃时清理向导草稿，避免后续再次进入时恢复到已放弃的数据。
         // Hermes 路径不使用 .openclaw，跳过写入以避免误创建该目录。
-        if selectedEngine != .hermes {
+        if WizardDraftPersistencePolicy.shouldUseOpenClawWorkspace(selectedEngineRaw: selectedEngine?.rawValue) {
             let emptyObject = Data("{}".utf8)
             let emptyArray = Data("[]".utf8)
             for (relPath, payload) in [
@@ -1221,19 +1301,18 @@ struct ShrimpInitWizardV2: View {
     private func checkEnvReady() {
         Task {
             let engine = selectedEngine ?? .openclaw
-            let version: String?
             if engine == .hermes {
-                version = await helperClient.getHermesVersion(username: user.username)
+                let version = await helperClient.getHermesVersion(username: user.username)
+                let gatewayStatus = await helperClient.getHermesGatewayStatus(username: user.username)
+                await MainActor.run {
+                    envReady = version != nil && gatewayStatus.running
+                }
             } else {
-                version = await helperClient.getOpenclawVersion(username: user.username)
+                let version = await helperClient.getOpenclawVersion(username: user.username)
                 let gatewayStatus = try? await helperClient.getGatewayStatus(username: user.username)
                 await MainActor.run {
                     envReady = version != nil && (gatewayStatus?.running == true)
                 }
-                return
-            }
-            await MainActor.run {
-                envReady = version != nil
             }
         }
     }
@@ -1324,10 +1403,18 @@ struct ShrimpInitWizardV2: View {
     }
 
     private func hermesInstallTerminalCommand() -> [String] {
+        let home = "/Users/\(user.username)"
         let hermesHome = "/Users/\(user.username)/.hermes"
         let script = """
             set -euo pipefail
+            export HOME="\(home)"
+            export USER="\(user.username)"
             export HERMES_HOME="\(hermesHome)"
+            export HOMEBREW_PREFIX="$HOME/.brew"
+            export HOMEBREW_CELLAR="$HOME/.brew/Cellar"
+            export HOMEBREW_REPOSITORY="$HOME/.brew"
+            export PATH="$HOME/.brew/bin:$HOME/.brew/sbin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            hash -r 2>/dev/null || true
             mkdir -p "$HERMES_HOME"
             curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | /bin/bash -s -- --skip-setup --hermes-home "$HERMES_HOME"
             """
@@ -1341,6 +1428,50 @@ struct ShrimpInitWizardV2: View {
             exec /usr/bin/tail -n +1 -f "\(logPath)"
             """
         return ["bash", "-lc", script]
+    }
+
+    private func openFilesWindow() {
+        let payload = maintenanceWindowRegistry.makeToolWindowPayload(
+            username: user.username,
+            title: L10n.f(
+                "wizard.maintenance.files.window_title",
+                fallback: "@%@ · 文件",
+                user.username
+            ),
+            kind: .files,
+            scope: selectedEngine == .hermes
+                ? .runtime(.hermes)
+                : (selectedEngine == .openclaw ? .runtime(.openclaw) : .home)
+        )
+        openWindow(id: "maintenance-files", value: payload)
+    }
+
+    private func openProcessesWindow() {
+        let payload = maintenanceWindowRegistry.makeToolWindowPayload(
+            username: user.username,
+            title: L10n.f(
+                "wizard.maintenance.processes.window_title",
+                fallback: "@%@ · 进程",
+                user.username
+            ),
+            kind: .processes
+        )
+        openWindow(id: "maintenance-processes", value: payload)
+    }
+
+    private func openMaintenanceTerminal() {
+        let engine: MaintenanceTerminalEngine? = switch selectedEngine {
+        case .hermes: .hermes
+        case .openclaw: .openclaw
+        case nil: nil
+        }
+        let payload = maintenanceWindowRegistry.makePayload(
+            username: user.username,
+            title: L10n.k("user.detail.auto.cli_maintenance_advanced", fallback: "命令行维护（高级）"),
+            command: ["zsh", "-l"],
+            engine: engine
+        )
+        openWindow(id: "maintenance-terminal", value: payload)
     }
 
     @MainActor
@@ -1362,6 +1493,17 @@ struct ShrimpInitWizardV2: View {
             envInstallingPhase = nil
             hermesEnvInstallingPhase = nil
             envError = "Hermes 安装校验失败：未读取到版本号。"
+            return
+        }
+
+        hermesEnvInstallingPhase = .startGateway
+        do {
+            try await helperClient.startHermesGateway(username: user.username)
+        } catch {
+            isInstallingEnv = false
+            envInstallingPhase = nil
+            hermesEnvInstallingPhase = nil
+            envError = "Hermes Gateway 启动失败：\(error.localizedDescription)"
             return
         }
 
@@ -1617,12 +1759,15 @@ struct ShrimpInitWizardV2: View {
             var state = InitWizardState()
             state.active = true
             state.mode = .onboarding
-            state.currentStep = "v2:\(currentStep)"
+            state.currentStep = "v2:\(currentStep.persistenceKey)"
             state.updatedAt = Date()
-            for s in WizardV2Step.allCases where s.rawValue < currentStep.rawValue {
-                state.steps["v2_\(s)"] = "done"
+            if let selectedEngine {
+                state.steps["v2_engine"] = selectedEngine.rawValue
             }
-            state.steps["v2_\(currentStep)"] = "running"
+            for s in WizardV2Step.allCases where s.rawValue < currentStep.rawValue {
+                state.steps["v2_\(s.persistenceKey)"] = "done"
+            }
+            state.steps["v2_\(currentStep.persistenceKey)"] = "running"
             do {
                 try await helperClient.saveInitState(username: user.username, json: state.toJSON())
             } catch {
@@ -1636,7 +1781,7 @@ struct ShrimpInitWizardV2: View {
 
     /// 将团队 DNA 写入用户 workspace，供重启后恢复（仅 OpenClaw 引擎）
     private func persistTeamDNA(_ teamDNA: TeamDNA) {
-        guard selectedEngine != .hermes else { return }
+        guard WizardDraftPersistencePolicy.shouldUseOpenClawWorkspace(selectedEngineRaw: selectedEngine?.rawValue) else { return }
         Task {
             guard let data = try? JSONEncoder().encode(teamDNA) else { return }
             try? await helperClient.createDirectory(username: user.username, relativePath: ".openclaw/workspace")
@@ -1654,7 +1799,8 @@ struct ShrimpInitWizardV2: View {
 
     /// 将 agent 定义（含模型选择）写入用户 workspace，供重启后恢复（仅 OpenClaw 引擎）
     private func persistAgentDefs() {
-        guard selectedEngine != .hermes, !agents.isEmpty else { return }
+        guard WizardDraftPersistencePolicy.shouldUseOpenClawWorkspace(selectedEngineRaw: selectedEngine?.rawValue),
+              !agents.isEmpty else { return }
         Task {
             guard let data = try? JSONEncoder().encode(agents) else { return }
             try? await helperClient.createDirectory(username: user.username, relativePath: ".openclaw/workspace")
@@ -1697,10 +1843,18 @@ struct ShrimpInitWizardV2: View {
         // 只要用户未在本次会话中明确选定团队，就继续尝试从磁盘恢复。
         guard selectedTeamDNA == nil else { return }
 
+        let persistedState = InitWizardState.from(json: await helperClient.loadInitState(username: user.username))
+        let persistedV2Step = v2PersistedStep(from: persistedState)
+        let persistedEngine = v2PersistedEngine(from: persistedState)
+
         let openclawVersion = await helperClient.getOpenclawVersion(username: user.username)
         let hermesVersion = await helperClient.getHermesVersion(username: user.username)
         if selectedEngine == nil {
-            if openclawVersion != nil {
+            if let persistedEngine {
+                selectedEngine = persistedEngine
+            } else if let persistedV2Step, activeSteps(for: .openclaw).contains(persistedV2Step), persistedV2Step != .selectEngine && persistedV2Step != .basicEnv {
+                selectedEngine = .openclaw
+            } else if openclawVersion != nil {
                 selectedEngine = .openclaw
             } else if hermesVersion != nil {
                 selectedEngine = .hermes
@@ -1738,7 +1892,8 @@ struct ShrimpInitWizardV2: View {
         let engine = selectedEngine ?? .openclaw
         let isEnvReady: Bool
         if engine == .hermes {
-            isEnvReady = hermesVersion != nil
+            let gatewayStatus = await helperClient.getHermesGatewayStatus(username: user.username)
+            isEnvReady = hermesVersion != nil && gatewayStatus.running
         } else {
             let gatewayStatus = try? await helperClient.getGatewayStatus(username: user.username)
             isEnvReady = openclawVersion != nil && (gatewayStatus?.running == true)
@@ -1753,6 +1908,14 @@ struct ShrimpInitWizardV2: View {
             }
         } else {
             envReady = isEnvReady
+        }
+
+        if let persistedV2Step,
+           let engine = selectedEngine,
+           activeSteps(for: engine).contains(persistedV2Step) {
+            visitedSteps = Set(activeSteps(for: engine).filter { $0.rawValue <= persistedV2Step.rawValue })
+            currentStep = persistedV2Step
+            return
         }
 
         // 跳到第一个未完成的步骤
@@ -1777,6 +1940,34 @@ struct ShrimpInitWizardV2: View {
             // 环境已就绪但没有团队 DNA（可能是手动创建的用户）
             visitedSteps = [.selectEngine, .basicEnv]
             currentStep = .basicEnv
+        }
+    }
+
+    private func v2PersistedStep(from state: InitWizardState?) -> WizardV2Step? {
+        guard let state, !state.isCompleted, state.active else { return nil }
+        if let step = WizardV2Step.fromPersistenceKey(state.currentStep) {
+            return step == .done ? nil : step
+        }
+        for step in WizardV2Step.allCases {
+            if state.steps["v2_\(step.persistenceKey)"] == "running" {
+                return step == .done ? nil : step
+            }
+        }
+        return nil
+    }
+
+    private func v2PersistedEngine(from state: InitWizardState?) -> WizardEngine? {
+        guard let state, !state.isCompleted, state.active else { return nil }
+        guard let raw = state.steps["v2_engine"] else { return nil }
+        return WizardEngine(rawValue: raw)
+    }
+
+    private func activeSteps(for engine: WizardEngine) -> [WizardV2Step] {
+        switch engine {
+        case .hermes:
+            return [.selectEngine, .basicEnv, .hermesSetup, .done]
+        case .openclaw:
+            return [.selectEngine, .basicEnv, .configModel, .configAgents, .configIM, .done]
         }
     }
 }
