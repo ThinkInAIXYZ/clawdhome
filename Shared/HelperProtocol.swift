@@ -363,6 +363,15 @@ import Foundation
         withReply reply: @escaping (Bool, String) -> Void
     )
 
+    /// 统一诊断（指定引擎）：
+    /// engine: "openclaw" | "hermes"，空字符串或未知值按自动推断处理
+    func runDiagnosticsForEngine(
+        username: String,
+        fix: Bool,
+        engine: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
     /// 单组诊断（供 App 逐组调用，实时展示进度）
     /// groupName: DiagnosticGroup.rawValue（如 "environment"、"network" 等）
     /// 返回 (success, json) — json 为 JSON 编码的 [DiagnosticItem]
@@ -370,6 +379,16 @@ import Foundation
         username: String,
         groupName: String,
         fix: Bool,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 单组诊断（指定引擎）：
+    /// engine: "openclaw" | "hermes"，空字符串或未知值按自动推断处理
+    func runDiagnosticGroupForEngine(
+        username: String,
+        groupName: String,
+        fix: Bool,
+        engine: String,
         withReply reply: @escaping (Bool, String) -> Void
     )
 
@@ -644,6 +663,28 @@ import Foundation
     /// 读取 Helper DEBUG 日志开关
     func getHelperDebugLogging(withReply reply: @escaping (Bool) -> Void)
 
+    // MARK: - Agent Management
+
+    /// 获取指定用户的所有 agent 列表（返回 JSON: [AgentProfile]）
+    func listAgents(
+        username: String,
+        withReply reply: @escaping (String?, String?) -> Void
+    )
+
+    /// 创建新 agent（configJSON: AgentProfile JSON）
+    func createAgent(
+        username: String,
+        configJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 删除 agent（移除配置 + 清理 workspace + sessions）
+    func removeAgent(
+        username: String,
+        agentId: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
     // MARK: - 角色定义 Git 管理
 
     /// 初始化 workspace git repo（幂等）
@@ -688,11 +729,53 @@ import Foundation
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
+    // MARK: - OpenClaw 插件管理 (v2)
+
+    /// 为指定用户安装 openclaw plugin（npm exec openclaw plugins install <packageSpec>）
+    /// packageSpec 示例："@larksuite/openclaw-lark"
+    /// 纯插件安装，不执行 bot 绑定（--install-only 语义）
+    func installOpenclawPlugin(
+        username: String,
+        packageSpec: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 列出指定用户已安装的 openclaw plugins（返回 JSON 编码的 [String]）
+    func listOpenclawPlugins(
+        username: String,
+        withReply reply: @escaping (String?, String?) -> Void
+    )
+
+    /// 为指定用户移除 openclaw plugin
+    func removeOpenclawPlugin(
+        username: String,
+        packageSpec: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 以指定用户身份执行 openclaw channels login（标准 channel login 流程）
+    /// argsJSON 示例：["--channel","openclaw-weixin","--account","wechat-work"]
+    /// 返回 (success, outputLines) — outputLines 包含二维码/URL 等交互输出
+    func runChannelLogin(
+        username: String,
+        argsJSON: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 应用 ShrimpConfigV2 JSON 到指定用户的 openclaw.json（v2 批量写入）
+    /// configJSON：JSON 编码的 ShrimpConfigV2
+    /// 返回 (success, errorMessage?)
+    func applyV2Config(
+        username: String,
+        configJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
     // MARK: - Hermes Agent 引擎（双引擎支持）
     // 与 openclaw 并列的另一种 AI 代理运行时，基于 Python 3.11+ venv 安装。
     // 设计文档：docs/design-hermes-agent-integration.md
 
-    /// 为指定用户安装 Hermes Agent（创建 Python venv + pip/uv install hermes-agent）
+    /// 为指定用户安装 Hermes Agent（调用官方 install.sh，非交互）
     /// - Parameter version: nil 表示最新版，否则安装指定版本（如 "0.1.0"）
     /// - 运行时要求：目标用户家目录下或系统存在 Python 3.11+
     func installHermes(
@@ -707,23 +790,211 @@ import Foundation
         withReply reply: @escaping (String) -> Void
     )
 
-    /// 以指定用户身份启动 hermes gateway（LaunchDaemon：ai.clawdhome.hermes.<user>）
+    // MARK: - Hermes Gateway 生命周期（profile-aware）
+    // label 规则：main → ai.clawdhome.hermes.<user>；named → ai.clawdhome.hermes.<user>.<profileID>
+    // 老接口（不带 profileID）保留，内部转发到 profileID="main"（向后兼容，至少一个版本）
+
+    /// 以指定用户身份启动 hermes gateway（profile-aware）
+    /// profileID="main" 时 label = ai.clawdhome.hermes.<user>（向后兼容）
+    func startHermesGateway(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 以指定用户身份启动 hermes gateway（main profile，向后兼容）
+    /// 内部转发到 startHermesGateway(username:profileID:"main":)
     func startHermesGateway(
         username: String,
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
-    /// 停止指定用户的 hermes gateway
+    /// 停止指定用户的指定 profile 的 hermes gateway
+    func stopHermesGateway(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 停止指定用户的 hermes gateway（main profile，向后兼容）
     func stopHermesGateway(
         username: String,
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
-    /// 查询 hermes gateway 运行状态，返回 (isRunning, pid)
-    /// Hermes 不绑定 HTTP 端口，只能根据 launchd 注册态判断是否在跑
+    /// 查询指定 profile 的 hermes gateway 运行状态，返回 (isRunning, pid)
+    func getHermesGatewayStatus(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, Int32) -> Void
+    )
+
+    /// 查询 hermes gateway 运行状态（main profile，向后兼容）
     func getHermesGatewayStatus(
         username: String,
         withReply reply: @escaping (Bool, Int32) -> Void
+    )
+
+    /// 卸载指定 profile 的 hermes gateway（bootout + 删除 plist）
+    func uninstallHermesGateway(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    // MARK: - Hermes 配置写入（profile-aware）
+    // applyHermesInitConfig / getHermesInitSummary / validateHermesInitConfig
+    // 老接口保留，内部转发到 profileID="main"（PR-3 会完整实现 profileID 路径分发）
+
+    /// 应用 Hermes 初始化配置（profile-aware；payloadJSON 由 App 侧序列化）
+    /// - profileID="main" 写入 ~/.hermes/；named 写入 ~/.hermes/profiles/<profileID>/
+    func applyHermesInitConfig(
+        username: String,
+        profileID: String,
+        payloadJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 应用 Hermes 初始化配置（main profile，向后兼容）
+    func applyHermesInitConfig(
+        username: String,
+        payloadJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 读取指定 profile 的 Hermes 初始化摘要（JSON 编码字符串，失败返回 "{}"）
+    func getHermesInitSummary(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 读取 Hermes 初始化摘要（main profile，向后兼容）
+    func getHermesInitSummary(
+        username: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 校验指定 profile 的 Hermes 初始化配置完整性（返回 JSON 编码报告）
+    /// withReply 第一个 Bool 仅表示 RPC 是否成功执行，配置是否通过请看返回 JSON 的 valid 字段。
+    func validateHermesInitConfig(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 校验 Hermes 初始化配置完整性（main profile，向后兼容）
+    func validateHermesInitConfig(
+        username: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 取消正在进行的 Hermes 安装（终止 curl/bash/pip 进程树）
+    func cancelHermesInstall(
+        username: String,
+        withReply reply: @escaping (Bool) -> Void
+    )
+
+    /// 列出 Hermes profiles（返回 JSON: [AgentProfile]）
+    /// 约定：
+    /// - 主 profile（default）映射为 id="main"
+    /// - 其余 profile id 与目录名一致（~/.hermes/profiles/<id>）
+    func listHermesProfiles(
+        username: String,
+        withReply reply: @escaping (String?, String?) -> Void
+    )
+
+    /// 创建或更新 Hermes profile（configJSON: AgentProfile JSON）
+    /// - id="main" 时只更新显示元数据（名称/emoji），不创建目录。
+    func createHermesProfile(
+        username: String,
+        configJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 获取当前 Hermes 活跃 profile（返回 profile id；默认返回 "main"）
+    func getHermesActiveProfile(
+        username: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 设置 Hermes 活跃 profile（profileID: "main" 或命名 profile id）
+    func setHermesActiveProfile(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 删除 Hermes profile（不允许删除 main/default）
+    func removeHermesProfile(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    // MARK: - Hermes IM 绑定（PR-3）
+
+    /// 将 IM 平台 token 写入指定 profile 的 .env（纯 token 模式）
+    /// payloadJSON: { "platform": "telegram", "env": {"TELEGRAM_BOT_TOKEN": "xxx", ...} }
+    /// 返回 (success, errorMessage?)；必填 key 缺失时返回 (false, "im_token_missing:<key>")
+    func applyHermesIMBinding(
+        username: String,
+        profileID: String,
+        payloadJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 以 shrimp 用户身份执行 `hermes -p <profileID> doctor`，返回结构化 JSON
+    /// 返回 JSON: {"ok": Bool, "platforms": {"telegram": "ready"|"missing_token"|"unknown_error", ...}, "raw": "..."}
+    func runHermesDoctor(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    // MARK: - Hermes 向导进度位图（PR-3）
+
+    /// 读取指定 profile 的向导进度位图 JSON；文件不存在时返回默认骨架
+    func getHermesWizardState(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 以 deep-merge 语义将 patchJSON 合并到向导进度位图
+    /// 返回 (success, errorMessage?)
+    func updateHermesWizardState(
+        username: String,
+        profileID: String,
+        patchJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 清空向导进度位图（重置为默认骨架）
+    func clearHermesWizardState(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool) -> Void
+    )
+
+    // MARK: - Hermes 自启白名单（F2）
+
+    /// 读取指定用户的 Hermes profile 自启白名单
+    /// 返回 JSON 字符串：{"schemaVersion":1,"profiles":["main","coder"]}
+    /// 文件不存在时返回 {"schemaVersion":1,"profiles":["main"]}（向后兼容）
+    func getHermesAutostartWhitelist(
+        username: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 设置指定 profile 的开机自启开关
+    /// enabled=true  → 将 profileID 加入白名单
+    /// enabled=false → 将 profileID 从白名单移除（对 main 也生效）
+    func setHermesAutostartProfile(
+        username: String,
+        profileID: String,
+        enabled: Bool,
+        withReply reply: @escaping (Bool, String?) -> Void
     )
 }
 

@@ -199,8 +199,8 @@ enum VaultManager {
         }
 
         try? fm.createDirectory(atPath: linkDir, withIntermediateDirectories: true, attributes: nil)
-        try? FilePermissionHelper.chown(linkDir, owner: username)
-        try? FilePermissionHelper.chmod(linkDir, mode: "755")
+        _ = try? FilePermissionHelper.chown(linkDir, owner: username)
+        _ = try? FilePermissionHelper.chmod(linkDir, mode: "755")
 
         ensureSymlink(at: "\(linkDir)/private", target: vaultPath)
         ensureSymlink(at: "\(linkDir)/public", target: publicDir)

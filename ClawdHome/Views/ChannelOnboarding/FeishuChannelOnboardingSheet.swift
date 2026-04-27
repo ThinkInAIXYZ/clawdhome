@@ -56,6 +56,7 @@ struct FeishuChannelOnboardingSheet: View {
     let entryMode: ChannelOnboardingEntryMode
 
     @Environment(GatewayHub.self) private var gatewayHub
+    @Environment(HelperClient.self) private var helperClient
 
     @StateObject private var terminalControl = LocalTerminalControl()
     @State private var showTerminal = false
@@ -338,6 +339,7 @@ struct FeishuChannelOnboardingSheet: View {
         now = Date()
         outputBuffer = ""
         didDetectPairingDone = false
+        pairingCompletedInCurrentSession = false
         showTerminal = true
         terminalRunID += 1
     }
@@ -370,7 +372,11 @@ struct FeishuChannelOnboardingSheet: View {
         let normalized = code ?? -999
         evaluatePairingCompletion(from: outputBuffer)
         if normalized == 0 {
-            pairingCompletedInCurrentSession = true
+            // 注意：不在此处把 pairingCompletedInCurrentSession 置 true。
+            // 仅当 evaluatePairingCompletion 命中完成关键词，或后续 reloadConfig
+            // 让 channelStore 回报 isBound==true 时，shouldShowChannelConfigPanel 才放行。
+            // 仅 exit==0 不构成绑定证据：用户可能 Ctrl+C、扫码未完成就退出，
+            // 此时切到"已配置"面板会出现 App ID 为空的占位符。
             showTerminal = false
             statusText = didDetectPairingDone
                 ? L10n.k("channel.runtime.exit.success_detected", fallback: "已检测到配对成功，您可以继续配置下方选项。")
@@ -713,9 +719,9 @@ struct FeishuChannelOnboardingSheet: View {
     /// 重新加载配置
     private func reloadConfig() async {
         saveMessage = nil
-        await loadAllConfig()
-        // 同时刷新 channel store
+        // 先刷新 channel store，让 loadAllConfig 能读到最新的 isBound 状态
         await gatewayHub.channelStore(for: username).refresh()
+        await loadAllConfig()
     }
 
     /// 保存所有配置（绑定信息 + 开关，一次 config.patch）
@@ -724,6 +730,15 @@ struct FeishuChannelOnboardingSheet: View {
         isSaving = true
         saveMessage = nil
         defer { isSaving = false }
+
+        // 兜底：向导首次安装路径下，runEnvInstall 的 10 秒 token 轮询可能错过；
+        // 这里在保存前再尝试一次连接，避免 configSetBatch 直接抛 notConnected。
+        if !gatewayHub.connectedUsernames.contains(username) {
+            let url = await helperClient.getGatewayURL(username: username)
+            if !url.isEmpty, url.contains("#token=") {
+                await gatewayHub.connect(username: username, gatewayURL: url)
+            }
+        }
 
         let appId = editAppId.trimmingCharacters(in: .whitespacesAndNewlines)
         let allowFrom = editAllowFrom
@@ -769,7 +784,9 @@ struct FeishuChannelOnboardingSheet: View {
         case .configuration:
             return channelAccount?.isBound == true || pairingCompletedInCurrentSession
         case .initialBinding:
-            return pairingCompletedInCurrentSession
+            // pairingCompletedInCurrentSession 现在仅由 completionMarker 命中触发，
+            // 与 channelAccount?.isBound 互为冗余证据，任一成立即可放行。
+            return channelAccount?.isBound == true || pairingCompletedInCurrentSession
         }
     }
 

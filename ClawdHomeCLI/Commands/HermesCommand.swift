@@ -93,7 +93,7 @@ enum HermesCommand {
                 "version": installed,
             ] as [String: Any])
         } else {
-            Output.printSuccess("Hermes 已安装 @\(username): \(installed.isEmpty ? "未知版本" : installed)")
+            Output.printSuccess("Hermes 已安装并已启动 gateway @\(username): \(installed.isEmpty ? "未知版本" : installed)")
         }
     }
 

@@ -328,12 +328,38 @@ enum InstanceCommand {
 
     static func doctor(_ args: [String], client: CLIHelperClient) throws {
         guard let username = args.first else {
-            Output.printError("用法: clawdhome doctor <name> [--fix]")
+            Output.printError("用法: clawdhome doctor <name> [--fix] [--engine <openclaw|hermes>]")
             exit(1)
         }
 
         try requireInstance(username)
-        let fix = args.contains("--fix")
+        var fix = false
+        var engine: String?
+        var i = 1
+        while i < args.count {
+            let arg = args[i]
+            switch arg {
+            case "--fix":
+                fix = true
+                i += 1
+            case "--engine":
+                guard i + 1 < args.count else {
+                    Output.printError("用法: clawdhome doctor <name> [--fix] [--engine <openclaw|hermes>]")
+                    exit(1)
+                }
+                let value = args[i + 1].lowercased()
+                guard value == "openclaw" || value == "hermes" else {
+                    Output.printError("无效 --engine 值: \(args[i + 1])（仅支持 openclaw 或 hermes）")
+                    exit(1)
+                }
+                engine = value
+                i += 2
+            default:
+                Output.printError("未知参数: \(arg)")
+                Output.printError("用法: clawdhome doctor <name> [--fix] [--engine <openclaw|hermes>]")
+                exit(1)
+            }
+        }
         let proxy = try client.proxy()
 
         if !fix {
@@ -346,8 +372,14 @@ enum InstanceCommand {
         var success = false
         var resultJSON = ""
 
-        proxy.runDiagnostics(username: username, fix: fix) { ok, json in
-            success = ok; resultJSON = json; sema.signal()
+        if let engine {
+            proxy.runDiagnosticsForEngine(username: username, fix: fix, engine: engine) { ok, json in
+                success = ok; resultJSON = json; sema.signal()
+            }
+        } else {
+            proxy.runDiagnostics(username: username, fix: fix) { ok, json in
+                success = ok; resultJSON = json; sema.signal()
+            }
         }
         sema.wait()
 

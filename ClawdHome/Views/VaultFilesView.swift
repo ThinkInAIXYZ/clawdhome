@@ -143,8 +143,8 @@ struct VaultFilesView: View {
                 logger.log("[文件共享] @\(user.username) TOOLS.md 缺少共享文件夹指引，追加写入")
                 // 不存在或不含共享文件夹指引 → 追加
                 let newContent = existingContent.isEmpty
-                    ? UserInitWizardView.defaultToolsContent
-                    : existingContent + "\n\n" + UserInitWizardView.defaultToolsContent
+                    ? defaultToolsContent
+                    : existingContent + "\n\n" + defaultToolsContent
                 try? await helperClient.writeFile(
                     username: user.username,
                     relativePath: toolsRelPath,

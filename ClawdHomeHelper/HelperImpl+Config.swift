@@ -445,6 +445,13 @@ extension ClawdHomeHelperImpl {
         noProxy: String
     ) {
         guard let uid = try? UserManager.uid(for: username) else { return }
+        // launchctl asuser 要求用户有活跃的 launchd domain（已登录会话）。
+        // 对无活跃 session 的用户（如新建虾）跳过，否则 launchctl 会挂起。
+        guard hasActiveLaunchdDomain(uid: uid) else {
+            helperLog("refreshLaunchctlProxyEnv @\(username): 无活跃 launchd domain，跳过 launchctl asuser")
+            return
+        }
+
         let proxyKeys = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]
         let noProxyKeys = ["NO_PROXY", "no_proxy"]
 
@@ -476,6 +483,14 @@ extension ClawdHomeHelperImpl {
                 }
             }
         }
+    }
+
+    /// 检测用户是否有活跃的 launchd domain（用于 launchctl asuser 前置守卫）
+    /// 通过 ps 检查该 uid 下是否有进程在运行：有进程 = 有活跃会话，无进程 = 无会话。
+    /// 注意：ps 是纯读操作，不触碰 launchd Mach port，可安全用于新建用户检测。
+    private func hasActiveLaunchdDomain(uid: Int) -> Bool {
+        guard let output = try? run("/bin/ps", args: ["-u", "\(uid)", "-o", "pid="]) else { return false }
+        return !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func runModelCommand(username: String, argsJSON: String,
@@ -599,12 +614,17 @@ extension ClawdHomeHelperImpl {
 
     // MARK: - 维护终端 XPC 处理
 
+    private func normalizedMaintenanceExecutable(_ raw: String) -> String {
+        (raw as NSString).lastPathComponent.lowercased()
+    }
+
     private func validateMaintenanceCommand(_ command: [String]) -> String? {
         guard let executable = command.first, !executable.isEmpty else {
             return "命令不能为空"
         }
-        let allowed = Set(["openclaw", "npx", "zsh", "bash", "sh"])
-        if !allowed.contains(executable) {
+        let normalizedExecutable = normalizedMaintenanceExecutable(executable)
+        let allowed = Set(["openclaw", "hermes", "hermes-shell", "npx", "zsh", "bash", "sh"])
+        if !allowed.contains(normalizedExecutable) {
             return "不支持的维护命令：\(executable)"
         }
         return nil
@@ -624,25 +644,7 @@ extension ClawdHomeHelperImpl {
             reply(false, "", error)
             return
         }
-        let home = "/Users/\(username)"
-        let isHermesCommand = command.first == "hermes"
-
-        // 按引擎类型修复对应配置目录的所有权
-        if isHermesCommand {
-            let hermesHome = HermesInstaller.hermesHome(for: username)
-            if FileManager.default.fileExists(atPath: hermesHome) {
-                if (try? run("/usr/sbin/chown", args: ["-R", username, hermesHome])) == nil {
-                    helperLog("chown -R \(username) \(hermesHome) failed before hermes maintenance terminal session", level: .warn)
-                }
-            }
-        } else {
-            let openclawDir = "\(home)/.openclaw"
-            if FileManager.default.fileExists(atPath: openclawDir) {
-                if (try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])) == nil {
-                    helperLog("chown -R \(username) \(openclawDir) failed before maintenance terminal session", level: .warn)
-                }
-            }
-        }
+        // 权限修复在安装/体检阶段完成，终端启动不再执行 chown
         let nodePath = ConfigWriter.buildNodePath(username: username)
 
         do {

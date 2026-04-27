@@ -20,7 +20,16 @@ struct AgentDNA: Codable, Identifiable {
     let fileIdentity: String?   // 身份设定 (IDENTITY)
     let fileUser: String?       // 我的画像 (USER)
     // OS 用户名建议值（由模板预填充，用户可修改）
-    let suggestedUsername: String?
+    let suggestedAgentID: String?
+}
+
+/// 团队 DNA：由 roles.html 通过 adoptTeam bridge 消息发送过来
+struct TeamDNA: Codable, Identifiable {
+    let id: String
+    let teamName: String
+    let teamEmoji: String
+    let suggestedInstanceID: String
+    let members: [AgentDNA]
 }
 
 // MARK: - Shimmer 骨架屏动画修饰器
@@ -131,6 +140,7 @@ private struct RoleMarketSkeletonView: View {
 
 final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var onAdoptAgent: ((AgentDNA) -> Void)?
+    var onAdoptTeam: ((TeamDNA) -> Void)?
     var onPageLoaded: (() -> Void)?
     /// Stored by the cache so didFailProvisionalNavigation can fall back to local HTML
     var localFallbackURL: URL?
@@ -141,19 +151,51 @@ final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigatio
         didReceive message: WKScriptMessage
     ) {
         guard message.name == "ClawdHomeBridge" else { return }
+        guard let body = message.body as? [String: Any] else {
+            appLog("[Bridge] Failed to parse message: \(message.body)", level: .warn)
+            return
+        }
 
-        guard let body = message.body as? [String: Any],
-              let data = try? JSONSerialization.data(withJSONObject: body),
+        // 区分团队领养 vs 单角色领养
+        if let msgType = body["type"] as? String, msgType == "adoptTeam" {
+            guard let teamId = body["teamId"] as? String,
+                  let teamName = body["teamName"] as? String,
+                  let teamEmoji = body["teamEmoji"] as? String,
+                  let membersRaw = body["members"] as? [[String: Any]]
+            else {
+                appLog("[Bridge] Failed to parse TeamDNA: \(body)", level: .warn)
+                return
+            }
+            let teamID = (body["suggestedInstanceID"] as? String)
+                ?? (body["suggestedTeamID"] as? String)
+                ?? teamName
+            let members: [AgentDNA] = membersRaw.compactMap { dict in
+                guard let data = try? JSONSerialization.data(withJSONObject: dict),
+                      let dna = try? JSONDecoder().decode(AgentDNA.self, from: data)
+                else { return nil }
+                return dna
+            }
+            let teamDNA = TeamDNA(
+                id: teamId,
+                teamName: teamName,
+                teamEmoji: teamEmoji,
+                suggestedInstanceID: teamID,
+                members: members
+            )
+            appLog("[Bridge] Received TeamDNA: \(teamName) (\(members.count) members)")
+            DispatchQueue.main.async { self.onAdoptTeam?(teamDNA) }
+            return
+        }
+
+        // 普通单角色 DNA
+        guard let data = try? JSONSerialization.data(withJSONObject: body),
               let dna = try? JSONDecoder().decode(AgentDNA.self, from: data)
         else {
             appLog("[Bridge] Failed to parse DNA: \(message.body)", level: .warn)
             return
         }
-
         appLog("[Bridge] Received DNA: \(dna.name) (\(dna.id))")
-        DispatchQueue.main.async {
-            self.onAdoptAgent?(dna)
-        }
+        DispatchQueue.main.async { self.onAdoptAgent?(dna) }
     }
 
     // MARK: WKNavigationDelegate — 加载完成通知
@@ -205,7 +247,7 @@ private func javaScriptStringLiteral(_ value: String) -> String {
     return String(encoded.dropFirst().dropLast())
 }
 
-private func makeRoleMarketConfiguration(coordinator: RoleMarketCoordinator, localeIdentifier: String) -> WKWebViewConfiguration {
+func makeRoleMarketConfiguration(coordinator: RoleMarketCoordinator, localeIdentifier: String) -> WKWebViewConfiguration {
     let config = WKWebViewConfiguration()
     let localeLiteral = javaScriptStringLiteral(localeIdentifier)
     // Inject locale + app version at document start
@@ -337,6 +379,7 @@ struct RoleMarketWebView: NSViewRepresentable {
 
 struct RoleMarketView: View {
     @State private var adoptedDNA: AgentDNA? = nil
+    @State private var adoptedTeam: TeamDNA? = nil
     @State private var awakeningError: String? = nil
     /// 缓存已加载完毕时直接为 true，第二次进入跳过骨架屏，无闪烁
     @State private var isPageLoaded: Bool = {
@@ -381,6 +424,9 @@ struct RoleMarketView: View {
         .onAppear {
             coordinator.onAdoptAgent = { dna in
                 self.adoptedDNA = dna
+            }
+            coordinator.onAdoptTeam = { teamDNA in
+                self.adoptedTeam = teamDNA
             }
             coordinator.onPageLoaded = {
                 withAnimation {
@@ -435,7 +481,7 @@ struct RoleMarketView: View {
                     let toolsPath = "\(workspaceDir)/TOOLS.md"
                     let toolsExists = (try? await helperClient.readFile(username: normalizedUsername, relativePath: toolsPath)) != nil
                     if !toolsExists {
-                        try? await helperClient.writeFile(username: normalizedUsername, relativePath: toolsPath, data: UserInitWizardView.defaultToolsContent.data(using: .utf8) ?? Data())
+                        try? await helperClient.writeFile(username: normalizedUsername, relativePath: toolsPath, data: defaultToolsContent.data(using: .utf8) ?? Data())
                     }
 
                     // workspace 已创建，触发 setupVault 在 workspace 中建立 shared/ 符号链接
@@ -449,6 +495,13 @@ struct RoleMarketView: View {
                 }
             )
             .frame(minWidth: 460, minHeight: 560)
+        }
+        .sheet(item: $adoptedTeam) { teamDNA in
+            AdoptTeamSheet(
+                teamDNA: teamDNA,
+                existingUsers: pool.users.map { AwakeningExistingUser(username: $0.username, fullName: $0.fullName) }
+            ) { adoptedTeam = nil }
+            .frame(minWidth: 460, minHeight: 420)
         }
         .overlay(alignment: .bottom) {
             if let err = awakeningError {

@@ -5,6 +5,15 @@ import SwiftUI
 
 let modelConfigMaintenanceContext = "wizard-model-config"
 
+// MARK: - 团队 Agent 激活状态
+
+enum TeamAgentActivationStatus: Equatable {
+    case waiting          // 尚未开始
+    case activating       // 正在写入
+    case done             // 已就位
+    case failed(String)   // 失败，附带错误
+}
+
 enum WizardL10nKeys {
     static var pairingDetectedHint: String {
         L10n.k("wizard.channel.pairing_detected_continue_hint", fallback: "%@ pairing detected. Review channel settings, then click Done to continue.")
@@ -96,135 +105,8 @@ enum BaseEnvProgressPhase: Int, CaseIterable {
     }
 }
 
-enum MinimaxModel: String, CaseIterable {
-    case m27 = "minimax/MiniMax-M2.7"
-    case m27Highspeed = "minimax/MiniMax-M2.7-highspeed"
-    case m25 = "minimax/MiniMax-M2.5"
-    case m25Highspeed = "minimax/MiniMax-M2.5-highspeed"
-    case vl01 = "minimax/MiniMax-VL-01"
-    case m2 = "minimax/MiniMax-M2"
-    case m21 = "minimax/MiniMax-M2.1"
-
-    var providerModelID: String {
-        rawValue.replacingOccurrences(of: "minimax/", with: "")
-    }
-
-    var providerName: String {
-        switch self {
-        case .m27: return "MiniMax M2.7"
-        case .m27Highspeed: return "MiniMax M2.7 Highspeed"
-        case .m25: return "MiniMax M2.5"
-        case .m25Highspeed: return "MiniMax M2.5 Highspeed"
-        case .vl01: return "MiniMax VL 01"
-        case .m2: return "MiniMax M2"
-        case .m21: return "MiniMax M2.1"
-        }
-    }
-
-    var reasoning: Bool {
-        switch self {
-        case .vl01: return false
-        default: return true
-        }
-    }
-
-    var inputTypes: [String] {
-        switch self {
-        case .vl01: return ["text", "image"]
-        default: return ["text"]
-        }
-    }
-
-    var providerModelConfig: [String: Any] {
-        [
-            "id": providerModelID,
-            "name": providerName,
-            "reasoning": reasoning,
-            "input": inputTypes,
-            "cost": [
-                "input": 0.3,
-                "output": 1.2,
-                "cacheRead": 0.03,
-                "cacheWrite": 0.12,
-            ],
-            "contextWindow": 200000,
-            "maxTokens": 8192,
-        ]
-    }
-}
-
-enum QiniuModel: String, CaseIterable {
-    case deepseekV32 = "qiniu/deepseek-v3.2-251201"
-    case glm5 = "qiniu/z-ai/glm-5"
-    case kimiK25 = "qiniu/moonshotai/kimi-k2.5"
-    case minimaxM25 = "qiniu/minimax/minimax-m2.5"
-
-    var alias: String {
-        switch self {
-        case .deepseekV32: return "DeepSeek V3.2"
-        case .glm5: return "GLM 5"
-        case .kimiK25: return "Kimi K2.5"
-        case .minimaxM25: return "Minimax M2.5"
-        }
-    }
-
-    var providerModelID: String {
-        rawValue.replacingOccurrences(of: "qiniu/", with: "")
-    }
-
-    var providerModelConfig: [String: Any] {
-        [
-            "id": providerModelID,
-            "name": alias,
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": contextWindow,
-            "maxTokens": 8192,
-            "compat": [
-                "supportsStore": false,
-                "supportsDeveloperRole": false,
-                "supportsReasoningEffort": false,
-            ],
-        ]
-    }
-
-    private var contextWindow: Int {
-        switch self {
-        case .kimiK25: return 256000
-        default: return 128000
-        }
-    }
-}
-
-enum ZAIModel: String, CaseIterable {
-    case glm5 = "zai/glm-5"
-    case glm4_7 = "zai/glm-4.7"
-    case glm5_1 = "zai/glm-5.1"
-
-    var alias: String {
-        switch self {
-        case .glm5: return "GLM-5"
-        case .glm4_7: return "GLM-4.7"
-        case .glm5_1: return "GLM-5.1"
-        }
-    }
-
-    var providerModelID: String {
-        rawValue.replacingOccurrences(of: "zai/", with: "")
-    }
-
-    var providerModelConfig: [String: Any] {
-        [
-            "id": providerModelID,
-            "name": alias,
-            "reasoning": true,
-            "input": ["text"],
-            "cost": ["input": 0.0, "output": 0.0, "cacheRead": 0.0, "cacheWrite": 0.0],
-            "contextWindow": 204800,
-            "maxTokens": 131072,
-        ]
-    }
-}
+// MinimaxModel / QiniuModel / ZAIModel 已统一到 ModelsStatus.swift 的 builtInModelGroups
+// 使用 builtInModels(for: "minimax") / builtInModels(for: "qiniu") / builtInModels(for: "zai") 查询
 
 enum WizardChannelType: String {
     case feishu
