@@ -1563,6 +1563,7 @@ final class EmbeddedGatewayConsoleCoordinator: NSObject, WKNavigationDelegate, W
     weak var webView: WKWebView?
     var pendingFileInputAccept = ""
     var onNavigationStateChanged: ((Bool) -> Void)?
+    var onContentProcessTerminated: (() -> Void)?
 
     func webView(
         _ webView: WKWebView,
@@ -1613,6 +1614,10 @@ final class EmbeddedGatewayConsoleCoordinator: NSObject, WKNavigationDelegate, W
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         onNavigationStateChanged?(false)
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        onContentProcessTerminated?()
     }
 
     func download(
@@ -1681,6 +1686,11 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
             guard let self else { return }
             self.loadState = success ? .loaded : .failed
         }
+        coordinator.onContentProcessTerminated = { [weak self] in
+            guard let self else { return }
+            self.loadState = .failed
+            self.lastRetryAt = .distantPast
+        }
         self.webView = webView
         return webView
     }
@@ -1697,7 +1707,9 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
         }
 
         guard !webView.isLoading else { return }
-        let shouldRetry = (loadState == .failed) || webView.url == nil
+        let currentURL = webView.url?.absoluteString ?? ""
+        let isBlankPage = currentURL.isEmpty || currentURL == "about:blank"
+        let shouldRetry = (loadState == .failed) || isBlankPage
         guard shouldRetry else { return }
         let now = Date()
         guard now.timeIntervalSince(lastRetryAt) >= retryInterval else { return }
