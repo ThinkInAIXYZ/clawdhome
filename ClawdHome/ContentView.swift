@@ -146,11 +146,7 @@ struct ContentView: View {
                     NetworkPolicyView()
                         .environment(helperClient)
                 case .models:
-                    #if DEBUG
                     ModelManagerView()
-                    #else
-                    ComingSoonView(title: L10n.k("auto.content_view.models", fallback: "模型"), icon: "cpu.fill")
-                    #endif
                 case .aiLab:
                     AILabView()
                 case .roleMarket:
