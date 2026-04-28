@@ -130,6 +130,11 @@ struct UserDetailView: View {
     @State private var quickTransferAlertMessage: String?
     @State private var quickTransferClipboardText = ""
     @State private var quickTransferLastPaths: [String] = []
+    @State private var browserAccountStatus: BrowserAccountStatus? = nil
+    @State private var isOpeningBrowserAccount = false
+    @State private var isInstallingBrowserAccountTool = false
+    @State private var isResettingBrowserAccount = false
+    @State private var showResetBrowserAccountConfirm = false
     // Tab
     @State private var selectedTab: ClawTab = .overview
     /// 跳转到 settings tab 时，让 ShrimpSettingsV2View 内部默认选中哪个二级 tab（model/agents/...）
@@ -733,6 +738,20 @@ struct UserDetailView: View {
         } message: {
             Text(L10n.k("user.detail.auto.userprocess_openclaw_process_start", fallback: "将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。"))
         }
+        .confirmationDialog(
+            "重置浏览器账号？",
+            isPresented: $showResetBrowserAccountConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("备份并重置", role: .destructive) {
+                Task { await resetBrowserAccount() }
+            }
+            Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) {
+                showResetBrowserAccountConfirm = false
+            }
+        } message: {
+            Text("将备份并清空该虾专属 Chrome profile。其他虾和你的主浏览器账号不会受影响。")
+        }
         .alert(
             L10n.k("user.detail.auto.file", fallback: "文件快传结果"),
             isPresented: Binding(
@@ -1228,7 +1247,65 @@ struct UserDetailView: View {
                 }
             }
 
+            overviewBrowserAccountCard
             overviewChannelCard
+        }
+    }
+
+    private var overviewBrowserAccountCard: some View {
+        overviewSupplementaryCard(
+            title: "浏览器账号",
+            subtitle: browserAccountStatus?.message ?? "尚未检查"
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                if let endpoint = browserAccountStatus?.httpEndpoint,
+                   browserAccountStatus?.browserReachable == true {
+                    Text(endpoint)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                HStack(spacing: 8) {
+                    overviewCompactActionButton(
+                        title: isOpeningBrowserAccount ? "打开中…" : "打开",
+                        systemImage: "globe",
+                        tint: Color.blue.opacity(0.12),
+                        foreground: .blue,
+                        disabled: !helperClient.isConnected || isOpeningBrowserAccount
+                    ) {
+                        Task { await openBrowserAccount() }
+                    }
+                    overviewCompactActionButton(
+                        title: browserAccountStatus?.toolInstalled == true ? "已安装" : "安装工具",
+                        systemImage: "wrench.and.screwdriver",
+                        tint: Color.secondary.opacity(0.08),
+                        foreground: .primary,
+                        disabled: !helperClient.isConnected || isInstallingBrowserAccountTool
+                    ) {
+                        Task { await installBrowserAccountTool() }
+                    }
+                }
+                HStack(spacing: 8) {
+                    overviewCompactActionButton(
+                        title: "刷新",
+                        systemImage: "arrow.clockwise",
+                        tint: Color.secondary.opacity(0.08),
+                        foreground: .primary,
+                        disabled: !helperClient.isConnected
+                    ) {
+                        Task { await refreshBrowserAccountStatus() }
+                    }
+                    overviewCompactActionButton(
+                        title: isResettingBrowserAccount ? "重置中…" : "重置",
+                        systemImage: "trash",
+                        tint: Color.red.opacity(0.10),
+                        foreground: .red,
+                        disabled: !helperClient.isConnected || isResettingBrowserAccount
+                    ) {
+                        showResetBrowserAccountConfirm = true
+                    }
+                }
+            }
         }
     }
 
@@ -2569,6 +2646,7 @@ struct UserDetailView: View {
         async let modelsStatusResult = helperClient.getModelsStatus(username: user.username)
         async let installedVersionResult = helperClient.getOpenclawVersion(username: user.username)
         async let npmRegistryResult = helperClient.getNpmRegistry(username: user.username)
+        async let browserAccountStatusResult = helperClient.getBrowserAccountStatus(username: user.username)
 
         // --- 处理结果 ---
 
@@ -2620,6 +2698,7 @@ struct UserDetailView: View {
         }
         defaultModel = modelsStatus?.resolvedDefault ?? modelsStatus?.defaultModel
         fallbackModels = modelsStatus?.fallbacks ?? []
+        browserAccountStatus = await browserAccountStatusResult
         applyLoadedNpmRegistry(registryURL)
         loadPreUpgradeInfo()
         // Gateway 运行且有地址时，建立 WebSocket 连接（幂等）
@@ -2761,6 +2840,48 @@ struct UserDetailView: View {
 
         await loadAgents()
         appLog("[V2] persona 写入全部完成 @\(user.username)")
+    }
+
+    @MainActor
+    private func refreshBrowserAccountStatus() async {
+        browserAccountStatus = await helperClient.getBrowserAccountStatus(username: user.username)
+    }
+
+    @MainActor
+    private func openBrowserAccount() async {
+        isOpeningBrowserAccount = true
+        actionError = nil
+        defer { isOpeningBrowserAccount = false }
+        do {
+            _ = try await helperClient.openBrowserAccount(username: user.username)
+            await refreshBrowserAccountStatus()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func installBrowserAccountTool() async {
+        isInstallingBrowserAccountTool = true
+        actionError = nil
+        defer { isInstallingBrowserAccountTool = false }
+        do {
+            browserAccountStatus = try await helperClient.installBrowserAccountTool(username: user.username)
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func resetBrowserAccount() async {
+        isResettingBrowserAccount = true
+        actionError = nil
+        defer { isResettingBrowserAccount = false }
+        do {
+            browserAccountStatus = try await helperClient.resetBrowserAccount(username: user.username)
+        } catch {
+            actionError = error.localizedDescription
+        }
     }
 
     private func refreshGatewayURLUntilTokenReady(

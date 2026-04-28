@@ -56,6 +56,7 @@
 		315C6CEC2A97C5D4E9AB211A /* LogViewerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9F9AD8700941AFBF1F34673 /* LogViewerSheet.swift */; };
 		32D9B81BFBF01C467C5EF953 /* ManagedUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77A62354E2723BF8150EDAF6 /* ManagedUser.swift */; };
 		33377A070BA5CD38AF3D570D /* ProcessManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6946296FDE26A0A2A7A8EC /* ProcessManager.swift */; };
+		33EEEC7848F25E6176D19E8B /* BrowserAccountModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D033FFF56C00EB989EF8FD /* BrowserAccountModels.swift */; };
 		346939ADEDF99620B1967823 /* UserPasswordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFD718E7777280D5BC94DE0D /* UserPasswordStore.swift */; };
 		35293BE0C7E82BADEFB540F7 /* HealthCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CB22903A652976B892FA384 /* HealthCheck.swift */; };
 		372F9047B27AB90A2CF66AF5 /* RoleMarketView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0511A43DA0C20592D7181ABD /* RoleMarketView.swift */; };
@@ -65,6 +66,7 @@
 		3B8D878C4D830AA5B9390BED /* ProviderKeyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */; };
 		3D7B3D66E56E6D32CFC39D1F /* NodeDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB4BFDC6320B7C035E22C884 /* NodeDownloader.swift */; };
 		41526F31288D5BF4B5D5E8FC /* UserPasswordSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60647F2C674DA123E7DA59A /* UserPasswordSheet.swift */; };
+		41948DEC934C2D8278F0EB80 /* BrowserAccountManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF8BBAC6A6AC388EF29FA64 /* BrowserAccountManager.swift */; };
 		41B0259B5FC9A1381D8F840C /* UserDetailWindowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54777C27B432E10D49786DE9 /* UserDetailWindowLayout.swift */; };
 		42784EA2B3A334AF6AF8E881 /* LLMManagerTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155680EF2A850BB4215754A8 /* LLMManagerTab.swift */; };
 		42CBA4971CC3B6B09F9071AE /* FileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71156CAD7673A87034AF0D8 /* FileModels.swift */; };
@@ -107,6 +109,7 @@
 		69BF685059BE6B7AEB250E07 /* HelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F39F27916E7B56B4688842 /* HelperClient.swift */; };
 		6B6B8E332776101B198630AC /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 806D35D06FA4AFEDDAA912AD /* L10n.swift */; };
 		6D32F3636220EFA100E00EA8 /* GatewayChannelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD59CE8ED9E05145D8207B3D /* GatewayChannelStore.swift */; };
+		6DE0CBAF951D1278E9972543 /* HelperImpl+BrowserAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 397BF349AA548AE5115CAD7F /* HelperImpl+BrowserAccount.swift */; };
 		6E8C4678124BD866C8C20445 /* HealthCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CB22903A652976B892FA384 /* HealthCheck.swift */; };
 		6E8E862B9D09268ABD86C619 /* DashboardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7E5FF24A0246F866BFF996 /* DashboardModels.swift */; };
 		6F9101485DF1A9C40CE39C65 /* ProcessModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76A73EBA6C37473C494E20D /* ProcessModels.swift */; };
@@ -118,6 +121,7 @@
 		7334B8F99215A7B9F95F5DEC /* HermesPendingBindingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC3A7281B970E8EFA6FCAD2B /* HermesPendingBindingsSheet.swift */; };
 		744E5B64F5A52793EFAED3AC /* UserInitPresentationRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */; };
 		7686487709FBD85014989A10 /* HermesAutostartList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95EC78AB0531DB2D03762D85 /* HermesAutostartList.swift */; };
+		79663F3C6F1A20FF33506B22 /* BrowserAccountModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D033FFF56C00EB989EF8FD /* BrowserAccountModels.swift */; };
 		7A11F882D706844DD3EF518F /* WizardConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C409AF7F1CC045A211F7F27E /* WizardConnection.swift */; };
 		7A19BA1D08E439220F09D5CD /* CloneClawSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A692ECF0806042C37B632CB /* CloneClawSheet.swift */; };
 		7C6F9710AD100210ABE9D075 /* CLIConfigStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC953D5E3DFF20B87A053D04 /* CLIConfigStep.swift */; };
@@ -176,6 +180,7 @@
 		BD523BF37E409AB6FA1D6D27 /* UpgradeConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800B6FF59BBD8AF1F7721480 /* UpgradeConfirmSheet.swift */; };
 		BE20A437ADC0E25426EC7750 /* FeishuChannelOnboardingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40305CC98880248434C11684 /* FeishuChannelOnboardingSheet.swift */; };
 		C11B2113E212A1BBC279EC49 /* UserFileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAD293FACB59B2F45FF9D4A /* UserFileManager.swift */; };
+		C128E0FD980B6706D8E01A40 /* BrowserAccountModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D033FFF56C00EB989EF8FD /* BrowserAccountModels.swift */; };
 		C1D0DF6E8649DB1726E57E86 /* OpenclawConfigSerializerV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEA3246D788EC5F1AE06F4F /* OpenclawConfigSerializerV2.swift */; };
 		C1D80403CCA910757BC41012 /* FilePermissionHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44A9E4389475CA9623EA4CD0 /* FilePermissionHelper.swift */; };
 		C72DF5FEB4906D0AA459139E /* UserDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46E3226FB170F1C35BB73B5 /* UserDetailView.swift */; };
@@ -283,6 +288,7 @@
 		3793B8613E7B9D05787DDB8B /* ConfigEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigEditorSheet.swift; sourceTree = "<group>"; };
 		37C2B17425B19E3FD55EC7AF /* PersonaGitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonaGitManager.swift; sourceTree = "<group>"; };
 		38A912F0A5514717350027B5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		397BF349AA548AE5115CAD7F /* HelperImpl+BrowserAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+BrowserAccount.swift"; sourceTree = "<group>"; };
 		3F177240AE99ADC3F3D2AD8F /* roles.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = roles.html; sourceTree = "<group>"; };
 		40305CC98880248434C11684 /* FeishuChannelOnboardingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeishuChannelOnboardingSheet.swift; sourceTree = "<group>"; };
 		41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderKeyConfig.swift; sourceTree = "<group>"; };
@@ -296,6 +302,7 @@
 		46BB2187C1CBAE602D47A53E /* IMAccountModelsV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IMAccountModelsV2.swift; sourceTree = "<group>"; };
 		48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserAdoptionFlow.swift; sourceTree = "<group>"; };
 		48D89D26AB1F2A1F57A4C957 /* InitCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InitCommand.swift; sourceTree = "<group>"; };
+		49D033FFF56C00EB989EF8FD /* BrowserAccountModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserAccountModels.swift; sourceTree = "<group>"; };
 		4A1CD2C5DBEEFC059991B495 /* GatewayHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayHub.swift; sourceTree = "<group>"; };
 		4A4D0168443D77B00A4092E7 /* AddUserSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddUserSheet.swift; sourceTree = "<group>"; };
 		4B639FCB2D3020F3E95F7EFC /* AppLockStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockStore.swift; sourceTree = "<group>"; };
@@ -313,6 +320,7 @@
 		5589A294DB8520AF114FFFC3 /* DeleteUserSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteUserSheet.swift; sourceTree = "<group>"; };
 		58D6A0A3A03533CF7E7AC045 /* ManagedUserDisplayName.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedUserDisplayName.swift; sourceTree = "<group>"; };
 		591172964025C5CCE5E2A000 /* HelperImpl+Plugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Plugin.swift"; sourceTree = "<group>"; };
+		5AF8BBAC6A6AC388EF29FA64 /* BrowserAccountManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserAccountManager.swift; sourceTree = "<group>"; };
 		5C63492C6F439FBCA71D8BF5 /* NStatCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NStatCollector.swift; sourceTree = "<group>"; };
 		5C6946296FDE26A0A2A7A8EC /* ProcessManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessManager.swift; sourceTree = "<group>"; };
 		5D7D1F12DB908202E9E91105 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
@@ -604,6 +612,7 @@
 				CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */,
 				F32760673784B8C2FA774E74 /* HelperImpl+Agent.swift */,
 				1C8B8FD7981A5C81058060CC /* HelperImpl+Backup.swift */,
+				397BF349AA548AE5115CAD7F /* HelperImpl+BrowserAccount.swift */,
 				642F3F921C3D218DB8393578 /* HelperImpl+Config.swift */,
 				AE60C673397402540C236C95 /* HelperImpl+Diagnostics.swift */,
 				F00BA42C0EC4C8B25A8BFCE7 /* HelperImpl+Files.swift */,
@@ -645,6 +654,7 @@
 			children = (
 				98F2D77C8262C551CBD26BA2 /* AppUpdateState.swift */,
 				B62AE0CAFA22F67436019A51 /* BackupModels.swift */,
+				49D033FFF56C00EB989EF8FD /* BrowserAccountModels.swift */,
 				F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */,
 				AB7E5FF24A0246F866BFF996 /* DashboardModels.swift */,
 				EFC4D03808505276353A3AD2 /* FileInputAcceptFilter.swift */,
@@ -701,6 +711,7 @@
 				F115A85A4379CCBE8899FDB8 /* AgentManager.swift */,
 				335F70B73CF355F93B436AFA /* AppUpdateHeartbeatService.swift */,
 				1879663548E380CB2414733A /* BackupManager.swift */,
+				5AF8BBAC6A6AC388EF29FA64 /* BrowserAccountManager.swift */,
 				C1EAFFDC5338D0ACC3A06CDD /* CloneClawManager.swift */,
 				ABE86644B5FC4578CCB9C6FF /* ConfigWriter.swift */,
 				DA495FBE50F338DEF7A55573 /* ConnectionCollector.swift */,
@@ -894,7 +905,6 @@
 				};
 			};
 			buildConfigurationList = B46EBA0D85074DCA05238407 /* Build configuration list for PBXProject "ClawdHome" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -908,6 +918,7 @@
 				74F355130984997690AD4FDF /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 849301842B00AAF8E21D222B /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -1022,6 +1033,7 @@
 				18454F2283EC4E5E627584DE /* BackupModels.swift in Sources */,
 				FD7FF04B316FD5DFE140F7E4 /* BackupView.swift in Sources */,
 				50561051EF6B1A1F618C1D4F /* BindingFormSheet.swift in Sources */,
+				79663F3C6F1A20FF33506B22 /* BrowserAccountModels.swift in Sources */,
 				7C6F9710AD100210ABE9D075 /* CLIConfigStep.swift in Sources */,
 				1D4EDB9DB0495FE0EFA54FE4 /* ClawPoolView.swift in Sources */,
 				A8BE1B4D2DCDE54C8F63CBF2 /* ClawdHomeApp.swift in Sources */,
@@ -1139,6 +1151,7 @@
 			files = (
 				EF130B9EF81C9F5788618250 /* AppUpdateState.swift in Sources */,
 				1D89B835DEDF080130A04031 /* BackupModels.swift in Sources */,
+				33EEEC7848F25E6176D19E8B /* BrowserAccountModels.swift in Sources */,
 				F13F8D9CE464C91C4DF946C0 /* CLIHelperClient.swift in Sources */,
 				CA751AF8D61283E7E3107E20 /* ChatCommand.swift in Sources */,
 				4607AB86E302C700777C3DEA /* CloneClawModels.swift in Sources */,
@@ -1176,6 +1189,8 @@
 				8ABC91BB2196F6C05E6647C9 /* AppUpdateState.swift in Sources */,
 				C77B4F6939884B36F73EB45C /* BackupManager.swift in Sources */,
 				E7E82F61DD2D204B321B1710 /* BackupModels.swift in Sources */,
+				41948DEC934C2D8278F0EB80 /* BrowserAccountManager.swift in Sources */,
+				C128E0FD980B6706D8E01A40 /* BrowserAccountModels.swift in Sources */,
 				1549B24326311C26E1701BA8 /* CloneClawManager.swift in Sources */,
 				288E715EE589A7D76A68455D /* CloneClawModels.swift in Sources */,
 				3B5E95B51DE262D04BC56FBA /* ConfigWriter.swift in Sources */,
@@ -1191,6 +1206,7 @@
 				A74D7C244C8DC0ECFAE9A55B /* HealthCheck.swift in Sources */,
 				ABC6F684C91886DAD8409030 /* HelperImpl+Agent.swift in Sources */,
 				B08AD6863D465C16D9D2D0FC /* HelperImpl+Backup.swift in Sources */,
+				6DE0CBAF951D1278E9972543 /* HelperImpl+BrowserAccount.swift in Sources */,
 				4EEAE5D4A875735967902F6C /* HelperImpl+Config.swift in Sources */,
 				E31BC807CD66ED973B4DDB0B /* HelperImpl+Diagnostics.swift in Sources */,
 				03A2120E2AF19C2CCA7879D4 /* HelperImpl+Files.swift in Sources */,

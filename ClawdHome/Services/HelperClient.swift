@@ -591,6 +591,74 @@ final class HelperClient {
         }
     }
 
+    // MARK: - 浏览器账号
+
+    func openBrowserAccount(username: String) async throws -> BrowserAccountSession {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.openBrowserAccount(username: username) { ok, payload in
+                done((ok, payload))
+            }
+        }
+        guard ok else {
+            throw HelperError.operationFailed(payload)
+        }
+        guard let data = payload.data(using: .utf8),
+              let session = try? JSONDecoder().decode(BrowserAccountSession.self, from: data) else {
+            throw HelperError.operationFailed("浏览器账号会话解析失败")
+        }
+        return session
+    }
+
+    func getBrowserAccountStatus(username: String) async -> BrowserAccountStatus? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            let payload: String = try await xpcCall { done in
+                proxy.getBrowserAccountStatus(username: username) { payload in
+                    done(payload)
+                }
+            }
+            guard let data = payload.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(BrowserAccountStatus.self, from: data)
+        } catch {
+            return nil
+        }
+    }
+
+    func resetBrowserAccount(username: String) async throws -> BrowserAccountStatus {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.resetBrowserAccount(username: username) { ok, payload in
+                done((ok, payload))
+            }
+        }
+        guard ok else {
+            throw HelperError.operationFailed(payload)
+        }
+        guard let data = payload.data(using: .utf8),
+              let status = try? JSONDecoder().decode(BrowserAccountStatus.self, from: data) else {
+            throw HelperError.operationFailed("浏览器账号状态解析失败")
+        }
+        return status
+    }
+
+    func installBrowserAccountTool(username: String) async throws -> BrowserAccountStatus {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.installBrowserAccountTool(username: username) { ok, payload in
+                done((ok, payload))
+            }
+        }
+        guard ok else {
+            throw HelperError.operationFailed(payload)
+        }
+        guard let data = payload.data(using: .utf8),
+              let status = try? JSONDecoder().decode(BrowserAccountStatus.self, from: data) else {
+            throw HelperError.operationFailed("浏览器账号状态解析失败")
+        }
+        return status
+    }
+
     // MARK: - 配置管理
 
     func setConfig(username: String, key: String, value: String) async throws {
