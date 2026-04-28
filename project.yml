@@ -23,6 +23,15 @@ targets:
     sources:
       - path: ClawdHome
       - path: Shared
+    preBuildScripts:
+      - name: "Build Embedded LLM Wiki Runtime"
+        script: |
+          bash "${SRCROOT}/scripts/build-embedded-llmwiki-runtime.sh"
+        basedOnDependencyAnalysis: false
+      - name: "Build Embedded LLM Wiki Frontend"
+        script: |
+          bash "${SRCROOT}/scripts/build-embedded-llmwiki-frontend.sh"
+        basedOnDependencyAnalysis: false
     dependencies:
       - target: ClawdHomeHelper
         embed: false
@@ -72,6 +81,7 @@ targets:
       properties:
         CFBundleName: ClawdHome
         CFBundleDisplayName: ClawdHome
+        CFBundleShortVersionString: "1.9.0"
         CFBundleIconFile: AppIcon.icns
         NSHumanReadableDescription: OpenClaw 家庭管理器
         LSApplicationCategoryType: public.app-category.utilities

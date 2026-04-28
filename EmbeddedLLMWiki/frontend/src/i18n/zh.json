@@ -1,0 +1,109 @@
+{
+  "app": {
+    "title": "LLM Wiki",
+    "subtitle": "用 LLM 构建和维护你的个人知识库"
+  },
+  "nav": {
+    "wiki": "Wiki",
+    "sources": "原始资料",
+    "search": "搜索",
+    "graph": "关系图",
+    "lint": "检查",
+    "review": "待审阅",
+    "settings": "设置",
+    "switchProject": "切换项目"
+  },
+  "welcome": {
+    "newProject": "新建项目",
+    "openProject": "打开项目",
+    "recentProjects": "最近项目"
+  },
+  "project": {
+    "createTitle": "新建 Wiki 项目",
+    "name": "项目名称",
+    "namePlaceholder": "my-research-wiki",
+    "parentDir": "父目录",
+    "template": "模板",
+    "cancel": "取消",
+    "create": "创建",
+    "creating": "创建中..."
+  },
+  "sources": {
+    "title": "原始资料",
+    "import": "导入",
+    "importing": "导入中...",
+    "noSources": "暂无资料",
+    "importHint": "导入文档，开始构建你的 Wiki",
+    "importFiles": "导入文件",
+    "ingest": "提取到 Wiki",
+    "delete": "删除资料及相关 Wiki 页面",
+    "deleteConfirm": "删除「{{name}}」及其相关 Wiki 页面？\n\n此操作将：\n- 删除原始资料文件\n- 删除由该资料生成的 Wiki 页面\n- 更新 index.md",
+    "sourceCount": "{{count}} 个资料",
+    "sourceCount_plural": "{{count}} 个资料"
+  },
+  "chat": {
+    "placeholder": "向你的 Wiki 提问...",
+    "ingestPlaceholder": "讨论资料内容或继续追问...",
+    "saveToWiki": "保存到 Wiki",
+    "saving": "保存中...",
+    "saved": "已保存！",
+    "writeToWiki": "写入 Wiki",
+    "emptyHint": "提问或开始提取资料。",
+    "sources": "来源"
+  },
+  "search": {
+    "title": "搜索",
+    "placeholder": "搜索 Wiki 页面...",
+    "noResults": "未找到相关结果",
+    "startSearching": "输入关键词搜索 Wiki 页面"
+  },
+  "lint": {
+    "title": "检查",
+    "runLint": "开始检查",
+    "running": "检查中...",
+    "semantic": "语义检查（LLM）",
+    "allClear": "一切正常，未发现问题",
+    "orphan": "孤立页面",
+    "brokenLink": "失效链接",
+    "noOutlinks": "无出链",
+    "contradiction": "内容矛盾",
+    "stale": "内容过时",
+    "missingPage": "缺失页面",
+    "suggestion": "建议"
+  },
+  "review": {
+    "title": "待审阅",
+    "clearResolved": "清除已解决",
+    "allClear": "一切正常，无需审阅"
+  },
+  "settings": {
+    "title": "设置",
+    "llmProvider": "LLM 提供商",
+    "provider": "提供商",
+    "apiKey": "API 密钥",
+    "apiKeyPlaceholder": "请输入你的 {{provider}} API 密钥",
+    "model": "模型",
+    "customModel": "或手动输入模型名称",
+    "ollamaUrl": "Ollama 地址",
+    "customEndpoint": "API 端点（OpenAI 兼容）",
+    "customEndpointHint": "任何兼容 OpenAI 的 API 端点（如 LiteLLM、vLLM、LocalAI、Azure OpenAI）",
+    "customApiKey": "请输入 API 密钥（如需要）",
+    "modelPlaceholder": "请输入模型名称",
+    "save": "保存设置",
+    "saved": "已保存！",
+    "language": "语言",
+    "languageHint": "界面语言（Wiki 内容语言以原始资料为准）"
+  },
+  "preview": {
+    "selectFile": "选择文件以预览",
+    "notAvailable": "该文件类型暂不支持预览"
+  },
+  "activity": {
+    "processing": "处理中：{{title}}",
+    "done": "已完成：{{title}}",
+    "clearCompleted": "清除已完成"
+  },
+  "fileTree": {
+    "noProject": "未打开项目"
+  }
+}

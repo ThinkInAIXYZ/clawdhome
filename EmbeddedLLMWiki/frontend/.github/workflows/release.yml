@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            id: macos-aarch64
+            args: "--target aarch64-apple-darwin"
+            rust_target: aarch64-apple-darwin
+          - platform: macos-latest
+            id: macos-x64
+            args: "--target x86_64-apple-darwin"
+            rust_target: x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            id: linux-x64
+            args: ""
+            rust_target: ""
+          - platform: windows-latest
+            id: windows-x64
+            args: ""
+            rust_target: ""
+
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup build environment
+        uses: ./.github/actions/setup-tauri-build
+        with:
+          node-version: "20"
+          rust-target: ${{ matrix.rust_target }}
+
+      - name: Build and publish release bundles
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          includeDebug: false
+          includeRelease: true
+          workflowArtifactNamePattern: "llm-wiki-[platform]-[arch]-[bundle]"
+          tagName: ${{ github.ref_name }}
+          releaseName: "LLM Wiki ${{ github.ref_name }}"
+          releaseBody: "See the assets below for download links."
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

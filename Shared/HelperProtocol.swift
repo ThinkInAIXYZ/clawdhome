@@ -50,6 +50,45 @@ import Foundation
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
+    /// 初始化或修复指定虾的 LLM Wiki 专用笔记目录（幂等）
+    func setupLlmWikiNotes(
+        username: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 修复共享 LLM Wiki 项目骨架和所有现存虾的映射
+    func repairLlmWikiProject(
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 修复指定虾到共享项目 raw/sources/shrimps/<username> 的软链映射
+    func repairLlmWikiMapping(
+        username: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 修复共享 runtime 目录和 socket/metadata 权限
+    func repairLlmWikiRuntimePermissions(
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 为指定虾写入或更新内置 clawdhome-llmwiki workspace skill
+    func repairBundledLlmWikiSkill(
+        username: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 读取全局 LLM Wiki 状态（JSON 编码的 LLMWikiGlobalAudit）
+    func auditLlmWikiState(
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 读取指定虾的 LLM Wiki 状态（JSON 编码的 LLMWikiUserAudit）
+    func auditLlmWikiUserState(
+        username: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
     /// 以指定用户身份启动 openclaw-gateway（通过 launchctl）
     func startGateway(
         username: String,
