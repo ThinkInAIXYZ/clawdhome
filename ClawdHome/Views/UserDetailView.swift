@@ -121,8 +121,6 @@ struct UserDetailView: View {
     @State private var showFlashFreezeConfirm = false
     @State private var showPauseFreezeConfirm = false
     @State private var showNormalFreezeConfirm = false
-    // Hermes
-    @State private var showHermesSetup = false
     // 密码
     @State private var showPassword = false
     @State private var logSearchText = ""
@@ -621,9 +619,6 @@ struct UserDetailView: View {
                     agents[idx] = updatedAgent
                 }
             }
-        }
-        .sheet(isPresented: $showHermesSetup) {
-            HermesSetupSheet(user: user)
         }
         .sheet(isPresented: $showConfig) {
             ConfigEditorSheet(user: user)
@@ -2095,12 +2090,6 @@ struct UserDetailView: View {
                             showPassword = true
                         } label: {
                             Label(L10n.k("views.user_detail_view.os_user_password", fallback: "获取 OS 用户密码"), systemImage: "key")
-                        }
-
-                        Button {
-                            showHermesSetup = true
-                        } label: {
-                            Label("Hermes Agent", systemImage: "brain.head.profile")
                         }
 
                         Divider()
