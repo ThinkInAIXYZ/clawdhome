@@ -71,6 +71,8 @@ final class MaintenanceTerminalSession {
         let argvRest = Array(command.dropFirst())
         let isHermesCommand = (normalizedArgv0 == "hermes")
         let isHermesShellCommand = (normalizedArgv0 == "hermes-shell")
+        let isZshCommand = (normalizedArgv0 == "zsh" || normalizedArgv0 == "hermes-shell")
+
         let resolvedExecutable: String
         switch normalizedArgv0 {
         case "openclaw":
@@ -115,6 +117,14 @@ final class MaintenanceTerminalSession {
             "TERM=xterm-256color",
         ])
 
+        let executableArgs: [String]
+        if isZshCommand {
+            // 关闭 zsh 的 PROMPT_SP，避免终端中出现额外的 "%" 行尾标记。
+            executableArgs = ["-o", "NO_PROMPT_SP"] + argvRest
+        } else {
+            executableArgs = argvRest
+        }
+
         let commandArgs = [
             "-q", "/dev/null",
             "/usr/bin/sudo", "-n", "-u", username, "-H",
@@ -122,7 +132,7 @@ final class MaintenanceTerminalSession {
         ] + envArgs + [
             "/bin/sh", "-lc", bootstrapScript,
             resolvedExecutable,
-        ] + argvRest
+        ] + executableArgs
 
         process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
         process.arguments = commandArgs

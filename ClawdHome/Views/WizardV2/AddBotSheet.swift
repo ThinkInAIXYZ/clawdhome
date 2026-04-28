@@ -311,7 +311,7 @@ struct AddBotSheet: View {
     private var feishuNamedAccountGuidanceSection: some View {
         Section {
             Picker(L10n.k("add_bot.feishu_domain", fallback: "域名"), selection: $selectedFeishuBrand) {
-                Text("飞书 (feishu.cn)").tag(FeishuBrand.feishu)
+                Text(L10n.k("add_bot.feishu_label", fallback: "飞书 (feishu.cn)")).tag(FeishuBrand.feishu)
                 Text("Lark (larksuite.com)").tag(FeishuBrand.lark)
             }
             Button(action: { openFeishuCreatePage() }) {

@@ -45,6 +45,9 @@ extension ClawdHomeHelperImpl {
         do {
             let uid = try UserManager.uid(for: username)
             try HermesGatewayManager.startGateway(username: username, profileID: profileID, uid: uid)
+            // 统一在 Hermes 网关成功启动后写入运行时锚点，
+            // 覆盖“终端脚本安装（未走 installHermes）”等路径，避免识别回退到 openclaw。
+            HermesInstaller.writeRuntimeConfig(runtime: "hermes", username: username)
             reply(true, nil)
         } catch {
             helperLog("Hermes 启动失败 profile=\(profileID) @\(username): \(error.localizedDescription)", level: .error)

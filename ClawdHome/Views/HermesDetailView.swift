@@ -123,13 +123,13 @@ struct HermesDetailView: View {
                                 )
                         }
                         .buttonStyle(.plain)
-                        .help("新建 Profile")
+                        .help(L10n.k("hermes.profile.new_profile", fallback: "新建 Profile"))
                         .popover(isPresented: $showNewProfilePopover, arrowEdge: .bottom) {
                             VStack(spacing: 10) {
-                                Text("新建 Profile")
+                                Text(L10n.k("hermes.profile.new_profile", fallback: "新建 Profile"))
                                     .font(.headline)
                                 HStack(spacing: 8) {
-                                    TextField("名称", text: $newProfileName)
+                                    TextField(L10n.k("common.label.name", fallback: "名称"), text: $newProfileName)
                                         .textFieldStyle(.roundedBorder)
                                         .frame(width: 160)
                                     TextField("🤖", text: $newProfileEmoji)
@@ -138,13 +138,13 @@ struct HermesDetailView: View {
                                 }
                                 HStack {
                                     Spacer()
-                                    Button("取消") {
+                                    Button(L10n.k("common.action.cancel", fallback: "取消")) {
                                         showNewProfilePopover = false
                                         newProfileName = ""
                                         newProfileEmoji = "🤖"
                                     }
                                     .buttonStyle(.bordered)
-                                    Button("创建") {
+                                    Button(L10n.k("common.action.create", fallback: "创建")) {
                                         let rawName = newProfileName.trimmingCharacters(in: .whitespacesAndNewlines)
                                         guard !rawName.isEmpty else { return }
                                         let emoji = newProfileEmoji.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -207,40 +207,40 @@ struct HermesDetailView: View {
             configureChatTabsIfNeeded()
         }
         .alert(
-            "关闭会话标签？",
+            L10n.k("hermes.profile.close_chat_tab_title", fallback: "关闭会话标签？"),
             isPresented: Binding(
                 get: { pendingCloseTabID != nil },
                 set: { if !$0 { pendingCloseTabID = nil } }
             )
         ) {
-            Button("取消", role: .cancel) {
+            Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {
                 pendingCloseTabID = nil
             }
-            Button("关闭", role: .destructive) {
+            Button(L10n.k("common.action.close", fallback: "关闭"), role: .destructive) {
                 guard let tabID = pendingCloseTabID else { return }
                 chatTabManager.closeTab(id: tabID)
                 pendingCloseTabID = nil
             }
         } message: {
-            Text("关闭后该标签中的 Hermes 会话会被终止，无法恢复。")
+            Text(L10n.k("hermes.profile.close_chat_tab_message", fallback: "关闭后该标签中的 Hermes 会话会被终止，无法恢复。"))
         }
         .alert(
-            "删除 Profile？",
+            L10n.k("hermes.profile.delete_title", fallback: "删除 Profile？"),
             isPresented: Binding(
                 get: { deleteProfileID != nil },
                 set: { if !$0 { deleteProfileID = nil } }
             )
         ) {
-            Button("取消", role: .cancel) {
+            Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {
                 deleteProfileID = nil
             }
-            Button("删除", role: .destructive) {
+            Button(L10n.k("common.action.delete", fallback: "删除"), role: .destructive) {
                 guard let profileID = deleteProfileID else { return }
                 onDeleteProfile(profileID)
                 deleteProfileID = nil
             }
         } message: {
-            Text("删除后该 profile 的会话和配置不可恢复。")
+            Text(L10n.k("hermes.profile.delete_message", fallback: "删除后该 profile 的会话和配置不可恢复。"))
         }
     }
 
@@ -298,7 +298,7 @@ struct HermesDetailView: View {
                     Image(systemName: "bubble.left.and.text.bubble.right")
                         .font(.system(size: 40))
                         .foregroundStyle(.tertiary)
-                    Text("点击下方按钮开始与 Hermes 对话")
+                    Text(L10n.k("hermes.chat.empty_hint", fallback: "点击下方按钮开始与 Hermes 对话"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     Button {
@@ -308,7 +308,7 @@ struct HermesDetailView: View {
                             chatTabManager.addTab()
                         }
                     } label: {
-                        Label("启动会话", systemImage: "play.fill")
+                        Label(L10n.k("hermes.chat.start_session", fallback: "启动会话"), systemImage: "play.fill")
                             .font(.body.weight(.medium))
                     }
                     .buttonStyle(.borderedProminent)
@@ -336,7 +336,7 @@ struct HermesDetailView: View {
                 )
         }
         .buttonStyle(.plain)
-        .help("新建会话标签")
+        .help(L10n.k("hermes.chat.new_tab", fallback: "新建会话标签"))
     }
 
     @ViewBuilder
@@ -363,7 +363,7 @@ struct HermesDetailView: View {
                     .font(.system(size: 10, weight: .semibold))
             }
             .buttonStyle(.plain)
-            .help("关闭标签")
+            .help(L10n.k("common.action.close_tab", fallback: "关闭标签"))
         }
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
         .padding(.horizontal, 10)
@@ -384,7 +384,7 @@ struct HermesDetailView: View {
                 .font(.title3.weight(.semibold))
 
             if profiles.isEmpty {
-                ContentUnavailableView("暂无 profile", systemImage: "person.2.slash")
+                ContentUnavailableView(L10n.k("hermes.profile.empty", fallback: "暂无 profile"), systemImage: "person.2.slash")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
@@ -443,7 +443,7 @@ struct HermesDetailView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
                 .disabled(isRunning)
-                .help("启动")
+                .help(L10n.k("common.action.start", fallback: "启动"))
 
                 // ■ 停止
                 Button {
@@ -456,7 +456,7 @@ struct HermesDetailView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
                 .disabled(!isRunning)
-                .help("停止")
+                .help(L10n.k("common.action.stop", fallback: "停止"))
 
                 // ↻ 重启
                 Button {
@@ -469,7 +469,7 @@ struct HermesDetailView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
                 .disabled(!isRunning)
-                .help("重启")
+                .help(L10n.k("common.action.restart", fallback: "重启"))
 
                 Spacer()
 
@@ -477,7 +477,7 @@ struct HermesDetailView: View {
                 Button {
                     onSelectProfile(profile.id)
                 } label: {
-                    Label("设为当前", systemImage: "checkmark.circle")
+                    Label(L10n.k("hermes.profile.set_current", fallback: "设为当前"), systemImage: "checkmark.circle")
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.bordered)
@@ -501,13 +501,13 @@ struct HermesDetailView: View {
                         editingProfileName = profile.name
                         editingProfileEmoji = profile.emoji.isEmpty ? "🤖" : profile.emoji
                     } label: {
-                        Label("重命名", systemImage: "pencil")
+                        Label(L10n.k("common.action.rename", fallback: "重命名"), systemImage: "pencil")
                     }
                     if profile.id != "main" {
                         Button(role: .destructive) {
                             deleteProfileID = profile.id
                         } label: {
-                            Label("删除", systemImage: "trash")
+                            Label(L10n.k("common.action.delete", fallback: "删除"), systemImage: "trash")
                         }
                     }
                 } label: {
@@ -538,7 +538,7 @@ struct HermesDetailView: View {
                     get: { isAutostart },
                     set: { newVal in onToggleAutostart(profile.id, newVal) }
                 )) {
-                    Text("开机启动")
+                    Text(L10n.k("common.label.autostart", fallback: "开机启动"))
                         .font(.caption)
                 }
                 .toggleStyle(.checkbox)
@@ -551,7 +551,7 @@ struct HermesDetailView: View {
                     Button {
                         onShowProfileBindings(profileDeferredItems)
                     } label: {
-                        Label("继续绑定 (\(profileDeferredItems.count))", systemImage: "clock.badge.exclamationmark")
+                        Label(L10n.f("hermes.profile.continue_binding", fallback: "继续绑定 (%d)", profileDeferredItems.count), systemImage: "clock.badge.exclamationmark")
                             .font(.system(size: 11))
                             .foregroundStyle(.orange)
                     }
@@ -562,12 +562,12 @@ struct HermesDetailView: View {
             // --- 重命名编辑区 ---
             if editingProfileID == profile.id {
                 HStack(spacing: 8) {
-                    TextField("名称", text: $editingProfileName)
+                    TextField(L10n.k("common.label.name", fallback: "名称"), text: $editingProfileName)
                         .textFieldStyle(.roundedBorder)
                     TextField("🤖", text: $editingProfileEmoji)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 56)
-                    Button("保存") {
+                    Button(L10n.k("common.action.save", fallback: "保存")) {
                         onUpdateProfile(
                             profile.id,
                             editingProfileName.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -577,7 +577,7 @@ struct HermesDetailView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(editingProfileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Button("取消") {
+                    Button(L10n.k("common.action.cancel", fallback: "取消")) {
                         editingProfileID = nil
                     }
                     .buttonStyle(.bordered)
@@ -648,18 +648,18 @@ struct HermesDetailView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(!isConnected || isLoading)
 
-                    Button("停止 Hermes", action: onStop)
+                    Button(L10n.k("hermes.action.stop", fallback: "停止 Hermes"), action: onStop)
                         .buttonStyle(.bordered)
                         .disabled(!isConnected || isLoading || !runtimeRunning)
 
                     HStack(spacing: 8) {
-                        Button("体检", action: onOpenHealthCheck)
+                        Button(L10n.k("hermes.action.health_check", fallback: "体检"), action: onOpenHealthCheck)
                             .buttonStyle(.bordered)
-                        Button("Hermes 设置", action: onShowSetup)
+                        Button(L10n.k("hermes.action.settings", fallback: "Hermes 设置"), action: onShowSetup)
                             .buttonStyle(.bordered)
                     }
 
-                    Button("刷新状态", action: onRefresh)
+                    Button(L10n.k("common.action.refresh", fallback: "刷新状态"), action: onRefresh)
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
                         .disabled(!isConnected || isLoading)
@@ -838,7 +838,7 @@ private struct HermesChatTerminalPanel: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
-                Label("Helper 会话", systemImage: "bolt.horizontal.circle")
+                Label(L10n.k("hermes.chat.helper_session", fallback: "Helper 会话"), systemImage: "bolt.horizontal.circle")
                     .font(.caption2)
                     .foregroundStyle(theme.headerSecondary)
             }
@@ -1248,9 +1248,9 @@ private struct HermesProfileStatusPill: View {
                     .fill(Color.green)
                     .frame(width: 7, height: 7)
                 if let pid, pid > 0 {
-                    Text("运行中 PID \(pid)")
+                    Text(L10n.f("hermes.status.running_pid", fallback: "运行中 PID %d", pid))
                 } else {
-                    Text("运行中")
+                    Text(L10n.k("hermes.status.running", fallback: "运行中"))
                 }
             }
             .font(.caption2.weight(.medium))
@@ -1263,7 +1263,7 @@ private struct HermesProfileStatusPill: View {
                 Circle()
                     .fill(Color.secondary.opacity(0.5))
                     .frame(width: 7, height: 7)
-                Text("已停止")
+                Text(L10n.k("hermes.status.stopped", fallback: "已停止"))
             }
             .font(.caption2.weight(.medium))
             .foregroundStyle(.secondary)
@@ -1379,7 +1379,7 @@ struct HermesTerminalConsole: View {
         VStack(alignment: .leading, spacing: 10) {
             // Tab 栏
             HStack(spacing: 10) {
-                Text("终端")
+                Text(L10n.k("common.label.terminal", fallback: "终端"))
                     .font(.headline)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -1416,13 +1416,13 @@ struct HermesTerminalConsole: View {
                     Image(systemName: "terminal")
                         .font(.system(size: 40))
                         .foregroundStyle(.tertiary)
-                    Text("点击下方按钮打开终端会话")
+                    Text(L10n.k("hermes.terminal.empty_hint", fallback: "点击下方按钮打开终端会话"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     Button {
                         tabManager.addTab()
                     } label: {
-                        Label("打开终端", systemImage: "play.fill")
+                        Label(L10n.k("hermes.terminal.open", fallback: "打开终端"), systemImage: "play.fill")
                             .font(.body.weight(.medium))
                     }
                     .buttonStyle(.borderedProminent)
@@ -1445,22 +1445,22 @@ struct HermesTerminalConsole: View {
             }
         }
         .alert(
-            "关闭终端标签？",
+            L10n.k("hermes.terminal.close_tab_title", fallback: "关闭终端标签？"),
             isPresented: Binding(
                 get: { pendingCloseTabID != nil },
                 set: { if !$0 { pendingCloseTabID = nil } }
             )
         ) {
-            Button("取消", role: .cancel) {
+            Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {
                 pendingCloseTabID = nil
             }
-            Button("关闭", role: .destructive) {
+            Button(L10n.k("common.action.close", fallback: "关闭"), role: .destructive) {
                 guard let tabID = pendingCloseTabID else { return }
                 tabManager.closeTab(id: tabID)
                 pendingCloseTabID = nil
             }
         } message: {
-            Text("关闭后该终端会话将被终止，无法恢复。")
+            Text(L10n.k("hermes.terminal.close_tab_message", fallback: "关闭后该终端会话将被终止，无法恢复。"))
         }
     }
 
@@ -1486,7 +1486,7 @@ struct HermesTerminalConsole: View {
                     .font(.system(size: 10, weight: .semibold))
             }
             .buttonStyle(.plain)
-            .help("关闭标签")
+            .help(L10n.k("common.action.close_tab", fallback: "关闭标签"))
         }
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
         .padding(.horizontal, 10)
@@ -1514,7 +1514,7 @@ struct HermesTerminalConsole: View {
                 )
         }
         .buttonStyle(.plain)
-        .help("新建终端标签")
+        .help(L10n.k("hermes.terminal.new_tab", fallback: "新建终端标签"))
     }
 }
 
@@ -1534,7 +1534,7 @@ struct HermesDetailContainer: View {
     @State private var mode: HermesDetailMode = .chat
     @StateObject private var chatTabManager = HermesChatTabManager()
     @StateObject private var configTabManager = HermesTerminalTabManager()
-    @StateObject private var shellTabManager = HermesTerminalTabManager(titlePrefix: "终端", defaultCommand: ["zsh", "-l"])
+    @StateObject private var shellTabManager = HermesTerminalTabManager(titlePrefix: "终端", defaultCommand: ["hermes-shell", "-l"])
     @State private var profiles: [AgentProfile] = []
     @State private var selectedProfileID: String? = nil
     @State private var isLoading = false
@@ -1678,24 +1678,24 @@ struct HermesDetailContainer: View {
             deleteConfirmSheet
         }
         .alert(
-            "操作失败",
+            L10n.k("common.error.action_failed", fallback: "操作失败"),
             isPresented: $showProfileActionError
         ) {
-            Button("确定", role: .cancel) { showProfileActionError = false }
+            Button(L10n.k("common.action.confirm", fallback: "确定"), role: .cancel) { showProfileActionError = false }
         } message: {
             Text(profileActionError ?? "未知错误")
         }
         .alert(
-            "有 \(shellTabManager.tabs.count) 个终端会话正在运行",
+            L10n.f("hermes.terminal.stop_with_terminals_title", fallback: "有 %d 个终端会话正在运行", shellTabManager.tabs.count),
             isPresented: $showStopWithTerminalsAlert
         ) {
-            Button("取消", role: .cancel) {}
-            Button("关闭终端并停止", role: .destructive) {
+            Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {}
+            Button(L10n.k("hermes.terminal.close_and_stop", fallback: "关闭终端并停止"), role: .destructive) {
                 shellTabManager.closeAllTabs()
                 Task { await stop() }
             }
         } message: {
-            Text("停止 Hermes 将终止所有打开的终端会话，无法恢复。")
+            Text(L10n.k("hermes.terminal.stop_message", fallback: "停止 Hermes 将终止所有打开的终端会话，无法恢复。"))
         }
         .task {
             await refreshAll()
@@ -1718,7 +1718,7 @@ struct HermesDetailContainer: View {
             // 折叠/展开
             HStack {
                 if detailSidebarShowsLabels {
-                    Text("概览")
+                    Text(L10n.k("common.label.overview", fallback: "概览"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -1825,7 +1825,7 @@ struct HermesDetailContainer: View {
                     Button {
                         showTeamWizard = true
                     } label: {
-                        Label("团队初始化", systemImage: "wand.and.stars")
+                        Label(L10n.k("hermes.sidebar.team_init", fallback: "团队初始化"), systemImage: "wand.and.stars")
                             .font(.system(size: 12))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 10)
@@ -1839,7 +1839,7 @@ struct HermesDetailContainer: View {
                     Button {
                         showPendingBindings = true
                     } label: {
-                        Label("继续绑定 (\(pendingBindingItems.count))", systemImage: "clock.badge.exclamationmark")
+                        Label(L10n.f("hermes.profile.continue_binding", fallback: "继续绑定 (%d)", pendingBindingItems.count), systemImage: "clock.badge.exclamationmark")
                             .font(.system(size: 12))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 10)
@@ -1852,7 +1852,7 @@ struct HermesDetailContainer: View {
                 Button(role: .destructive) {
                     showDeleteConfirm = true
                 } label: {
-                    Label("删除用户", systemImage: "trash")
+                    Label(L10n.k("common.action.delete_user", fallback: "删除用户"), systemImage: "trash")
                         .font(.system(size: 12))
                         .foregroundStyle(.red.opacity(0.8))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1941,7 +1941,7 @@ struct HermesDetailContainer: View {
                     Button {
                         Task { await batchStartAll() }
                     } label: {
-                        Label("全部启动", systemImage: "play.fill")
+                        Label(L10n.k("common.action.start_all", fallback: "全部启动"), systemImage: "play.fill")
                             .font(.system(size: 11))
                             .lineLimit(1)
                     }
@@ -1952,7 +1952,7 @@ struct HermesDetailContainer: View {
                     Button {
                         Task { await batchStopAll() }
                     } label: {
-                        Label("全部停止", systemImage: "stop.fill")
+                        Label(L10n.k("common.action.stop_all", fallback: "全部停止"), systemImage: "stop.fill")
                             .font(.system(size: 11))
                             .lineLimit(1)
                     }
@@ -2361,9 +2361,9 @@ struct HermesDetailContainer: View {
 
     private var deleteConfirmSheet: some View {
         VStack(spacing: 16) {
-            Text("确认删除 @\(user.username)？")
+            Text(L10n.f("hermes.delete.confirm_title", fallback: "确认删除 @%@？", user.username))
                 .font(.headline)
-            Text("此操作不可撤销，将删除该用户的所有数据。")
+            Text(L10n.k("hermes.delete.confirm_message", fallback: "此操作不可撤销，将删除该用户的所有数据。"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
             if let deleteError {
@@ -2372,11 +2372,11 @@ struct HermesDetailContainer: View {
                     .foregroundStyle(.red)
             }
             HStack {
-                Button("取消", role: .cancel) {
+                Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {
                     showDeleteConfirm = false
                 }
                 .keyboardShortcut(.cancelAction)
-                Button("删除", role: .destructive) {
+                Button(L10n.k("common.action.delete", fallback: "删除"), role: .destructive) {
                     Task { await performDelete() }
                 }
                 .disabled(isDeleting)

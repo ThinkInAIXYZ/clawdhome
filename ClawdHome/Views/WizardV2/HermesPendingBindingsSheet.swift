@@ -35,14 +35,14 @@ struct HermesPendingBindingsSheet: View {
             // 标题栏
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("继续绑定")
+                    Text(L10n.k("hermes.pending_bindings.title", fallback: "继续绑定"))
                         .font(.title3.weight(.semibold))
-                    Text("以下平台扫码配对未完成，点击【立即绑定】继续")
+                    Text(L10n.k("hermes.pending_bindings.subtitle", fallback: "以下平台扫码配对未完成，点击【立即绑定】继续"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("关闭") { dismiss() }
+                Button(L10n.k("common.action.close", fallback: "关闭")) { dismiss() }
                     .buttonStyle(.bordered)
                     .keyboardShortcut(.cancelAction)
             }
@@ -52,9 +52,9 @@ struct HermesPendingBindingsSheet: View {
 
             if pendingItems.isEmpty {
                 ContentUnavailableView(
-                    "没有待完成的绑定",
+                    L10n.k("hermes.pending_bindings.empty_title", fallback: "没有待完成的绑定"),
                     systemImage: "checkmark.circle",
-                    description: Text("所有扫码平台均已配对完成")
+                    description: Text(L10n.k("hermes.pending_bindings.empty_desc", fallback: "所有扫码平台均已配对完成"))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -92,13 +92,13 @@ struct HermesPendingBindingsSheet: View {
                 Spacer()
 
                 if isActive {
-                    Button("收起") {
+                    Button(L10n.k("hermes.pending_bindings.collapse", fallback: "收起")) {
                         withAnimation { activeItemID = nil }
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 } else {
-                    Button("立即绑定") {
+                    Button(L10n.k("hermes.pending_bindings.bind_now", fallback: "立即绑定")) {
                         withAnimation { activeItemID = item.id }
                     }
                     .buttonStyle(.borderedProminent)
