@@ -20,15 +20,15 @@ enum UserAdoptionValidationError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .emptyUsername:
-            return "系统用户名不能为空"
+            return String(localized: "adoption.error.empty_username", defaultValue: "系统用户名不能为空")
         case .invalidUsername:
-            return "用户名只能包含小写字母、数字和下划线，且须以字母开头"
+            return String(localized: "adoption.error.invalid_username", defaultValue: "用户名只能包含小写字母、数字和下划线，且须以字母开头")
         case .emptyFullName:
-            return "显示名不能为空"
+            return String(localized: "adoption.error.empty_fullname", defaultValue: "显示名不能为空")
         case .duplicateUsername(let username):
-            return "用户名 @\(username) 已存在，请换一个再试"
+            return String(format: String(localized: "adoption.error.duplicate_username", defaultValue: "用户名 @%@ 已存在，请换一个再试"), username)
         case .duplicateFullName(let fullName):
-            return "显示名“\(fullName)”已被使用，请换一个名字"
+            return String(format: String(localized: "adoption.error.duplicate_fullname", defaultValue: "显示名\u{201C}%@\u{201D}已被使用，请换一个名字"), fullName)
         }
     }
 }
@@ -66,5 +66,72 @@ enum UserAdoptionInputValidator {
             username: normalizedUsername,
             fullName: normalizedFullName
         )
+    }
+}
+
+/// 将任意文案稳定转换为 ASCII 标识符（用于 @username / agentId）。
+enum ASCIIIdentifier {
+    private static let transliterationLocale = Locale(identifier: "en_US_POSIX")
+    private static let asciiLetters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz")
+    private static let asciiAlnum = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789")
+    private static let usernameAllowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789_")
+    private static let agentIDAllowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789_-")
+
+    static func username(from source: String, fallbackPrefix: String = "team", maxLength: Int = 30) -> String {
+        let candidate = normalizedASCII(from: source, allowed: usernameAllowed)
+        guard let first = candidate.unicodeScalars.first, asciiLetters.contains(first) else {
+            return fallbackValue(prefix: fallbackPrefix)
+        }
+        return String(candidate.prefix(maxLength))
+    }
+
+    static func agentID(from source: String, fallbackPrefix: String = "agent", maxLength: Int = 64) -> String {
+        let candidate = normalizedASCII(from: source, allowed: agentIDAllowed)
+        guard let first = candidate.unicodeScalars.first, asciiAlnum.contains(first) else {
+            return fallbackValue(prefix: fallbackPrefix)
+        }
+        return String(candidate.prefix(maxLength))
+    }
+
+    private static func normalizedASCII(from source: String, allowed: CharacterSet) -> String {
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let latin = (trimmed as NSString).applyingTransform(.toLatin, reverse: false) ?? trimmed
+        let folded = latin.folding(
+            options: [.diacriticInsensitive, .caseInsensitive, .widthInsensitive],
+            locale: transliterationLocale
+        )
+        let normalizedWhitespace = folded
+            .lowercased()
+            .replacingOccurrences(of: #"[[:space:]/]+"#, with: "_", options: .regularExpression)
+
+        var output = ""
+        var previousIsUnderscore = false
+
+        for scalar in normalizedWhitespace.unicodeScalars {
+            if allowed.contains(scalar) {
+                let ch = Character(scalar)
+                if ch == "_" {
+                    if previousIsUnderscore { continue }
+                    previousIsUnderscore = true
+                } else {
+                    previousIsUnderscore = false
+                }
+                output.append(ch)
+                continue
+            }
+
+            if !previousIsUnderscore {
+                output.append("_")
+                previousIsUnderscore = true
+            }
+        }
+
+        return output.trimmingCharacters(in: CharacterSet(charactersIn: "_-"))
+    }
+
+    private static func fallbackValue(prefix: String) -> String {
+        "\(prefix)_\(Int(Date().timeIntervalSince1970) % 10000)"
     }
 }

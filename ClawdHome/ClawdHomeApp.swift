@@ -144,6 +144,28 @@ struct ClawdHomeApp: App {
         .windowResizability(.automatic)
         .defaultSize(width: 860, height: 560)
 
+        WindowGroup(id: "maintenance-files", for: String.self) { $payload in
+            MaintenanceFilesWindow(payload: payload)
+                .environment(helperClient)
+                .environment(shrimpPool)
+                .environment(maintenanceWindowRegistry)
+                .environment(\.locale, appLanguage.locale)
+        }
+        .windowStyle(.titleBar)
+        .windowResizability(.automatic)
+        .defaultSize(width: 960, height: 640)
+
+        WindowGroup(id: "maintenance-processes", for: String.self) { $payload in
+            MaintenanceProcessesWindow(payload: payload)
+                .environment(helperClient)
+                .environment(shrimpPool)
+                .environment(maintenanceWindowRegistry)
+                .environment(\.locale, appLanguage.locale)
+        }
+        .windowStyle(.titleBar)
+        .windowResizability(.automatic)
+        .defaultSize(width: 920, height: 620)
+
         WindowGroup(id: "clone-claw", for: String.self) { $sourceUsername in
             if let username = sourceUsername {
                 CloneClawSheet(sourceUsername: username)
@@ -180,6 +202,7 @@ final class MaintenanceWindowRegistry {
         username: String,
         title: String,
         command: [String],
+        engine: MaintenanceTerminalEngine? = nil,
         completionToken: String? = nil,
         completionContext: String? = nil
     ) -> String {
@@ -189,12 +212,50 @@ final class MaintenanceWindowRegistry {
             token: UUID().uuidString,
             username: username,
             title: title,
-            command: command,
+            command: MaintenanceTerminalCommandPolicy.commandForRuntime(
+                command: command,
+                runtime: engine?.managedHomeRuntime
+            ),
             index: next,
+            engine: engine,
             completionToken: completionToken,
             completionContext: completionContext
         )
         return req.payload
+    }
+
+    func makeToolWindowPayload(
+        username: String,
+        title: String,
+        kind: MaintenanceToolWindowKind,
+        scope: UserFilesScope = .home
+    ) -> String {
+        let next = (nextIndexByUser[username] ?? 0) + 1
+        nextIndexByUser[username] = next
+        let req = MaintenanceToolWindowRequest(
+            token: UUID().uuidString,
+            username: username,
+            title: title,
+            kind: kind,
+            scope: scope,
+            index: next
+        )
+        return req.payload
+    }
+}
+
+/// 终端所属的 Agent 引擎；未指定时不显示任何引擎相关的快捷指令菜单
+enum MaintenanceTerminalEngine: String, Codable {
+    case openclaw
+    case hermes
+
+    var managedHomeRuntime: ManagedHomeRuntime {
+        switch self {
+        case .openclaw:
+            return .openclaw
+        case .hermes:
+            return .hermes
+        }
     }
 }
 
@@ -204,6 +265,7 @@ struct MaintenanceTerminalWindowRequest: Codable {
     let title: String
     let command: [String]
     let index: Int
+    let engine: MaintenanceTerminalEngine?
     let completionToken: String?
     let completionContext: String?
 
@@ -218,6 +280,7 @@ struct MaintenanceTerminalWindowRequest: Codable {
         title: String,
         command: [String],
         index: Int,
+        engine: MaintenanceTerminalEngine? = nil,
         completionToken: String? = nil,
         completionContext: String? = nil
     ) {
@@ -226,6 +289,7 @@ struct MaintenanceTerminalWindowRequest: Codable {
         self.title = title
         self.command = command
         self.index = index
+        self.engine = engine
         self.completionToken = completionToken
         self.completionContext = completionContext
     }
@@ -234,6 +298,50 @@ struct MaintenanceTerminalWindowRequest: Codable {
         guard let payload,
               let data = Data(base64Encoded: payload),
               let req = try? JSONDecoder().decode(MaintenanceTerminalWindowRequest.self, from: data) else {
+            return nil
+        }
+        self = req
+    }
+}
+
+enum MaintenanceToolWindowKind: String, Codable {
+    case files
+    case processes
+}
+
+struct MaintenanceToolWindowRequest: Codable {
+    let token: String
+    let username: String
+    let title: String
+    let kind: MaintenanceToolWindowKind
+    let scope: UserFilesScope
+    let index: Int
+
+    var payload: String {
+        guard let data = try? JSONEncoder().encode(self) else { return "" }
+        return data.base64EncodedString()
+    }
+
+    init(
+        token: String,
+        username: String,
+        title: String,
+        kind: MaintenanceToolWindowKind,
+        scope: UserFilesScope = .home,
+        index: Int
+    ) {
+        self.token = token
+        self.username = username
+        self.title = title
+        self.kind = kind
+        self.scope = scope
+        self.index = index
+    }
+
+    init?(payload: String?) {
+        guard let payload,
+              let data = Data(base64Encoded: payload),
+              let req = try? JSONDecoder().decode(MaintenanceToolWindowRequest.self, from: data) else {
             return nil
         }
         self = req
@@ -252,6 +360,28 @@ private struct OpenClawQuickCommand: Identifiable {
     let label: String
     let command: String
 }
+
+private let hermesQuickCommandSections: [(section: String, items: [OpenClawQuickCommand])] = [
+    (L10n.k("app.maintenance.quick.section.query_diagnose", fallback: "查询 / 诊断"), [
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.version", fallback: "版本查询"), command: "hermes --version"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.status", fallback: "状态概览"), command: "hermes status"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.profile_list", fallback: "角色列表"), command: "hermes profile list"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.gateway_status", fallback: "网关状态"), command: "hermes gateway status"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.doctor", fallback: "系统体检"), command: "hermes doctor"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.logs", fallback: "实时日志"), command: "hermes logs --follow"),
+    ]),
+    (L10n.k("app.maintenance.quick.section.config_control", fallback: "配置 / 控制"), [
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.setup", fallback: "交互配置"), command: "hermes setup"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.gateway_restart", fallback: "重启网关"), command: "hermes gateway restart"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.channels_list", fallback: "频道列表"), command: "hermes channels list"),
+    ]),
+    (L10n.k("app.maintenance.quick.section.upgrade_maintenance", fallback: "升级 / 维护"), [
+        OpenClawQuickCommand(
+            label: L10n.k("app.maintenance.quick.hermes.upgrade_latest", fallback: "升级到最新"),
+            command: "hermes --version; npm install -g @nousresearch/hermes-agent@latest; hermes --version"
+        ),
+    ]),
+]
 
 private let openClawQuickCommandSections: [(section: String, items: [OpenClawQuickCommand])] = [
     (L10n.k("app.maintenance.quick.section.query_diagnose", fallback: "查询 / 诊断"), [
@@ -295,11 +425,63 @@ private struct MaintenanceTerminalWindow: View {
     }
 }
 
+private struct MaintenanceFilesWindow: View {
+    let payload: String?
+    @Environment(ShrimpPool.self) private var pool
+
+    var body: some View {
+        if let request = MaintenanceToolWindowRequest(payload: payload),
+           request.kind == .files,
+           let user = pool.users.first(where: { $0.username == request.username }) {
+            NavigationStack {
+                UserFilesView(users: [user], preselectedUser: user, scope: request.scope)
+            }
+            .navigationTitle(request.title)
+        } else {
+            ContentUnavailableView(
+                L10n.k("app.maintenance.invalid_params", fallback: "维护终端参数无效"),
+                systemImage: "exclamationmark.triangle",
+                description: Text(L10n.k("app.maintenance.invalid_params.desc", fallback: "请从虾详情页或初始化向导重新打开维护终端。"))
+            )
+        }
+    }
+}
+
+private struct MaintenanceProcessesWindow: View {
+    let payload: String?
+    @Environment(ShrimpPool.self) private var pool
+
+    var body: some View {
+        if let request = MaintenanceToolWindowRequest(payload: payload),
+           request.kind == .processes,
+           pool.users.contains(where: { $0.username == request.username }) {
+            NavigationStack {
+                ProcessTabView(username: request.username)
+            }
+            .navigationTitle(request.title)
+        } else {
+            ContentUnavailableView(
+                L10n.k("app.maintenance.invalid_params", fallback: "维护终端参数无效"),
+                systemImage: "exclamationmark.triangle",
+                description: Text(L10n.k("app.maintenance.invalid_params.desc", fallback: "请从虾详情页或初始化向导重新打开维护终端。"))
+            )
+        }
+    }
+}
+
 private struct MaintenanceTerminalWindowContent: View {
+    private struct OutputSearchMatch: Identifiable {
+        let id: Int
+        let range: NSRange
+        let preview: String
+    }
+
     let request: MaintenanceTerminalWindowRequest
 
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
     @Environment(ShrimpPool.self) private var pool
+    @Environment(MaintenanceWindowRegistry.self) private var maintenanceWindowRegistry
     @StateObject private var terminalControl = LocalTerminalControl()
     @State private var terminalRunID = 0
     @State private var exitCode: Int32? = nil
@@ -311,8 +493,19 @@ private struct MaintenanceTerminalWindowContent: View {
     @State private var didStart = false
     @State private var didPostCloseNotification = false
     @State private var didAutoCloseOnConfigureComplete = false
+    @State private var terminalTheme: MaintenanceTerminalTheme = .system
+    @State private var searchText = ""
+    @State private var searchMatches: [OutputSearchMatch] = []
+    @State private var selectedSearchMatchIndex = 0
+    @State private var outputRateWindowStartedAt = Date()
+    @State private var outputBytesInRateWindow = 0
+    @State private var droppedOutputBytes = 0
+    @State private var didNotifyRateLimit = false
+    @AppStorage("app.maintenance.outputRateLimitEnabled") private var outputRateLimitEnabled = true
+    @AppStorage("app.maintenance.fontSize") private var terminalFontSize = 12.0
 
     private let waitingThreshold: TimeInterval = 8
+    private let outputRateLimitBytesPerSecond = 80 * 1024
     private let uiTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var windowTitle: String {
@@ -357,6 +550,26 @@ private struct MaintenanceTerminalWindowContent: View {
         guard let last = all.last, last.numberOfRanges >= 2 else { return nil }
         return ns.substring(with: last.range(at: 1))
     }
+    private var selectedSearchMatch: OutputSearchMatch? {
+        guard selectedSearchMatchIndex >= 0, selectedSearchMatchIndex < searchMatches.count else { return nil }
+        return searchMatches[selectedSearchMatchIndex]
+    }
+    private var searchSummaryText: String {
+        guard !searchMatches.isEmpty else {
+            return L10n.k("app.maintenance.search.no_hits", fallback: "0 项")
+        }
+        return String(
+            format: L10n.k("app.maintenance.search.hit_count", fallback: "%d/%d"),
+            selectedSearchMatchIndex + 1,
+            searchMatches.count
+        )
+    }
+    private var droppedOutputText: String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .binary
+        let dropped = formatter.string(fromByteCount: Int64(max(0, droppedOutputBytes)))
+        return L10n.f("app.maintenance.output_limited", fallback: "已限流（丢弃 %@）", dropped)
+    }
 
     @ViewBuilder
     private var topBar: some View {
@@ -380,41 +593,201 @@ private struct MaintenanceTerminalWindowContent: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Button(L10n.k("common.action.interrupt", fallback: "中断")) { terminalControl.sendInterrupt() }
+                .keyboardShortcut(".", modifiers: .command)
                 .disabled(!isRunning)
             Button(L10n.k("common.action.rerun", fallback: "重跑")) { startRun() }
+                .keyboardShortcut("r", modifiers: .command)
+            Button(L10n.k("common.action.clone_terminal", fallback: "复制终端")) { cloneTerminalWindow() }
             Button(L10n.k("common.action.copy_output", fallback: "复制输出")) { copyTerminalOutput() }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(outputBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button(L10n.k("common.action.clear_screen", fallback: "清屏")) { clearTerminalOutput() }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled(outputBuffer.isEmpty)
 
             Spacer(minLength: 0)
 
+            outputMenu
+            typographyMenu
+            terminalThemeMenu
             quickCommandMenu
         }
     }
 
     @ViewBuilder
-    private var quickCommandMenu: some View {
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(L10n.k("app.maintenance.search.placeholder", fallback: "搜索输出"), text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption)
+                .frame(width: 220)
+                .onSubmit {
+                    jumpToSearchMatch(direction: .forward)
+                }
+                .onChange(of: searchText) { _, _ in
+                    rebuildSearchMatches()
+                }
+            Button {
+                jumpToSearchMatch(direction: .backward)
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(.borderless)
+            .keyboardShortcut("g", modifiers: [.command, .shift])
+            .disabled(searchMatches.isEmpty)
+            Button {
+                jumpToSearchMatch(direction: .forward)
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.borderless)
+            .keyboardShortcut("g", modifiers: .command)
+            .disabled(searchMatches.isEmpty)
+            Text(searchSummaryText)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if let selectedSearchMatch {
+                Text(selectedSearchMatch.preview)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+            if outputRateLimitEnabled, droppedOutputBytes > 0 {
+                Text(droppedOutputText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    @ViewBuilder
+    private var outputMenu: some View {
         Menu {
-            ForEach(openClawQuickCommandSections, id: \.section) { group in
-                Section(group.section) {
-                    ForEach(group.items) { cmd in
-                        Button {
-                            terminalControl.sendLine(cmd.command)
-                        } label: {
-                            Text(cmd.label)
-                        }
-                    }
+            Button(L10n.k("common.action.export_output", fallback: "导出输出…")) {
+                exportTerminalOutput()
+            }
+            Divider()
+            Button {
+                outputRateLimitEnabled.toggle()
+            } label: {
+                if outputRateLimitEnabled {
+                    Label(L10n.k("app.maintenance.output_rate_limit_enabled", fallback: "限流输出：开"), systemImage: "checkmark")
+                } else {
+                    Text(L10n.k("app.maintenance.output_rate_limit_disabled", fallback: "限流输出：关"))
                 }
             }
         } label: {
-            Text(L10n.k("app.maintenance.quick.menu_title", fallback: "🦞openclaw 指令"))
+            Label(L10n.k("app.maintenance.output_menu", fallback: "输出"), systemImage: "doc.text.magnifyingglass")
         }
         .menuIndicator(.visible)
         .fixedSize()
     }
 
+    @ViewBuilder
+    private var typographyMenu: some View {
+        Menu {
+            Button(L10n.k("app.maintenance.font.decrease", fallback: "减小字号")) {
+                terminalFontSize = max(10, terminalFontSize - 1)
+            }
+            .disabled(terminalFontSize <= 10)
+            Button(L10n.k("app.maintenance.font.increase", fallback: "增大字号")) {
+                terminalFontSize = min(16, terminalFontSize + 1)
+            }
+            .disabled(terminalFontSize >= 16)
+            Button(L10n.k("app.maintenance.font.reset", fallback: "恢复默认")) {
+                terminalFontSize = 12
+            }
+        } label: {
+            Label(
+                String(format: L10n.k("app.maintenance.font.current", fallback: "字号 %.0f"), terminalFontSize),
+                systemImage: "textformat.size"
+            )
+        }
+        .menuIndicator(.visible)
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private var terminalThemeMenu: some View {
+        Menu {
+            ForEach(MaintenanceTerminalTheme.allCases) { theme in
+                Button {
+                    terminalTheme = theme
+                } label: {
+                    if theme == terminalTheme {
+                        Label(theme.title, systemImage: "checkmark")
+                    } else {
+                        Text(theme.title)
+                    }
+                }
+            }
+        } label: {
+            Label(
+                L10n.k("app.maintenance.terminal_background", fallback: "背景"),
+                systemImage: "paintpalette"
+            )
+        }
+        .menuIndicator(.visible)
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private var quickCommandMenu: some View {
+        // 仅当请求方明确指定了 engine 时才显示对应引擎的快捷指令；否则隐藏菜单。
+        switch request.engine {
+        case .openclaw:
+            Menu {
+                ForEach(openClawQuickCommandSections, id: \.section) { group in
+                    Section(group.section) {
+                        ForEach(group.items) { cmd in
+                            Button {
+                                terminalControl.sendLine(cmd.command)
+                            } label: {
+                                Text(cmd.label)
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Text(L10n.k("app.maintenance.quick.menu_title", fallback: "🦞openclaw 指令"))
+            }
+            .menuIndicator(.visible)
+            .fixedSize()
+        case .hermes:
+            Menu {
+                ForEach(hermesQuickCommandSections, id: \.section) { group in
+                    Section(group.section) {
+                        ForEach(group.items) { cmd in
+                            Button {
+                                terminalControl.sendLine(cmd.command)
+                            } label: {
+                                Text(cmd.label)
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Text(L10n.k("app.maintenance.quick.hermes.menu_title", fallback: "🪽hermes 指令"))
+            }
+            .menuIndicator(.visible)
+            .fixedSize()
+        case .none:
+            EmptyView()
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             topBar
+            searchBar
             authAssistBar
             terminalPanel
             statusBar
@@ -483,6 +856,8 @@ private struct MaintenanceTerminalWindowContent: View {
             username: request.username,
             command: request.command,
             minHeight: isModelConfigureCommand ? 420 : 280,
+            theme: terminalTheme,
+            fontSize: CGFloat(terminalFontSize),
             onOutput: { chunk in
                 handleTerminalOutput(chunk)
             },
@@ -497,10 +872,17 @@ private struct MaintenanceTerminalWindowContent: View {
 
     @ViewBuilder
     private var statusBar: some View {
-        if let st = statusText {
-            Text(st)
-                .font(.caption)
-                .foregroundStyle(exitCode == 0 ? Color.secondary : Color.red)
+        VStack(alignment: .leading, spacing: 4) {
+            if let st = statusText {
+                Text(st)
+                    .font(.caption)
+                    .foregroundStyle(exitCode == 0 ? Color.secondary : Color.red)
+            }
+            if outputRateLimitEnabled, droppedOutputBytes > 0 {
+                Text(droppedOutputText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -512,17 +894,60 @@ private struct MaintenanceTerminalWindowContent: View {
         lastOutputAt = Date()
         now = Date()
         outputBuffer = ""
+        searchMatches = []
+        selectedSearchMatchIndex = 0
+        droppedOutputBytes = 0
+        didNotifyRateLimit = false
+        outputRateWindowStartedAt = Date()
+        outputBytesInRateWindow = 0
         terminalRunID += 1
     }
 
     private func handleTerminalOutput(_ chunk: String) {
         lastOutputAt = Date()
-        outputBuffer += chunk
+        let accepted = applyOutputRateLimitIfNeeded(chunk)
+        if !accepted.isEmpty {
+            outputBuffer += accepted
+        }
         let maxChars = 300_000
         if outputBuffer.count > maxChars {
             outputBuffer.removeFirst(outputBuffer.count - maxChars)
         }
+        if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            rebuildSearchMatches()
+        }
         autoCloseIfConfigureCompleted(chunk)
+    }
+
+    private func applyOutputRateLimitIfNeeded(_ chunk: String) -> String {
+        guard outputRateLimitEnabled else { return chunk }
+        let now = Date()
+        if now.timeIntervalSince(outputRateWindowStartedAt) >= 1 {
+            outputRateWindowStartedAt = now
+            outputBytesInRateWindow = 0
+        }
+        let bytes = Array(chunk.utf8)
+        guard !bytes.isEmpty else { return "" }
+        let remaining = max(0, outputRateLimitBytesPerSecond - outputBytesInRateWindow)
+        guard remaining > 0 else {
+            registerDroppedOutput(bytes.count)
+            return ""
+        }
+        let acceptedCount = min(remaining, bytes.count)
+        outputBytesInRateWindow += acceptedCount
+        if acceptedCount < bytes.count {
+            registerDroppedOutput(bytes.count - acceptedCount)
+        }
+        if acceptedCount == bytes.count { return chunk }
+        return String(decoding: bytes.prefix(acceptedCount), as: UTF8.self)
+    }
+
+    private func registerDroppedOutput(_ droppedBytes: Int) {
+        guard droppedBytes > 0 else { return }
+        droppedOutputBytes += droppedBytes
+        guard !didNotifyRateLimit else { return }
+        didNotifyRateLimit = true
+        statusText = L10n.k("app.maintenance.output_rate_limit_notice", fallback: "输出过快，已启用限流。可在“输出”菜单关闭。")
     }
 
     private func autoCloseIfConfigureCompleted(_ chunk: String) {
@@ -530,7 +955,7 @@ private struct MaintenanceTerminalWindowContent: View {
         let normalized = stripANSIEscapeSequences(chunk).lowercased()
         guard normalized.contains("configure complete.") else { return }
         didAutoCloseOnConfigureComplete = true
-        statusText = "检测到 Configure complete.，正在关闭窗口并刷新调用方…"
+        statusText = L10n.k("views.maintenance.configure_complete_closing", fallback: "检测到 Configure complete.，正在关闭窗口并刷新调用方…")
         postCloseNotificationIfNeeded()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             dismiss()
@@ -559,6 +984,128 @@ private struct MaintenanceTerminalWindowContent: View {
             return
         }
         copyText(text, success: L10n.k("app.clawd_home_app.output_copied", fallback: "命令输出已复制。"))
+    }
+
+    private func clearTerminalOutput() {
+        outputBuffer = ""
+        searchMatches = []
+        selectedSearchMatchIndex = 0
+        droppedOutputBytes = 0
+        didNotifyRateLimit = false
+        outputRateWindowStartedAt = Date()
+        outputBytesInRateWindow = 0
+        terminalControl.clearDisplay()
+        statusText = L10n.k("app.maintenance.output_cleared", fallback: "终端输出已清空。")
+    }
+
+    private func exportTerminalOutput() {
+        let text = outputBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            statusText = L10n.k("app.clawd_home_app.no_output_to_copy", fallback: "暂无可复制的命令输出。")
+            return
+        }
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "maintenance-\(request.username)-\(timestampString()).log"
+        panel.allowedFileTypes = ["log", "txt"]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            statusText = L10n.f("app.maintenance.output_exported", fallback: "输出已导出：%@", url.lastPathComponent)
+        } catch {
+            statusText = L10n.f(
+                "app.maintenance.output_export_failed",
+                fallback: "导出失败：%@",
+                error.localizedDescription
+            )
+        }
+    }
+
+    private func cloneTerminalWindow() {
+        // 克隆窗口时继承当前命令与 engine，避免跨运行时环境漂移。
+        let payload = maintenanceWindowRegistry.makePayload(
+            username: request.username,
+            title: L10n.k("user.detail.auto.cli_maintenance_advanced", fallback: "命令行维护（高级）"),
+            command: request.command,
+            engine: request.engine
+        )
+        openWindow(id: "maintenance-terminal", value: payload)
+        statusText = L10n.k("app.maintenance.terminal_cloned", fallback: "已打开新的维护终端窗口。")
+    }
+
+    private enum SearchJumpDirection {
+        case forward
+        case backward
+    }
+
+    private func rebuildSearchMatches() {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            searchMatches = []
+            selectedSearchMatchIndex = 0
+            return
+        }
+        let nsText = sanitizedOutput as NSString
+        let previousLocation = selectedSearchMatch?.range.location
+        var ranges: [NSRange] = []
+        var scanLocation = 0
+        while scanLocation < nsText.length {
+            let searchRange = NSRange(location: scanLocation, length: nsText.length - scanLocation)
+            let found = nsText.range(of: query, options: [.caseInsensitive], range: searchRange)
+            guard found.location != NSNotFound else { break }
+            ranges.append(found)
+            let step = max(found.length, 1)
+            scanLocation = found.location + step
+        }
+        searchMatches = ranges.enumerated().map { idx, range in
+            OutputSearchMatch(id: idx, range: range, preview: searchPreview(in: nsText, at: range))
+        }
+        guard !searchMatches.isEmpty else {
+            selectedSearchMatchIndex = 0
+            return
+        }
+        if let previousLocation,
+           let nearest = searchMatches.lastIndex(where: { $0.range.location <= previousLocation })
+        {
+            selectedSearchMatchIndex = nearest
+        } else {
+            selectedSearchMatchIndex = min(selectedSearchMatchIndex, searchMatches.count - 1)
+        }
+    }
+
+    private func jumpToSearchMatch(direction: SearchJumpDirection) {
+        guard !searchMatches.isEmpty else {
+            statusText = L10n.k("app.maintenance.search.not_found", fallback: "没有匹配项。")
+            return
+        }
+        switch direction {
+        case .forward:
+            selectedSearchMatchIndex = (selectedSearchMatchIndex + 1) % searchMatches.count
+        case .backward:
+            selectedSearchMatchIndex = (selectedSearchMatchIndex - 1 + searchMatches.count) % searchMatches.count
+        }
+        statusText = String(
+            format: L10n.k("app.maintenance.search.jumped", fallback: "已跳转到匹配 %d/%d。"),
+            selectedSearchMatchIndex + 1,
+            searchMatches.count
+        )
+    }
+
+    private func searchPreview(in text: NSString, at range: NSRange) -> String {
+        let context = 36
+        let start = max(0, range.location - context)
+        let end = min(text.length, NSMaxRange(range) + context)
+        let previewRange = NSRange(location: start, length: max(0, end - start))
+        let raw = text.substring(with: previewRange)
+        return raw
+            .replacingOccurrences(of: "\n", with: " ⏎ ")
+            .replacingOccurrences(of: "\r", with: " ")
+    }
+
+    private func timestampString() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter.string(from: Date())
     }
 
     private func copyText(_ text: String, success: String) {
@@ -824,15 +1371,26 @@ private struct ClawDetailWindow: View {
     }
 
     var body: some View {
-        NavigationStack {
-            if let user {
-                UserDetailView(user: user, onDeleted: {
+        if let user {
+            if user.prefersHermesRuntime {
+                HermesDetailContainer(user: user, onDeleted: {
                     dismiss()
                     Task { @MainActor in
                         pool.removeUser(username: username)
                     }
                 })
             } else {
+                NavigationStack {
+                    UserDetailView(user: user, onDeleted: {
+                        dismiss()
+                        Task { @MainActor in
+                            pool.removeUser(username: username)
+                        }
+                    })
+                }
+            }
+        } else {
+            NavigationStack {
                 ContentUnavailableView(
                     "@\(username)",
                     systemImage: "person.slash",
@@ -844,11 +1402,17 @@ private struct ClawDetailWindow: View {
     }
 }
 
+// v2 入口：使用 ShrimpInitWizardV2 替换 UserInitWizardView
+// 保留 UserInitWizardWindow 名称避免修改 WindowGroup 注册
 private struct UserInitWizardWindow: View {
     let username: String
 
     @Environment(ShrimpPool.self) private var pool
     @Environment(\.dismiss) private var dismiss
+    // 先消费 pool.pendingInitTeams 再渲染 wizard，保证 wizard 首帧 onAppear 就能
+    // 在 hydrateInitialRolesIfNeeded() 里看到 teamDNA，避免 agents 被预填成 solo
+    // 之后再 onChange 回来就被 `agents.isEmpty` guard 挡掉（只剩主 Agent 的 bug）。
+    @State private var resolvedInitialRoles: WizardV2InitialRoles? = nil
 
     private var user: ManagedUser? {
         pool.users.first { $0.username == username }
@@ -856,10 +1420,19 @@ private struct UserInitWizardWindow: View {
 
     var body: some View {
         if let user {
-            UserInitWizardView(user: user) { sessionVisible in
-                if !sessionVisible {
+            if let resolvedInitialRoles {
+                ShrimpInitWizardV2(user: user, initialRoles: resolvedInitialRoles) {
                     dismiss()
                 }
+            } else {
+                Color.clear
+                    .task {
+                        guard resolvedInitialRoles == nil else { return }
+                        resolvedInitialRoles = WizardV2InitialRoles(
+                            teamDNA: pool.consumeInitTeam(for: username),
+                            agents: WizardV2InitialRoles.solo.agents
+                        )
+                    }
             }
         } else {
             ContentUnavailableView(

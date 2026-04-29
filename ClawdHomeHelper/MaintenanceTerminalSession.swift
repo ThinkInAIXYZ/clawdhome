@@ -67,12 +67,20 @@ final class MaintenanceTerminalSession {
         let lcAll = inheritedEnv["LC_ALL"] ?? lang
         let lcCType = inheritedEnv["LC_CTYPE"] ?? lang
         let argv0 = command.first ?? ""
+        let normalizedArgv0 = (argv0 as NSString).lastPathComponent.lowercased()
         let argvRest = Array(command.dropFirst())
-        let effectivePath = nodePath
+        let isHermesCommand = (normalizedArgv0 == "hermes")
+        let isHermesShellCommand = (normalizedArgv0 == "hermes-shell")
+        let isZshCommand = (normalizedArgv0 == "zsh" || normalizedArgv0 == "hermes-shell")
+
         let resolvedExecutable: String
-        switch argv0 {
+        switch normalizedArgv0 {
         case "openclaw":
             resolvedExecutable = "\(home)/.npm-global/bin/openclaw"
+        case "hermes":
+            resolvedExecutable = HermesInstaller.hermesExecutable(for: username)
+        case "hermes-shell":
+            resolvedExecutable = "/bin/zsh"
         case "zsh":
             resolvedExecutable = "/bin/zsh"
         case "bash":
@@ -83,17 +91,39 @@ final class MaintenanceTerminalSession {
             resolvedExecutable = argv0
         }
 
-        let bootstrapScript = "stty cols 120 rows 40 >/dev/null 2>&1 || true; exec \"$0\" \"$@\""
+        // hermes 命令：login shell (-l) 的初始化脚本可能通过 path_helper 覆盖 PATH，
+        // 在 bootstrap 脚本里强制重新 export，确保 ~/.local/bin 始终可见。
+        let bootstrapScript: String
+        if isHermesCommand || isHermesShellCommand {
+            let hermesPATH = HermesInstaller.buildPath(for: username)
+                .replacingOccurrences(of: "'", with: "'\"'\"'")
+            bootstrapScript = "export PATH='\(hermesPATH)'; stty cols 120 rows 40 >/dev/null 2>&1 || true; exec \"$0\" \"$@\""
+        } else {
+            bootstrapScript = "stty cols 120 rows 40 >/dev/null 2>&1 || true; exec \"$0\" \"$@\""
+        }
 
-        var envArgs = UserEnvContract
-            .orderedRuntimeEnvironment(username: username, nodePath: effectivePath)
-            .map { "\($0.0)=\($0.1)" }
+        // Hermes / OpenClaw 使用完全独立的环境变量（PATH、HOME 等互不混用）
+        let runtimeEnv: [(String, String)]
+        if isHermesCommand || isHermesShellCommand {
+            runtimeEnv = HermesInstaller.orderedRuntimeEnvironment(username: username)
+        } else {
+            runtimeEnv = UserEnvContract.orderedRuntimeEnvironment(username: username, nodePath: nodePath)
+        }
+        var envArgs = runtimeEnv.map { "\($0.0)=\($0.1)" }
         envArgs.append(contentsOf: [
             "LANG=\(lang)",
             "LC_ALL=\(lcAll)",
             "LC_CTYPE=\(lcCType)",
             "TERM=xterm-256color",
         ])
+
+        let executableArgs: [String]
+        if isZshCommand {
+            // 关闭 zsh 的 PROMPT_SP，避免终端中出现额外的 "%" 行尾标记。
+            executableArgs = ["-o", "NO_PROMPT_SP"] + argvRest
+        } else {
+            executableArgs = argvRest
+        }
 
         let commandArgs = [
             "-q", "/dev/null",
@@ -102,7 +132,7 @@ final class MaintenanceTerminalSession {
         ] + envArgs + [
             "/bin/sh", "-lc", bootstrapScript,
             resolvedExecutable,
-        ] + argvRest
+        ] + executableArgs
 
         process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
         process.arguments = commandArgs
@@ -118,6 +148,9 @@ final class MaintenanceTerminalSession {
             let chunk = fh.availableData
             guard let self else { return }
             if chunk.isEmpty { return }
+            // 在 Helper 侧立即响应 CPR 查询（\033[6n），避免 TUI 应用因
+            // XPC 轮询延迟（>250ms）等待超时后退化到无 CPR 模式。
+            self.respondToCPRIfNeeded(chunk)
             self.lock.lock()
             self.outputBuffer.append(chunk)
             self.lock.unlock()
@@ -204,5 +237,25 @@ final class MaintenanceTerminalSession {
         if process.isRunning {
             process.terminate()
         }
+    }
+
+    // MARK: - CPR 即时响应
+
+    /// 扫描输出 chunk 中的 CPR 查询（\033[6n），立即通过 stdin 回写当前终端尺寸。
+    /// TUI 应用（如 hermes）通常在启动时发出 CPR 并设置极短超时（~50ms）；
+    /// 若依赖 app 侧 SwiftTerm 经 XPC 轮询（>250ms）响应，会直接超时并退化。
+    private func respondToCPRIfNeeded(_ data: Data) {
+        // 快路径：无 ESC 字节时跳过
+        guard data.contains(0x1B) else { return }
+        guard let text = String(data: data, encoding: .utf8),
+              text.contains("\u{1B}[6n") else { return }
+        lock.lock()
+        let size = lastResize ?? (cols: 120, rows: 40)
+        lock.unlock()
+        // 回报光标在终端左上角（1;1），让 TUI 应用知晓 CPR 可用并自行定位。
+        // 注：script -q 不输出 banner，终端启动时光标确实在 (1,1)。
+        _ = size
+        let cpr = "\u{1B}[1;1R"
+        try? stdinPipe.fileHandleForWriting.write(contentsOf: Data(cpr.utf8))
     }
 }

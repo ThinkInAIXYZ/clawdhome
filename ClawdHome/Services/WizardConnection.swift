@@ -4,7 +4,7 @@
 import Foundation
 
 /// 向导专用 XPC 连接封装。
-/// 由 UserInitWizardView 在开始初始化时创建，完成/失败/取消后释放（wizardConn = nil）。
+/// 由初始化向导在开始初始化时创建，完成/失败/取消后释放（wizardConn = nil）。
 /// 独立于 HelperClient 的 controlConnection，长阻塞操作不会影响仪表盘或其他向导。
 final class WizardConnection {
     private var connection: NSXPCConnection?

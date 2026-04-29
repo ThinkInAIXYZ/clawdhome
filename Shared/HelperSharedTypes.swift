@@ -23,6 +23,146 @@ enum XPCTimeoutPolicy {
     }
 }
 
+enum HermesFeaturePolicy {
+    static let supportsMultiAgent = false
+    static let nextVersionHint = "Hermes 团队召唤将在下一版支持"
+
+    static var shouldShowMultiAgentEntrypoints: Bool {
+        supportsMultiAgent
+    }
+
+    static func canSelectHermesForTeamSummon(hasTeamDNA: Bool) -> Bool {
+        !hasTeamDNA || supportsMultiAgent
+    }
+}
+
+enum HermesProfileRuntimeSummary {
+    static func badgeText(
+        profileIDs: [String],
+        runningProfileIDs: Set<String>,
+        mainRuntimeRunning: Bool,
+        profilesLoaded: Bool
+    ) -> String {
+        guard profilesLoaded else {
+            return "Hermes · 加载中…"
+        }
+        let running = runningCount(
+            profileIDs: profileIDs,
+            runningProfileIDs: runningProfileIDs,
+            mainRuntimeRunning: mainRuntimeRunning
+        )
+        return "Hermes · \(running)/\(profileIDs.count) 运行中"
+    }
+
+    static func runningCount(
+        profileIDs: [String],
+        runningProfileIDs: Set<String>,
+        mainRuntimeRunning: Bool
+    ) -> Int {
+        profileIDs.reduce(0) { count, profileID in
+            if runningProfileIDs.contains(profileID) {
+                return count + 1
+            }
+            if profileID == "main" && mainRuntimeRunning {
+                return count + 1
+            }
+            return count
+        }
+    }
+}
+
+enum ManagedHomeRuntime: String, Codable, Sendable {
+    case openclaw
+    case hermes
+
+    var relativeHomePath: String {
+        switch self {
+        case .openclaw:
+            return ".openclaw"
+        case .hermes:
+            return ".hermes"
+        }
+    }
+}
+
+enum UserFilesScope: Codable, Sendable, Equatable {
+    case home
+    case runtime(ManagedHomeRuntime)
+
+    var rootRelativePath: String {
+        switch self {
+        case .home:
+            return ""
+        case .runtime(let runtime):
+            return runtime.relativeHomePath
+        }
+    }
+
+    var runtime: ManagedHomeRuntime? {
+        switch self {
+        case .home:
+            return nil
+        case .runtime(let runtime):
+            return runtime
+        }
+    }
+
+    var shortcutTitle: String? {
+        switch self {
+        case .home:
+            return nil
+        case .runtime(.openclaw):
+            return "OpenClaw 数据"
+        case .runtime(.hermes):
+            return "Hermes 数据"
+        }
+    }
+}
+
+enum UserFilesRuntimePolicy {
+    static func shouldShowRuntimeHomeShortcut(scope: UserFilesScope) -> Bool {
+        scope.runtime != nil
+    }
+
+    static func shouldHideEntryFromRootHomeList(name: String, isDirectory: Bool, scope: UserFilesScope, currentPath: String) -> Bool {
+        guard scope == .home, currentPath.isEmpty, isDirectory else {
+            return false
+        }
+        return name == ManagedHomeRuntime.openclaw.relativeHomePath || name == ManagedHomeRuntime.hermes.relativeHomePath
+    }
+}
+
+enum MaintenanceTerminalCommandPolicy {
+    static func commandForRuntime(command: [String], runtime: ManagedHomeRuntime?) -> [String] {
+        guard runtime == .hermes,
+              let executable = command.first,
+              isShellExecutable(executable) else {
+            return command
+        }
+        return ["hermes-shell"] + command.dropFirst()
+    }
+
+    private static func isShellExecutable(_ executable: String) -> Bool {
+        let normalized = (executable as NSString).lastPathComponent.lowercased()
+        return normalized == "zsh" || normalized == "bash" || normalized == "sh"
+    }
+}
+
+enum WizardDraftPersistencePolicy {
+    static func shouldUseOpenClawWorkspace(selectedEngineRaw: String?) -> Bool {
+        selectedEngineRaw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "openclaw"
+    }
+}
+
+enum AccidentalOpenClawDraftDetector {
+    static func shouldDelete(topLevelEntries: [String], hasOpenClawBinary: Bool) -> Bool {
+        guard !hasOpenClawBinary else { return false }
+        let normalized = Set(topLevelEntries.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
+        if normalized.isEmpty { return true }
+        return normalized == ["workspace"]
+    }
+}
+
 enum GatewayStartFailureClassifier {
     static func classify(_ message: String) -> GatewayStartFailureType {
         let lowered = message.lowercased()
@@ -110,6 +250,15 @@ enum ManagedUserFilter {
     static func shouldConsiderUsersDirectoryEntry(_ name: String) -> Bool {
         !name.hasPrefix(".") && !usersDirectorySkipEntries.contains(name)
     }
+}
+
+// MARK: - 运行时配置（~/.clawdhome/runtime.json）
+
+/// ClawdHome 写入的 shrimp 运行时声明，是识别引擎的唯一锚点。
+/// 无此文件时回退到 openclaw 文件检测（向下兼容历史安装）。
+struct ShrimpRuntimeConfig: Codable, Sendable {
+    /// "hermes" 或 "openclaw"
+    var runtime: String
 }
 
 struct XcodeEnvStatus: Codable, Sendable {

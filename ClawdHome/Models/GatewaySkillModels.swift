@@ -33,14 +33,14 @@ struct GatewaySkillStatus: Codable, Identifiable {
         source == "openclaw-bundled"
     }
 
-    /// 来源中文标签
+    /// 来源标签
     var sourceLabel: String {
         switch source {
-        case "openclaw-bundled": return "内置"
-        case "openclaw-managed": return "已安装"
-        case "openclaw-workspace": return "工作区"
-        case "openclaw-extra": return "扩展"
-        case "openclaw-plugin": return "插件"
+        case "openclaw-bundled": return L10n.k("model.skill.source.bundled", fallback: "内置")
+        case "openclaw-managed": return L10n.k("model.skill.source.managed", fallback: "已安装")
+        case "openclaw-workspace": return L10n.k("model.skill.source.workspace", fallback: "工作区")
+        case "openclaw-extra": return L10n.k("model.skill.source.extra", fallback: "扩展")
+        case "openclaw-plugin": return L10n.k("model.skill.source.plugin", fallback: "插件")
         default: return source
         }
     }

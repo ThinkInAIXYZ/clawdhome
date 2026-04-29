@@ -1,6 +1,7 @@
 // ClawdHome/Views/RoleMarketView.swift
 // 角色中心：本地 HTML 市场 + JS Bridge + 唤醒向导
 
+import Network
 import SwiftUI
 import WebKit
 
@@ -19,7 +20,16 @@ struct AgentDNA: Codable, Identifiable {
     let fileIdentity: String?   // 身份设定 (IDENTITY)
     let fileUser: String?       // 我的画像 (USER)
     // OS 用户名建议值（由模板预填充，用户可修改）
-    let suggestedUsername: String?
+    let suggestedAgentID: String?
+}
+
+/// 团队 DNA：由 roles.html 通过 adoptTeam bridge 消息发送过来
+struct TeamDNA: Codable, Identifiable {
+    let id: String
+    let teamName: String
+    let teamEmoji: String
+    let suggestedInstanceID: String
+    let members: [AgentDNA]
 }
 
 // MARK: - Shimmer 骨架屏动画修饰器
@@ -130,7 +140,10 @@ private struct RoleMarketSkeletonView: View {
 
 final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var onAdoptAgent: ((AgentDNA) -> Void)?
+    var onAdoptTeam: ((TeamDNA) -> Void)?
     var onPageLoaded: (() -> Void)?
+    /// Stored by the cache so didFailProvisionalNavigation can fall back to local HTML
+    var localFallbackURL: URL?
 
     // MARK: JS Bridge
     func userContentController(
@@ -138,19 +151,51 @@ final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigatio
         didReceive message: WKScriptMessage
     ) {
         guard message.name == "ClawdHomeBridge" else { return }
+        guard let body = message.body as? [String: Any] else {
+            appLog("[Bridge] Failed to parse message: \(message.body)", level: .warn)
+            return
+        }
 
-        guard let body = message.body as? [String: Any],
-              let data = try? JSONSerialization.data(withJSONObject: body),
+        // 区分团队领养 vs 单角色领养
+        if let msgType = body["type"] as? String, msgType == "adoptTeam" {
+            guard let teamId = body["teamId"] as? String,
+                  let teamName = body["teamName"] as? String,
+                  let teamEmoji = body["teamEmoji"] as? String,
+                  let membersRaw = body["members"] as? [[String: Any]]
+            else {
+                appLog("[Bridge] Failed to parse TeamDNA: \(body)", level: .warn)
+                return
+            }
+            let teamID = (body["suggestedInstanceID"] as? String)
+                ?? (body["suggestedTeamID"] as? String)
+                ?? teamName
+            let members: [AgentDNA] = membersRaw.compactMap { dict in
+                guard let data = try? JSONSerialization.data(withJSONObject: dict),
+                      let dna = try? JSONDecoder().decode(AgentDNA.self, from: data)
+                else { return nil }
+                return dna
+            }
+            let teamDNA = TeamDNA(
+                id: teamId,
+                teamName: teamName,
+                teamEmoji: teamEmoji,
+                suggestedInstanceID: teamID,
+                members: members
+            )
+            appLog("[Bridge] Received TeamDNA: \(teamName) (\(members.count) members)")
+            DispatchQueue.main.async { self.onAdoptTeam?(teamDNA) }
+            return
+        }
+
+        // 普通单角色 DNA
+        guard let data = try? JSONSerialization.data(withJSONObject: body),
               let dna = try? JSONDecoder().decode(AgentDNA.self, from: data)
         else {
             appLog("[Bridge] Failed to parse DNA: \(message.body)", level: .warn)
             return
         }
-
         appLog("[Bridge] Received DNA: \(dna.name) (\(dna.id))")
-        DispatchQueue.main.async {
-            self.onAdoptAgent?(dna)
-        }
+        DispatchQueue.main.async { self.onAdoptAgent?(dna) }
     }
 
     // MARK: WKNavigationDelegate — 加载完成通知
@@ -164,6 +209,15 @@ final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigatio
         // 失败时同样隐藏骨架屏，避免永久卡住
         DispatchQueue.main.async {
             self.onPageLoaded?()
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: Error) {
+        appLog("[RoleMarketCoordinator] Remote load failed: \(error.localizedDescription), falling back to local", level: .warn)
+        if let url = localFallbackURL ?? Bundle.main.url(forResource: "roles", withExtension: "html") {
+            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        } else {
+            DispatchQueue.main.async { self.onPageLoaded?() }
         }
     }
 }
@@ -193,10 +247,13 @@ private func javaScriptStringLiteral(_ value: String) -> String {
     return String(encoded.dropFirst().dropLast())
 }
 
-private func makeRoleMarketConfiguration(coordinator: RoleMarketCoordinator, localeIdentifier: String) -> WKWebViewConfiguration {
+func makeRoleMarketConfiguration(coordinator: RoleMarketCoordinator, localeIdentifier: String) -> WKWebViewConfiguration {
     let config = WKWebViewConfiguration()
     let localeLiteral = javaScriptStringLiteral(localeIdentifier)
-    let bootstrap = "window.__clawdhomeLocale = \(localeLiteral);"
+    // Inject locale + app version at document start
+    let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+    let versionLiteral = javaScriptStringLiteral(appVersion)
+    let bootstrap = "window.__clawdhomeLocale = \(localeLiteral); window.__clawdhomeAppVersion = \(versionLiteral);"
     let script = WKUserScript(source: bootstrap, injectionTime: .atDocumentStart, forMainFrameOnly: true)
     config.userContentController.addUserScript(script)
     config.userContentController.add(coordinator, name: "ClawdHomeBridge")
@@ -234,16 +291,45 @@ final class RoleMarketWebViewCache {
         wv.navigationDelegate = c
         wv.setValue(false, forKey: "drawsBackground")  // 透明背景，防止白屏闪烁
 
-        // 加载本地 HTML（未来改线上只需替换为 wv.load(URLRequest(url:...))）
+        // Check network synchronously via NWPathMonitor snapshot
+        let monitor = NWPathMonitor()
+        let queue = DispatchQueue(label: "ai.clawdhome.rolemarketpath")
+        var networkAvailable = false
+        let sema = DispatchSemaphore(value: 0)
+        monitor.pathUpdateHandler = { path in
+            networkAvailable = path.status == .satisfied
+            sema.signal()
+        }
+        monitor.start(queue: queue)
+        sema.wait()
+        monitor.cancel()
+
+        loadRoleMarket(into: wv, networkAvailable: networkAvailable, coordinator: c)
+
+        self.coordinator = c
+        self.webView = wv
+        appLog("[RoleMarketWebViewCache] WebView preloaded (network: \(networkAvailable))")
+    }
+
+    @MainActor
+    func loadRoleMarket(into wv: WKWebView, networkAvailable: Bool, coordinator: RoleMarketCoordinator) {
+        if networkAvailable, let remoteURL = URL(string: "https://platform.clawdhome.ai/roles") {
+            coordinator.localFallbackURL = Bundle.main.url(forResource: "roles", withExtension: "html")
+            wv.load(URLRequest(url: remoteURL))
+            appLog("[RoleMarketWebViewCache] Loading remote URL")
+        } else {
+            loadLocalRoles(into: wv)
+            appLog("[RoleMarketWebViewCache] No network, loading local fallback")
+        }
+    }
+
+    @MainActor
+    func loadLocalRoles(into wv: WKWebView) {
         if let url = Bundle.main.url(forResource: "roles", withExtension: "html") {
             wv.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else {
             appLog("[RoleMarketWebViewCache] roles.html not found in Bundle!", level: .error)
         }
-
-        self.coordinator = c
-        self.webView = wv
-        appLog("[RoleMarketWebViewCache] WebView preloaded")
     }
 }
 
@@ -293,6 +379,7 @@ struct RoleMarketWebView: NSViewRepresentable {
 
 struct RoleMarketView: View {
     @State private var adoptedDNA: AgentDNA? = nil
+    @State private var adoptedTeam: TeamDNA? = nil
     @State private var awakeningError: String? = nil
     /// 缓存已加载完毕时直接为 true，第二次进入跳过骨架屏，无闪烁
     @State private var isPageLoaded: Bool = {
@@ -337,6 +424,9 @@ struct RoleMarketView: View {
         .onAppear {
             coordinator.onAdoptAgent = { dna in
                 self.adoptedDNA = dna
+            }
+            coordinator.onAdoptTeam = { teamDNA in
+                self.adoptedTeam = teamDNA
             }
             coordinator.onPageLoaded = {
                 withAnimation {
@@ -391,7 +481,7 @@ struct RoleMarketView: View {
                     let toolsPath = "\(workspaceDir)/TOOLS.md"
                     let toolsExists = (try? await helperClient.readFile(username: normalizedUsername, relativePath: toolsPath)) != nil
                     if !toolsExists {
-                        try? await helperClient.writeFile(username: normalizedUsername, relativePath: toolsPath, data: UserInitWizardView.defaultToolsContent.data(using: .utf8) ?? Data())
+                        try? await helperClient.writeFile(username: normalizedUsername, relativePath: toolsPath, data: defaultToolsContent.data(using: .utf8) ?? Data())
                     }
 
                     // workspace 已创建，触发 setupVault 在 workspace 中建立 shared/ 符号链接
@@ -405,6 +495,13 @@ struct RoleMarketView: View {
                 }
             )
             .frame(minWidth: 460, minHeight: 560)
+        }
+        .sheet(item: $adoptedTeam) { teamDNA in
+            AdoptTeamSheet(
+                teamDNA: teamDNA,
+                existingUsers: pool.users.map { AwakeningExistingUser(username: $0.username, fullName: $0.fullName) }
+            ) { adoptedTeam = nil }
+            .frame(minWidth: 460, minHeight: 420)
         }
         .overlay(alignment: .bottom) {
             if let err = awakeningError {
@@ -422,16 +519,16 @@ struct RoleMarketView: View {
 
     private func validateAwakeningInput(username: String, fullName: String) throws {
         guard !username.isEmpty else {
-            throw AwakeningValidationError(message: "系统用户名不能为空")
+            throw AwakeningValidationError(message: L10n.k("views.role_market.error_username_empty", fallback: "系统用户名不能为空"))
         }
         guard !fullName.isEmpty else {
-            throw AwakeningValidationError(message: "显示名不能为空")
+            throw AwakeningValidationError(message: L10n.k("views.role_market.error_display_name_empty", fallback: "显示名不能为空"))
         }
         if pool.users.contains(where: { $0.username.caseInsensitiveCompare(username) == .orderedSame }) {
-            throw AwakeningValidationError(message: "用户名 @\(username) 已存在，请换一个再试")
+            throw AwakeningValidationError(message: L10n.f("views.role_market.error_username_exists", fallback: "用户名 @%@ 已存在，请换一个再试", username))
         }
         if pool.users.contains(where: { $0.fullName.caseInsensitiveCompare(fullName) == .orderedSame }) {
-            throw AwakeningValidationError(message: "显示名“\(fullName)”已被使用，请换一个名字")
+            throw AwakeningValidationError(message: L10n.f("views.role_market.error_display_name_taken", fallback: "显示名「%@」已被使用，请换一个名字", fullName))
         }
     }
 
@@ -443,7 +540,7 @@ struct RoleMarketView: View {
             || lowercased.contains("/users/\(username.lowercased())")
         if hasDirectoryConflict {
             return AwakeningValidationError(
-                message: "创建失败：检测到用户名或显示名冲突（@\(username) / \(fullName)）。请修改后重试。"
+                message: L10n.f("views.role_market.error_create_conflict", fallback: "创建失败：检测到用户名或显示名冲突（@%@ / %@）。请修改后重试。", username, fullName)
             )
         }
         return error

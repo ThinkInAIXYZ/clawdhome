@@ -5,6 +5,7 @@ import SwiftUI
 
 struct MemoryTabView: View {
     let username: String
+    var agentId: String? = nil
     @Environment(HelperClient.self) private var helperClient
 
     @State private var files: [FileEntry] = []

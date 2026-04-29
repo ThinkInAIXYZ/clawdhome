@@ -5,6 +5,24 @@ import SwiftUI
 
 let modelConfigMaintenanceContext = "wizard-model-config"
 
+// MARK: - 团队 Agent 激活状态
+
+enum TeamAgentActivationStatus: Equatable {
+    case waiting          // 尚未开始
+    case activating       // 正在写入
+    case done             // 已就位
+    case failed(String)   // 失败，附带错误
+}
+
+enum WizardL10nKeys {
+    static var pairingDetectedHint: String {
+        L10n.k("wizard.channel.pairing_detected_continue_hint", fallback: "%@ pairing detected. Review channel settings, then click Done to continue.")
+    }
+    static var currentChannelName: String {
+        L10n.k("views.wizard.channel_name.current", fallback: "Current Channel")
+    }
+}
+
 struct ModelConfigTerminalCloseState: Identifiable {
     let id = UUID()
     let exitCode: Int32?
@@ -73,12 +91,12 @@ enum BaseEnvProgressPhase: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .xcodeCheck: return "检查 Xcode 开发环境"
-        case .homebrewRepair: return "修复 Homebrew 权限"
-        case .installNode: return "安装 Node.js"
-        case .setupNpmEnv: return "配置 npm 目录"
-        case .setNpmRegistry: return "设置 npm 安装源"
-        case .installOpenclaw: return "安装 openclaw"
+        case .xcodeCheck: return L10n.k("wizard.base_env.xcode_check", fallback: "检查 Xcode 开发环境")
+        case .homebrewRepair: return L10n.k("wizard.base_env.homebrew_repair", fallback: "修复 Homebrew 权限")
+        case .installNode: return L10n.k("wizard.base_env.install_node", fallback: "安装 Node.js")
+        case .setupNpmEnv: return L10n.k("wizard.base_env.setup_npm_env", fallback: "配置 npm 目录")
+        case .setNpmRegistry: return L10n.k("wizard.base_env.set_npm_registry", fallback: "设置 npm 安装源")
+        case .installOpenclaw: return L10n.k("wizard.base_env.install_openclaw", fallback: "安装 openclaw")
         }
     }
 
@@ -87,139 +105,19 @@ enum BaseEnvProgressPhase: Int, CaseIterable {
     }
 }
 
-enum MinimaxModel: String, CaseIterable {
-    case m27 = "minimax/MiniMax-M2.7"
-    case m27Highspeed = "minimax/MiniMax-M2.7-highspeed"
-    case m25 = "minimax/MiniMax-M2.5"
-    case m25Highspeed = "minimax/MiniMax-M2.5-highspeed"
-    case vl01 = "minimax/MiniMax-VL-01"
-    case m2 = "minimax/MiniMax-M2"
-    case m21 = "minimax/MiniMax-M2.1"
-
-    var providerModelID: String {
-        rawValue.replacingOccurrences(of: "minimax/", with: "")
-    }
-
-    var providerName: String {
-        switch self {
-        case .m27: return "MiniMax M2.7"
-        case .m27Highspeed: return "MiniMax M2.7 Highspeed"
-        case .m25: return "MiniMax M2.5"
-        case .m25Highspeed: return "MiniMax M2.5 Highspeed"
-        case .vl01: return "MiniMax VL 01"
-        case .m2: return "MiniMax M2"
-        case .m21: return "MiniMax M2.1"
-        }
-    }
-
-    var reasoning: Bool {
-        switch self {
-        case .vl01: return false
-        default: return true
-        }
-    }
-
-    var inputTypes: [String] {
-        switch self {
-        case .vl01: return ["text", "image"]
-        default: return ["text"]
-        }
-    }
-
-    var providerModelConfig: [String: Any] {
-        [
-            "id": providerModelID,
-            "name": providerName,
-            "reasoning": reasoning,
-            "input": inputTypes,
-            "cost": [
-                "input": 0.3,
-                "output": 1.2,
-                "cacheRead": 0.03,
-                "cacheWrite": 0.12,
-            ],
-            "contextWindow": 200000,
-            "maxTokens": 8192,
-        ]
-    }
-}
-
-enum QiniuModel: String, CaseIterable {
-    case deepseekV32 = "qiniu/deepseek-v3.2-251201"
-    case glm5 = "qiniu/z-ai/glm-5"
-    case kimiK25 = "qiniu/moonshotai/kimi-k2.5"
-    case minimaxM25 = "qiniu/minimax/minimax-m2.5"
-
-    var alias: String {
-        switch self {
-        case .deepseekV32: return "DeepSeek V3.2"
-        case .glm5: return "GLM 5"
-        case .kimiK25: return "Kimi K2.5"
-        case .minimaxM25: return "Minimax M2.5"
-        }
-    }
-
-    var providerModelID: String {
-        rawValue.replacingOccurrences(of: "qiniu/", with: "")
-    }
-
-    var providerModelConfig: [String: Any] {
-        [
-            "id": providerModelID,
-            "name": alias,
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": contextWindow,
-            "maxTokens": 8192,
-            "compat": [
-                "supportsStore": false,
-                "supportsDeveloperRole": false,
-                "supportsReasoningEffort": false,
-            ],
-        ]
-    }
-
-    private var contextWindow: Int {
-        switch self {
-        case .kimiK25: return 256000
-        default: return 128000
-        }
-    }
-}
-
-enum ZAIModel: String, CaseIterable {
-    case glm5 = "zai/glm-5"
-    case glm4_7 = "zai/glm-4.7"
-    case glm5_1 = "zai/glm-5.1"
-
-    var alias: String {
-        switch self {
-        case .glm5: return "GLM-5"
-        case .glm4_7: return "GLM-4.7"
-        case .glm5_1: return "GLM-5.1"
-        }
-    }
-
-    var providerModelID: String {
-        rawValue.replacingOccurrences(of: "zai/", with: "")
-    }
-
-    var providerModelConfig: [String: Any] {
-        [
-            "id": providerModelID,
-            "name": alias,
-            "reasoning": true,
-            "input": ["text"],
-            "cost": ["input": 0.0, "output": 0.0, "cacheRead": 0.0, "cacheWrite": 0.0],
-            "contextWindow": 204800,
-            "maxTokens": 131072,
-        ]
-    }
-}
+// MinimaxModel / QiniuModel / ZAIModel 已统一到 ModelsStatus.swift 的 builtInModelGroups
+// 使用 builtInModels(for: "minimax") / builtInModels(for: "qiniu") / builtInModels(for: "zai") 查询
 
 enum WizardChannelType: String {
     case feishu
     case weixin
+
+    var localizedName: String {
+        switch self {
+        case .feishu: return L10n.k("views.wizard.channel_name.feishu", fallback: "Feishu")
+        case .weixin: return L10n.k("views.wizard.channel_name.weixin", fallback: "WeChat")
+        }
+    }
 }
 
 enum OpenclawVersionPreset: String {
@@ -247,8 +145,8 @@ enum WizardProvider: String, CaseIterable, Identifiable {
         case .kimiCoding: return "Kimi Code"
         case .minimax:    return "MiniMax"
         case .qiniu:      return "Qiniu AI"
-        case .zai:        return "智谱 Z.AI"
-        case .custom:     return "自定义"
+        case .zai:        return L10n.k("wizard.provider.zai.name", fallback: "智谱 Z.AI")
+        case .custom:     return L10n.k("wizard.provider.custom.name", fallback: "自定义")
         }
     }
 
@@ -257,8 +155,8 @@ enum WizardProvider: String, CaseIterable, Identifiable {
         case .kimiCoding: return "Kimi for Coding"
         case .minimax:    return L10n.k("wizard.provider.minimax.subtitle", fallback: "MiniMax M2.5 系列")
         case .qiniu:      return "DeepSeek / GLM / Kimi / Minimax"
-        case .zai:        return "GLM系列模型"
-        case .custom:     return "OpenAI / Anthropic 兼容"
+        case .zai:        return L10n.k("wizard.provider.zai.subtitle", fallback: "GLM系列模型")
+        case .custom:     return L10n.k("wizard.provider.custom.subtitle", fallback: "OpenAI / Anthropic 兼容")
         }
     }
 
@@ -277,8 +175,8 @@ enum WizardProvider: String, CaseIterable, Identifiable {
         case .kimiCoding: return "Kimi Code API Key"
         case .minimax:    return "MiniMax API Key"
         case .qiniu:      return "Qiniu API Key"
-        case .zai:        return "智谱 API Key"
-        case .custom:     return "自定义 API Key"
+        case .zai:        return L10n.k("wizard.provider.zai.api_key_label", fallback: "智谱 API Key")
+        case .custom:     return L10n.k("wizard.provider.custom.api_key_label", fallback: "自定义 API Key")
         }
     }
 
@@ -288,7 +186,7 @@ enum WizardProvider: String, CaseIterable, Identifiable {
         case .minimax:    return L10n.k("wizard.provider.minimax.api_key.placeholder", fallback: "粘贴 MiniMax API Key")
         case .qiniu:      return "sk-..."
         case .zai:        return "sk-..."
-        case .custom:     return "留空则使用 CUSTOM_API_KEY"
+        case .custom:     return L10n.k("wizard.provider.custom.api_key_placeholder", fallback: "留空则使用 CUSTOM_API_KEY")
         }
     }
 
@@ -306,9 +204,9 @@ enum WizardProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return L10n.k("wizard.provider.kimi.console", fallback: "Kimi Code 控制台")
         case .minimax:    return L10n.k("wizard.provider.minimax.console", fallback: "MiniMax 控制台")
-        case .qiniu:      return "七牛 API Key"
-        case .zai:        return "获取 API Key"
-        case .custom:     return "API Key 参考"
+        case .qiniu:      return L10n.k("wizard.provider.qiniu.console", fallback: "七牛 API Key")
+        case .zai:        return L10n.k("wizard.provider.zai.console", fallback: "获取 API Key")
+        case .custom:     return L10n.k("wizard.provider.custom.console", fallback: "API Key 参考")
         }
     }
 
@@ -328,11 +226,11 @@ enum WizardProvider: String, CaseIterable, Identifiable {
     var promotionTitle: String? {
         switch self {
         case .minimax:
-            return "🎁 领取 9 折专属优惠"
+            return L10n.k("wizard.provider.minimax.promotion", fallback: "🎁 领取 9 折专属优惠")
         case .qiniu:
-            return "免费领取 1000 万 Token"
+            return L10n.k("wizard.provider.qiniu.promotion", fallback: "免费领取 1000 万 Token")
         case .zai:
-            return "95折优惠订阅"
+            return L10n.k("wizard.provider.zai.promotion", fallback: "95折优惠订阅")
         default:
             return nil
         }

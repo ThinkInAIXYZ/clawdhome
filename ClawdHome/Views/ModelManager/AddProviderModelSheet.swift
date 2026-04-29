@@ -32,27 +32,8 @@ struct AddProviderModelSheet: View {
     private var isCustomGroup: Bool { selectedGroupId == "custom" }
 
     private var providerGroups: [ModelGroup] {
+        // 模型 (id, label) 统一来自 builtInModelGroups，仅追加"自定义"空组
         var groups = builtInModelGroups
-        if !groups.contains(where: { $0.id == "kimi-coding" }) {
-            groups.append(ModelGroup(id: "kimi-coding", provider: "Kimi Code", models: [
-                ModelEntry(id: "kimi-coding/k2p5", label: "Kimi K2.5"),
-            ]))
-        }
-        if !groups.contains(where: { $0.id == "qiniu" }) {
-            groups.append(ModelGroup(id: "qiniu", provider: "Qiniu AI", models: [
-                ModelEntry(id: "qiniu/deepseek-v3.2-251201", label: "DeepSeek V3.2"),
-                ModelEntry(id: "qiniu/z-ai/glm-5", label: "GLM 5"),
-                ModelEntry(id: "qiniu/moonshotai/kimi-k2.5", label: "Kimi K2.5"),
-                ModelEntry(id: "qiniu/minimax/minimax-m2.5", label: "Minimax M2.5"),
-            ]))
-        }
-        if !groups.contains(where: { $0.id == "zai" }) {
-            groups.append(ModelGroup(id: "zai", provider: "智谱 Z.AI", models: [
-                ModelEntry(id: "zai/glm-5.1", label: "GLM-5.1"),
-                ModelEntry(id: "zai/glm-5", label: "GLM-5"),
-                ModelEntry(id: "zai/glm-4.7", label: "GLM-4.7"),
-            ]))
-        }
         if !groups.contains(where: { $0.id == "custom" }) {
             groups.append(ModelGroup(id: "custom", provider: "自定义", models: []))
         }
@@ -165,7 +146,7 @@ struct AddProviderModelSheet: View {
                 if hasDuplicateAlias {
                     HStack {
                         Spacer().frame(width: 72)
-                        Text("别名已存在，请使用唯一别名")
+                        Text(L10n.k("add_provider_model.alias_exists", fallback: "别名已存在，请使用唯一别名"))
                             .font(.caption2)
                             .foregroundStyle(.red)
                     }
@@ -331,10 +312,10 @@ struct AddProviderModelSheet: View {
     private var customProviderForm: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("兼容类型")
+                Text(L10n.k("add_provider_model.compat_type", fallback: "兼容类型"))
                     .font(.caption)
                     .foregroundStyle(.primary)
-                Picker("兼容类型", selection: $customAPIType) {
+                Picker(L10n.k("add_provider_model.compat_type", fallback: "兼容类型"), selection: $customAPIType) {
                     Text("OpenAI").tag("openai-completions")
                     Text("Anthropic").tag("anthropic-messages")
                 }
@@ -351,7 +332,7 @@ struct AddProviderModelSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Provider ID（可选，默认 custom）")
+                Text(L10n.k("add_provider_model.provider_id_label", fallback: "Provider ID（可选，默认 custom）"))
                     .font(.caption)
                     .foregroundStyle(.primary)
                 TextField("custom", text: $customProviderId)
@@ -360,15 +341,15 @@ struct AddProviderModelSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("模型 ID")
+                Text(L10n.k("add_provider_model.model_id_label", fallback: "模型 ID"))
                     .font(.caption)
                     .foregroundStyle(.primary)
-                TextField("例如 gpt-4.1 / claude-3-7-sonnet", text: $customModelId)
+                TextField(L10n.k("add_provider_model.model_id_placeholder", fallback: "例如 gpt-4.1 / claude-3-7-sonnet"), text: $customModelId)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
             }
 
-            Text("主模型：\(customPrimaryModelId.isEmpty ? "-" : customPrimaryModelId)")
+            Text(L10n.f("add_provider_model.primary_model_preview", fallback: "主模型：%@", customPrimaryModelId.isEmpty ? "-" : customPrimaryModelId))
                 .font(.system(.caption2, design: .monospaced))
                 .foregroundStyle(.secondary)
 
@@ -410,7 +391,7 @@ struct AddProviderModelSheet: View {
                 .font(.caption2).foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 6) {
-                TextField("测试内容（留空默认：请发送你好）", text: $testContent)
+                TextField(L10n.k("add_provider_model.test_content_placeholder", fallback: "测试内容（留空默认：请发送你好）"), text: $testContent)
                     .textFieldStyle(.roundedBorder)
                     .font(.caption)
                 HStack(spacing: 10) {

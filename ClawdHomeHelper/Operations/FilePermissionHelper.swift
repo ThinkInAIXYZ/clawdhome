@@ -25,6 +25,12 @@ enum FilePermissionHelper {
         try run("/usr/sbin/chown", args: ["\(owner):\(group)", path])
     }
 
+    /// 递归将目录归属给 owner:group
+    @discardableResult
+    static func chownRecursive(_ path: String, owner: String, group: String) throws -> String {
+        try run("/usr/sbin/chown", args: ["-R", "\(owner):\(group)", path])
+    }
+
     // MARK: - 权限（chmod）
 
     /// 设置文件权限（数字模式，如 "700"、"644"）

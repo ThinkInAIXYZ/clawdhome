@@ -22,6 +22,7 @@ final class GatewaySkillsStore {
     private var client: GatewayClient?
     private var eventTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
+    private var shrimpName: String = ""
 
     func isBusy(skill: GatewaySkillStatus) -> Bool {
         pendingOps[skill.skillKey] != nil
@@ -29,15 +30,17 @@ final class GatewaySkillsStore {
 
     // MARK: - 生命周期
 
-    func start(client: GatewayClient) async {
+    func start(client: GatewayClient, shrimpName: String) async {
         self.client = client
+        self.shrimpName = shrimpName
         await refresh()
         startEventSubscription(client: client)
         startPolling()
     }
 
     /// 幂等启动：仅在 client 尚未设置时执行完整启动；已有 client 时仅 refresh
-    func startIfNeeded(client: GatewayClient) async {
+    func startIfNeeded(client: GatewayClient, shrimpName: String) async {
+        self.shrimpName = shrimpName
         if self.client != nil {
             self.client = client
             if eventTask == nil { startEventSubscription(client: client) }
@@ -45,7 +48,7 @@ final class GatewaySkillsStore {
             await refresh()
             return
         }
-        await start(client: client)
+        await start(client: client, shrimpName: shrimpName)
     }
 
     func stop() {
@@ -70,20 +73,20 @@ final class GatewaySkillsStore {
             skills = report.skills.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             error = nil
         } catch {
-            appLog("GatewaySkillsStore refresh error: \(error.localizedDescription)", level: .error)
+            appLog("GatewaySkillsStore refresh error [@\(shrimpName)]: \(error.localizedDescription)", level: .error)
             self.error = error.localizedDescription
         }
     }
 
     func install(skill: GatewaySkillStatus, option: GatewaySkillInstallOption) async {
-        await withBusy(skill.skillKey, label: "安装中") {
-            self.statusMessage = "正在安装 \(skill.name)…"
+        await withBusy(skill.skillKey, label: L10n.k("service.skills_store.installing", fallback: "安装中")) {
+            self.statusMessage = L10n.f("service.skills_store.installing_name", fallback: "正在安装 %@…", skill.name)
             do {
                 guard let client = self.client else { throw GatewayClientError.notConnected }
                 let result = try await client.skillsInstall(name: skill.name, installId: option.id, timeoutMs: 300_000)
                 let installFailureMessage = result.ok ? nil : Self.formatInstallFailureMessage(result)
                 let baseMessage = Self.trimmed(result.message)
-                self.statusMessage = baseMessage?.isEmpty == false ? baseMessage : (result.ok ? "安装命令已完成，正在验证结果…" : "安装命令返回异常，正在验证结果…")
+                self.statusMessage = baseMessage?.isEmpty == false ? baseMessage : (result.ok ? L10n.k("service.skills_store.install_verifying", fallback: "安装命令已完成，正在验证结果…") : L10n.k("service.skills_store.install_abnormal_verifying", fallback: "安装命令返回异常，正在验证结果…"))
 
                 let verification = await self.waitForInstallCompletion(
                     skillKey: skill.skillKey,
@@ -98,7 +101,7 @@ final class GatewaySkillsStore {
                         if let msg = baseMessage, !msg.isEmpty {
                             self.statusMessage = msg
                         } else {
-                            self.statusMessage = "安装成功"
+                            self.statusMessage = L10n.k("service.skills_store.install_success", fallback: "安装成功")
                         }
                     }
                 case .stillMissing(let bins):
@@ -107,9 +110,9 @@ final class GatewaySkillsStore {
                     }
                     let missing = bins.joined(separator: ", ")
                     if missing.isEmpty {
-                        self.statusMessage = "安装命令已结束，但状态未及时刷新，请稍后重试刷新。"
+                        self.statusMessage = L10n.k("service.skills_store.install_done_refresh_later", fallback: "安装命令已结束，但状态未及时刷新，请稍后重试刷新。")
                     } else {
-                        self.statusMessage = "安装命令已结束，但仍缺少依赖: \(missing)"
+                        self.statusMessage = L10n.f("service.skills_store.install_done_missing_deps", fallback: "安装命令已结束，但仍缺少依赖: %@", missing)
                     }
                 }
             } catch {
@@ -120,10 +123,10 @@ final class GatewaySkillsStore {
     }
 
     func remove(skillKey: String) async {
-        await withBusy(skillKey, label: "卸载中") {
+        await withBusy(skillKey, label: L10n.k("service.skills_store.removing", fallback: "卸载中")) {
             do {
                 try await self.client?.skillsRemove(skillKey: skillKey)
-                self.statusMessage = "已卸载"
+                self.statusMessage = L10n.k("service.skills_store.removed", fallback: "已卸载")
             } catch {
                 self.statusMessage = error.localizedDescription
             }
@@ -132,10 +135,10 @@ final class GatewaySkillsStore {
     }
 
     func update(skillKey: String) async {
-        await withBusy(skillKey, label: "更新中") {
+        await withBusy(skillKey, label: L10n.k("service.skills_store.updating", fallback: "更新中")) {
             do {
                 _ = try await self.client?.skillsUpdate(skillKey: skillKey)
-                self.statusMessage = "已更新"
+                self.statusMessage = L10n.k("service.skills_store.updated", fallback: "已更新")
             } catch {
                 self.statusMessage = error.localizedDescription
             }
@@ -144,10 +147,10 @@ final class GatewaySkillsStore {
     }
 
     func toggleEnabled(skillKey: String, enabled: Bool) async {
-        await withBusy(skillKey, label: enabled ? "启用中" : "禁用中") {
+        await withBusy(skillKey, label: enabled ? L10n.k("service.skills_store.enabling", fallback: "启用中") : L10n.k("service.skills_store.disabling", fallback: "禁用中")) {
             do {
                 _ = try await self.client?.skillsUpdate(skillKey: skillKey, enabled: enabled)
-                self.statusMessage = enabled ? "已启用" : "已禁用"
+                self.statusMessage = enabled ? L10n.k("service.skills_store.enabled", fallback: "已启用") : L10n.k("service.skills_store.disabled", fallback: "已禁用")
             } catch {
                 self.statusMessage = error.localizedDescription
             }
@@ -156,10 +159,10 @@ final class GatewaySkillsStore {
     }
 
     func setApiKey(skillKey: String, value: String) async {
-        await withBusy(skillKey, label: "保存中") {
+        await withBusy(skillKey, label: L10n.k("service.skills_store.saving", fallback: "保存中")) {
             do {
                 _ = try await self.client?.skillsUpdate(skillKey: skillKey, apiKey: value)
-                self.statusMessage = "API Key 已保存"
+                self.statusMessage = L10n.k("service.skills_store.api_key_saved", fallback: "API Key 已保存")
             } catch {
                 self.statusMessage = error.localizedDescription
             }
@@ -168,10 +171,10 @@ final class GatewaySkillsStore {
     }
 
     func setEnvVar(skillKey: String, envKey: String, value: String) async {
-        await withBusy(skillKey, label: "保存中") {
+        await withBusy(skillKey, label: L10n.k("service.skills_store.saving", fallback: "保存中")) {
             do {
                 _ = try await self.client?.skillsUpdate(skillKey: skillKey, env: [envKey: value])
-                self.statusMessage = "\(envKey) 已保存"
+                self.statusMessage = L10n.f("service.skills_store.env_saved", fallback: "%@ 已保存", envKey)
             } catch {
                 self.statusMessage = error.localizedDescription
             }
@@ -224,7 +227,7 @@ final class GatewaySkillsStore {
         let waitSeconds = max(1, timeoutSeconds)
         let expected = Set(expectedBins)
         for second in 0..<waitSeconds {
-            pendingOps[skillKey] = second == 0 ? "安装中" : "安装中 \(second)s"
+            pendingOps[skillKey] = second == 0 ? L10n.k("service.skills_store.installing", fallback: "安装中") : L10n.f("service.skills_store.installing_elapsed", fallback: "安装中 %ds", second)
             await refresh()
 
             if let current = skills.first(where: { $0.skillKey == skillKey }) {
@@ -266,9 +269,9 @@ final class GatewaySkillsStore {
             segments.append(stdoutLine)
         }
         if segments.isEmpty {
-            return "安装失败，网关未返回可用错误信息。"
+            return L10n.k("service.skills_store.install_failed_no_info", fallback: "安装失败，网关未返回可用错误信息。")
         }
-        return "安装失败：\(segments.joined(separator: " | "))"
+        return L10n.f("service.skills_store.install_failed_detail", fallback: "安装失败：%@", segments.joined(separator: " | "))
     }
 
     private static func formatRecoveredInstallMessage(
@@ -279,7 +282,7 @@ final class GatewaySkillsStore {
             ?? lastNonEmptyLine(result.stdout)
             ?? trimmed(result.message)
             ?? fallback
-        return "安装已完成（安装器返回异常）：\(suffix)"
+        return L10n.f("service.skills_store.install_recovered", fallback: "安装已完成（安装器返回异常）：%@", suffix)
     }
 
     private static func messageFromSkillsEvent(_ event: GatewayEvent) -> String? {

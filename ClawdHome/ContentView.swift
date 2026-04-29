@@ -24,6 +24,17 @@ struct ContentView: View {
     @Environment(AppLockStore.self) private var lockStore
     @State private var daemonInstaller = DaemonInstaller()
     @State private var navSelection: NavDestination? = .clawPool
+    // 0 = 跟随系统, 1 = 浅色, 2 = 深色
+    @AppStorage("colorSchemePreference") private var colorSchemePreference: Int = 0
+
+    private var preferredColorScheme: ColorScheme? {
+        switch colorSchemePreference {
+        case 1: return .light
+        case 2: return .dark
+        default: return nil
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if let err = pool.loadError {
@@ -38,7 +49,7 @@ struct ContentView: View {
                     Section(L10n.k("auto.content_view.daily", fallback: "日常")) {
                         Label(L10n.k("auto.content_view.dashboard", fallback: "仪表盘"), systemImage: "gauge.with.dots.needle.33percent")
                             .tag(NavDestination.dashboard)
-                        Label { Text(L10n.k("auto.content_view.claw_pool", fallback: "虾塘")) } icon: { Text("🦞") }
+                        Label { Text(L10n.k("auto.content_view.claw_pool", fallback: "虾塘")) } icon: { OpenClawLogoMark().frame(width: 16, height: 16) }
                             .tag(NavDestination.clawPool)
                         Label(L10n.k("auto.content_view.vault_files", fallback: "文件共享"), systemImage: "folder.badge.person.crop")
                             .tag(NavDestination.vaultFiles)
@@ -91,6 +102,16 @@ struct ContentView: View {
                                     )
                                 )
                                 .clipShape(Capsule())
+                            Spacer()
+                            Button {
+                                colorSchemePreference = (colorSchemePreference + 1) % 3
+                            } label: {
+                                Image(systemName: colorSchemePreference == 1 ? "sun.max.fill" : colorSchemePreference == 2 ? "moon.fill" : "circle.lefthalf.filled")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help(colorSchemePreference == 1 ? "浅色模式" : colorSchemePreference == 2 ? "深色模式" : "跟随系统")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
@@ -130,11 +151,7 @@ struct ContentView: View {
                     NetworkPolicyView()
                         .environment(helperClient)
                 case .models:
-                    #if DEBUG
                     ModelManagerView()
-                    #else
-                    ComingSoonView(title: L10n.k("auto.content_view.models", fallback: "模型"), icon: "cpu.fill")
-                    #endif
                 case .aiLab:
                     AILabView()
                 case .roleMarket:
@@ -178,6 +195,7 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.15), value: lockStore.isLocked)
+        .preferredColorScheme(preferredColorScheme)
         .onAppear {
             let visible = (navSelection == .dashboard || navSelection == nil)
             pool.setDashboardVisible(visible)
