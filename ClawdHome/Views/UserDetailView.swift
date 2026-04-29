@@ -146,6 +146,8 @@ struct UserDetailView: View {
     @State private var hasOpenedStandaloneInitWindow = false
     @State private var detailAutoRefreshActive = false
     @StateObject private var embeddedOverviewConsoleStore = EmbeddedGatewayConsoleStore()
+    @State private var promptMemoryCurrentInput = ""
+    @State private var promptMemoryRequestedQuery: String?
     private var shouldPinWindowTopmost: Bool {
         !user.isAdmin
         && user.clawType == .macosUser
@@ -485,6 +487,20 @@ struct UserDetailView: View {
             Divider()
             tabContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .overlay {
+            if shouldEmbedOverviewConsole, embeddedOverviewConsoleURL != nil {
+                PromptMemoryOverlay(
+                    username: user.username,
+                    currentInput: promptMemoryCurrentInput,
+                    requestedQuery: promptMemoryRequestedQuery,
+                    onConsumeRequest: { promptMemoryRequestedQuery = nil },
+                    onInsert: { text, mode in
+                        embeddedOverviewConsoleStore.insertPromptText(text, mode: mode)
+                    }
+                )
+                .zIndex(4000)
+            }
         }
         .task { await refreshStatus() }
         .task { await loadShrimpBindings() }
@@ -896,6 +912,15 @@ struct UserDetailView: View {
         if shouldEmbedOverviewConsole,
            let url = embeddedOverviewConsoleURL {
             EmbeddedGatewayConsoleView(url: url, store: embeddedOverviewConsoleStore)
+                .onAppear {
+                    embeddedOverviewConsoleStore.onPromptMemoryRequest = { text in
+                        promptMemoryCurrentInput = text
+                        promptMemoryRequestedQuery = text
+                    }
+                    embeddedOverviewConsoleStore.onPromptInputChanged = { text in
+                        promptMemoryCurrentInput = text
+                    }
+                }
         } else if shouldEmbedOverviewConsole, isEffectivelyRunning {
             ContentUnavailableView {
                 Label(L10n.k("user.detail.auto.waiting_token", fallback: "等待 Token…"), systemImage: "network")
