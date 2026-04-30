@@ -60,6 +60,7 @@ struct ClawdHomeApp: App {
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                     await MainActor.run {
                         RoleMarketWebViewCache.shared.preloadIfNeeded()
+                        WikiHostWebViewCache.shared.preloadIfNeeded()
                     }
                 }
         }

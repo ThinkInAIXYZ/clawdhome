@@ -1,0 +1,109 @@
+{
+  "app": {
+    "title": "LLM Wiki",
+    "subtitle": "Build and maintain your personal knowledge base with LLMs"
+  },
+  "nav": {
+    "wiki": "Wiki",
+    "sources": "Sources",
+    "search": "Search",
+    "graph": "Graph",
+    "lint": "Lint",
+    "review": "Review",
+    "settings": "Settings",
+    "switchProject": "Switch Project"
+  },
+  "welcome": {
+    "newProject": "New Project",
+    "openProject": "Open Project",
+    "recentProjects": "Recent Projects"
+  },
+  "project": {
+    "createTitle": "Create New Wiki Project",
+    "name": "Project Name",
+    "namePlaceholder": "my-research-wiki",
+    "parentDir": "Parent Directory",
+    "template": "Template",
+    "cancel": "Cancel",
+    "create": "Create",
+    "creating": "Creating..."
+  },
+  "sources": {
+    "title": "Raw Sources",
+    "import": "Import",
+    "importing": "Importing...",
+    "noSources": "No sources yet",
+    "importHint": "Import documents to start building your wiki",
+    "importFiles": "Import Files",
+    "ingest": "Ingest",
+    "delete": "Delete source and related wiki pages",
+    "deleteConfirm": "Delete \"{{name}}\" and its related wiki pages?\n\nThis will:\n- Delete the source file\n- Delete wiki pages generated from this source\n- Update index.md",
+    "sourceCount": "{{count}} source",
+    "sourceCount_plural": "{{count}} sources"
+  },
+  "chat": {
+    "placeholder": "Ask about your wiki...",
+    "ingestPlaceholder": "Discuss the source or ask follow-up questions...",
+    "saveToWiki": "Save to Wiki",
+    "saving": "Saving...",
+    "saved": "Saved!",
+    "writeToWiki": "Write to Wiki",
+    "emptyHint": "Ask a question or start an ingest to begin.",
+    "sources": "Sources"
+  },
+  "search": {
+    "title": "Search",
+    "placeholder": "Search wiki pages...",
+    "noResults": "No results found",
+    "startSearching": "Type to search wiki pages"
+  },
+  "lint": {
+    "title": "Lint",
+    "runLint": "Run Lint",
+    "running": "Running...",
+    "semantic": "Semantic (LLM)",
+    "allClear": "All clear — no issues found",
+    "orphan": "Orphan Page",
+    "brokenLink": "Broken Link",
+    "noOutlinks": "No Outbound Links",
+    "contradiction": "Contradiction",
+    "stale": "Stale Content",
+    "missingPage": "Missing Page",
+    "suggestion": "Suggestion"
+  },
+  "review": {
+    "title": "Review",
+    "clearResolved": "Clear resolved",
+    "allClear": "All clear — nothing to review"
+  },
+  "settings": {
+    "title": "Settings",
+    "llmProvider": "LLM Provider",
+    "provider": "Provider",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "Enter your {{provider}} API key",
+    "model": "Model",
+    "customModel": "Or type a custom model name",
+    "ollamaUrl": "Ollama URL",
+    "customEndpoint": "API Endpoint (OpenAI-compatible)",
+    "customEndpointHint": "Any OpenAI-compatible API endpoint (e.g., LiteLLM, vLLM, LocalAI, Azure OpenAI)",
+    "customApiKey": "Enter API key (if required)",
+    "modelPlaceholder": "Enter model name",
+    "save": "Save Settings",
+    "saved": "Saved!",
+    "language": "Language",
+    "languageHint": "Interface language (wiki content follows source material language)"
+  },
+  "preview": {
+    "selectFile": "Select a file to preview",
+    "notAvailable": "Preview not available for this file type"
+  },
+  "activity": {
+    "processing": "Processing: {{title}}",
+    "done": "Done: {{title}}",
+    "clearCompleted": "Clear completed"
+  },
+  "fileTree": {
+    "noProject": "No project open"
+  }
+}

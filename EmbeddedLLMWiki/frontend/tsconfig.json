@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@tauri-apps/api/core": ["./src/platform/core.ts"],
+      "@tauri-apps/plugin-dialog": ["./src/platform/dialog.ts"],
+      "@tauri-apps/plugin-store": ["./src/platform/store.ts"]
+    }
+  },
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

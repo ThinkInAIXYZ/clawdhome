@@ -1,0 +1,34 @@
+[package]
+name = "clawdhome-llmwiki-runtime"
+version = "0.3.1"
+description = "Embedded ClawdHome LLM Wiki runtime"
+authors = []
+edition = "2021"
+
+[[bin]]
+name = "llm-wiki-runtime"
+path = "src/main.rs"
+
+[dependencies]
+tauri = { version = "2", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["clock"] }
+pdf-extract = "0.10.0"
+tiny_http = "0.12"
+zip = "2"
+calamine = "0.34.0"
+docx-rs = "0.4.20"
+lancedb = "0.27.2"
+# tokio provided by tauri runtime for async commands
+arrow-array = "57"
+arrow-schema = "57"
+futures = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
