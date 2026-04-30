@@ -54,6 +54,15 @@ function generateId(): string {
   return `ingest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function normalizeSourcePath(sourcePath: string): string {
+  return normalizePath(sourcePath)
+}
+
+function findExistingTask(sourcePath: string): IngestTask | undefined {
+  const normalizedSourcePath = normalizeSourcePath(sourcePath)
+  return queue.find((task) => normalizeSourcePath(task.sourcePath) === normalizedSourcePath)
+}
+
 /**
  * Add a file to the ingest queue.
  */
@@ -66,15 +75,15 @@ export async function enqueueIngest(
   const normalizedSourcePath = normalizePath(sourcePath)
   currentProjectPath = pp
 
-  const existingPending = queue.find((task) =>
-    task.sourcePath === normalizedSourcePath && task.status === "pending"
-  )
-  if (existingPending) {
-    existingPending.folderContext = folderContext || existingPending.folderContext
-    existingPending.addedAt = Date.now()
+  const existingTask = findExistingTask(normalizedSourcePath)
+  if (existingTask) {
+    existingTask.folderContext = folderContext || existingTask.folderContext
+    if (existingTask.status === "pending") {
+      existingTask.addedAt = Date.now()
+    }
     await saveQueue(pp)
     processNext(pp)
-    return existingPending.id
+    return existingTask.id
   }
 
   const task: IngestTask = {
@@ -108,9 +117,20 @@ export async function enqueueBatch(
   const ids: string[] = []
 
   for (const file of files) {
+    const normalizedSourcePath = normalizePath(file.sourcePath)
+    const existingTask = findExistingTask(normalizedSourcePath)
+    if (existingTask) {
+      existingTask.folderContext = file.folderContext || existingTask.folderContext
+      if (existingTask.status === "pending") {
+        existingTask.addedAt = Date.now()
+      }
+      ids.push(existingTask.id)
+      continue
+    }
+
     const task: IngestTask = {
       id: generateId(),
-      sourcePath: file.sourcePath,
+      sourcePath: normalizedSourcePath,
       folderContext: file.folderContext,
       status: "pending",
       addedAt: Date.now(),
