@@ -32,7 +32,11 @@ function cachePath(projectPath: string): string {
 async function loadCache(projectPath: string): Promise<CacheData> {
   try {
     const raw = await readFile(cachePath(projectPath))
-    return JSON.parse(raw) as CacheData
+    const parsed = JSON.parse(raw) as Partial<CacheData>
+    if (!parsed || typeof parsed !== "object" || !parsed.entries || typeof parsed.entries !== "object") {
+      return { entries: {} }
+    }
+    return { entries: parsed.entries }
   } catch {
     return { entries: {} }
   }

@@ -185,7 +185,7 @@ enum LlmWikiManager {
             ("\(projectRoot)/wiki/log.md", logContent()),
             ("\(projectRoot)/wiki/overview.md", overviewContent()),
             ("\(projectRoot)/.llm-wiki/conversations.json", "[]\n"),
-            ("\(projectRoot)/.llm-wiki/ingest-cache.json", "{}\n"),
+            ("\(projectRoot)/.llm-wiki/ingest-cache.json", "{\n  \"entries\": {}\n}\n"),
             ("\(projectRoot)/.llm-wiki/ingest-queue.json", "[]\n"),
             ("\(projectRoot)/.llm-wiki/review.json", "{}\n"),
         ]
