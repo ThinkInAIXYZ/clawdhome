@@ -398,22 +398,9 @@ pub fn normalize_ingest_source_path_input(
         return Err(format!("sourcePath is not a file: {}", candidate.display()));
     }
 
-    let canonical_candidate = candidate.canonicalize().map_err(|error| {
-        format!(
-            "Failed to resolve sourcePath '{}': {}",
-            candidate.display(),
-            error
-        )
-    })?;
-    let canonical_sources_root = sources_root.canonicalize().map_err(|error| {
-        format!(
-            "Failed to resolve project sources root '{}': {}",
-            sources_root.display(),
-            error
-        )
-    })?;
-
-    if !canonical_candidate.starts_with(&canonical_sources_root) {
+    let lexical_candidate = normalize_path_lexically(&candidate);
+    let lexical_sources_root = normalize_path_lexically(&sources_root);
+    if !lexical_candidate.starts_with(&lexical_sources_root) {
         return Err(format!(
             "sourcePath must be inside project raw/sources: {}",
             candidate.display()
@@ -421,6 +408,22 @@ pub fn normalize_ingest_source_path_input(
     }
 
     Ok(candidate.to_string_lossy().to_string())
+}
+
+fn normalize_path_lexically(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            std::path::Component::RootDir => normalized.push(component.as_os_str()),
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::Normal(value) => normalized.push(value),
+        }
+    }
+    normalized
 }
 
 async fn query_knowledge_base_internal(
@@ -2517,5 +2520,34 @@ mod tests {
         .expect_err("document lookup should be blocked");
 
         assert_eq!(error.status, 404);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ingest_source_path_accepts_symlinked_shrimp_source_entry() {
+        let unique = format!(
+            "clawdhome-llmwiki-ingest-symlink-{}",
+            std::process::id()
+        );
+        let root = std::env::temp_dir().join(unique);
+        let project = root.join("project");
+        let external_notes = root.join("vaults").join("shrimp").join("llmwiki-notes");
+        let source_link = project.join("raw/sources/shrimps/shrimp");
+        let source_file = source_link.join("note.md");
+
+        fs::create_dir_all(project.join("wiki")).expect("create wiki dir");
+        fs::create_dir_all(project.join("raw/sources/shrimps")).expect("create sources dir");
+        fs::create_dir_all(&external_notes).expect("create external notes dir");
+        fs::write(external_notes.join("note.md"), "# Note\n").expect("write note");
+        std::os::unix::fs::symlink(&external_notes, &source_link).expect("create source symlink");
+
+        let normalized = normalize_ingest_source_path_input(
+            project.to_string_lossy().as_ref(),
+            source_file.to_string_lossy().as_ref(),
+        )
+        .expect("symlinked source entry should be accepted");
+
+        assert_eq!(normalized, source_file.to_string_lossy());
+        let _ = fs::remove_dir_all(root);
     }
 }
