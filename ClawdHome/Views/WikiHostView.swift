@@ -487,6 +487,7 @@ private struct WikiEmbeddedWebView: NSViewRepresentable {
 struct WikiHostView: View {
     let onOpenWikiSupport: () -> Void
 
+    @Environment(HelperClient.self) private var helperClient
     @State private var loadState: WikiHostLoadState = .preparing
     @State private var refreshToken = UUID()
     @State private var latestDiagnostic = "No diagnostics yet."
@@ -599,11 +600,11 @@ struct WikiHostView: View {
 
     private func prepareWiki() async {
         do {
-            guard let resourceURL = Bundle.main.url(
+            guard Bundle.main.url(
                 forResource: "index",
                 withExtension: "html",
                 subdirectory: LLMWikiPaths.frontendResourceDirectoryName
-            ) else {
+            ) != nil else {
                 loadState = .blocked("Embedded Wiki frontend assets are missing from the app bundle.")
                 return
             }
@@ -614,9 +615,15 @@ struct WikiHostView: View {
                 "\(LLMWikiPaths.projectRoot)/raw/sources",
                 LLMWikiPaths.shrimpsSourcesRoot,
             ]
-            for path in requiredPaths where !FileManager.default.fileExists(atPath: path) {
-                loadState = .blocked("Shared Wiki project is incomplete at \(path). Repair it from Notes before reopening Wiki.")
-                return
+            if let missingPath = requiredPaths.first(where: { !FileManager.default.fileExists(atPath: $0) }) {
+                appLog("[WikiHostView] shared project incomplete at \(missingPath); attempting helper repair")
+                if helperClient.isConnected {
+                    try await helperClient.repairLlmWikiProject()
+                }
+                if let stillMissingPath = requiredPaths.first(where: { !FileManager.default.fileExists(atPath: $0) }) {
+                    loadState = .blocked("Shared Wiki project is incomplete at \(stillMissingPath). Repair it from Notes before reopening Wiki.")
+                    return
+                }
             }
 
             try LLMWikiAppStateStore.shared.loadStore(named: "app-state.json")

@@ -38,8 +38,9 @@ final class LLMWikiRuntimeManager {
 
     func ensureRunning() async throws {
         let hasTrackedProcess = process?.isRunning == true
-        let hasReachableRuntime = await canReachClipServerStatus()
-        if !hasTrackedProcess && !hasReachableRuntime {
+        let hasHealthySocket = await canReachKnowledgeBaseSocket()
+        if !hasTrackedProcess && !hasHealthySocket {
+            clearStaleRuntimeSockets()
             try startProcess()
         }
         try await waitUntilHealthy()
@@ -158,6 +159,7 @@ final class LLMWikiRuntimeManager {
         }
 
         if process?.isRunning == true { return }
+        clearStaleRuntimeSockets()
 
         let proc = Process()
         proc.executableURL = executableURL
@@ -204,6 +206,11 @@ final class LLMWikiRuntimeManager {
         )
     }
 
+    private func canReachKnowledgeBaseSocket() async -> Bool {
+        guard let health = try? await kbClient.health() else { return false }
+        return health.ok
+    }
+
     private func canReachClipServerStatus() async -> Bool {
         guard let url = URL(string: "http://127.0.0.1:19827/status") else { return false }
         var request = URLRequest(url: url)
@@ -214,6 +221,13 @@ final class LLMWikiRuntimeManager {
             return (200..<300).contains(http.statusCode)
         } catch {
             return false
+        }
+    }
+
+    private func clearStaleRuntimeSockets() {
+        let fileManager = FileManager.default
+        for path in [LLMWikiPaths.socketPath, LLMWikiPaths.heartbeatSocketPath] where fileManager.fileExists(atPath: path) {
+            try? fileManager.removeItem(atPath: path)
         }
     }
 

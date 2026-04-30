@@ -35,6 +35,7 @@ enum LlmWikiManager {
         for managed in DashboardCollector.fetchManagedUsers() {
             try setupLlmWikiNotes(username: managed.username)
             try repairMapping(username: managed.username)
+            try installBundledSkill(username: managed.username)
         }
     }
 
@@ -157,6 +158,8 @@ enum LlmWikiManager {
         let runtimeOwner = resolvePrimaryAdminUser()
         let directories = [
             projectRoot,
+            "\(projectRoot)/.llm-wiki",
+            "\(projectRoot)/.llm-wiki/chats",
             "\(projectRoot)/wiki",
             "\(projectRoot)/wiki/entities",
             "\(projectRoot)/wiki/concepts",
@@ -181,6 +184,10 @@ enum LlmWikiManager {
             ("\(projectRoot)/wiki/index.md", indexContent()),
             ("\(projectRoot)/wiki/log.md", logContent()),
             ("\(projectRoot)/wiki/overview.md", overviewContent()),
+            ("\(projectRoot)/.llm-wiki/conversations.json", "[]\n"),
+            ("\(projectRoot)/.llm-wiki/ingest-cache.json", "{}\n"),
+            ("\(projectRoot)/.llm-wiki/ingest-queue.json", "[]\n"),
+            ("\(projectRoot)/.llm-wiki/review.json", "{}\n"),
         ]
         for (path, content) in files {
             try writeIfMissing(path: path, content: content)

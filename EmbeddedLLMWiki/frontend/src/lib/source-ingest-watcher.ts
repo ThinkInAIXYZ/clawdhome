@@ -59,6 +59,13 @@ async function scheduleDebouncedIngest(
     }
     if (!llmConfigured()) {
       console.warn(`[Auto Ingest Watcher] Skip ${normalizedSourcePath} (${reason}): LLM not configured`)
+      await scheduleDebouncedIngest(
+        normalizedProjectPath,
+        normalizedSourcePath,
+        Math.max(delay, 5000),
+        reason.includes("llm_config_pending") ? reason : `${reason}:llm_config_pending`,
+        fileFingerprint,
+      )
       return
     }
 
