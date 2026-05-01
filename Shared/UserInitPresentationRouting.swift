@@ -10,10 +10,13 @@ func resolveUserInitPresentation(
     versionChecked: Bool,
     hasInitStep: Bool,
     hasPendingInitWizard: Bool,
+    hasInstalledOpenClawHint: Bool,
+    isGatewayOperationalHint: Bool,
     isAdmin: Bool,
     isMacOSUser: Bool
 ) -> UserInitPresentationRoute {
-    if !versionChecked && !hasInitStep {
+    let hasEntryHint = hasInstalledOpenClawHint || isGatewayOperationalHint
+    if !versionChecked && !hasInitStep && !hasPendingInitWizard && !hasEntryHint && !isAdmin && isMacOSUser {
         return .loading
     }
 

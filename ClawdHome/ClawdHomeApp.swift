@@ -229,7 +229,8 @@ final class MaintenanceWindowRegistry {
         username: String,
         title: String,
         kind: MaintenanceToolWindowKind,
-        scope: UserFilesScope = .home
+        scope: UserFilesScope = .home,
+        initialRelativePath: String? = nil
     ) -> String {
         let next = (nextIndexByUser[username] ?? 0) + 1
         nextIndexByUser[username] = next
@@ -239,6 +240,7 @@ final class MaintenanceWindowRegistry {
             title: title,
             kind: kind,
             scope: scope,
+            initialRelativePath: initialRelativePath,
             index: next
         )
         return req.payload
@@ -316,6 +318,7 @@ struct MaintenanceToolWindowRequest: Codable {
     let title: String
     let kind: MaintenanceToolWindowKind
     let scope: UserFilesScope
+    let initialRelativePath: String?
     let index: Int
 
     var payload: String {
@@ -329,6 +332,7 @@ struct MaintenanceToolWindowRequest: Codable {
         title: String,
         kind: MaintenanceToolWindowKind,
         scope: UserFilesScope = .home,
+        initialRelativePath: String? = nil,
         index: Int
     ) {
         self.token = token
@@ -336,6 +340,7 @@ struct MaintenanceToolWindowRequest: Codable {
         self.title = title
         self.kind = kind
         self.scope = scope
+        self.initialRelativePath = initialRelativePath
         self.index = index
     }
 
@@ -435,7 +440,12 @@ private struct MaintenanceFilesWindow: View {
            request.kind == .files,
            let user = pool.users.first(where: { $0.username == request.username }) {
             NavigationStack {
-                UserFilesView(users: [user], preselectedUser: user, scope: request.scope)
+                UserFilesView(
+                    users: [user],
+                    preselectedUser: user,
+                    scope: request.scope,
+                    initialRelativePath: request.initialRelativePath
+                )
             }
             .navigationTitle(request.title)
         } else {
@@ -598,21 +608,104 @@ private struct MaintenanceTerminalWindowContent: View {
                 .disabled(!isRunning)
             Button(L10n.k("common.action.rerun", fallback: "重跑")) { startRun() }
                 .keyboardShortcut("r", modifiers: .command)
-            Button(L10n.k("common.action.clone_terminal", fallback: "复制终端")) { cloneTerminalWindow() }
-            Button(L10n.k("common.action.copy_output", fallback: "复制输出")) { copyTerminalOutput() }
-                .keyboardShortcut("c", modifiers: [.command, .shift])
-                .disabled(outputBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Button(L10n.k("common.action.clear_screen", fallback: "清屏")) { clearTerminalOutput() }
-                .keyboardShortcut("k", modifiers: .command)
-                .disabled(outputBuffer.isEmpty)
 
             Spacer(minLength: 0)
 
-            outputMenu
-            typographyMenu
-            terminalThemeMenu
+            actionsMenu
+            settingsMenu
             quickCommandMenu
         }
+    }
+
+    @ViewBuilder
+    private var actionsMenu: some View {
+        Menu {
+            Button(L10n.k("common.action.clone_terminal", fallback: "复制终端")) {
+                cloneTerminalWindow()
+            }
+            Button(L10n.k("common.action.copy_output", fallback: "复制输出")) {
+                copyTerminalOutput()
+            }
+            .keyboardShortcut("c", modifiers: [.command, .shift])
+            .disabled(outputBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button(L10n.k("common.action.clear_screen", fallback: "清屏")) {
+                clearTerminalOutput()
+            }
+            .keyboardShortcut("k", modifiers: .command)
+            .disabled(outputBuffer.isEmpty)
+
+            Divider()
+
+            Button(L10n.k("common.action.export_output", fallback: "导出输出…")) {
+                exportTerminalOutput()
+            }
+            Button {
+                outputRateLimitEnabled.toggle()
+            } label: {
+                if outputRateLimitEnabled {
+                    Label(L10n.k("app.maintenance.output_rate_limit_enabled", fallback: "限流输出：开"), systemImage: "checkmark")
+                } else {
+                    Text(L10n.k("app.maintenance.output_rate_limit_disabled", fallback: "限流输出：关"))
+                }
+            }
+
+            Divider()
+
+            Button {
+                terminalControl.sendLine("cd ~/clawdhome_shared/private/")
+                statusText = L10n.k("app.maintenance.shared.cd_done", fallback: "已切换到共享目录：~/clawdhome_shared/private/")
+            } label: {
+                Label(
+                    L10n.k("app.maintenance.shared.cd_private", fallback: "终端进入 private 目录"),
+                    systemImage: "terminal"
+                )
+            }
+
+            Button {
+                let payload = maintenanceWindowRegistry.makeToolWindowPayload(
+                    username: request.username,
+                    title: L10n.k("app.maintenance.shared.files_title", fallback: "共享文件夹（private）"),
+                    kind: .files,
+                    scope: .home,
+                    initialRelativePath: "clawdhome_shared/private"
+                )
+                openWindow(id: "maintenance-files", value: payload)
+                statusText = L10n.k("app.maintenance.shared.files_opened", fallback: "已打开文件管理并定位到共享目录。")
+            } label: {
+                Label(
+                    L10n.k("app.maintenance.shared.open_files", fallback: "文件管理打开 private 目录"),
+                    systemImage: "folder"
+                )
+            }
+
+            Button {
+                let fm = FileManager.default
+                let primaryPath = "/Users/Shared/ClawdHome/vaults/\(request.username)"
+                let legacyPath = "/Users/\(request.username)/clawdhome_shared/private"
+                let candidates = [primaryPath, legacyPath, "/Users/Shared/ClawdHome/vaults", "/Users/Shared/ClawdHome"]
+
+                var opened = false
+                for path in candidates where fm.fileExists(atPath: path) {
+                    if NSWorkspace.shared.open(URL(fileURLWithPath: path)) {
+                        opened = true
+                        break
+                    }
+                }
+
+                statusText = opened
+                    ? L10n.k("app.maintenance.shared.finder_opened", fallback: "已在 Finder 打开共享目录。")
+                    : L10n.k("app.maintenance.shared.finder_failed", fallback: "无法打开 Finder 目录。")
+            } label: {
+                Label(
+                    L10n.k("app.maintenance.shared.open_finder", fallback: "在 Finder 打开 private 目录"),
+                    systemImage: "folder.badge.gearshape"
+                )
+            }
+        } label: {
+            Label(L10n.k("app.maintenance.actions_menu", fallback: "操作"), systemImage: "ellipsis.circle")
+        }
+        .menuIndicator(.visible)
+        .fixedSize()
     }
 
     @ViewBuilder
@@ -670,71 +763,37 @@ private struct MaintenanceTerminalWindowContent: View {
     }
 
     @ViewBuilder
-    private var outputMenu: some View {
+    private var settingsMenu: some View {
         Menu {
-            Button(L10n.k("common.action.export_output", fallback: "导出输出…")) {
-                exportTerminalOutput()
-            }
-            Divider()
-            Button {
-                outputRateLimitEnabled.toggle()
-            } label: {
-                if outputRateLimitEnabled {
-                    Label(L10n.k("app.maintenance.output_rate_limit_enabled", fallback: "限流输出：开"), systemImage: "checkmark")
-                } else {
-                    Text(L10n.k("app.maintenance.output_rate_limit_disabled", fallback: "限流输出：关"))
+            Section(L10n.k("app.maintenance.font.section", fallback: "字号")) {
+                Button(L10n.k("app.maintenance.font.decrease", fallback: "减小字号")) {
+                    terminalFontSize = max(10, terminalFontSize - 1)
                 }
+                .disabled(terminalFontSize <= 10)
+                Button(L10n.k("app.maintenance.font.increase", fallback: "增大字号")) {
+                    terminalFontSize = min(16, terminalFontSize + 1)
+                }
+                .disabled(terminalFontSize >= 16)
+                Button(String(format: L10n.k("app.maintenance.font.reset_to", fallback: "恢复默认（%.0f）"), 12.0)) {
+                    terminalFontSize = 12
+                }
+                .disabled(terminalFontSize == 12)
             }
-        } label: {
-            Label(L10n.k("app.maintenance.output_menu", fallback: "输出"), systemImage: "doc.text.magnifyingglass")
-        }
-        .menuIndicator(.visible)
-        .fixedSize()
-    }
-
-    @ViewBuilder
-    private var typographyMenu: some View {
-        Menu {
-            Button(L10n.k("app.maintenance.font.decrease", fallback: "减小字号")) {
-                terminalFontSize = max(10, terminalFontSize - 1)
-            }
-            .disabled(terminalFontSize <= 10)
-            Button(L10n.k("app.maintenance.font.increase", fallback: "增大字号")) {
-                terminalFontSize = min(16, terminalFontSize + 1)
-            }
-            .disabled(terminalFontSize >= 16)
-            Button(L10n.k("app.maintenance.font.reset", fallback: "恢复默认")) {
-                terminalFontSize = 12
-            }
-        } label: {
-            Label(
-                String(format: L10n.k("app.maintenance.font.current", fallback: "字号 %.0f"), terminalFontSize),
-                systemImage: "textformat.size"
-            )
-        }
-        .menuIndicator(.visible)
-        .fixedSize()
-    }
-
-    @ViewBuilder
-    private var terminalThemeMenu: some View {
-        Menu {
-            ForEach(MaintenanceTerminalTheme.allCases) { theme in
-                Button {
-                    terminalTheme = theme
-                } label: {
-                    if theme == terminalTheme {
-                        Label(theme.title, systemImage: "checkmark")
-                    } else {
-                        Text(theme.title)
+            Section(L10n.k("app.maintenance.theme.section", fallback: "背景")) {
+                ForEach(MaintenanceTerminalTheme.allCases) { theme in
+                    Button {
+                        terminalTheme = theme
+                    } label: {
+                        if theme == terminalTheme {
+                            Label(theme.title, systemImage: "checkmark")
+                        } else {
+                            Text(theme.title)
+                        }
                     }
                 }
             }
         } label: {
-            Label(
-                L10n.k("app.maintenance.terminal_background", fallback: "背景"),
-                systemImage: "paintpalette"
-            )
+            Label(L10n.k("app.maintenance.settings_menu", fallback: "设置"), systemImage: "gearshape")
         }
         .menuIndicator(.visible)
         .fixedSize()

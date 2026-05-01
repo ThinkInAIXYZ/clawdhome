@@ -236,7 +236,8 @@ struct SkillsTabContent: View {
         components.host = components.host ?? "127.0.0.1"
         components.port = components.port ?? 18525
         components.path = "/skills"
-        components.queryItems = [URLQueryItem(name: "token", value: token)]
+        // 按 Control UI 推荐优先使用 fragment 传 token；query 仅作兼容回退。
+        components.queryItems = nil
         components.fragment = "token=\(token)"
         return components.url
     }

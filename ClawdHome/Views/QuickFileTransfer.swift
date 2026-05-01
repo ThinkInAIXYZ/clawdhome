@@ -56,7 +56,7 @@ struct QuickFileTransferOutcome {
 }
 
 enum QuickFileTransferService {
-    static let destinationRelativePath = ".openclaw/clawdhome_upload"
+    static let destinationRelativePath = "clawdhome_shared/private/upload"
 
     static func destinationAbsolutePath(username: String) -> String {
         "/Users/\(username)/\(destinationRelativePath)"

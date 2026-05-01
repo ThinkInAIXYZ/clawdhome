@@ -496,6 +496,14 @@ struct HermesProfileManager {
         "memories/MEMORY.md",
         "memories/USER.md",
     ]
+    private static let sharedFolderMarker = "~/clawdhome_shared/private/"
+    private static let defaultSavePolicy = """
+    ## File Save Policy
+
+    - When asked to save files, export results, or generate reports, write to `~/clawdhome_shared/private/` first.
+    - Use `~/clawdhome_shared/public/` only for non-sensitive shared resources.
+    - Do not write sensitive data to the public folder.
+    """
 
     static func listProfiles(username: String) throws -> String {
         let hermesHome = HermesInstaller.hermesHome(for: username)
@@ -572,6 +580,7 @@ struct HermesProfileManager {
             // id="main" 不显式追加：由 HermesAutostartList.load 的兜底语义（缺失文件 → ["main"]）覆盖
             try? HermesAutostartList.add(username: username, profileID: id)
         }
+        try ensureSoulSavePolicy(username: username, hermesHome: hermesHome, profileID: id)
 
         try saveMetaMap(metas, hermesHome: hermesHome, username: username)
         if profile.isDefault {
@@ -730,6 +739,20 @@ struct HermesProfileManager {
         try text.write(toFile: tmp, atomically: true, encoding: .utf8)
         _ = try? FileManager.default.removeItem(atPath: path)
         try FileManager.default.moveItem(atPath: tmp, toPath: path)
+    }
+
+    private static func ensureSoulSavePolicy(username: String, hermesHome: String, profileID: String) throws {
+        let root = profileRootPath(hermesHome: hermesHome, profileID: profileID)
+        let soulPath = "\(root)/SOUL.md"
+        let existing = (try? String(contentsOfFile: soulPath, encoding: .utf8)) ?? ""
+        if existing.contains(sharedFolderMarker) { return }
+
+        let updated = existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? defaultSavePolicy
+            : existing + "\n\n" + defaultSavePolicy
+        try updated.write(toFile: soulPath, atomically: true, encoding: .utf8)
+        _ = try? FilePermissionHelper.chown(soulPath, owner: username)
+        _ = try? FilePermissionHelper.chmod(soulPath, mode: "600")
     }
 
     private static func normalized(_ value: String?) -> String? {

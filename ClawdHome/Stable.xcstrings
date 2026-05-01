@@ -2543,6 +2543,24 @@
         }
       }
     },
+    "auto.content_view.vault_files": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File Sharing"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件共享"
+          }
+        }
+      }
+    },
     "auto.daemon_setup_banner.clawdhome_user": {
       "comment": "",
       "extractionState": "stale",
@@ -27431,13 +27449,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Drag files or folders onto this shrimp card to quick-transfer to ~/.openclaw/clawdhome_upload"
+            "value": "Drag files or folders onto this shrimp card to quick-transfer to ~/clawdhome_shared/private/upload"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "可将文件或文件夹拖入该虾卡片，快传到 ~/.openclaw/clawdhome_upload"
+            "value": "可将文件或文件夹拖入该虾卡片，快传到 ~/clawdhome_shared/private/upload"
           }
         }
       }
@@ -29015,7 +29033,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "## Shared Folders\\n\\nYou have two file sharing spaces accessible at the following paths:\\n\\n### Private Folder\\n- Path: `~/clawdhome_shared/private/`\\n- Access: Only you and the admin can access; other Shrimps cannot see it\\n- Purpose: All work outputs, generated files, and exported data should be stored here first\\n\\n### Public Folder\\n- Path: `~/clawdhome_shared/public/`\\n- Access: Shared by all Shrimps and the admin\\n- Purpose: Read/write common resources, shared files, and public datasets\\n\\n### Usage Guidelines\\n- When asked to save files, export results, or generate reports, write to `~/clawdhome_shared/private/`\\n- When referencing public resources, read from `~/clawdhome_shared/public/`\\n- Do not write sensitive data to the public folder"
+            "value": "## Shared Folders\n\nYou have two file sharing spaces accessible at the following paths:\n\n### Private Folder\n- Path: `~/clawdhome_shared/private/`\n- Access: Only you and the admin can access; other Shrimps cannot see it\n- Purpose: All work outputs, generated files, and exported data should be stored here first\n\n### Public Folder\n- Path: `~/clawdhome_shared/public/`\n- Access: Shared by all Shrimps and the admin\n- Purpose: Read/write common resources, shared files, and public datasets\n\n### Usage Guidelines\n- When asked to save files, export results, or generate reports, write to `~/clawdhome_shared/private/`\n- When referencing public resources, read from `~/clawdhome_shared/public/`\n- Do not write sensitive data to the public folder"
           }
         },
         "zh-Hans": {
