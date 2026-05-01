@@ -389,6 +389,8 @@ struct UserFilesView: View {
     var preselectedUser: ManagedUser? = nil
     /// 浏览作用域：用户 Home 或某个运行时目录
     var scope: UserFilesScope = .home
+    /// 初始定位路径（相对用户 home），仅首次进入时生效
+    var initialRelativePath: String? = nil
     /// 仅用于详情页预选用户模式：按天记忆每个用户在文件页的最后目录
     private static var preselectedDailyPathByUser: [String: (dayKey: String, path: String)] = [:]
 
@@ -431,6 +433,7 @@ struct UserFilesView: View {
     // 上传进度
     @State private var uploadStatus: UploadStatus? = nil
     @State private var isUploadDropTargeted = false
+    @State private var didApplyInitialRelativePath = false
 
     private enum UploadStatus {
         case singleUpload(name: String)
@@ -1210,6 +1213,19 @@ struct UserFilesView: View {
         selectedUser = pre
         selectedEntryIDs = []
         showHidden = true
+
+        if !didApplyInitialRelativePath,
+           let initialRelativePath,
+           !initialRelativePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            currentPath = initialRelativePath
+            shouldFallbackMissingRuntimeHome = false
+            didApplyInitialRelativePath = true
+            let today = Self.dayKey()
+            let storageKey = preselectedPathStorageKey(for: pre.username)
+            Self.preselectedDailyPathByUser[storageKey] = (today, initialRelativePath)
+            Task { await loadDirectory() }
+            return
+        }
 
         let today = Self.dayKey()
         let storageKey = preselectedPathStorageKey(for: pre.username)

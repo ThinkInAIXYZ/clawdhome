@@ -345,14 +345,24 @@ final class ShrimpPool {
         await withTaskGroup(of: Void.self) { group in
             for user in targets {
                 group.addTask {
-                    async let openclawVersionResult = self.helperClient.getOpenclawVersion(username: user.username)
-                    async let hermesVersionResult = self.helperClient.getHermesVersion(username: user.username)
+                    // 虾塘列表采用短超时策略，避免单次版本查询阻塞近 1 分钟。
+                    async let openclawVersionResult = self.helperClient.getOpenclawVersion(
+                        username: user.username,
+                        timeout: .seconds(6)
+                    )
+                    async let hermesVersionResult = self.helperClient.getHermesVersion(
+                        username: user.username,
+                        timeout: .seconds(6)
+                    )
                     async let wizardStateResult = self.helperClient.loadInitState(username: user.username)
 
                     let openclawVersion = await openclawVersionResult
                     let hermesVersion = await hermesVersionResult
                     user.openclawVersion = openclawVersion
                     user.hermesVersion = hermesVersion
+                    // 版本查询完成（含失败回落为 nil）后立刻结束列表 spinner，
+                    // 避免后续运行态/向导态查询变慢导致一直转圈。
+                    user.versionChecked = true
 
                     let status: (Bool, Int32)?
                     if hermesVersion != nil {
@@ -378,7 +388,6 @@ final class ShrimpPool {
                     let wizardJSON = await wizardStateResult
                     let hasRuntime = openclawVersion != nil || hermesVersion != nil
                     user.isWizardCompleted = Self.resolveWizardCompleted(stateJSON: wizardJSON, hasRuntime: hasRuntime)
-                    user.versionChecked = true
                 }
             }
         }

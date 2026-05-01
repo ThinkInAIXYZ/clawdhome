@@ -333,6 +333,14 @@ final class GatewayHub {
             }
             let agentId = payload["agentId"] as? String ?? ""
             let resolvedName = payload["name"] as? String ?? name
+            if !agentId.isEmpty {
+                try? await agentsFileSet(
+                    username: username,
+                    agentId: agentId,
+                    fileName: "TOOLS.md",
+                    content: defaultToolsContent
+                )
+            }
             appLog("GatewayHub agentsCreate @\(username) success → agentId=\(agentId)")
             return AgentProfile(
                 id: agentId,

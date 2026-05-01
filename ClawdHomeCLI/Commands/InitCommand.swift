@@ -94,6 +94,7 @@ enum InitCommand {
     - When referencing public resources, read from `~/clawdhome_shared/public/`
     - Do not write sensitive data to the public folder
     """
+    static let sharedFolderMarker = "~/clawdhome_shared/"
 
     // MARK: - run
 
@@ -289,8 +290,11 @@ enum InitCommand {
             // 注入 TOOLS.md
             let toolsPath = "\(workspaceDir)/TOOLS.md"
             let (existingData, _) = syncCallRead { proxy.readFile(username: options.username, relativePath: toolsPath, withReply: $0) }
-            if existingData == nil {
-                let toolsContent = Self.defaultToolsContent
+            let existingContent = existingData.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            if !existingContent.contains(Self.sharedFolderMarker) {
+                let toolsContent = existingContent.isEmpty
+                    ? Self.defaultToolsContent
+                    : existingContent + "\n\n" + Self.defaultToolsContent
                 let (ok, err) = syncCallWrite {
                     proxy.writeFile(
                         username: options.username,

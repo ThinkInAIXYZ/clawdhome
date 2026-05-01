@@ -143,7 +143,9 @@ struct UserDetailView: View {
     @State private var isOverviewSidebarCollapsed = false
     @State private var hasOpenedStandaloneInitWindow = false
     @State private var detailAutoRefreshActive = false
-    @StateObject private var embeddedOverviewConsoleStore = EmbeddedGatewayConsoleStore()
+    private var embeddedOverviewConsoleStore: EmbeddedGatewayConsoleStore {
+        EmbeddedGatewayConsoleStoreRegistry.shared.store(for: user.username)
+    }
     private var shouldPinWindowTopmost: Bool {
         !user.isAdmin
         && user.clawType == .macosUser
@@ -155,6 +157,8 @@ struct UserDetailView: View {
             versionChecked: versionChecked,
             hasInitStep: user.initStep != nil,
             hasPendingInitWizard: hasPendingInitWizard,
+            hasInstalledOpenClawHint: user.openclawVersion != nil,
+            isGatewayOperationalHint: isEffectivelyRunning,
             isAdmin: user.isAdmin,
             isMacOSUser: user.clawType == .macosUser
         )
@@ -186,7 +190,7 @@ struct UserDetailView: View {
             }
             maybeOpenStandaloneInitWindow()
         }
-        .onChange(of: user.username) { _, _ in
+        .onChange(of: user.username) { oldUsername, _ in
             forceOnboardingAtEntry = false
             hasOpenedStandaloneInitWindow = false
             if pool.consumeNeedsOnboarding(username: user.username) {
@@ -198,6 +202,7 @@ struct UserDetailView: View {
             gatewayURLTokenPollTask?.cancel()
             gatewayURLTokenPollTask = nil
             gatewayURL = nil
+            EmbeddedGatewayConsoleStoreRegistry.shared.invalidate(username: oldUsername)
         }
         .onDisappear {
             detailAutoRefreshActive = false
@@ -590,7 +595,8 @@ struct UserDetailView: View {
             }
         }
         .onDisappear {
-            embeddedOverviewConsoleStore.invalidateLoadedURL()
+            // 保留内嵌控制台 WebView 会话，避免二次进入详情页时丢失 UI 侧会话状态导致白屏。
+            // 真正需要重置时由网关重启流转（beginGatewayRestartVisualTransition）或 username 切换触发。
         }
     }
 
@@ -2388,9 +2394,12 @@ struct UserDetailView: View {
 
     private func freezeUser(mode: FreezeMode) async throws {
         appLog("freeze start user=\(user.username) mode=\(mode.statusLabel)")
+        var previousAutostart: Bool?
+        var autostartChanged = false
         do {
-            let previousAutostart = await helperClient.getUserAutostart(username: user.username)
-            try? await helperClient.setUserAutostart(username: user.username, enabled: false)
+            previousAutostart = await helperClient.getUserAutostart(username: user.username)
+            try await helperClient.setUserAutostart(username: user.username, enabled: false)
+            autostartChanged = true
             if mode != .pause {
                 gatewayHub.markPendingStopped(username: user.username)
                 do {
@@ -2465,6 +2474,13 @@ struct UserDetailView: View {
             )
             appLog("freeze success user=\(user.username) mode=\(mode.statusLabel)")
         } catch {
+            if autostartChanged, let previousAutostart {
+                do {
+                    try await helperClient.setUserAutostart(username: user.username, enabled: previousAutostart)
+                } catch {
+                    appLog("freeze rollback autostart failed user=\(user.username) error=\(error.localizedDescription)", level: .error)
+                }
+            }
             appLog("freeze failed user=\(user.username) mode=\(mode.statusLabel) error=\(error.localizedDescription)", level: .error)
             throw error
         }
@@ -2490,7 +2506,7 @@ struct UserDetailView: View {
                 }
             }
             if let restoreAutostart = user.freezePreviousAutostartEnabled {
-                try? await helperClient.setUserAutostart(username: user.username, enabled: restoreAutostart)
+                try await helperClient.setUserAutostart(username: user.username, enabled: restoreAutostart)
             }
             pool.setFrozen(false, for: user.username)
             appLog("unfreeze success user=\(user.username)")
@@ -2549,15 +2565,12 @@ struct UserDetailView: View {
             return
         }
 
-        // 所有 XPC 调用一次性并行发出，避免分批串行等待
+        // 首屏快路径：仅拉取进入详情页必需状态，优先保证可交互速度
         async let statusResult = helperClient.getGatewayStatus(username: user.username)
         async let wizardStateResult = loadWizardState()
         async let nodeInstalledResult = helperClient.isNodeInstalled(username: user.username)
-        async let xcodeStatusResult = helperClient.getXcodeEnvStatus()
         async let urlResult = helperClient.getGatewayURL(username: user.username)
-        async let modelsStatusResult = helperClient.getModelsStatus(username: user.username)
         async let installedVersionResult = helperClient.getOpenclawVersion(username: user.username)
-        async let npmRegistryResult = helperClient.getNpmRegistry(username: user.username)
 
         // --- 处理结果 ---
 
@@ -2591,13 +2604,7 @@ struct UserDetailView: View {
         )
         hasPendingInitWizard = ensuredPending
         isNodeInstalledReady = await nodeInstalledResult
-        xcodeEnvStatus = await xcodeStatusResult
-
-        let (url, modelsStatus, registryURL) = await (
-            urlResult,
-            modelsStatusResult,
-            npmRegistryResult
-        )
+        let url = await urlResult
         guard requestID == refreshStatusGeneration else { return }
 
         gatewayURL = url.isEmpty ? nil : url
@@ -2607,15 +2614,38 @@ struct UserDetailView: View {
             gatewayURLTokenPollTask?.cancel()
             gatewayURLTokenPollTask = nil
         }
-        defaultModel = modelsStatus?.resolvedDefault ?? modelsStatus?.defaultModel
-        fallbackModels = modelsStatus?.fallbacks ?? []
-        applyLoadedNpmRegistry(registryURL)
         loadPreUpgradeInfo()
         // Gateway 运行且有地址时，建立 WebSocket 连接（幂等）
         if user.isRunning, let gatewayURLValue = gatewayURL {
             await gatewayHub.connect(username: user.username, gatewayURL: gatewayURLValue)
         }
-        await loadAgents()
+        // 慢路径：对首屏非阻塞信息异步补全，避免详情入口卡顿
+        Task { @MainActor [requestID] in
+            async let modelsStatusResult = helperClient.getModelsStatus(username: user.username)
+            async let npmRegistryResult = helperClient.getNpmRegistry(username: user.username)
+            let shouldFetchXcodeStatus = (selectedTab == .settings) || (xcodeEnvStatus == nil)
+            async let xcodeStatusResult: XcodeEnvStatus? = shouldFetchXcodeStatus
+                ? helperClient.getXcodeEnvStatus()
+                : nil
+
+            let (modelsStatus, registryURL, fetchedXcodeStatus) = await (
+                modelsStatusResult,
+                npmRegistryResult,
+                xcodeStatusResult
+            )
+            guard requestID == refreshStatusGeneration else { return }
+            defaultModel = modelsStatus?.resolvedDefault ?? modelsStatus?.defaultModel
+            fallbackModels = modelsStatus?.fallbacks ?? []
+            applyLoadedNpmRegistry(registryURL)
+            if shouldFetchXcodeStatus {
+                xcodeEnvStatus = fetchedXcodeStatus
+            }
+        }
+
+        Task { @MainActor [requestID] in
+            await loadAgents()
+            guard requestID == refreshStatusGeneration else { return }
+        }
 
     }
 
@@ -2756,8 +2786,6 @@ struct UserDetailView: View {
         maxAttempts: Int = 20,
         retryDelayNanoseconds: UInt64 = 500_000_000
     ) {
-        let current = gatewayURL
-        if gatewayToken(from: current) != nil { return }
         let readiness = gatewayHub.readinessMap[user.username]
         guard user.isRunning || readiness == .starting || readiness == .ready else { return }
 
@@ -2791,20 +2819,12 @@ struct UserDetailView: View {
         return token.isEmpty ? nil : token
     }
 
-    /// 将 helper 返回的 `#token=...` URL 规范化为 `?token=...`，避免 hash 与前端路由冲突导致白屏。
+    /// 直接使用 helper 返回的 `#token=...` 片段 URL。
+    /// Control UI 会在首屏 bootstrap 时从 fragment 导入 token 并写入 sessionStorage；
+    /// 使用 query 仅是兼容回退路径，且会被 UI 立即剥离，稳定性较差。
     private func gatewayConsoleURL(from rawURL: String?) -> URL? {
-        guard let rawURL, var components = URLComponents(string: rawURL) else { return nil }
-        guard let token = gatewayToken(from: rawURL) else { return components.url }
-
-        var items = components.queryItems ?? []
-        if let idx = items.firstIndex(where: { $0.name == "token" }) {
-            items[idx] = URLQueryItem(name: "token", value: token)
-        } else {
-            items.append(URLQueryItem(name: "token", value: token))
-        }
-        components.queryItems = items
-        components.fragment = nil
-        return components.url
+        guard let rawURL else { return nil }
+        return URL(string: rawURL)
     }
 
     private func loadWizardState() async -> InitWizardState? {

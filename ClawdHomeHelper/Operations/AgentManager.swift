@@ -28,6 +28,27 @@ enum AgentManagerError: LocalizedError {
 }
 
 struct AgentManager {
+    private static let sharedFolderMarker = "~/clawdhome_shared/"
+    private static let defaultToolsContent = """
+    ## Shared Folders
+
+    You have two file sharing spaces accessible at the following paths:
+
+    ### Private Folder
+    - Path: `~/clawdhome_shared/private/`
+    - Access: Only you and the admin can access; other Shrimps cannot see it
+    - Purpose: All work outputs, generated files, and exported data should be stored here first
+
+    ### Public Folder
+    - Path: `~/clawdhome_shared/public/`
+    - Access: Shared by all Shrimps and the admin
+    - Purpose: Read/write common resources, shared files, and public datasets
+
+    ### Usage Guidelines
+    - When asked to save files, export results, or generate reports, write to `~/clawdhome_shared/private/`
+    - When referencing public resources, read from `~/clawdhome_shared/public/`
+    - Do not write sensitive data to the public folder
+    """
 
     // MARK: - listAgents
 
@@ -187,6 +208,7 @@ struct AgentManager {
         if !fm.fileExists(atPath: workspaceDir) {
             try fm.createDirectory(atPath: workspaceDir, withIntermediateDirectories: true)
         }
+        try ensureToolsFile(workspaceDir: workspaceDir)
 
         // 修正目录权限（owner = 该用户）
         chownRecursive(path: "/Users/\(username)/.openclaw", username: username)
@@ -273,6 +295,17 @@ struct AgentManager {
         if (try? run("/usr/sbin/chown", args: ["-R", username, path])) == nil {
             helperLog("chown -R \(username) \(path) failed in AgentManager", level: .warn)
         }
+    }
+
+    private static func ensureToolsFile(workspaceDir: String) throws {
+        let toolsPath = "\(workspaceDir)/TOOLS.md"
+        let existing = (try? String(contentsOfFile: toolsPath, encoding: .utf8)) ?? ""
+        if existing.contains(sharedFolderMarker) { return }
+
+        let content = existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? defaultToolsContent
+            : existing + "\n\n" + defaultToolsContent
+        try content.write(toFile: toolsPath, atomically: true, encoding: .utf8)
     }
 }
 

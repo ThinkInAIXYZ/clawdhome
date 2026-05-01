@@ -253,26 +253,44 @@ struct HermesInstaller {
     /// 识别依据：先查 ~/.clawdhome/runtime.json，确认是 hermes 实例后再读 dist-info 版本号。
     /// 不再 fallback 到 hermes --version 子进程，防止并发执行时输出为空导致识别抖动。
     static func installedVersion(username: String) -> String? {
-        // 1. 有运行时配置且明确声明为非 hermes → 快速返回 nil，防止误识别
-        if let config = readRuntimeConfig(username: username), config.runtime != "hermes" {
-            return nil
+        let hasConfigAnchor = hasHermesConfigAnchor(username: username)
+        // 1. runtime.json 存在时严格以其声明为准（不做锚点纠偏）
+        if let config = readRuntimeConfig(username: username) {
+            if config.runtime != "hermes" {
+                return nil
+            }
+        } else if hasConfigAnchor {
+            // 2. 仅在 runtime.json 缺失时，使用 ~/.hermes/config.yaml 作为兜底锚点，
+            //    并补写 runtime.json=hermes，后续回归主锚点判定。
+            helperLog("[HermesInstaller] runtime missing, recovered from config anchor @\(username)")
+            writeRuntimeConfig(runtime: "hermes", username: username)
         }
 
-        // 2. 可执行文件必须存在（向下兼容：无配置文件时也走此检查）
+        // 3. 可执行文件必须存在（向下兼容：无配置文件时也走此检查）
         let hermesBin = hermesExecutable(for: username)
         guard FileManager.default.isExecutableFile(atPath: hermesBin) else { return nil }
 
-        // 3. 从 venv dist-info 读取版本（纯文件读取，无子进程）
+        // 4. 从 venv dist-info 读取版本（纯文件读取，无子进程）
         if let fastVersion = readVersionFromDistInfo(username: username) {
             return fastVersion
         }
 
-        // 4. dist-info 暂时不可读（如安装中途）→ 有配置文件时返回占位版本避免识别翻转
+        // 5. dist-info 暂时不可读（如安装中途）→ 有配置文件时返回占位版本避免识别翻转
         if readRuntimeConfig(username: username) != nil {
             return "unknown"
         }
 
         return nil
+    }
+
+    private static func hasHermesConfigAnchor(username: String) -> Bool {
+        let path = "\(hermesHome(for: username))/config.yaml"
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let type = attrs[.type] as? FileAttributeType,
+              type == .typeRegular else {
+            return false
+        }
+        return true
     }
 
     /// 从 venv/lib/pythonX.Y/site-packages/hermes_agent-*.dist-info/METADATA 解析版本
