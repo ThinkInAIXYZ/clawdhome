@@ -1,5 +1,6 @@
 // ClawdHome/ContentView.swift
 
+import AppKit
 import SwiftUI
 
 // MARK: - 顶层导航目的地
@@ -8,7 +9,6 @@ enum NavDestination: Hashable {
     case clawPool
     case vaultFiles
     case notes
-    case wikiSupport
     case prompts
     case network
     case aiLab
@@ -26,8 +26,12 @@ struct ContentView: View {
     @Environment(AppLockStore.self) private var lockStore
     @State private var daemonInstaller = DaemonInstaller()
     @State private var navSelection: NavDestination? = .clawPool
+    @State private var chromeInstallCheckCompleted = false
+    @State private var isChromeInstalled = true
     // 0 = 跟随系统, 1 = 浅色, 2 = 深色
     @AppStorage("colorSchemePreference") private var colorSchemePreference: Int = 0
+
+    private let chromeInstallCheckTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     private var preferredColorScheme: ColorScheme? {
         switch colorSchemePreference {
@@ -35,6 +39,13 @@ struct ContentView: View {
         case 2: return .dark
         default: return nil
         }
+    }
+
+    private var shouldShowChromeInstallHint: Bool {
+        chromeInstallCheckCompleted
+        && !isChromeInstalled
+        && !lockStore.isLocked
+        && (navSelection == .dashboard || navSelection == .clawPool || navSelection == nil)
     }
 
     var body: some View {
@@ -57,8 +68,6 @@ struct ContentView: View {
                             .tag(NavDestination.vaultFiles)
                         Label(L10n.k("content_view.notes_center", fallback: "笔记"), systemImage: "book.closed")
                             .tag(NavDestination.notes)
-                        Label("Wiki Support", systemImage: "wrench.and.screwdriver")
-                            .tag(NavDestination.wikiSupport)
                         Label("Prompt", systemImage: "text.bubble")
                             .tag(NavDestination.prompts)
                     }
@@ -152,11 +161,7 @@ struct ContentView: View {
                         .environment(helperClient)
                         .environment(pool)
                 case .notes:
-                    WikiHostView {
-                        navSelection = .wikiSupport
-                    }
-                case .wikiSupport:
-                    NotesCenterView()
+                    NotesWorkspaceView()
                         .environment(helperClient)
                         .environment(pool)
                 case .prompts:
@@ -200,7 +205,15 @@ struct ContentView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            if shouldShowChromeInstallHint {
+                ChromeInstallHintCard()
+                    .padding(20)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
         .animation(.easeInOut(duration: 0.25), value: helperClient.isConnected)
+        .animation(.easeInOut(duration: 0.18), value: shouldShowChromeInstallHint)
         .overlay {
             if lockStore.isLocked {
                 AppLockScreen()
@@ -213,6 +226,15 @@ struct ContentView: View {
         .onAppear {
             let visible = (navSelection == .dashboard || navSelection == nil)
             pool.setDashboardVisible(visible)
+            refreshChromeInstallStatus()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshChromeInstallStatus()
+        }
+        .onReceive(chromeInstallCheckTimer) { _ in
+            if chromeInstallCheckCompleted && !isChromeInstalled {
+                refreshChromeInstallStatus()
+            }
         }
         .onChange(of: navSelection) { _, newValue in
             let visible = (newValue == .dashboard || newValue == nil)
@@ -220,6 +242,136 @@ struct ContentView: View {
         }
     }
 
+    private func refreshChromeInstallStatus() {
+        isChromeInstalled = ChromeInstallDetector.isGoogleChromeInstalled()
+        chromeInstallCheckCompleted = true
+    }
+
+}
+
+private enum ChromeInstallDetector {
+    static func isGoogleChromeInstalled() -> Bool {
+        if NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.google.Chrome") != nil {
+            return true
+        }
+
+        let fileManager = FileManager.default
+        let candidatePaths = [
+            "/Applications/Google Chrome.app",
+            "\(NSHomeDirectory())/Applications/Google Chrome.app",
+        ]
+        return candidatePaths.contains { fileManager.fileExists(atPath: $0) }
+    }
+}
+
+private struct ChromeInstallHintCard: View {
+    private let chromeDownloadURL = URL(string: "https://www.google.com/chrome/")!
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "globe.badge.chevron.backward")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("未检测到 Google Chrome")
+                        .font(.headline)
+                    Text("浏览器账号和网页登录能力需要 Chrome。安装完成后，这个提示会自动消失。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Link(destination: chromeDownloadURL) {
+                Label("前往 Chrome 官网安装", systemImage: "arrow.up.forward.square")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(14)
+        .frame(width: 320, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.orange.opacity(0.28), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.16), radius: 18, x: 0, y: 8)
+    }
+}
+
+private enum NotesWorkspaceTab: String, CaseIterable, Identifiable {
+    case editor
+    case status
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .editor: return "笔记"
+        case .status: return "笔记状态"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .editor: return "book.closed"
+        case .status: return "checklist.checked"
+        }
+    }
+}
+
+private struct NotesWorkspaceView: View {
+    @State private var selectedTab: NotesWorkspaceTab = .editor
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                ForEach(NotesWorkspaceTab.allCases) { tab in
+                    Button {
+                        selectedTab = tab
+                    } label: {
+                        Label(tab.title, systemImage: tab.icon)
+                            .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .regular))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(selectedTab == tab ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.05))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(selectedTab == tab ? Color.accentColor.opacity(0.28) : Color.primary.opacity(0.08), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(selectedTab == tab ? Color.accentColor : Color.primary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(Color(nsColor: .windowBackgroundColor))
+
+            Divider()
+
+            ZStack {
+                WikiHostView {
+                    selectedTab = .status
+                }
+                .opacity(selectedTab == .editor ? 1 : 0)
+                .allowsHitTesting(selectedTab == .editor)
+
+                NotesCenterView()
+                    .opacity(selectedTab == .status ? 1 : 0)
+                    .allowsHitTesting(selectedTab == .status)
+            }
+        }
+        .navigationTitle(selectedTab.title)
+    }
 }
 
 // MARK: - 敬请期待占位视图
