@@ -35,6 +35,10 @@ struct BrowserAccountModelsTests {
             BrowserAccountPaths.openCLIRealExecutableName == "opencli.clawdhome-real",
             "opencli wrapper should preserve the real executable separately"
         )
+        expect(
+            BrowserAccountPaths.openCLINPMExecutableName == "open-cli",
+            "open-cli wrapper should cover the npm URL opener command name"
+        )
 
         let activePort = BrowserAccountActivePort.parse("39123\n/devtools/browser/abc-def\n")
         expect(activePort?.port == 39123, "DevToolsActivePort should parse the first line as port")

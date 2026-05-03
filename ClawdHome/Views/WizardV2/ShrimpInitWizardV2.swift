@@ -109,7 +109,7 @@ private enum WizardV2BasicEnvPhase: Int, CaseIterable {
         case .setNpmRegistry:
             return L10n.k("wizard.base_env.set_npm_registry", fallback: "设置 npm 安装源")
         case .installBrowserTool:
-            return "安装浏览器工具并打开 Chrome"
+            return "安装浏览器工具"
         case .installOpenclaw:
             return L10n.k("wizard.base_env.install_openclaw", fallback: "安装 openclaw")
         case .startGateway:
@@ -137,7 +137,7 @@ private enum WizardV2HermesEnvPhase: Int, CaseIterable {
         case .installNode:
             return "安装 Node.js"
         case .installBrowserTool:
-            return "安装浏览器工具并打开 Chrome"
+            return "安装浏览器工具"
         case .installHermes:
             return "安装 Hermes"
         case .verifyInstall:

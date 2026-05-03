@@ -18,6 +18,7 @@ struct BrowserAccountPaths: Codable, Equatable {
     static let npmGlobalBinRelativePath = ".npm-global/bin"
     static let toolsGuideRelativePath = ".clawdhome/TOOLS.md"
     static let openCLIRealExecutableName = "opencli.clawdhome-real"
+    static let openCLINPMExecutableName = "open-cli"
     static let browserCommandWrapperNames = [
         "open",
         "xdg-open",

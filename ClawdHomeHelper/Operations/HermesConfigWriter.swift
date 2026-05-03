@@ -66,6 +66,34 @@ struct HermesConfigWriter {
         try apply(username: username, profileID: "main", payloadJSON: payloadJSON)
     }
 
+    static func syncBrowserCDPEndpoint(username: String, endpoint: String?) {
+        let mainHome = HermesInstaller.hermesHome(for: username)
+        guard FileManager.default.fileExists(atPath: mainHome) else {
+            return
+        }
+        let homes = hermesHomesForBrowserSync(username: username)
+        let updates = ["cdp_url": endpoint ?? ""]
+        for hermesHome in homes {
+            let configPath = "\(hermesHome)/config.yaml"
+            let existing = (try? String(contentsOfFile: configPath, encoding: .utf8)) ?? ""
+            let patched = patchYAMLSections(existing, sections: [("browser", updates)])
+            do {
+                if !FileManager.default.fileExists(atPath: hermesHome) {
+                    try FileManager.default.createDirectory(
+                        atPath: hermesHome,
+                        withIntermediateDirectories: true,
+                        attributes: [.posixPermissions: 0o700]
+                    )
+                }
+                try patched.write(toFile: configPath, atomically: true, encoding: .utf8)
+                _ = try? FilePermissionHelper.chown(configPath, owner: username)
+                _ = try? FilePermissionHelper.chmod(configPath, mode: "600")
+            } catch {
+                helperLog("[HermesConfig] browser.cdp_url sync failed path=\(configPath): \(error.localizedDescription)", level: .warn)
+            }
+        }
+    }
+
     static func initSummaryJSON(username: String, profileID: String) -> String {
         let hermesHome = HermesGatewayManager.hermesHomeForProfile(username: username, profileID: profileID)
         let configPath = "\(hermesHome)/config.yaml"
@@ -190,6 +218,23 @@ struct HermesConfigWriter {
             )
         }
         _ = try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
+    }
+
+    private static func hermesHomesForBrowserSync(username: String) -> [String] {
+        let mainHome = HermesInstaller.hermesHome(for: username)
+        var homes = [mainHome]
+        let profilesDir = "\(mainHome)/profiles"
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: profilesDir) {
+            for entry in entries.sorted() where !entry.hasPrefix(".") {
+                let path = "\(profilesDir)/\(entry)"
+                var isDirectory: ObjCBool = false
+                if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+                   isDirectory.boolValue {
+                    homes.append(path)
+                }
+            }
+        }
+        return homes
     }
 
     /// 逐行修补 YAML 的指定顶层 section（保留注释、空行、未管理的 section）

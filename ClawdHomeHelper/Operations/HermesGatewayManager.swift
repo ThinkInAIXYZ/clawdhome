@@ -193,6 +193,13 @@ struct HermesGatewayManager {
         let logPath = "\(profileHome)/logs/gateway.log"
         let path = HermesInstaller.buildPath(for: username)
         let browserCommand = "\(home)/.clawdhome/tools/clawdhome-browser/clawdhome-browser open %s"
+        let cdpEndpoint = BrowserAccountManager.reachableCDPEndpoint(username: username)
+        let cdpEnvironmentXML = cdpEndpoint.map {
+            """
+                <key>BROWSER_CDP_URL</key>
+                <string>\($0)</string>
+            """
+        } ?? ""
 
         // named profile 需要在 ProgramArguments 中追加 --profile <id>
         let programArgumentsXML: String
@@ -236,6 +243,7 @@ struct HermesGatewayManager {
                 <string>\(path)</string>
                 <key>BROWSER</key>
                 <string>\(browserCommand)</string>
+        \(cdpEnvironmentXML)
                 <key>HERMES_HOME</key>
                 <string>\(profileHome)</string>
             </dict>

@@ -155,7 +155,7 @@ struct HermesInstaller {
         let home = "/Users/\(username)"
         let brew = "\(home)/.brew"
         let browserCommand = "\(home)/.clawdhome/tools/clawdhome-browser/clawdhome-browser open %s"
-        return [
+        var env = [
             ("HOME", home),
             ("USER", username),
             ("PATH", buildPath(for: username)),
@@ -166,6 +166,10 @@ struct HermesInstaller {
             ("HOMEBREW_CELLAR", "\(brew)/Cellar"),
             ("HOMEBREW_REPOSITORY", brew),
         ]
+        if let cdpEndpoint = BrowserAccountManager.reachableCDPEndpoint(username: username) {
+            env.append(("BROWSER_CDP_URL", cdpEndpoint))
+        }
+        return env
     }
 
     /// 以 sudo -u <user> 运行 hermes/pip/uv 时通用的环境变量前缀
@@ -225,6 +229,10 @@ struct HermesInstaller {
         helperLog("[HermesInstaller] INSTALL_OK @\(username)")
         // 写入运行时声明，固定识别引擎（防止 hermes --version 并发失败导致实例识别抖动）
         writeRuntimeConfig(runtime: "hermes", username: username)
+        HermesConfigWriter.syncBrowserCDPEndpoint(
+            username: username,
+            endpoint: BrowserAccountManager.reachableCDPEndpoint(username: username)
+        )
         return output
     }
 
