@@ -154,10 +154,12 @@ struct HermesInstaller {
     static func orderedRuntimeEnvironment(username: String) -> [(String, String)] {
         let home = "/Users/\(username)"
         let brew = "\(home)/.brew"
+        let browserCommand = "\(home)/.clawdhome/tools/clawdhome-browser/clawdhome-browser open %s"
         return [
             ("HOME", home),
             ("USER", username),
             ("PATH", buildPath(for: username)),
+            ("BROWSER", browserCommand),
             ("HERMES_HOME", hermesHome(for: username)),
             ("VIRTUAL_ENV", venvDir(for: username)),
             ("HOMEBREW_PREFIX", brew),

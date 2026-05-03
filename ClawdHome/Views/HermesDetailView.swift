@@ -9,6 +9,7 @@ enum HermesDetailMode: Hashable {
     case chat
     case profiles
     case config
+    case browser
     // 实例管理（与 OpenClaw 共享内容视图）
     case files
     case terminal
@@ -69,6 +70,11 @@ struct HermesDetailView: View {
     @State private var deleteProfileID: String?
     @State private var showOnlySelectedProfileTabs = false
     @State private var hermesLogSearchText = ""
+    @State private var browserAccountStatus: BrowserAccountStatus?
+    @State private var isOpeningBrowserAccount = false
+    @State private var isInstallingBrowserAccountTool = false
+    @State private var isResettingBrowserAccount = false
+    @State private var showResetBrowserAccountConfirm = false
 
     private var showMultiAgentEntrypoints: Bool {
         HermesFeaturePolicy.shouldShowMultiAgentEntrypoints
@@ -94,7 +100,9 @@ struct HermesDetailView: View {
                     .opacity(mode == .terminal ? 1 : 0)
                     .allowsHitTesting(mode == .terminal)
 
-                if mode == .profiles && showMultiAgentEntrypoints {
+                if mode == .browser {
+                    hermesBrowserBody
+                } else if mode == .profiles && showMultiAgentEntrypoints {
                     profilesBody
                 } else if mode == .files {
                     UserFilesView(users: [user], preselectedUser: user, scope: .runtime(.hermes))
@@ -201,9 +209,12 @@ struct HermesDetailView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             configureChatTabsIfNeeded()
+            Task { await refreshBrowserAccountStatus() }
         }
         .onChange(of: user.username) { _, _ in
             configureChatTabsIfNeeded()
+            browserAccountStatus = nil
+            Task { await refreshBrowserAccountStatus() }
         }
         .alert(
             L10n.k("hermes.profile.close_chat_tab_title", fallback: "关闭会话标签？"),
@@ -241,6 +252,19 @@ struct HermesDetailView: View {
         } message: {
             Text(L10n.k("hermes.profile.delete_message", fallback: "删除后该 profile 的会话和配置不可恢复。"))
         }
+        .alert(
+            L10n.k("hermes.browser.reset_title", fallback: "重置 Hermes 浏览器？"),
+            isPresented: $showResetBrowserAccountConfirm
+        ) {
+            Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {
+                showResetBrowserAccountConfirm = false
+            }
+            Button(L10n.k("common.action.reset", fallback: "重置"), role: .destructive) {
+                Task { await resetBrowserAccount() }
+            }
+        } message: {
+            Text(L10n.k("hermes.browser.reset_message", fallback: "将备份并清空该用户的 ClawdHome Chrome profile。Hermes 的 OAuth 和网页登录态会被清空，其他用户与主浏览器不受影响。"))
+        }
     }
 
     private var chatBody: some View {
@@ -256,6 +280,93 @@ struct HermesDetailView: View {
     private var shellBody: some View {
         HermesTerminalConsole(username: user.username, tabManager: shellTabManager, isActive: mode == .terminal)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var hermesBrowserBody: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.k("hermes.browser.title", fallback: "Hermes 浏览器配置"))
+                        .font(.title3.weight(.semibold))
+                    Text(browserAccountStatus?.message ?? L10n.k("hermes.browser.status_unchecked", fallback: "尚未检查"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    Task { await refreshBrowserAccountStatus() }
+                } label: {
+                    Label(L10n.k("common.action.refresh", fallback: "刷新状态"), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!helperClient.isConnected)
+            }
+
+            GroupBox {
+                fixedSectionContent {
+                    row(L10n.k("hermes.browser.profile_path", fallback: "Chrome Profile"), browserAccountStatus?.profilePath ?? "—")
+                    row(L10n.k("hermes.browser.tool_path", fallback: "浏览器工具"), browserAccountStatus?.toolPath ?? "—")
+                    if let endpoint = browserAccountStatus?.httpEndpoint,
+                       browserAccountStatus?.browserReachable == true {
+                        row("CDP", endpoint)
+                    } else {
+                        row("CDP", "—")
+                    }
+                    row(
+                        L10n.k("hermes.browser.tool_state", fallback: "工具状态"),
+                        browserAccountStatus?.toolInstalled == true
+                            ? L10n.k("common.status.installed", fallback: "已安装")
+                            : L10n.k("common.status.not_installed", fallback: "未安装")
+                    )
+                }
+            } label: {
+                Label(L10n.k("hermes.browser.runtime_account", fallback: "Hermes 浏览器账号"), systemImage: "globe")
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    Task { await openBrowserAccount() }
+                } label: {
+                    Label(
+                        isOpeningBrowserAccount
+                            ? L10n.k("hermes.browser.opening", fallback: "打开中…")
+                            : L10n.k("hermes.browser.open", fallback: "打开浏览器"),
+                        systemImage: "globe"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!helperClient.isConnected || isOpeningBrowserAccount)
+
+                Button {
+                    Task { await installBrowserAccountTool() }
+                } label: {
+                    Label(
+                        browserAccountStatus?.toolInstalled == true
+                            ? L10n.k("hermes.browser.tool_installed", fallback: "工具已安装")
+                            : L10n.k("hermes.browser.install_tool", fallback: "安装浏览器工具"),
+                        systemImage: "wrench.and.screwdriver"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!helperClient.isConnected || isInstallingBrowserAccountTool)
+
+                Button(role: .destructive) {
+                    showResetBrowserAccountConfirm = true
+                } label: {
+                    Label(
+                        isResettingBrowserAccount
+                            ? L10n.k("hermes.browser.resetting", fallback: "重置中…")
+                            : L10n.k("common.action.reset", fallback: "重置"),
+                        systemImage: "trash"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!helperClient.isConnected || isResettingBrowserAccount)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var terminalColumn: some View {
@@ -703,6 +814,47 @@ struct HermesDetailView: View {
         )
     }
 
+    @MainActor
+    private func refreshBrowserAccountStatus() async {
+        browserAccountStatus = await helperClient.getBrowserAccountStatus(username: user.username)
+    }
+
+    @MainActor
+    private func openBrowserAccount() async {
+        isOpeningBrowserAccount = true
+        defer { isOpeningBrowserAccount = false }
+        do {
+            _ = try await helperClient.openBrowserAccount(username: user.username)
+            await refreshBrowserAccountStatus()
+        } catch {
+            await refreshBrowserAccountStatus()
+        }
+    }
+
+    @MainActor
+    private func installBrowserAccountTool() async {
+        isInstallingBrowserAccountTool = true
+        defer { isInstallingBrowserAccountTool = false }
+        do {
+            browserAccountStatus = try await helperClient.installBrowserAccountTool(username: user.username)
+            _ = try await helperClient.openBrowserAccount(username: user.username)
+            await refreshBrowserAccountStatus()
+        } catch {
+            await refreshBrowserAccountStatus()
+        }
+    }
+
+    @MainActor
+    private func resetBrowserAccount() async {
+        isResettingBrowserAccount = true
+        defer { isResettingBrowserAccount = false }
+        do {
+            browserAccountStatus = try await helperClient.resetBrowserAccount(username: user.username)
+        } catch {
+            await refreshBrowserAccountStatus()
+        }
+    }
+
     private func configureChatTabsIfNeeded() {
         guard mode == .chat else { return }
         chatTabManager.configureIfNeeded(
@@ -906,7 +1058,7 @@ private struct HermesChatTerminalNSView: NSViewRepresentable {
 }
 
 @MainActor
-final class HermesChatTerminalSession: NSObject, ObservableObject, TerminalViewDelegate {
+final class HermesChatTerminalSession: NSObject, ObservableObject, @preconcurrency TerminalViewDelegate {
     private let helperClient: HelperClient
     private let username: String
     private let command: [String]
@@ -925,8 +1077,6 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, TerminalViewD
 
     private var startTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
-    private var openedOAuthURLs: Set<String> = []
-
     private var lastResizeSent: (cols: Int, rows: Int)?
     private var pendingResize: (cols: Int, rows: Int)?
     private var isReplaying = false
@@ -1087,7 +1237,6 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, TerminalViewD
             let text = String(decoding: chunk, as: UTF8.self)
             appendOutput(text)
             feedToTerminal(text)
-            autoOpenOAuthIfNeeded(text)
         }
 
         if exited {
@@ -1154,14 +1303,6 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, TerminalViewD
         terminalView.feed(byteArray: bytes)
     }
 
-    private func autoOpenOAuthIfNeeded(_ chunk: String) {
-        guard let url = firstHermesOAuthAuthorizeURL(in: chunk) else { return }
-        let raw = url.absoluteString
-        guard !raw.isEmpty, !openedOAuthURLs.contains(raw) else { return }
-        openedOAuthURLs.insert(raw)
-        openHermesExternalURL(url)
-    }
-
     // MARK: TerminalViewDelegate
 
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
@@ -1189,7 +1330,20 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, TerminalViewD
 
     func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
         guard let url = URL(string: link) else { return }
-        openHermesExternalURL(url)
+        let scheme = url.scheme?.lowercased()
+        guard scheme == "http" || scheme == "https" else {
+            openHermesExternalURL(url)
+            return
+        }
+        let username = username
+        let helperClient = helperClient
+        Task {
+            do {
+                try await helperClient.openBrowserAccountURL(username: username, url: url.absoluteString)
+            } catch {
+                openHermesExternalURL(url)
+            }
+        }
     }
 
     func clipboardCopy(source: TerminalView, content: Data) {
@@ -1202,17 +1356,6 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, TerminalViewD
             board.setData(content, forType: .string)
         }
     }
-}
-
-private func firstHermesOAuthAuthorizeURL(in text: String) -> URL? {
-    for token in text.split(whereSeparator: { $0.isWhitespace }) {
-        let candidate = String(token).trimmingCharacters(in: CharacterSet(charactersIn: "\"'()[]<>.,"))
-        guard candidate.hasPrefix("https://auth.openai.com/oauth/authorize") else { continue }
-        if let url = URL(string: candidate) {
-            return url
-        }
-    }
-    return nil
 }
 
 private func openHermesExternalURL(_ url: URL) {
@@ -1786,6 +1929,7 @@ struct HermesDetailContainer: View {
                 hermesSidebarButton(.profiles, label: "角色", icon: "theatermasks")
             }
             hermesSidebarButton(.config, label: "配置", icon: "gearshape")
+            hermesSidebarButton(.browser, label: "浏览器", icon: "globe")
 
             Divider()
                 .padding(.horizontal, detailSidebarShowsLabels ? 10 : 4)

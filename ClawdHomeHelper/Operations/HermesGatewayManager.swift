@@ -191,15 +191,8 @@ struct HermesGatewayManager {
         let home = "/Users/\(username)"
         let profileHome = hermesHomeForProfile(username: username, profileID: profileID)
         let logPath = "\(profileHome)/logs/gateway.log"
-        let path = [
-            HermesInstaller.venvBin(for: username),
-            "\(home)/.local/bin",
-            "\(home)/.brew/bin",
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "/usr/bin",
-            "/bin",
-        ].joined(separator: ":")
+        let path = HermesInstaller.buildPath(for: username)
+        let browserCommand = "\(home)/.clawdhome/tools/clawdhome-browser/clawdhome-browser open %s"
 
         // named profile 需要在 ProgramArguments 中追加 --profile <id>
         let programArgumentsXML: String
@@ -241,6 +234,8 @@ struct HermesGatewayManager {
                 <string>\(username)</string>
                 <key>PATH</key>
                 <string>\(path)</string>
+                <key>BROWSER</key>
+                <string>\(browserCommand)</string>
                 <key>HERMES_HOME</key>
                 <string>\(profileHome)</string>
             </dict>
