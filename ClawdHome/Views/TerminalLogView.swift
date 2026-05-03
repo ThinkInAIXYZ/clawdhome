@@ -55,17 +55,6 @@ enum MaintenanceTerminalTheme: String, CaseIterable, Identifiable {
     }
 }
 
-private func firstOAuthAuthorizeURL(in text: String) -> URL? {
-    for token in text.split(whereSeparator: { $0.isWhitespace }) {
-        let candidate = String(token).trimmingCharacters(in: CharacterSet(charactersIn: "\"'()[]<>.,"))
-        guard candidate.hasPrefix("https://auth.openai.com/oauth/authorize") else { continue }
-        if let url = URL(string: candidate) {
-            return url
-        }
-    }
-    return nil
-}
-
 private func openExternalURL(_ url: URL) {
     DispatchQueue.main.async {
         _ = NSWorkspace.shared.open(url)
@@ -757,7 +746,6 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     private let transientRetryNoticeThreshold = 2
     private var lastResizeSent: (cols: Int, rows: Int)?
     private var pendingResize: (cols: Int, rows: Int)?
-    private var openedOAuthURLs: Set<String> = []
     private let inputQueueLock = NSLock()
     private var pendingInputBuffer = Data()
     private var inputDrainInFlight = false
@@ -889,7 +877,6 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
             feedToTerminal(chunk)
             let outputText = String(decoding: chunk, as: UTF8.self)
             onOutput?(outputText)
-            autoOpenOAuthIfNeeded(outputText)
         }
         if exited {
             timer?.invalidate()
@@ -1057,7 +1044,20 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     func scrolled(source: TerminalView, position: Double) {}
     func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
         guard let url = URL(string: link) else { return }
-        openExternalURL(url)
+        let scheme = url.scheme?.lowercased()
+        guard scheme == "http" || scheme == "https" else {
+            openExternalURL(url)
+            return
+        }
+        let username = username
+        let helperClient = helperClient
+        Task {
+            do {
+                try await helperClient.openBrowserAccountURL(username: username, url: url.absoluteString)
+            } catch {
+                openExternalURL(url)
+            }
+        }
     }
     func bell(source: TerminalView) {}
     func clipboardCopy(source: TerminalView, content: Data) {
@@ -1066,20 +1066,12 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
     func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
 
-    private func autoOpenOAuthIfNeeded(_ chunk: String) {
-        guard let url = firstOAuthAuthorizeURL(in: chunk) else { return }
-        let raw = url.absoluteString
-        guard !raw.isEmpty, !openedOAuthURLs.contains(raw) else { return }
-        openedOAuthURLs.insert(raw)
-        openExternalURL(url)
-    }
 }
 
 // MARK: - LocalProcessTerminalViewDelegate
 
 final class LocalProcessCoordinator: NSObject, LocalProcessTerminalViewDelegate {
     var onExit: ((Int32?) -> Void)?
-    private var openedOAuthURLs: Set<String> = []
 
     init(onExit: ((Int32?) -> Void)?) {
         self.onExit = onExit
@@ -1091,13 +1083,7 @@ final class LocalProcessCoordinator: NSObject, LocalProcessTerminalViewDelegate 
         }
     }
 
-    func handleOutputChunk(_ chunk: String) {
-        guard let url = firstOAuthAuthorizeURL(in: chunk) else { return }
-        let raw = url.absoluteString
-        guard !raw.isEmpty, !openedOAuthURLs.contains(raw) else { return }
-        openedOAuthURLs.insert(raw)
-        openExternalURL(url)
-    }
+    func handleOutputChunk(_ chunk: String) {}
 
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}

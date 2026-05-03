@@ -767,7 +767,7 @@ struct UserDetailView: View {
                 showResetBrowserAccountConfirm = false
             }
         } message: {
-            Text("将备份并清空该虾专属 Chrome profile。其他虾和你的主浏览器账号不会受影响。")
+            Text("将备份并清空该用户的 ClawdHome Chrome profile。其他用户和你的主浏览器账号不会受影响。")
         }
         .alert(
             L10n.k("user.detail.auto.file", fallback: "文件快传结果"),
@@ -2911,8 +2911,11 @@ struct UserDetailView: View {
         defer { isInstallingBrowserAccountTool = false }
         do {
             browserAccountStatus = try await helperClient.installBrowserAccountTool(username: user.username)
+            _ = try await helperClient.openBrowserAccount(username: user.username)
+            await refreshBrowserAccountStatus()
         } catch {
             actionError = error.localizedDescription
+            await refreshBrowserAccountStatus()
         }
     }
 

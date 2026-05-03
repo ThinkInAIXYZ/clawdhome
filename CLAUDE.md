@@ -126,7 +126,7 @@ Build numbers are **auto-derived** from git commit count (`git rev-list --count 
 | `/var/lib/clawdhome/cache/` | Helper installation cache (homebrew, nodejs) — root only |
 | `/var/lib/clawdhome/models/` | Local AI models (omlx) — root only |
 | `/Users/Shared/ClawdHome/` | Cross-user shared file space (public folder, per-shrimp vaults) |
-| `~<shrimp>/.clawdhome/` | Per-Shrimp ClawdHome config directory (runtime declaration, future per-shrimp settings) |
+| `~<user>/.clawdhome/` | Per-user ClawdHome config and browser-tool directory, shared by OpenClaw, Hermes, and future runtimes |
 | `~<shrimp>/.clawdhome/runtime.json` | Runtime type anchor: `{"runtime":"hermes"}` or `{"runtime":"openclaw"}` — written on install, read by identification engine; absent → falls back to openclaw detection |
 | `~<shrimp>/.openclaw/` | Per-Shrimp OpenClaw config and data |
 | `~<shrimp>/.npm-global/` | Per-Shrimp npm global install directory |

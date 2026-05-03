@@ -23,6 +23,8 @@ extension ClawdHomeHelperImpl {
         helperLog("安装 openclaw @\(username) v\(version ?? "latest")")
         let logURL = initLogURL(username: username)
         do {
+            helperLog("[browser-account] OpenClaw 安装前准备浏览器工具 @\(username)")
+            try BrowserAccountManager.prepareForRuntimeInstall(username: username, logURL: logURL)
             try InstallManager.install(username: username, version: version, logURL: logURL)
 
             // 升级后环境验证与修复
@@ -102,6 +104,8 @@ extension ClawdHomeHelperImpl {
 
         // 3. 重新安装
         do {
+            helperLog("[browser-account] OpenClaw 重装前准备浏览器工具 @\(username)")
+            try BrowserAccountManager.prepareForRuntimeInstall(username: username, logURL: logURL)
             try InstallManager.install(username: username, version: version, logURL: logURL)
         } catch {
             helperLog("[reinstall] 重装失败 @\(username): \(error.localizedDescription)", level: .error)

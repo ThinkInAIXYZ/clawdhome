@@ -127,6 +127,7 @@ struct ConfigWriter {
         // 兼容场景：当 ~/.brew/bin/node 符号链接丢失时，回退到 ~/.brew/lib/nodejs/<version>/bin。
         var paths: [String] = [
             InstallManager.npmGlobalBin(for: username),
+            "/Users/\(username)/.local/bin",
             "/Users/\(username)/.brew/bin",
             "/Users/\(username)/.brew/opt/node/bin",
             "/Users/\(username)/.brew/opt/node@24/bin",

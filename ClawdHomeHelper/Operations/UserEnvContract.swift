@@ -22,6 +22,7 @@ enum UserEnvContract {
         "npm_config_cache",
         "NPM_CONFIG_USERCONFIG",
         "npm_config_userconfig",
+        "OPENCLAW_PATH_BOOTSTRAPPED",
     ]
 
     static func home(username: String) -> String {
@@ -80,6 +81,9 @@ enum UserEnvContract {
             "npm_config_cache": npmCache,
             "NPM_CONFIG_USERCONFIG": npmrc,
             "npm_config_userconfig": npmrc,
+            // OpenClaw 会在启动时 best-effort 追加 /opt/homebrew/bin、/usr/local/bin。
+            // ClawdHome 已经构造了虾用户隔离 PATH，这里阻止它把宿主工具链混回来。
+            "OPENCLAW_PATH_BOOTSTRAPPED": "1",
         ]
 
         let proxy = normalizedProxyEnvironment(username: username)

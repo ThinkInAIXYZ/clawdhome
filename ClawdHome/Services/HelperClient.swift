@@ -704,6 +704,18 @@ final class HelperClient {
         return session
     }
 
+    func openBrowserAccountURL(username: String, url: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.openBrowserAccountURL(username: username, url: url) { ok, payload in
+                done((ok, payload))
+            }
+        }
+        guard ok else {
+            throw HelperError.operationFailed(payload)
+        }
+    }
+
     func getBrowserAccountStatus(username: String) async -> BrowserAccountStatus? {
         guard let proxy = controlProxy else { return nil }
         do {
@@ -751,6 +763,18 @@ final class HelperClient {
             throw HelperError.operationFailed("浏览器账号状态解析失败")
         }
         return status
+    }
+
+    func prepareBrowserAccountForRuntimeInstall(username: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.prepareBrowserAccountForRuntimeInstall(username: username) { ok, payload in
+                done((ok, payload))
+            }
+        }
+        guard ok else {
+            throw HelperError.operationFailed(payload)
+        }
     }
 
     // MARK: - 配置管理

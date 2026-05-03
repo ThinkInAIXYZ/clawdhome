@@ -4,11 +4,19 @@ struct BrowserAccountPaths: Codable, Equatable {
     let username: String
     let appSupportDirectory: URL
 
-    static let sessionRelativePath = ".openclaw/clawdhome-browser-session.json"
-    static let toolDirectoryRelativePath = ".openclaw/tools/clawdhome-browser"
-    static let toolExecutableRelativePath = ".openclaw/tools/clawdhome-browser/clawdhome-browser"
-    static let toolLauncherRelativePath = ".openclaw/tools/clawdhome-browser/clawdhome-browser-launcher"
-    static let toolBrowserProfileRelativePath = ".openclaw/browser-profile"
+    static let browserDirectoryRelativePath = ".clawdhome/browser"
+    static let sessionRelativePath = ".clawdhome/browser/session.json"
+    static let legacySessionRelativePath = ".openclaw/clawdhome-browser-session.json"
+    static let toolDirectoryRelativePath = ".clawdhome/tools/clawdhome-browser"
+    static let toolExecutableRelativePath = ".clawdhome/tools/clawdhome-browser/clawdhome-browser"
+    static let toolLauncherRelativePath = ".clawdhome/tools/clawdhome-browser/clawdhome-browser-launcher"
+    static let toolBrowserProfileRelativePath = ".clawdhome/browser/profile"
+    static let legacyToolBrowserProfileRelativePath = ".openclaw/browser-profile"
+    static let debugLogRelativePath = ".clawdhome/browser/debug.log"
+    static let installWarmupMarkerRelativePath = ".clawdhome/browser/install-warmup.json"
+    static let userLocalBinRelativePath = ".local/bin"
+    static let npmGlobalBinRelativePath = ".npm-global/bin"
+    static let toolsGuideRelativePath = ".clawdhome/TOOLS.md"
     static let openCLIRealExecutableName = "opencli.clawdhome-real"
     static let browserCommandWrapperNames = [
         "open",

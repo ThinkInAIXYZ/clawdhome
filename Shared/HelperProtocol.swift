@@ -114,26 +114,39 @@ import Foundation
         withReply reply: @escaping (Bool, Int32) -> Void
     )
 
-    /// 打开该虾专属的 Chrome 浏览器账号，返回 BrowserAccountSession JSON
+    /// 打开指定用户的 ClawdHome Chrome 浏览器账号，返回 BrowserAccountSession JSON
     func openBrowserAccount(
         username: String,
         withReply reply: @escaping (Bool, String) -> Void
     )
 
-    /// 查询该虾浏览器账号状态，返回 BrowserAccountStatus JSON
+    /// 通过指定用户的 ClawdHome 浏览器账号打开 URL
+    func openBrowserAccountURL(
+        username: String,
+        url: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 查询指定用户的浏览器账号状态，返回 BrowserAccountStatus JSON
     func getBrowserAccountStatus(
         username: String,
         withReply reply: @escaping (String) -> Void
     )
 
-    /// 备份并重置该虾专属 Chrome profile，返回 BrowserAccountStatus JSON
+    /// 备份并重置指定用户的 ClawdHome Chrome profile，返回 BrowserAccountStatus JSON
     func resetBrowserAccount(
         username: String,
         withReply reply: @escaping (Bool, String) -> Void
     )
 
-    /// 安装虾侧 clawdhome-browser 工具并补充 TOOLS.md，返回 BrowserAccountStatus JSON
+    /// 安装用户级 clawdhome-browser 工具并补充 TOOLS.md，返回 BrowserAccountStatus JSON
     func installBrowserAccountTool(
+        username: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 运行引擎安装前的浏览器工具预热：安装工具、打开一次 Chrome、写 session、关闭该 profile 的 Chrome
+    func prepareBrowserAccountForRuntimeInstall(
         username: String,
         withReply reply: @escaping (Bool, String) -> Void
     )
