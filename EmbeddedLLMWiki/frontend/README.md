@@ -378,8 +378,10 @@ Download from [Releases](https://github.com/nashsu/llm_wiki/releases):
 git clone https://github.com/nashsu/llm_wiki.git
 cd llm_wiki
 npm ci
-npm run tauri dev      # Development
-npm run tauri build    # Production build
+npm run dev            # Frontend development
+npm run build          # Production frontend build
+npm run check:rust     # Embedded runtime check
+npm run package:desktop # Frontend build + release runtime build
 ```
 
 ### Release Automation

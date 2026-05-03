@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label"
 import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/i18n"
-import { saveLanguage } from "@/lib/project-store"
+import { saveEmbeddingConfig, saveLanguage, saveSearchApiConfig } from "@/lib/project-store"
 import { getHost } from "@/platform/host"
 import type { LlmConfig } from "@/stores/wiki-store"
 
@@ -120,7 +120,6 @@ export function SettingsView() {
   }
 
   async function handleSave() {
-    const { saveSearchApiConfig, saveEmbeddingConfig } = await import("@/lib/project-store")
     const newSearchConfig = { provider: searchProvider, apiKey: searchApiKey }
     const newEmbeddingConfig = { enabled: embeddingEnabled, endpoint: embeddingEndpoint, apiKey: embeddingApiKey, model: embeddingModel }
     if (selectedGlobalOptionId) {

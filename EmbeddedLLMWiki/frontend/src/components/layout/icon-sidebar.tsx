@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import {
   FileText, FolderOpen, Search, Network, ClipboardCheck, Settings, ClipboardList, Globe,
 } from "lucide-react"
+import { clipServerStatus } from "@/commands/fs"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
@@ -35,7 +36,6 @@ export function IconSidebar() {
   useEffect(() => {
     const check = async () => {
       try {
-        const { clipServerStatus } = await import("@/commands/fs")
         const status = await clipServerStatus()
         setDaemonStatus(status)
       } catch {

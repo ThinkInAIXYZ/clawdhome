@@ -79,8 +79,7 @@ git push origin v0.3.2
 Keep these versions aligned before creating a release tag:
 
 - `package.json`
-- `src-tauri/tauri.conf.json`
-- `src-tauri/Cargo.toml`
+- `../runtime/Cargo.toml`
 - Git tag name, for example `v0.3.2`
 
 Recommended order:

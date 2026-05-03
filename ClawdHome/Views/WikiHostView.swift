@@ -21,6 +21,7 @@ private final class WikiFileSchemeHandler: NSObject, WKURLSchemeHandler {
 
         let fileURL = URL(fileURLWithPath: encodedPath)
         do {
+            try LocalWikiHostFS.validateReadableFilePath(encodedPath)
             let data = try Data(contentsOf: fileURL)
             let mimeType = UTType(filenameExtension: fileURL.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
             let response = URLResponse(
@@ -55,6 +56,12 @@ private final class WikiBundleSchemeHandler: NSObject, WKURLSchemeHandler {
         let rawPath = url.path.isEmpty ? "/index.html" : url.path
         let relativePath = rawPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let fileURL = resourceRoot.appendingPathComponent(relativePath.isEmpty ? "index.html" : relativePath)
+        let resourceRootPath = resourceRoot.resolvingSymlinksInPath().standardizedFileURL.path
+        let filePath = fileURL.resolvingSymlinksInPath().standardizedFileURL.path
+        guard filePath == resourceRootPath || filePath.hasPrefix("\(resourceRootPath)/") else {
+            urlSchemeTask.didFailWithError(NSError(domain: "WikiBundleSchemeHandler", code: 3))
+            return
+        }
 
         do {
             let data = try Data(contentsOf: fileURL)
@@ -196,9 +203,15 @@ final class WikiHostCoordinator: NSObject, WKScriptMessageHandler, WKNavigationD
         let response = panel.runModal()
         guard response == .OK else { return nil }
         if panel.allowsMultipleSelection {
-            return panel.urls.map(\.path)
+            let paths = panel.urls.map(\.path)
+            LocalWikiHostFS.authorizeExternalPaths(paths)
+            return paths
         }
-        return panel.url?.path
+        if let path = panel.url?.path {
+            LocalWikiHostFS.authorizeExternalPaths([path])
+            return path
+        }
+        return nil
     }
 
     private func complete(requestID: String, result: Any) {

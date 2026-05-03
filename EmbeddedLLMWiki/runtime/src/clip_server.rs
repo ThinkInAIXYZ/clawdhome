@@ -180,7 +180,6 @@ fn start_tcp_clip_server() {
             };
 
             DAEMON_STATUS.store(1, Ordering::Relaxed);
-            restart_count = 0;
             println!("[Clip Server] Listening on http://127.0.0.1:{}", PORT);
 
             for mut request in server.incoming_requests() {
