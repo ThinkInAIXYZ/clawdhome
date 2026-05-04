@@ -391,6 +391,10 @@ struct UserFilesView: View {
     var scope: UserFilesScope = .home
     /// 初始定位路径（相对用户 home），仅首次进入时生效
     var initialRelativePath: String? = nil
+    /// 由父视图（详情页）注入：把"在终端打开当前路径"路由到内嵌 terminal tab。
+    /// 未注入时（如 ClawPool 等独立调用场景）走 fallback：弹独立 maintenance-terminal 窗口。
+    /// 闭包参数 = 当前目录相对 home 的路径（空串表示 home 根）
+    var onOpenTerminalAt: ((_ relativePath: String) -> Void)? = nil
     /// 仅用于详情页预选用户模式：按天记忆每个用户在文件页的最后目录
     private static var preselectedDailyPathByUser: [String: (dayKey: String, path: String)] = [:]
 
@@ -1539,6 +1543,11 @@ struct UserFilesView: View {
 
     private func openTerminalAtCurrentPath() {
         guard let user = selectedUser else { return }
+        if let onOpenTerminalAt {
+            onOpenTerminalAt(currentPath)
+            return
+        }
+        // ↓ 现有 fallback 代码保持不变
         let home = "/Users/\(user.username)"
         let fullPath = currentPath.isEmpty ? home : "\(home)/\(currentPath)"
         let escaped = fullPath.replacingOccurrences(of: "'", with: "'\\''")

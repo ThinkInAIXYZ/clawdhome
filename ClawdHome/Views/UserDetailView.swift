@@ -10,7 +10,7 @@ import WebKit
 // MARK: - 详情窗口 Tab
 
 private enum ClawTab: String, Hashable {
-    case overview, files, logs, processes, cron, skills, characterDef, sessions, memory, settings
+    case overview, files, logs, processes, terminal, cron, skills, characterDef, sessions, memory, settings
 }
 
 private enum DetailXcodeHealthState {
@@ -133,6 +133,11 @@ struct UserDetailView: View {
     /// 跳转到 settings tab 时，让 ShrimpSettingsV2View 内部默认选中哪个二级 tab（model/agents/...）
     /// 用 .id(settingsInitialTab) 绑定让 view 在切换时重建并应用新的 initialTab
     @State private var settingsInitialTab: ShrimpSettingsV2View.SettingsTab = .agents
+    /// 详情页内嵌终端的 tab 管理器，挂在 detail view 的生命周期上：详情窗关闭即回收 PTY 会话
+    @StateObject private var terminalTabManager = ShrimpTerminalTabManager(
+        engine: .openclaw,
+        titlePrefix: "终端"
+    )
     // Agent
     @State private var agents: [AgentProfile] = []
     @State private var selectedAgentId: String? = nil
@@ -226,9 +231,9 @@ struct UserDetailView: View {
 
     // MARK: - Tab 容器
 
-    private let allTabs: [ClawTab] = [.overview, .characterDef, .files, .processes, .logs, .cron, .skills, .sessions, .memory]
+    private let allTabs: [ClawTab] = [.overview, .characterDef, .files, .terminal, .processes, .logs, .cron, .skills, .sessions, .memory]
     private let agentTabs: [ClawTab] = [.overview, .characterDef, .cron, .skills, .sessions, .memory]
-    private let gatewayTabs: [ClawTab] = [.files, .processes, .logs, .settings]
+    private let gatewayTabs: [ClawTab] = [.files, .terminal, .processes, .logs, .settings]
 
     private var shouldEmbedOverviewConsole: Bool {
         shouldEmbedOverviewGatewayConsole(
@@ -291,6 +296,7 @@ struct UserDetailView: View {
         case .sessions:  return (L10n.k("user.detail.auto.sessions", fallback: "会话"), "bubble.left.and.bubble.right")
         case .memory:    return (L10n.k("user.detail.auto.memory", fallback: "记忆"), "brain.head.profile")
         case .processes: return (L10n.k("user.detail.auto.processes", fallback: "进程"), "square.3.layers.3d")
+        case .terminal:  return (L10n.k("user.detail.auto.terminal", fallback: "终端"), "terminal")
         case .settings:  return (L10n.k("user.detail.sidebar.settings", fallback: "设置"), "gearshape")
         }
     }
@@ -456,7 +462,19 @@ struct UserDetailView: View {
     @ViewBuilder private var tabContent: some View {
         switch selectedTab {
         case .overview:  overviewTabContent
-        case .files:     UserFilesView(users: [user], preselectedUser: user, scope: .runtime(.openclaw))
+        case .files:
+            UserFilesView(
+                users: [user],
+                preselectedUser: user,
+                scope: .runtime(.openclaw),
+                onOpenTerminalAt: { relPath in
+                    let title = relPath.isEmpty
+                        ? L10n.k("terminal.tab.home", fallback: "home")
+                        : (relPath as NSString).lastPathComponent
+                    terminalTabManager.addTab(cdRelativePath: relPath, titleHint: title)
+                    selectedTab = .terminal
+                }
+            )
         case .logs:
             GatewayLogViewer(username: user.username, externalSearchQuery: $logSearchText)
         case .cron:      CronTabView(username: user.username, agentId: selectedAgentId)
@@ -473,6 +491,13 @@ struct UserDetailView: View {
             ProcessTabView(
                 username: user.username
             )
+        case .terminal:
+            ShrimpTerminalConsole(
+                username: user.username,
+                tabManager: terminalTabManager,
+                isActive: selectedTab == .terminal
+            )
+            .padding(12)
         case .settings:
             ShrimpSettingsV2View(user: user, initialTab: settingsInitialTab)
                 .id(settingsInitialTab)
@@ -3286,14 +3311,10 @@ struct UserDetailView: View {
     }
 
 
+    /// 详情页"高级维护"按钮：跳转到内嵌的 .terminal tab，由 ShrimpTerminalConsole 自动开启默认会话。
+    /// 不再弹出独立 maintenance-terminal 窗口（避免多窗口堆叠）。详情页之外的入口（如 UserListView 行内）仍走独立窗口。
     private func openTerminal() {
-        let payload = maintenanceWindowRegistry.makePayload(
-            username: user.username,
-            title: L10n.k("user.detail.auto.cli_maintenance_advanced", fallback: "命令行维护（高级）"),
-            command: ["zsh", "-l"],
-            engine: user.prefersHermesRuntime ? .hermes : .openclaw
-        )
-        openWindow(id: "maintenance-terminal", value: payload)
+        selectedTab = .terminal
     }
 
     /// 详情页"管理 / 配对"按钮的统一跳转：切到 settings tab 并设置二级 tab 初始值
