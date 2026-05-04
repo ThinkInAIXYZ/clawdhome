@@ -6,6 +6,55 @@
 import SwiftUI
 import SwiftTerm
 
+enum MaintenanceTerminalTheme: String, CaseIterable, Identifiable {
+    case system
+    case black
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .system: return L10n.k("views.terminal_log.theme.system", fallback: "跟随系统")
+        case .black:  return L10n.k("views.terminal_log.theme.black", fallback: "黑色")
+        }
+    }
+
+    var panelBackground: SwiftUI.Color {
+        switch self {
+        case .system: return SwiftUI.Color(nsColor: .textBackgroundColor)
+        case .black:  return SwiftUI.Color(nsColor: .black)
+        }
+    }
+
+    var borderColor: SwiftUI.Color {
+        switch self {
+        case .system: return SwiftUI.Color.secondary.opacity(0.2)
+        case .black:  return SwiftUI.Color.white.opacity(0.18)
+        }
+    }
+
+    var headerSecondary: SwiftUI.Color {
+        switch self {
+        case .system: return .secondary
+        case .black:  return SwiftUI.Color.white.opacity(0.72)
+        }
+    }
+
+    var terminalForeground: NSColor {
+        switch self {
+        case .system: return .labelColor
+        case .black:  return NSColor(calibratedWhite: 0.92, alpha: 1)
+        }
+    }
+
+    var terminalBackground: NSColor {
+        switch self {
+        case .system: return .textBackgroundColor
+        case .black:  return NSColor(calibratedWhite: 0.04, alpha: 1)
+        }
+    }
+}
+
 private func firstOAuthAuthorizeURL(in text: String) -> URL? {
     for token in text.split(whereSeparator: { $0.isWhitespace }) {
         let candidate = String(token).trimmingCharacters(in: CharacterSet(charactersIn: "\"'()[]<>.,"))
@@ -42,6 +91,7 @@ final class LocalTerminalControl: ObservableObject {
     fileprivate weak var terminalView: LocalProcessTerminalView?
     fileprivate var sendRawHandler: ((Data) -> Void)?
     fileprivate var terminateHandler: (() -> Void)?
+    fileprivate var clearDisplayHandler: (() -> Void)?
     private var pendingRawInputs: [Data] = []
 
     private func flushPendingInputsIfNeeded() {
@@ -70,13 +120,23 @@ final class LocalTerminalControl: ObservableObject {
         terminateHandler = { [weak view] in
             view?.terminate()
         }
+        clearDisplayHandler = { [weak view] in
+            guard let view else { return }
+            let bytes = Array("\u{001B}[2J\u{001B}[H".utf8)
+            view.feed(byteArray: bytes[...])
+        }
         flushPendingInputsIfNeeded()
     }
 
-    fileprivate func attachHandlers(sendRaw: ((Data) -> Void)?, terminate: (() -> Void)?) {
+    fileprivate func attachHandlers(
+        sendRaw: ((Data) -> Void)?,
+        terminate: (() -> Void)?,
+        clearDisplay: (() -> Void)? = nil
+    ) {
         terminalView = nil
         sendRawHandler = sendRaw
         terminateHandler = terminate
+        clearDisplayHandler = clearDisplay
         flushPendingInputsIfNeeded()
     }
 
@@ -86,6 +146,10 @@ final class LocalTerminalControl: ObservableObject {
 
     func terminate() {
         terminateHandler?()
+    }
+
+    func clearDisplay() {
+        clearDisplayHandler?()
     }
 
     func sendText(_ text: String) {
@@ -111,6 +175,8 @@ final class OutputObservingLocalProcessTerminalView: LocalProcessTerminalView {
 
 struct TerminalLogPanel: View {
     let username: String
+    var logPath: String? = nil
+    var logHeight: CGFloat? = 180
 
     @State private var autoScroll = true
     @State private var searchText = ""
@@ -150,11 +216,12 @@ struct TerminalLogPanel: View {
             Divider()
             LogTextNSView(
                 username: username,
+                logPath: logPath,
                 autoScroll: $autoScroll,
                 searchText: $searchText,
                 searchRequest: $searchRequest
             )
-                .frame(height: 180)
+                .frame(minHeight: 100, maxHeight: logHeight ?? .infinity)
         }
         .background(Color(nsColor: .textBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -180,12 +247,16 @@ private struct LogSearchRequest: Equatable {
 
 private struct LogTextNSView: NSViewRepresentable {
     let username: String
+    let logPath: String?
     @Binding var autoScroll: Bool
     @Binding var searchText: String
     @Binding var searchRequest: LogSearchRequest
 
     func makeCoordinator() -> LogFeedCoordinator {
-        LogFeedCoordinator(username: username)
+        LogFeedCoordinator(
+            username: username,
+            logPath: logPath ?? "/tmp/clawdhome-init-\(username).log"
+        )
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -228,6 +299,7 @@ private struct LogTextNSView: NSViewRepresentable {
 
 final class LogFeedCoordinator: NSObject {
     let username: String
+    let logPath: String
     var autoScroll = true
 
     private var fileOffset = 0
@@ -241,8 +313,9 @@ final class LogFeedCoordinator: NSObject {
         .foregroundColor: NSColor.labelColor
     ]
 
-    init(username: String) {
+    init(username: String, logPath: String) {
         self.username = username
+        self.logPath = logPath
     }
 
     deinit { timer?.invalidate() }
@@ -280,7 +353,7 @@ final class LogFeedCoordinator: NSObject {
     }
 
     private func pollLog() {
-        let path = "/tmp/clawdhome-init-\(username).log"
+        let path = logPath
         if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
            let size = attrs[.size] as? NSNumber,
            size.intValue < fileOffset {
@@ -572,6 +645,8 @@ struct HelperMaintenanceTerminalPanel: View {
     let command: [String]
     @Environment(HelperClient.self) private var helperClient
     var minHeight: CGFloat = 220
+    var theme: MaintenanceTerminalTheme = .system
+    var fontSize: CGFloat = 11
     var onOutput: ((String) -> Void)? = nil
     var control: LocalTerminalControl? = nil
     var onExit: ((Int32?) -> Void)? = nil
@@ -580,16 +655,16 @@ struct HelperMaintenanceTerminalPanel: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "terminal")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(theme.headerSecondary)
                 Text(command.joined(separator: " "))
                     .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.headerSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
                 Label(L10n.k("auto.terminal_log_view.helper_session", fallback: "Helper 会话"), systemImage: "bolt.horizontal.circle")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.headerSecondary)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -598,6 +673,8 @@ struct HelperMaintenanceTerminalPanel: View {
                 helperClient: helperClient,
                 username: username,
                 command: command,
+                theme: theme,
+                fontSize: fontSize,
                 onOutput: onOutput,
                 control: control,
                 onExit: onExit
@@ -605,9 +682,9 @@ struct HelperMaintenanceTerminalPanel: View {
             .padding(8)
             .frame(minHeight: minHeight)
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(theme.panelBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.2)))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.borderColor))
     }
 }
 
@@ -615,6 +692,8 @@ private struct HelperMaintenanceTerminalNSView: NSViewRepresentable {
     let helperClient: HelperClient
     let username: String
     let command: [String]
+    let theme: MaintenanceTerminalTheme
+    let fontSize: CGFloat
     var onOutput: ((String) -> Void)? = nil
     var control: LocalTerminalControl? = nil
     var onExit: ((Int32?) -> Void)? = nil
@@ -635,9 +714,9 @@ private struct HelperMaintenanceTerminalNSView: NSViewRepresentable {
         tv.terminalDelegate = context.coordinator
         // Keep text selection stable while output is streaming.
         tv.allowMouseReporting = false
-        tv.nativeForegroundColor = NSColor.labelColor
-        tv.nativeBackgroundColor = NSColor.textBackgroundColor
-        tv.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        tv.nativeForegroundColor = theme.terminalForeground
+        tv.nativeBackgroundColor = theme.terminalBackground
+        tv.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         context.coordinator.start(with: tv)
         // 窗口打开后自动聚焦到终端，用户可直接输入。
         DispatchQueue.main.async {
@@ -646,7 +725,17 @@ private struct HelperMaintenanceTerminalNSView: NSViewRepresentable {
         return tv
     }
 
-    func updateNSView(_ nsView: TerminalView, context: Context) {}
+    func updateNSView(_ nsView: TerminalView, context: Context) {
+        if !nsView.nativeForegroundColor.isEqual(theme.terminalForeground) {
+            nsView.nativeForegroundColor = theme.terminalForeground
+        }
+        if !nsView.nativeBackgroundColor.isEqual(theme.terminalBackground) {
+            nsView.nativeBackgroundColor = theme.terminalBackground
+        }
+        if abs(nsView.font.pointSize - fontSize) > 0.01 {
+            nsView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        }
+    }
 }
 
 final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate {
@@ -664,10 +753,14 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     private var exitNotified = false
     private var isCleaningUp = false
     private var transientPollRetryCount = 0
-    private let maxTransientPollRetries = 1
+    private let maxTransientPollRetries = 6
+    private let transientRetryNoticeThreshold = 2
     private var lastResizeSent: (cols: Int, rows: Int)?
     private var pendingResize: (cols: Int, rows: Int)?
     private var openedOAuthURLs: Set<String> = []
+    private let inputQueueLock = NSLock()
+    private var pendingInputBuffer = Data()
+    private var inputDrainInFlight = false
 
     init(
         helperClient: HelperClient,
@@ -709,7 +802,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
             username: username,
             command: command
         )
-        // 首次打开窗口时可能恰逢 XPC 连接未就绪：自动重试一次，减少“点重跑才成功”。
+        // 首次打开窗口时可能恰逢 XPC 连接未就绪：自动重试一次，减少"点重跑才成功"。
         let finalResult: (Bool, String, String?)
         if !startResult.0, startResult.2 == L10n.k("services.helper_client.disconnected", fallback: "未连接") {
             helperClient.connect()
@@ -748,6 +841,8 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
                 self?.sendInput(data)
             }, terminate: { [weak self] in
                 self?.cleanupSession()
+            }, clearDisplay: { [weak self] in
+                self?.clearDisplay()
             })
             self.startPollingTimer()
         }
@@ -776,7 +871,9 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
             if shouldRetryPoll(message: message), transientPollRetryCount < maxTransientPollRetries {
                 transientPollRetryCount += 1
                 helperClient.connect(reason: "maintenance poll retry")
-                feedToTerminal("会话连接中断，正在自动重试...\r\n")
+                if transientPollRetryCount >= transientRetryNoticeThreshold {
+                    feedToTerminal(L10n.k("views.terminal_log.session_interrupted", fallback: "会话连接中断，正在自动重试...") + "\r\n")
+                }
                 return
             }
             if let err, !err.isEmpty {
@@ -814,12 +911,71 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     }
 
     private func sendInput(_ data: Data) {
+        guard !data.isEmpty else { return }
         guard let sessionID else { return }
-        Task {
-            let (ok, err) = await helperClient.sendMaintenanceTerminalSessionInput(
+
+        inputQueueLock.lock()
+        pendingInputBuffer.append(data)
+        let shouldStartDrain = !inputDrainInFlight
+        if shouldStartDrain {
+            inputDrainInFlight = true
+        }
+        inputQueueLock.unlock()
+
+        guard shouldStartDrain else { return }
+        Task { [weak self] in
+            await self?.drainInputQueue(sessionID: sessionID)
+        }
+    }
+
+    private func dequeuePendingInputChunk() -> Data {
+        inputQueueLock.lock()
+        defer { inputQueueLock.unlock() }
+        guard !pendingInputBuffer.isEmpty else { return Data() }
+        let chunk = pendingInputBuffer
+        pendingInputBuffer.removeAll(keepingCapacity: true)
+        return chunk
+    }
+
+    private func finishInputDrainIfIdle() {
+        inputQueueLock.lock()
+        if pendingInputBuffer.isEmpty {
+            inputDrainInFlight = false
+            inputQueueLock.unlock()
+            return
+        }
+        inputQueueLock.unlock()
+    }
+
+    private func drainInputQueue(sessionID: String) async {
+        while true {
+            let chunk = dequeuePendingInputChunk()
+            if chunk.isEmpty {
+                finishInputDrainIfIdle()
+                // 竞态保护：在 inFlight 复位后若又有新输入，重新拉起 drain。
+                inputQueueLock.lock()
+                let shouldRestart = !pendingInputBuffer.isEmpty && !inputDrainInFlight
+                if shouldRestart {
+                    inputDrainInFlight = true
+                }
+                inputQueueLock.unlock()
+                if shouldRestart {
+                    continue
+                }
+                return
+            }
+
+            var (ok, err) = await helperClient.sendMaintenanceTerminalSessionInput(
                 sessionID: sessionID,
-                input: data
+                input: chunk
             )
+            if !ok, shouldRetryPoll(message: err ?? "") {
+                helperClient.connect(reason: "maintenance input retry")
+                (ok, err) = await helperClient.sendMaintenanceTerminalSessionInput(
+                    sessionID: sessionID,
+                    input: chunk
+                )
+            }
             if !ok, let err {
                 await MainActor.run { [weak self] in
                     self?.feedToTerminal(L10n.f("views.terminal_log_view.r_n_r_n", fallback: "\r\n输入失败：%@\r\n", String(describing: err)))
@@ -846,6 +1002,10 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     private func cleanupSession() {
         timer?.invalidate()
         timer = nil
+        inputQueueLock.lock()
+        pendingInputBuffer.removeAll(keepingCapacity: false)
+        inputDrainInFlight = false
+        inputQueueLock.unlock()
         guard !isCleaningUp else { return }
         guard let sessionID else { return }
         isCleaningUp = true
@@ -860,6 +1020,12 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
         guard !exitNotified else { return }
         exitNotified = true
         onExit?(code)
+    }
+
+    private func clearDisplay() {
+        guard let terminalView else { return }
+        let bytes = Array("\u{001B}[2J\u{001B}[H".utf8)
+        terminalView.feed(byteArray: bytes[...])
     }
 
     private func shouldRetryPoll(message: String) -> Bool {

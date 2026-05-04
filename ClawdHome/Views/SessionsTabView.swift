@@ -86,6 +86,7 @@ struct TranscriptMessage: Identifiable {
 
 struct SessionsTabView: View {
     let username: String
+    var agentId: String? = nil
     @Environment(GatewayHub.self) private var hub
     @Environment(HelperClient.self) private var helperClient
 
@@ -118,7 +119,7 @@ struct SessionsTabView: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .background(.quinary)
+                .background(.bar)
 
                 Divider()
 

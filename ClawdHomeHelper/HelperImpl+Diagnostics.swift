@@ -252,9 +252,10 @@ extension ClawdHomeHelperImpl {
 
     func runDiagnostics(username: String, fix: Bool,
                         withReply reply: @escaping (Bool, String) -> Void) {
-        helperLog("统一诊断 @\(username) fix=\(fix)")
+        let engine = resolveDiagnosticsEngine(username: username, hint: nil)
+        helperLog("统一诊断 @\(username) fix=\(fix) engine=\(engine.rawValue)")
         DispatchQueue.global(qos: .userInitiated).async { [self] in
-            let items = self.collectDiagnostics(username: username, fix: fix)
+            let items = self.collectDiagnostics(username: username, fix: fix, engine: engine)
             let result = DiagnosticsResult(username: username,
                 checkedAt: Date().timeIntervalSince1970, items: items)
             if let data = try? JSONEncoder().encode(result),
@@ -266,22 +267,39 @@ extension ClawdHomeHelperImpl {
         }
     }
 
+    func runDiagnosticsForEngine(
+        username: String,
+        fix: Bool,
+        engine: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    ) {
+        let resolved = resolveDiagnosticsEngine(username: username, hint: engine)
+        helperLog("统一诊断(指定引擎) @\(username) engine=\(engine) resolved=\(resolved.rawValue) fix=\(fix)")
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            let items = self.collectDiagnostics(username: username, fix: fix, engine: resolved)
+            let result = DiagnosticsResult(
+                username: username,
+                checkedAt: Date().timeIntervalSince1970,
+                items: items
+            )
+            if let data = try? JSONEncoder().encode(result),
+               let json = String(data: data, encoding: .utf8) {
+                reply(true, json)
+            } else {
+                reply(false, "{}")
+            }
+        }
+    }
+
     func runDiagnosticGroup(username: String, groupName: String, fix: Bool,
                             withReply reply: @escaping (Bool, String) -> Void) {
+        let engine = resolveDiagnosticsEngine(username: username, hint: nil)
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             guard let group = DiagnosticGroup(rawValue: groupName) else {
                 reply(false, "[]")
                 return
             }
-            let items: [DiagnosticItem]
-            switch group {
-            case .environment:  items = self.diagEnvironment(username: username, fix: fix)
-            case .permissions:  items = self.diagPermissions(username: username, fix: fix)
-            case .config:       items = self.diagConfig(username: username, fix: fix)
-            case .security:     items = self.diagSecurity(username: username, fix: fix)
-            case .gateway:      items = self.diagGateway(username: username)
-            case .network:      items = self.diagNetwork(username: username)
-            }
+            let items = self.itemsForGroup(group: group, username: username, fix: fix, engine: engine)
             if let data = try? JSONEncoder().encode(items),
                let json = String(data: data, encoding: .utf8) {
                 reply(true, json)
@@ -291,15 +309,604 @@ extension ClawdHomeHelperImpl {
         }
     }
 
-    private func collectDiagnostics(username: String, fix: Bool) -> [DiagnosticItem] {
+    func runDiagnosticGroupForEngine(
+        username: String,
+        groupName: String,
+        fix: Bool,
+        engine: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    ) {
+        let resolved = resolveDiagnosticsEngine(username: username, hint: engine)
+        helperLog("单组诊断(指定引擎) @\(username) group=\(groupName) engine=\(engine) resolved=\(resolved.rawValue) fix=\(fix)")
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            guard let group = DiagnosticGroup(rawValue: groupName) else {
+                reply(false, "[]")
+                return
+            }
+            let items = self.itemsForGroup(group: group, username: username, fix: fix, engine: resolved)
+            if let data = try? JSONEncoder().encode(items),
+               let json = String(data: data, encoding: .utf8) {
+                reply(true, json)
+            } else {
+                reply(false, "[]")
+            }
+        }
+    }
+
+    private enum DiagnosticsEngine: String {
+        case openclaw
+        case hermes
+    }
+
+    private func normalizeDiagnosticsEngine(_ value: String?) -> DiagnosticsEngine? {
+        guard let value else { return nil }
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "openclaw": return .openclaw
+        case "hermes": return .hermes
+        default: return nil
+        }
+    }
+
+    private func resolveDiagnosticsEngine(username: String, hint: String?) -> DiagnosticsEngine {
+        if let hinted = normalizeDiagnosticsEngine(hint) {
+            return hinted
+        }
+        let hasHermes = HermesInstaller.installedVersion(username: username) != nil
+        let hasOpenclaw = (try? ConfigWriter.findOpenclawBinary(for: username)) != nil
+        return (hasHermes && !hasOpenclaw) ? .hermes : .openclaw
+    }
+
+    private func itemsForGroup(
+        group: DiagnosticGroup,
+        username: String,
+        fix: Bool,
+        engine: DiagnosticsEngine
+    ) -> [DiagnosticItem] {
+        switch engine {
+        case .openclaw:
+            switch group {
+            case .environment: return diagEnvironment(username: username, fix: fix)
+            case .permissions: return diagPermissions(username: username, fix: fix)
+            case .config:      return diagConfig(username: username, fix: fix)
+            case .security:    return diagSecurity(username: username, fix: fix)
+            case .gateway:     return diagGateway(username: username)
+            case .network:     return diagNetwork(username: username)
+            }
+        case .hermes:
+            switch group {
+            case .environment: return diagEnvironmentHermes(username: username, fix: fix)
+            case .permissions: return diagPermissionsHermes(username: username, fix: fix)
+            case .config:      return diagConfigHermes(username: username, fix: fix)
+            case .security:    return diagSecurityHermes(username: username, fix: fix)
+            case .gateway:     return diagGatewayHermes(username: username)
+            case .network:     return diagNetwork(username: username)
+            }
+        }
+    }
+
+    private func collectDiagnostics(username: String, fix: Bool, engine: DiagnosticsEngine) -> [DiagnosticItem] {
         var items: [DiagnosticItem] = []
-        items += diagEnvironment(username: username, fix: fix)
-        items += diagPermissions(username: username, fix: fix)
-        items += diagConfig(username: username, fix: fix)
-        items += diagSecurity(username: username, fix: fix)
-        items += diagGateway(username: username)
-        items += diagNetwork(username: username)
+        for group in DiagnosticGroup.allCases {
+            items += itemsForGroup(group: group, username: username, fix: fix, engine: engine)
+        }
         return items
+    }
+
+    // MARK: 诊断 - Hermes 环境检测
+
+    private func diagEnvironmentHermes(username: String, fix: Bool) -> [DiagnosticItem] {
+        var items: [DiagnosticItem] = []
+        let home = "/Users/\(username)"
+        let hermesHome = HermesInstaller.hermesHome(for: username)
+        let hermesBin = HermesInstaller.hermesExecutable(for: username)
+
+        if let version = HermesInstaller.installedVersion(username: username) {
+            items.append(DiagnosticItem(
+                id: "env-hermes-installed", group: .environment, severity: "ok",
+                title: "Hermes 已安装",
+                detail: "v\(version)",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        } else {
+            items.append(DiagnosticItem(
+                id: "env-hermes-installed", group: .environment, severity: "critical",
+                title: "Hermes 未安装",
+                detail: "请先执行 Hermes 安装流程",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        }
+
+        if FileManager.default.isExecutableFile(atPath: hermesBin) {
+            items.append(DiagnosticItem(
+                id: "env-hermes-bin", group: .environment, severity: "ok",
+                title: "Hermes 可执行文件可用",
+                detail: hermesBin,
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        } else {
+            items.append(DiagnosticItem(
+                id: "env-hermes-bin", group: .environment, severity: "critical",
+                title: "Hermes 可执行文件缺失",
+                detail: hermesBin,
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        }
+
+        do {
+            let python = try HermesInstaller.findPython(for: username)
+            items.append(DiagnosticItem(
+                id: "env-hermes-python", group: .environment, severity: "ok",
+                title: "Python 运行时可用",
+                detail: python,
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        } catch {
+            items.append(DiagnosticItem(
+                id: "env-hermes-python", group: .environment, severity: "warn",
+                title: "Python 运行时不可用",
+                detail: "需要 Python 3.11+",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        }
+
+        if FileManager.default.fileExists(atPath: hermesHome) {
+            items.append(DiagnosticItem(
+                id: "env-hermes-home", group: .environment, severity: "ok",
+                title: "HERMES_HOME 目录存在",
+                detail: hermesHome,
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        } else {
+            var fixed: Bool? = nil
+            var fixError: String? = nil
+            if fix {
+                do {
+                    try FileManager.default.createDirectory(
+                        atPath: hermesHome,
+                        withIntermediateDirectories: true,
+                        attributes: [.posixPermissions: 0o700]
+                    )
+                    try FilePermissionHelper.chown(hermesHome, owner: username)
+                    fixed = true
+                } catch {
+                    fixed = false
+                    fixError = error.localizedDescription
+                }
+            }
+            items.append(DiagnosticItem(
+                id: "env-hermes-home", group: .environment, severity: "warn",
+                title: "HERMES_HOME 目录不存在",
+                detail: hermesHome,
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil
+            ))
+        }
+
+        let (running, _) = HermesGatewayManager.status(username: username)
+        if running {
+            let expected: [String: String] = [
+                "HOME": home,
+                "USER": username,
+                "PATH": HermesInstaller.buildPath(for: username),
+                "HERMES_HOME": hermesHome,
+            ]
+            if let actual = hermesGatewayPlistEnvironment(username: username) {
+                let mismatches = expected.keys.sorted().filter { actual[$0] != expected[$0] }
+                if mismatches.isEmpty {
+                    items.append(DiagnosticItem(
+                        id: "env-hermes-runtime", group: .environment, severity: "ok",
+                        title: "Hermes 运行时环境契约正常",
+                        detail: "LaunchDaemon 环境变量与期望一致",
+                        fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+                    ))
+                } else {
+                    var fixed: Bool? = nil
+                    var fixError: String? = nil
+                    if fix {
+                        do {
+                            let uid = try UserManager.uid(for: username)
+                            try HermesGatewayManager.startGateway(username: username, uid: uid)
+                            let refreshed = hermesGatewayPlistEnvironment(username: username) ?? [:]
+                            let remaining = expected.keys.sorted().filter { refreshed[$0] != expected[$0] }
+                            fixed = remaining.isEmpty
+                            if !remaining.isEmpty {
+                                fixError = "修复后仍不一致：\(remaining.joined(separator: ", "))"
+                            }
+                        } catch {
+                            fixed = false
+                            fixError = error.localizedDescription
+                        }
+                    }
+                    items.append(DiagnosticItem(
+                        id: "env-hermes-runtime", group: .environment, severity: "warn",
+                        title: "Hermes 运行时环境契约不一致",
+                        detail: "不一致键：\(mismatches.joined(separator: ", "))",
+                        fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil
+                    ))
+                }
+            } else {
+                items.append(DiagnosticItem(
+                    id: "env-hermes-runtime", group: .environment, severity: "warn",
+                    title: "Hermes 环境检查失败",
+                    detail: "无法读取 Hermes LaunchDaemon plist 环境变量",
+                    fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+                ))
+            }
+        } else {
+            items.append(DiagnosticItem(
+                id: "env-hermes-runtime", group: .environment, severity: "info",
+                title: "Hermes Gateway 未运行，跳过运行时环境比对",
+                detail: "仅在 Hermes Gateway 运行中执行契约一致性比对",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        }
+
+        return items
+    }
+
+    // MARK: 诊断 - Hermes 权限检测
+
+    private func diagPermissionsHermes(username: String, fix: Bool) -> [DiagnosticItem] {
+        var items: [DiagnosticItem] = []
+        let home = "/Users/\(username)"
+        let hermesHome = HermesInstaller.hermesHome(for: username)
+        let envPath = "\(hermesHome)/.env"
+        let configPath = "\(hermesHome)/config.yaml"
+        let logsPath = "\(hermesHome)/logs"
+
+        func checkPerms(
+            id: String,
+            path: String,
+            title: String,
+            detail: String,
+            check: (Int) -> Bool,
+            fixAction: () throws -> Void
+        ) {
+            guard FileManager.default.fileExists(atPath: path),
+                  let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                  let perms = attrs[.posixPermissions] as? Int else { return }
+            guard check(perms) else { return }
+            var fixed: Bool? = nil
+            var fixError: String? = nil
+            if fix {
+                do {
+                    try fixAction()
+                    fixed = true
+                } catch {
+                    fixed = false
+                    fixError = error.localizedDescription
+                }
+            }
+            items.append(DiagnosticItem(
+                id: id, group: .permissions, severity: "critical",
+                title: title,
+                detail: "\(detail)（当前 \(String(format: "%o", perms))）",
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil
+            ))
+        }
+
+        func checkOwner(id: String, path: String, title: String, recursive: Bool) {
+            guard FileManager.default.fileExists(atPath: path),
+                  let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                  let owner = attrs[.ownerAccountName] as? String,
+                  owner != username else { return }
+            var fixed: Bool? = nil
+            var fixError: String? = nil
+            if fix {
+                do {
+                    if recursive {
+                        try FilePermissionHelper.chownRecursive(path, owner: username)
+                    } else {
+                        try FilePermissionHelper.chown(path, owner: username)
+                    }
+                    fixed = true
+                } catch {
+                    fixed = false
+                    fixError = error.localizedDescription
+                }
+            }
+            items.append(DiagnosticItem(
+                id: id, group: .permissions, severity: "critical",
+                title: title,
+                detail: "当前归属 \(owner)，应归属 \(username)",
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil
+            ))
+        }
+
+        checkPerms(
+            id: "perm-hermes-home",
+            path: home,
+            title: "家目录未隔离",
+            detail: "应设为 700"
+        ) { ($0 & 0o077) != 0 } fixAction: {
+            try FilePermissionHelper.chmod(home, mode: "700")
+        }
+        checkPerms(
+            id: "perm-hermes-dir",
+            path: hermesHome,
+            title: ".hermes 目录权限过宽",
+            detail: "Hermes 配置目录对其他用户可见"
+        ) { ($0 & 0o077) != 0 } fixAction: {
+            try FilePermissionHelper.chmodSymbolicRecursive(hermesHome, expr: "go-rwx")
+        }
+        checkPerms(
+            id: "perm-hermes-env",
+            path: envPath,
+            title: ".env 文件权限过宽",
+            detail: "密钥文件不应被其他用户读取"
+        ) { ($0 & 0o077) != 0 } fixAction: {
+            try FilePermissionHelper.chmod(envPath, mode: "600")
+        }
+
+        checkOwner(id: "perm-hermes-home-owner", path: home, title: "家目录归属错误", recursive: false)
+        checkOwner(id: "perm-hermes-dir-owner", path: hermesHome, title: ".hermes 目录归属错误", recursive: true)
+        checkOwner(id: "perm-hermes-config-owner", path: configPath, title: "config.yaml 归属错误", recursive: false)
+        checkOwner(id: "perm-hermes-env-owner", path: envPath, title: ".env 归属错误", recursive: false)
+        checkOwner(id: "perm-hermes-logs-owner", path: logsPath, title: "logs 目录归属错误", recursive: true)
+
+        if items.isEmpty {
+            items.append(DiagnosticItem(
+                id: "perm-hermes-ok", group: .permissions, severity: "ok",
+                title: "权限配置正常",
+                detail: "无隔离风险",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        }
+        return items
+    }
+
+    // MARK: 诊断 - Hermes 配置校验
+
+    private func diagConfigHermes(username: String, fix: Bool) -> [DiagnosticItem] {
+        _ = fix // Hermes 配置校验暂不提供自动修复
+        var items: [DiagnosticItem] = []
+        let reportJSON = HermesConfigWriter.validateJSON(username: username)
+        guard let data = reportJSON.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return [DiagnosticItem(
+                id: "config-hermes-parse-fail", group: .config, severity: "warn",
+                title: "Hermes 配置校验解析失败",
+                detail: reportJSON,
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            )]
+        }
+
+        let valid = (root["valid"] as? Bool) ?? false
+        let issues = (root["issues"] as? [[String: Any]]) ?? []
+        if issues.isEmpty && valid {
+            items.append(DiagnosticItem(
+                id: "config-hermes-ok", group: .config, severity: "ok",
+                title: "Hermes 配置校验通过",
+                detail: "config.yaml / .env 关键项完整",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+            return items
+        }
+
+        for issue in issues {
+            let code = (issue["code"] as? String) ?? "unknown"
+            let level = ((issue["level"] as? String) ?? "warn").lowercased()
+            let message = (issue["message"] as? String) ?? "配置校验未通过"
+            let severity: String
+            switch level {
+            case "error": severity = "critical"
+            case "warn": severity = "warn"
+            default: severity = "info"
+            }
+            items.append(DiagnosticItem(
+                id: "config-hermes-\(code)", group: .config, severity: severity,
+                title: "Hermes 配置问题",
+                detail: message,
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        }
+
+        return items
+    }
+
+    // MARK: 诊断 - Hermes 安全审计
+
+    private func diagSecurityHermes(username: String, fix: Bool) -> [DiagnosticItem] {
+        var items: [DiagnosticItem] = []
+        let hermesHome = HermesInstaller.hermesHome(for: username)
+        let envPath = "\(hermesHome)/.env"
+        let gatewayLogPath = "\(hermesHome)/logs/gateway.log"
+
+        if FileManager.default.fileExists(atPath: envPath),
+           let attrs = try? FileManager.default.attributesOfItem(atPath: envPath),
+           let perms = attrs[.posixPermissions] as? Int,
+           (perms & 0o077) != 0 {
+            var fixed: Bool? = nil
+            var fixError: String? = nil
+            if fix {
+                do {
+                    try FilePermissionHelper.chmod(envPath, mode: "600")
+                    fixed = true
+                } catch {
+                    fixed = false
+                    fixError = error.localizedDescription
+                }
+            }
+            items.append(DiagnosticItem(
+                id: "security-hermes-env-perm", group: .security, severity: "critical",
+                title: ".env 文件权限过宽",
+                detail: "当前 \(String(format: "%o", perms))，密钥可能泄露",
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil
+            ))
+        }
+
+        if FileManager.default.fileExists(atPath: gatewayLogPath),
+           let attrs = try? FileManager.default.attributesOfItem(atPath: gatewayLogPath),
+           let perms = attrs[.posixPermissions] as? Int,
+           (perms & 0o077) != 0 {
+            var fixed: Bool? = nil
+            var fixError: String? = nil
+            if fix {
+                do {
+                    try FilePermissionHelper.chmod(gatewayLogPath, mode: "600")
+                    fixed = true
+                } catch {
+                    fixed = false
+                    fixError = error.localizedDescription
+                }
+            }
+            items.append(DiagnosticItem(
+                id: "security-hermes-log-perm", group: .security, severity: "warn",
+                title: "gateway 日志权限过宽",
+                detail: "当前 \(String(format: "%o", perms))，日志可能包含敏感上下文",
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil
+            ))
+        }
+
+        let env = loadEnvPairs(path: envPath)
+        for (key, value) in env where isHermesSecretLikeKey(key) && looksLikePlaceholderSecret(value) {
+            items.append(DiagnosticItem(
+                id: "security-hermes-placeholder-\(key.lowercased())",
+                group: .security,
+                severity: "warn",
+                title: "检测到占位密钥",
+                detail: "\(key) 仍为占位值",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        }
+
+        if items.isEmpty {
+            items.append(DiagnosticItem(
+                id: "security-hermes-ok", group: .security, severity: "ok",
+                title: "无安全审计问题",
+                detail: "",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        }
+        return items
+    }
+
+    // MARK: 诊断 - Hermes Gateway 状态
+
+    private func diagGatewayHermes(username: String) -> [DiagnosticItem] {
+        var items: [DiagnosticItem] = []
+        let (running, pid) = HermesGatewayManager.status(username: username)
+        if running {
+            items.append(DiagnosticItem(
+                id: "gw-hermes-running", group: .gateway, severity: "ok",
+                title: "Hermes Gateway 正在运行",
+                detail: pid > 0 ? "PID \(pid)" : "已运行（PID 未上报）",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        } else {
+            items.append(DiagnosticItem(
+                id: "gw-hermes-stopped", group: .gateway, severity: "info",
+                title: "Hermes Gateway 未运行",
+                detail: "",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        }
+
+        let globalAutostart = gatewayAutostartGloballyEnabled()
+        let userAutostart = userGatewayAutostartEnabled(username: username)
+        let autostartProfiles = HermesAutostartList.load(username: username)
+        let profileIDs = hermesDiagnosticProfileIDs(username: username, autostartProfiles: autostartProfiles)
+        for profileID in profileIDs {
+            let status = HermesGatewayManager.status(username: username, profileID: profileID)
+            let plistStatus = launchDaemonFlags(
+                path: HermesGatewayManager.launchDaemonPath(username: username, profileID: profileID)
+            )
+            items.append(DiagnosticsGatewayAutostartPolicy.hermesItem(
+                profileID: profileID,
+                globalAutostartEnabled: globalAutostart,
+                userAutostartEnabled: userAutostart,
+                profileAutostartEnabled: autostartProfiles.contains(profileID),
+                plistExists: plistStatus.exists,
+                runAtLoad: plistStatus.runAtLoad,
+                keepAlive: plistStatus.keepAlive,
+                running: status.running
+            ))
+        }
+
+        let plistPath = HermesGatewayManager.launchDaemonPath(username: username)
+        if FileManager.default.fileExists(atPath: plistPath) {
+            items.append(DiagnosticItem(
+                id: "gw-hermes-plist", group: .gateway, severity: "ok",
+                title: "Hermes LaunchDaemon 已注册",
+                detail: plistPath,
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        } else {
+            items.append(DiagnosticItem(
+                id: "gw-hermes-plist", group: .gateway, severity: "warn",
+                title: "Hermes LaunchDaemon 未注册",
+                detail: plistPath,
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil
+            ))
+        }
+
+        return items
+    }
+
+    private func hermesDiagnosticProfileIDs(username: String, autostartProfiles: Set<String>) -> [String] {
+        var profileIDs = Set(["main"])
+        profileIDs.formUnion(autostartProfiles)
+        if let data = try? HermesProfileManager.listProfiles(username: username).data(using: .utf8),
+           let rawList = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            for raw in rawList {
+                if let id = raw["id"] as? String, !id.isEmpty {
+                    profileIDs.insert(id)
+                }
+            }
+        }
+        return profileIDs.sorted { lhs, rhs in
+            if lhs == "main" { return true }
+            if rhs == "main" { return false }
+            return lhs < rhs
+        }
+    }
+
+    private func hermesGatewayPlistEnvironment(username: String) -> [String: String]? {
+        let path = HermesGatewayManager.launchDaemonPath(username: username)
+        guard let data = FileManager.default.contents(atPath: path),
+              let obj = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+              let env = obj["EnvironmentVariables"] as? [String: Any]
+        else { return nil }
+        var result: [String: String] = [:]
+        for (k, v) in env {
+            if let value = v as? String {
+                result[k] = value
+            }
+        }
+        return result
+    }
+
+    private func loadEnvPairs(path: String) -> [String: String] {
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return [:] }
+        var env: [String: String] = [:]
+        for line in text.split(separator: "\n").map(String.init) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
+            let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { continue }
+            let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            var value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
+                value = String(value.dropFirst().dropLast())
+            } else if value.hasPrefix("'"), value.hasSuffix("'"), value.count >= 2 {
+                value = String(value.dropFirst().dropLast())
+            }
+            env[key] = value
+        }
+        return env
+    }
+
+    private func isHermesSecretLikeKey(_ key: String) -> Bool {
+        let upper = key.uppercased()
+        return upper.hasSuffix("_API_KEY") || upper.hasSuffix("_TOKEN") || upper.hasSuffix("_SECRET")
+    }
+
+    private func looksLikePlaceholderSecret(_ value: String) -> Bool {
+        let lowered = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if lowered.isEmpty { return false }
+        if lowered.contains("changeme") || lowered.contains("replace_me") { return true }
+        if lowered.contains("your_") || lowered.hasPrefix("<") || lowered.hasPrefix("xxx") { return true }
+        if lowered.contains("example") || lowered.contains("placeholder") { return true }
+        return false
     }
 
     // MARK: 诊断 - 环境检测
@@ -933,6 +1540,17 @@ extension ClawdHomeHelperImpl {
                 fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
         }
 
+        let plistStatus = launchDaemonFlags(path: "/Library/LaunchDaemons/ai.clawdhome.gateway.\(username).plist")
+        items.append(DiagnosticsGatewayAutostartPolicy.openClawItem(
+            globalAutostartEnabled: gatewayAutostartGloballyEnabled(),
+            userAutostartEnabled: userGatewayAutostartEnabled(username: username),
+            intentionalStopActive: GatewayIntentionalStopStore.activeRecord(username: username) != nil,
+            plistExists: plistStatus.exists,
+            runAtLoad: plistStatus.runAtLoad,
+            keepAlive: plistStatus.keepAlive,
+            running: running
+        ))
+
         let configPath = "/Users/\(username)/.openclaw/openclaw.json"
         if let data = FileManager.default.contents(atPath: configPath),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -946,6 +1564,25 @@ extension ClawdHomeHelperImpl {
         }
 
         return items
+    }
+
+    private func launchDaemonFlags(path: String) -> (exists: Bool, runAtLoad: Bool, keepAlive: Bool) {
+        guard FileManager.default.fileExists(atPath: path) else {
+            return (false, false, false)
+        }
+        guard let data = FileManager.default.contents(atPath: path),
+              let obj = try? PropertyListSerialization.propertyList(
+                from: data,
+                options: [],
+                format: nil
+              ) as? [String: Any] else {
+            return (true, false, false)
+        }
+        return (
+            true,
+            (obj["RunAtLoad"] as? Bool) == true,
+            (obj["KeepAlive"] as? Bool) == true
+        )
     }
 
     // MARK: 诊断 - 网络连通

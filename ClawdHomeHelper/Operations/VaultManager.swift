@@ -49,12 +49,14 @@ enum VaultManager {
         try FilePermissionHelper.chown(vaultPath, owner: username, group: group)
         try FilePermissionHelper.chmod(vaultPath, mode: "2770")
         applyAdminACLs(adminUsers, to: vaultPath)
+        repairVaultTree(vaultPath: vaultPath, username: username, group: group)
 
         // 4. 创建公共文件夹目录
         try ensureDirectory(publicDir)
         try FilePermissionHelper.chown(publicDir, owner: "root", group: globalGroup)
         try FilePermissionHelper.chmod(publicDir, mode: "2775")
         applyAdminACLs(adminUsers, to: publicDir)
+        repairPublicTree()
 
         // 5. 确保上层目录可遍历
         try ensureDirectory(sharedRoot)
@@ -199,8 +201,8 @@ enum VaultManager {
         }
 
         try? fm.createDirectory(atPath: linkDir, withIntermediateDirectories: true, attributes: nil)
-        try? FilePermissionHelper.chown(linkDir, owner: username)
-        try? FilePermissionHelper.chmod(linkDir, mode: "755")
+        _ = try? FilePermissionHelper.chown(linkDir, owner: username)
+        _ = try? FilePermissionHelper.chmod(linkDir, mode: "755")
 
         ensureSymlink(at: "\(linkDir)/private", target: vaultPath)
         ensureSymlink(at: "\(linkDir)/public", target: publicDir)
@@ -283,5 +285,17 @@ enum VaultManager {
                 helperLog("为 \(path) 添加管理员 ACL 失败 @\(admin): \(error.localizedDescription)", level: .warn)
             }
         }
+    }
+
+    private static func repairVaultTree(vaultPath: String, username: String, group: String) {
+        _ = try? run("/usr/sbin/chown", args: ["-R", "\(username):\(group)", vaultPath])
+        _ = try? run("/usr/bin/find", args: [vaultPath, "-type", "d", "-exec", "/bin/chmod", "2770", "{}", "+"])
+        _ = try? run("/usr/bin/find", args: [vaultPath, "-type", "f", "-exec", "/bin/chmod", "660", "{}", "+"])
+    }
+
+    private static func repairPublicTree() {
+        _ = try? run("/usr/bin/chgrp", args: ["-R", globalGroup, publicDir])
+        _ = try? run("/usr/bin/find", args: [publicDir, "-type", "d", "-exec", "/bin/chmod", "2775", "{}", "+"])
+        _ = try? run("/usr/bin/find", args: [publicDir, "-type", "f", "-exec", "/bin/chmod", "664", "{}", "+"])
     }
 }

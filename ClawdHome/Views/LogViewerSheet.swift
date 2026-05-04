@@ -1,14 +1,27 @@
 // ClawdHome/Views/LogViewerSheet.swift
-// 展示指定用户的 openclaw-gateway 日志
+// 展示指定用户的 gateway 日志（按运行时区分 openclaw / hermes）
 // GatewayLogViewer 是可嵌入 Tab 的核心组件；LogViewerSheet 是浮窗壳
 
 import SwiftUI
 import AppKit
 
+enum GatewayLogRuntime: String, Sendable {
+    case openclaw
+    case hermes
+
+    var relativePath: String {
+        switch self {
+        case .openclaw: ".openclaw/logs/gateway.log"
+        case .hermes: ".hermes/logs/gateway.log"
+        }
+    }
+}
+
 // MARK: - 核心日志查看器（可嵌入 Tab 或 Sheet）
 
 struct GatewayLogViewer: View {
     let username: String
+    var runtime: GatewayLogRuntime = .openclaw
     var externalSearchQuery: Binding<String>? = nil
 
     @Environment(HelperClient.self) private var helperClient
@@ -46,6 +59,9 @@ struct GatewayLogViewer: View {
     private var filteredLogText: String {
         filteredLines.joined(separator: "\n")
     }
+
+    private var relativeLogPath: String { runtime.relativePath }
+    private var absoluteLogPath: String { "/Users/\(username)/\(relativeLogPath)" }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -161,7 +177,7 @@ struct GatewayLogViewer: View {
             // 日志文件可能远超 10MB，只读取尾部窗口以保证可查看性与性能
             data = try await helperClient.readFileTail(
                 username: username,
-                relativePath: ".openclaw/logs/gateway.log",
+                relativePath: relativeLogPath,
                 maxBytes: max(lineCount * 512, 128 * 1024)
             )
         } catch {
@@ -170,7 +186,7 @@ struct GatewayLogViewer: View {
                 error.localizedDescription,
                 "",
                 L10n.k("auto.log_viewer_sheet.logs", fallback: "日志路径："),
-                "/Users/\(username)/.openclaw/logs/gateway.log"
+                absoluteLogPath
             ]
             lastDataSize = -1
             return
@@ -183,7 +199,7 @@ struct GatewayLogViewer: View {
         if data.isEmpty {
             lines = [
                 L10n.k("auto.log_viewer_sheet.logsfile", fallback: "日志文件为空或不存在："),
-                "/Users/\(username)/.openclaw/logs/gateway.log",
+                absoluteLogPath,
                 "",
                 L10n.k("auto.log_viewer_sheet.gateway_startlogs", fallback: "gateway 启动后才会生成日志。")
             ]
@@ -230,11 +246,12 @@ struct GatewayLogViewer: View {
 
 struct LogViewerSheet: View {
     let username: String
+    var runtime: GatewayLogRuntime = .openclaw
 
     @Environment(\.dismiss) private var dismiss
 
     private var logPath: String {
-        "/Users/\(username)/.openclaw/logs/gateway.log"
+        "/Users/\(username)/\(runtime.relativePath)"
     }
 
     var body: some View {
@@ -251,7 +268,7 @@ struct LogViewerSheet: View {
             .padding(.horizontal, 16).padding(.vertical, 10)
             .background(.bar)
             Divider()
-            GatewayLogViewer(username: username)
+            GatewayLogViewer(username: username, runtime: runtime)
         }
         .frame(width: 700, height: 480)
     }

@@ -43,6 +43,11 @@ final class AppLogger {
     private let lock = NSLock()
     private let maxLines = 500
 
+    // 文件 sink：写入 /tmp/clawdhome-app-YYYYMMDD.log，供自动化监控 tail -f
+    private let fileQueue = DispatchQueue(label: "ai.clawdhome.mac.applog.file", qos: .utility)
+    private var fileHandle: FileHandle?
+    private var currentLogDate: String = ""
+
     struct LogLine: Identifiable {
         let id = UUID()
         let date: Date
@@ -59,6 +64,12 @@ final class AppLogger {
         }
     }
 
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyyMMdd"
+        return f
+    }()
+
     private init() {}
 
     func log(_ message: String, level: LogLine.Level = .info) {
@@ -74,10 +85,40 @@ final class AppLogger {
         lines.append(entry)
         if lines.count > maxLines { lines.removeFirst(lines.count - maxLines) }
         lock.unlock()
+
+        // 异步写入文件
+        let line = entry.formatted + "\n"
+        let dateKey = Self.dateFormatter.string(from: entry.date)
+        fileQueue.async { [weak self] in
+            self?.writeToFile(line, dateKey: dateKey)
+        }
+    }
+
+    private func writeToFile(_ line: String, dateKey: String) {
+        // 日期变更时轮转文件句柄
+        if dateKey != currentLogDate || fileHandle == nil {
+            fileHandle?.closeFile()
+            fileHandle = nil
+            currentLogDate = dateKey
+            let path = "/tmp/clawdhome-app-\(dateKey).log"
+            if !FileManager.default.fileExists(atPath: path) {
+                FileManager.default.createFile(atPath: path, contents: nil)
+            }
+            fileHandle = FileHandle(forWritingAtPath: path)
+            fileHandle?.seekToEndOfFile()
+        }
+        guard let fh = fileHandle, let data = line.data(using: .utf8) else { return }
+        fh.write(data)
     }
 
     func clear() {
         lock.lock(); lines = []; lock.unlock()
+    }
+
+    // 返回今天的日志文件路径（供调试/测试脚本使用）
+    var todayLogPath: String {
+        let dateKey = Self.dateFormatter.string(from: Date())
+        return "/tmp/clawdhome-app-\(dateKey).log"
     }
 }
 

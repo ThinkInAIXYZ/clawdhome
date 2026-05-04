@@ -331,12 +331,45 @@ func managedGatewayUsers() -> [(username: String, uid: Int)] {
 func bootAutostartGatewaysIfNeeded() {
     guard gatewayAutostartGloballyEnabled() else { return }
     for user in managedGatewayUsers() {
+        // 1. 检查 user 级总开关（sentinel 文件存在 = 整 user 禁用自启，含 hermes）
         guard userGatewayAutostartEnabled(username: user.username) else { continue }
+
+        // 2. OpenClaw gateway 自启（现有逻辑保持不变）
         guard GatewayIntentionalStopStore.activeRecord(username: user.username) == nil else { continue }
         do {
             try GatewayManager.startGateway(username: user.username, uid: user.uid)
         } catch {
             helperLog("autostart gateway failed for @\(user.username): \(error.localizedDescription)", level: .warn)
+        }
+
+        // 3. Hermes gateway 自启（profile 白名单维度）
+        bootAutostartHermesGatewaysIfNeeded(username: user.username, uid: user.uid)
+    }
+}
+
+/// 为单个 user 按 hermes 自启白名单串行拉起各 profile 的 gateway。
+/// 调用方已确认 user 级 autostart-disabled sentinel 不存在。
+private func bootAutostartHermesGatewaysIfNeeded(username: String, uid: Int) {
+    // 未安装 hermes 则跳过
+    guard HermesInstaller.installedVersion(username: username) != nil else { return }
+
+    let profiles = HermesAutostartList.load(username: username)
+    guard !profiles.isEmpty else {
+        helperLog("[autostart] hermes whitelist empty, skip @\(username)")
+        return
+    }
+
+    helperLog("[autostart] hermes profiles to start: \(profiles.sorted()) @\(username)")
+    for profileID in profiles.sorted() {
+        do {
+            try HermesGatewayManager.startGateway(username: username, profileID: profileID, uid: uid)
+            helperLog("[autostart] hermes gateway started profile=\(profileID) @\(username)")
+        } catch {
+            // 单 profile 失败仅记 warn，不影响其他 profile
+            helperLog(
+                "[autostart] hermes gateway failed profile=\(profileID) @\(username): \(error.localizedDescription)",
+                level: .warn
+            )
         }
     }
 }
