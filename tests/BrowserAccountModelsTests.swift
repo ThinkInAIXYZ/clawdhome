@@ -39,6 +39,15 @@ struct BrowserAccountModelsTests {
             BrowserAccountPaths.openCLINPMExecutableName == "open-cli",
             "open-cli wrapper should cover the npm URL opener command name"
         )
+        expect(
+            BrowserAccountPaths.profileExtensionsDirectoryName == "ClawdHomeExtensions"
+            && BrowserAccountPaths.openCLIBrowserBridgeExtensionDirectoryName == "opencli-browser-bridge",
+            "OpenCLI Browser Bridge should live under the Chrome profile extension directory"
+        )
+        expect(
+            paths.openCLIBrowserBridgeExtensionDirectory.path == "/Users/admin/Library/Application Support/ClawdHome/BrowserProfiles/agent.one/ClawdHomeExtensions/opencli-browser-bridge",
+            "OpenCLI Browser Bridge extension should be installed inside the managed Chrome profile"
+        )
 
         let activePort = BrowserAccountActivePort.parse("39123\n/devtools/browser/abc-def\n")
         expect(activePort?.port == 39123, "DevToolsActivePort should parse the first line as port")

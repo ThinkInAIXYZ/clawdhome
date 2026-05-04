@@ -133,6 +133,10 @@ struct UserDetailView: View {
     @State private var isInstallingBrowserAccountTool = false
     @State private var isResettingBrowserAccount = false
     @State private var showResetBrowserAccountConfirm = false
+    @State private var showAddManualLoginSite = false
+    @State private var manualLoginSiteName = ""
+    @State private var manualLoginSiteURL = ""
+    @AppStorage("browser.manualLogin.customSites") private var manualLoginCustomSitesRaw = "[]"
     // Tab
     @State private var selectedTab: ClawTab = .overview
     /// 跳转到 settings tab 时，让 ShrimpSettingsV2View 内部默认选中哪个二级 tab（model/agents/...）
@@ -769,6 +773,16 @@ struct UserDetailView: View {
         } message: {
             Text("将备份并清空该用户的 ClawdHome Chrome profile。其他用户和你的主浏览器账号不会受影响。")
         }
+        .alert("添加登录网站", isPresented: $showAddManualLoginSite) {
+            TextField("名称", text: $manualLoginSiteName)
+            TextField("https://example.com", text: $manualLoginSiteURL)
+            Button("添加") {
+                addManualLoginSiteAndOpen()
+            }
+            Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) {}
+        } message: {
+            Text("添加后会立即在该用户的 ClawdHome Chrome 中打开。")
+        }
         .alert(
             L10n.k("user.detail.auto.file", fallback: "文件快传结果"),
             isPresented: Binding(
@@ -1312,15 +1326,7 @@ struct UserDetailView: View {
                     }
                 }
                 HStack(spacing: 8) {
-                    overviewCompactActionButton(
-                        title: "刷新",
-                        systemImage: "arrow.clockwise",
-                        tint: Color.secondary.opacity(0.08),
-                        foreground: .primary,
-                        disabled: !helperClient.isConnected
-                    ) {
-                        Task { await refreshBrowserAccountStatus() }
-                    }
+                    manualLoginMenuCompact
                     overviewCompactActionButton(
                         title: isResettingBrowserAccount ? "重置中…" : "重置",
                         systemImage: "trash",
@@ -1333,6 +1339,37 @@ struct UserDetailView: View {
                 }
             }
         }
+    }
+
+    private var manualLoginMenuCompact: some View {
+        Menu {
+            ForEach(manualLoginSites) { site in
+                Button {
+                    Task { await openManualLoginSite(site) }
+                } label: {
+                    Text(site.name)
+                }
+            }
+            Divider()
+            Button {
+                manualLoginSiteName = ""
+                manualLoginSiteURL = ""
+                showAddManualLoginSite = true
+            } label: {
+                Label("添加网站…", systemImage: "plus")
+            }
+        } label: {
+            overviewCompactActionLabel(
+                title: "手动登录",
+                systemImage: "person.crop.circle.badge.plus",
+                tint: Color.orange.opacity(0.12),
+                foreground: .orange
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .disabled(!helperClient.isConnected || isOpeningBrowserAccount)
+        .opacity((!helperClient.isConnected || isOpeningBrowserAccount) ? 0.55 : 1)
     }
 
     private var overviewResourceCard: some View {
@@ -2902,6 +2939,36 @@ struct UserDetailView: View {
         } catch {
             actionError = error.localizedDescription
         }
+    }
+
+    private var manualLoginSites: [BrowserManualLoginSite] {
+        BrowserManualLoginSite.defaults + BrowserManualLoginSite.customSites(from: manualLoginCustomSitesRaw)
+    }
+
+    @MainActor
+    private func openManualLoginSite(_ site: BrowserManualLoginSite) async {
+        isOpeningBrowserAccount = true
+        actionError = nil
+        defer { isOpeningBrowserAccount = false }
+        do {
+            try await helperClient.openBrowserAccountURL(username: user.username, url: site.url)
+            await refreshBrowserAccountStatus()
+        } catch {
+            actionError = error.localizedDescription
+            await refreshBrowserAccountStatus()
+        }
+    }
+
+    @MainActor
+    private func addManualLoginSiteAndOpen() {
+        guard let site = BrowserManualLoginSite.makeCustom(name: manualLoginSiteName, url: manualLoginSiteURL) else {
+            actionError = "请输入有效的 http(s) 登录地址。"
+            return
+        }
+        var sites = BrowserManualLoginSite.customSites(from: manualLoginCustomSitesRaw)
+        sites.append(site)
+        manualLoginCustomSitesRaw = BrowserManualLoginSite.encodeCustomSites(sites)
+        Task { await openManualLoginSite(site) }
     }
 
     @MainActor
