@@ -780,6 +780,43 @@ final class HelperClient {
         }
     }
 
+    func installOpenCLI(username: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.installOpenCLI(username: username) { ok, msg in
+                done((ok, msg))
+            }
+        }
+        if !ok {
+            throw HelperError.operationFailed(msg ?? "OpenCLI 安装失败")
+        }
+    }
+
+    func getOpenCLIVersion(username: String) async -> String? {
+        guard let proxy = metadataProxy else { return nil }
+        do {
+            let v: String = try await xpcCall { done in
+                proxy.getOpenCLIVersion(username: username) { done($0) }
+            }
+            return v.isEmpty ? nil : v
+        } catch {
+            return nil
+        }
+    }
+
+    func runOpenCLIDoctor(username: String) async -> (Bool, String) {
+        guard let proxy = controlProxy else { return (false, "Helper 未连接") }
+        do {
+            return try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+                proxy.runOpenCLIDoctor(username: username) { ok, out in
+                    done((ok, out))
+                }
+            }
+        } catch {
+            return (false, error.localizedDescription)
+        }
+    }
+
     // MARK: - 配置管理
 
     func setConfig(username: String, key: String, value: String) async throws {

@@ -1,13 +1,14 @@
 // ClawdHome/Views/WizardV2/ShrimpInitWizardV2.swift
-// Shrimp 初始化向导 v2（6 步，支持双引擎）
+// Shrimp 初始化向导 v2（支持双引擎）
 //
 // 步骤：
 // 1. selectEngine    —— 选择引擎：OpenClaw / Hermes
 // 2. basicEnv        —— 安装引擎基础环境
-// 3. configModel     —— 模型选择（OpenClaw）
-// 4. configAgents    —— Agent 列表配置（OpenClaw）
-// 5. configIM        —— 为每个 agent 绑定 IM Bot（OpenClaw，可跳过）
-// 6. done            —— 完成摘要
+// 3. installTools    —— 安装依赖工具
+// 4. configModel     —— 模型选择（OpenClaw）
+// 5. configAgents    —— Agent 列表配置（OpenClaw）
+// 6. configIM        —— 为每个 agent 绑定 IM Bot（OpenClaw，可跳过）
+// 7. done            —— 完成摘要
 //
 // 入口替换：直接从 UserListView / AdoptTeamSheet 跳入本 Wizard
 
@@ -38,6 +39,7 @@ private enum WizardEngine: String, CaseIterable {
 enum WizardV2Step: Int, CaseIterable {
     case selectEngine
     case basicEnv
+    case installTools
     case hermesSetup
     case configModel
     case configAgents
@@ -48,6 +50,7 @@ enum WizardV2Step: Int, CaseIterable {
         switch self {
         case .selectEngine:   return "选择引擎"
         case .basicEnv:       return L10n.k("wizard_v2.step.basic_env", fallback: "基础环境")
+        case .installTools:   return "安装依赖工具"
         case .hermesSetup:    return "Hermes 配置"
         case .configModel:    return L10n.k("wizard_v2.step.model", fallback: "模型配置")
         case .configAgents:   return L10n.k("wizard_v2.step.agents", fallback: "Agent 配置")
@@ -60,6 +63,7 @@ enum WizardV2Step: Int, CaseIterable {
         switch self {
         case .selectEngine:   return "square.stack.3d.up"
         case .basicEnv:       return "wrench.and.screwdriver"
+        case .installTools:   return "shippingbox"
         case .hermesSetup:    return "wand.and.stars"
         case .configModel:    return "cpu"
         case .configAgents:   return "person.2"
@@ -72,6 +76,7 @@ enum WizardV2Step: Int, CaseIterable {
         switch self {
         case .selectEngine: return "selectEngine"
         case .basicEnv: return "basicEnv"
+        case .installTools: return "installTools"
         case .hermesSetup: return "hermesSetup"
         case .configModel: return "configModel"
         case .configAgents: return "configAgents"
@@ -94,7 +99,6 @@ private enum WizardV2BasicEnvPhase: Int, CaseIterable {
     case installNode
     case setupNpmEnv
     case setNpmRegistry
-    case installBrowserTool
     case installOpenclaw
     case startGateway
 
@@ -108,8 +112,6 @@ private enum WizardV2BasicEnvPhase: Int, CaseIterable {
             return L10n.k("wizard.base_env.setup_npm_env", fallback: "配置 npm 目录")
         case .setNpmRegistry:
             return L10n.k("wizard.base_env.set_npm_registry", fallback: "设置 npm 安装源")
-        case .installBrowserTool:
-            return "安装浏览器工具"
         case .installOpenclaw:
             return L10n.k("wizard.base_env.install_openclaw", fallback: "安装 openclaw")
         case .startGateway:
@@ -125,7 +127,6 @@ private enum WizardV2BasicEnvPhase: Int, CaseIterable {
 private enum WizardV2HermesEnvPhase: Int, CaseIterable {
     case repairHomebrew = 1
     case installNode
-    case installBrowserTool
     case installHermes
     case verifyInstall
     case startGateway
@@ -136,8 +137,6 @@ private enum WizardV2HermesEnvPhase: Int, CaseIterable {
             return "修复 Homebrew 权限"
         case .installNode:
             return "安装 Node.js"
-        case .installBrowserTool:
-            return "安装浏览器工具"
         case .installHermes:
             return "安装 Hermes"
         case .verifyInstall:
@@ -238,6 +237,10 @@ struct ShrimpInitWizardV2: View {
     @State private var hermesSetupDone = false
     @State private var showHermesSetupSkipConfirm = false
     @State private var didAttemptHermesOpenClawDraftCleanup = false
+    @State private var isInstallingTools = false
+    @State private var toolsError: String?
+    @State private var toolsMessage: String?
+    @State private var browserToolInstalled = false
 
     // Step 4: agents
     @State private var agents: [AgentDef] = []
@@ -319,10 +322,10 @@ struct ShrimpInitWizardV2: View {
 
     private var activeSteps: [WizardV2Step] {
         if selectedEngine == .hermes {
-            return [.selectEngine, .basicEnv, .hermesSetup, .done]
+            return [.selectEngine, .basicEnv, .installTools, .hermesSetup, .done]
         }
         // OpenClaw 或尚未选择引擎时，不显示 hermesSetup
-        return [.selectEngine, .basicEnv, .configModel, .configAgents, .configIM, .done]
+        return [.selectEngine, .basicEnv, .installTools, .configModel, .configAgents, .configIM, .done]
     }
 
     private var stepSidebar: some View {
@@ -401,6 +404,7 @@ struct ShrimpInitWizardV2: View {
         switch currentStep {
         case .selectEngine:   selectEngineView
         case .basicEnv:       basicEnvView
+        case .installTools:   installToolsView
         case .hermesSetup:    hermesSetupView
         case .configModel:    configModelView
         case .configAgents:   configAgentsView
@@ -803,6 +807,80 @@ struct ShrimpInitWizardV2: View {
             .onAppear {
                 clearInitialEnvLogIfNeeded()
                 checkEnvReady(autoInstallIfNeeded: true)
+            }
+        }
+    }
+
+    private var installToolsView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("安装依赖工具")
+                    .font(.title2).fontWeight(.semibold)
+                Text("用于 OAuth 登录、网页自动化与账号授权回调。缺失浏览器工具会导致部分平台无法完成绑定。")
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: browserToolInstalled ? "checkmark.circle.fill" : "circle.dotted")
+                        .foregroundStyle(browserToolInstalled ? .green : .secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("浏览器工具（必需）")
+                            .font(.headline)
+                        Text("安装用户级 browser wrapper 与授权辅助能力。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(browserToolInstalled ? "当前状态：已安装" : "当前状态：未安装")
+                            .font(.caption)
+                            .foregroundStyle(browserToolInstalled ? .green : .orange)
+                    }
+                    Spacer()
+                    if isInstallingTools {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+
+                if let toolsError {
+                    Text(toolsError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                if let toolsMessage {
+                    Text(toolsMessage)
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+
+                HStack(spacing: 10) {
+                    Button(browserToolInstalled ? "重新安装浏览器工具" : "安装浏览器工具") {
+                        runToolsInstall()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isInstallingTools)
+                    Spacer()
+                }
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+
+            Spacer()
+            navigationButtons(canGoNext: browserToolInstalled) {
+                advance()
+            }
+        }
+        .padding(24)
+        .onAppear {
+            Task {
+                let status = await helperClient.getBrowserAccountStatus(username: user.username)
+                await MainActor.run {
+                    browserToolInstalled = status?.toolInstalled == true
+                    toolsMessage = browserToolInstalled ? "已检测到浏览器工具，无需重复安装。" : "未检测到浏览器工具，请先安装。"
+                }
             }
         }
     }
@@ -1324,6 +1402,10 @@ struct ShrimpInitWizardV2: View {
     private func resetEnvStateOnEngineSwitch() {
         envReady = false
         envError = nil
+        toolsError = nil
+        toolsMessage = nil
+        browserToolInstalled = false
+        isInstallingTools = false
         envInstallingPhase = nil
         hermesEnvInstallingPhase = nil
         hermesInstallExitCode = nil
@@ -1428,9 +1510,6 @@ struct ShrimpInitWizardV2: View {
                     hermesEnvInstallingPhase = .installNode
                     try await helperClient.installNode(username: user.username, nodeDistURL: nodeDistURL)
 
-                    hermesEnvInstallingPhase = .installBrowserTool
-                    try await helperClient.prepareBrowserAccountForRuntimeInstall(username: user.username)
-
                     hermesEnvInstallingPhase = .installHermes
                     hermesInstallTerminalRunToken = UUID()
                 } catch {
@@ -1461,9 +1540,6 @@ struct ShrimpInitWizardV2: View {
                     username: user.username,
                     registry: NpmRegistryOption.defaultForInitialization.rawValue
                 )
-
-                envInstallingPhase = .installBrowserTool
-                try await helperClient.prepareBrowserAccountForRuntimeInstall(username: user.username)
 
                 envInstallingPhase = .installOpenclaw
                 try await helperClient.installOpenclaw(username: user.username, version: nil)
@@ -1496,6 +1572,27 @@ struct ShrimpInitWizardV2: View {
                 hermesEnvInstallingPhase = nil
                 envError = "\(phaseTitle)失败：\(error.localizedDescription)"
             }
+        }
+    }
+
+    private func runToolsInstall() {
+        guard !isInstallingTools else { return }
+        isInstallingTools = true
+        toolsError = nil
+        toolsMessage = nil
+        Task { @MainActor in
+            do {
+                let status = try await helperClient.installBrowserAccountTool(username: user.username)
+                browserToolInstalled = status.toolInstalled
+                if !status.toolInstalled {
+                    toolsError = "浏览器工具安装后状态校验失败，请重试。"
+                } else {
+                    toolsMessage = "浏览器工具安装完成。"
+                }
+            } catch {
+                toolsError = "安装浏览器工具失败：\(error.localizedDescription)"
+            }
+            isInstallingTools = false
         }
     }
 
@@ -2038,23 +2135,23 @@ struct ShrimpInitWizardV2: View {
             if isEnvReady {
                 // 环境就绪后停留在 hermesSetup 步骤，由用户完成 `hermes setup` 交互式配置
                 // 后再 advance 到 done；自动跳到 done 会绕过模型/密钥配置直接落盘 profile
-                visitedSteps = [.selectEngine, .basicEnv, .hermesSetup]
-                currentStep = .hermesSetup
+                visitedSteps = [.selectEngine, .basicEnv, .installTools]
+                currentStep = .installTools
             } else {
                 visitedSteps = [.selectEngine, .basicEnv]
                 currentStep = .basicEnv
             }
         } else if isEnvReady && !agents.isEmpty {
-            visitedSteps = [.selectEngine, .basicEnv, .configModel]
-            currentStep = .configModel
+            visitedSteps = [.selectEngine, .basicEnv, .installTools]
+            currentStep = .installTools
         } else if selectedEngine == .openclaw && !agents.isEmpty {
             // 仅在引擎已明确检测到时才跳过引擎选择；新用户预填的 solo agent 不应触发此跳转
             visitedSteps = [.selectEngine, .basicEnv]
             currentStep = .basicEnv
         } else if isEnvReady {
             // 环境已就绪但没有团队 DNA（可能是手动创建的用户）
-            visitedSteps = [.selectEngine, .basicEnv]
-            currentStep = .basicEnv
+            visitedSteps = [.selectEngine, .basicEnv, .installTools]
+            currentStep = .installTools
         }
     }
 
@@ -2080,9 +2177,9 @@ struct ShrimpInitWizardV2: View {
     private func activeSteps(for engine: WizardEngine) -> [WizardV2Step] {
         switch engine {
         case .hermes:
-            return [.selectEngine, .basicEnv, .hermesSetup, .done]
+            return [.selectEngine, .basicEnv, .installTools, .hermesSetup, .done]
         case .openclaw:
-            return [.selectEngine, .basicEnv, .configModel, .configAgents, .configIM, .done]
+            return [.selectEngine, .basicEnv, .installTools, .configModel, .configAgents, .configIM, .done]
         }
     }
 }

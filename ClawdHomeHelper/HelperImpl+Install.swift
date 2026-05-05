@@ -21,13 +21,8 @@ extension ClawdHomeHelperImpl {
     func installOpenclaw(username: String, version: String?,
                          withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("安装 openclaw @\(username) v\(version ?? "latest")")
-        let logURL = initLogURL(username: username)
         do {
-            helperLog("[browser-account] OpenClaw 安装前准备浏览器工具 @\(username)")
-            try BrowserAccountManager.prepareForRuntimeInstall(username: username, logURL: logURL)
-            try InstallManager.install(username: username, version: version, logURL: logURL)
-            helperLog("[browser-account] OpenClaw 安装后刷新浏览器工具 wrapper @\(username)")
-            _ = try BrowserAccountManager.installTool(username: username)
+            try InstallManager.install(username: username, version: version, logURL: initLogURL(username: username))
 
             // 升级后环境验证与修复
             let issues = InstallManager.verifyEnvironment(username: username)
@@ -106,11 +101,7 @@ extension ClawdHomeHelperImpl {
 
         // 3. 重新安装
         do {
-            helperLog("[browser-account] OpenClaw 重装前准备浏览器工具 @\(username)")
-            try BrowserAccountManager.prepareForRuntimeInstall(username: username, logURL: logURL)
             try InstallManager.install(username: username, version: version, logURL: logURL)
-            helperLog("[browser-account] OpenClaw 重装后刷新浏览器工具 wrapper @\(username)")
-            _ = try BrowserAccountManager.installTool(username: username)
         } catch {
             helperLog("[reinstall] 重装失败 @\(username): \(error.localizedDescription)", level: .error)
             // 即使安装失败，也尝试重启网关
@@ -954,7 +945,7 @@ enum HomebrewRepairManager {
         let home = UserEnvContract.home(username: username)
         let profilePath = "\(home)/.zprofile"
         let sharedCacheRoot = "/var/lib/clawdhome/cache"
-        let homebrewCacheDir = "\(sharedCacheRoot)/homebrew"
+        let homebrewCacheDir = UserEnvContract.homebrewSharedCacheDir()
         let nodePath = ConfigWriter.buildNodePath(username: username)
 
         let installScript = """
@@ -1018,6 +1009,7 @@ enum HomebrewRepairManager {
         )
         _ = try? FilePermissionHelper.chmod(sharedCacheRoot, mode: "1777")
         _ = try? FilePermissionHelper.chmod(homebrewCacheDir, mode: "1777")
+        _ = try? FilePermissionHelper.chmodSymbolicRecursive(homebrewCacheDir, expr: "a+rwX")
         let cacheTarPath = "\(homebrewCacheDir)/brew-master.tar.gz"
         if FileManager.default.fileExists(atPath: cacheTarPath) {
             // 缓存文件可能由上一只 Shrimp 用户创建；sticky 共享目录下，后续用户无法替换它。

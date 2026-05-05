@@ -346,6 +346,8 @@ final class ShrimpPool {
             for user in targets {
                 group.addTask {
                     // 虾塘列表采用短超时策略，避免单次版本查询阻塞近 1 分钟。
+                    let previousOpenclawVersion = user.openclawVersion
+                    let previousHermesVersion = user.hermesVersion
                     async let openclawVersionResult = self.helperClient.getOpenclawVersion(
                         username: user.username,
                         timeout: .seconds(6)
@@ -358,14 +360,16 @@ final class ShrimpPool {
 
                     let openclawVersion = await openclawVersionResult
                     let hermesVersion = await hermesVersionResult
-                    user.openclawVersion = openclawVersion
-                    user.hermesVersion = hermesVersion
+                    // 版本查询在安装/诊断高负载期间可能短时超时返回 nil。
+                    // 为避免 UI 类型/状态抖动：仅在查询成功时覆盖，失败时保留上一轮已知值。
+                    user.openclawVersion = openclawVersion ?? previousOpenclawVersion
+                    user.hermesVersion = hermesVersion ?? previousHermesVersion
                     // 版本查询完成（含失败回落为 nil）后立刻结束列表 spinner，
                     // 避免后续运行态/向导态查询变慢导致一直转圈。
                     user.versionChecked = true
 
                     let status: (Bool, Int32)?
-                    if hermesVersion != nil {
+                    if user.hermesVersion != nil {
                         status = await self.helperClient.getHermesGatewayStatus(username: user.username)
                     } else {
                         status = try? await self.helperClient.getGatewayStatus(username: user.username)
@@ -386,7 +390,7 @@ final class ShrimpPool {
                     }
 
                     let wizardJSON = await wizardStateResult
-                    let hasRuntime = openclawVersion != nil || hermesVersion != nil
+                    let hasRuntime = user.openclawVersion != nil || user.hermesVersion != nil
                     user.isWizardCompleted = Self.resolveWizardCompleted(stateJSON: wizardJSON, hasRuntime: hasRuntime)
                 }
             }

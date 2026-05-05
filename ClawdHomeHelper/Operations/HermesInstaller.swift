@@ -13,6 +13,9 @@
 import Foundation
 
 struct HermesInstaller {
+    private static let sharedCacheRoot = "/var/lib/clawdhome/cache"
+    private static let sharedPipCacheDir = "/var/lib/clawdhome/cache/pip"
+    private static let sharedUVCacheDir = "/var/lib/clawdhome/cache/uv"
 
     // MARK: - 路径契约
 
@@ -165,6 +168,9 @@ struct HermesInstaller {
             ("HOMEBREW_PREFIX", brew),
             ("HOMEBREW_CELLAR", "\(brew)/Cellar"),
             ("HOMEBREW_REPOSITORY", brew),
+            ("HOMEBREW_CACHE", UserEnvContract.homebrewSharedCacheDir()),
+            ("PIP_CACHE_DIR", sharedPipCacheDir),
+            ("UV_CACHE_DIR", sharedUVCacheDir),
         ]
         if let cdpEndpoint = BrowserAccountManager.reachableCDPEndpoint(username: username) {
             env.append(("BROWSER_CDP_URL", cdpEndpoint))
@@ -196,6 +202,8 @@ struct HermesInstaller {
 
         // 0. 前置检查：目标用户可用的 Python 3.11+
         _ = try findPython(for: username)
+        try ensureSharedPythonCacheReady()
+        defer { repairSharedPythonCachePermissions() }
 
         let home = hermesHome(for: username)
 
@@ -234,6 +242,29 @@ struct HermesInstaller {
             endpoint: BrowserAccountManager.reachableCDPEndpoint(username: username)
         )
         return output
+    }
+
+    private static func ensureSharedPythonCacheReady() throws {
+        try FileManager.default.createDirectory(
+            atPath: sharedPipCacheDir,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        try FileManager.default.createDirectory(
+            atPath: sharedUVCacheDir,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        _ = try? FilePermissionHelper.chmod(sharedCacheRoot, mode: "1777")
+        repairSharedPythonCachePermissions()
+    }
+
+    private static func repairSharedPythonCachePermissions() {
+        for dir in [sharedPipCacheDir, sharedUVCacheDir] {
+            guard FileManager.default.fileExists(atPath: dir) else { continue }
+            _ = try? FilePermissionHelper.chmodSymbolicRecursive(dir, expr: "a+rwX")
+            _ = try? FilePermissionHelper.chmod(dir, mode: "1777")
+        }
     }
 
     /// 官方脚本的 --branch 参数只接受安全字符，避免注入
