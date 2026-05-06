@@ -34142,6 +34142,23 @@
           }
         }
       }
+    },
+    "hermes.sidebar.chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会话"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
