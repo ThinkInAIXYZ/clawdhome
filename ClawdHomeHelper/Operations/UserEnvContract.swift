@@ -4,6 +4,8 @@
 import Foundation
 
 enum UserEnvContract {
+    static let sharedCacheRootDir = "/var/lib/clawdhome/cache"
+
     private static let proxyKeys = [
         "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
         "http_proxy", "https_proxy", "all_proxy",
@@ -44,21 +46,38 @@ enum UserEnvContract {
     }
 
     static func npmSharedCacheDir() -> String {
-        "/var/lib/clawdhome/cache/npm"
+        "\(sharedCacheRootDir)/npm"
+    }
+
+    static func pipSharedCacheDir() -> String {
+        "\(sharedCacheRootDir)/pip"
+    }
+
+    static func uvSharedCacheDir() -> String {
+        "\(sharedCacheRootDir)/uv"
+    }
+
+    static func homebrewCacheRootDir() -> String {
+        "\(sharedCacheRootDir)/homebrew"
     }
 
     static func homebrewSharedCacheDir() -> String {
-        "/var/lib/clawdhome/cache/homebrew"
+        homebrewCacheRootDir()
+    }
+
+    static func homebrewCacheDir(username: String) -> String {
+        homebrewSharedCacheDir()
     }
 
     /// ~/.zprofile 里要求存在的关键 export（顺序即最终建议顺序）
-    static func zprofileRequiredExports() -> [String] {
-        [
+    static func zprofileRequiredExports(username: String? = nil) -> [String] {
+        let homebrewCache = homebrewSharedCacheDir()
+        return [
             "export PATH=\"$HOME/.brew/bin:$PATH\"",
             "export HOMEBREW_PREFIX=\"$HOME/.brew\"",
             "export HOMEBREW_CELLAR=\"$HOME/.brew/Cellar\"",
             "export HOMEBREW_REPOSITORY=\"$HOME/.brew\"",
-            "export HOMEBREW_CACHE=\"/var/lib/clawdhome/cache/homebrew\"",
+            "export HOMEBREW_CACHE=\"\(homebrewCache)\"",
             "export NPM_CONFIG_PREFIX=\"$HOME/.npm-global\"",
             "export npm_config_prefix=\"$HOME/.npm-global\"",
             "export NPM_CONFIG_CACHE=\"/var/lib/clawdhome/cache/npm\"",
@@ -75,7 +94,7 @@ enum UserEnvContract {
         let brew = brewRoot(username: username)
         let npmGlobal = npmGlobalDir(username: username)
         let npmCache = npmSharedCacheDir()
-        let homebrewCache = homebrewSharedCacheDir()
+        let homebrewCache = homebrewCacheDir(username: username)
         let npmrc = npmUserConfig(username: username)
         var env: [String: String] = [
             "HOME": homeDir,

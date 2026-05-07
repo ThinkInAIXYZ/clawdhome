@@ -995,11 +995,20 @@ enum BrowserAccountManager {
           done
         fi
 
-        /usr/bin/env python3 "\(toolPath)" bridge-open "https://clawdhome.ai" >/dev/null 2>&1 || {
-          echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
-          echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
-        }
-        echo "opencli-prelaunch=done" >> "$LOG" 2>&1 || true
+        bridge_connected=0
+        status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"
+        if [ -n "${status_json:-}" ] && echo "$status_json" | /usr/bin/grep -q '"extensionConnected":true'; then
+          bridge_connected=1
+          echo "opencli-prelaunch=skip-connected" >> "$LOG" 2>&1 || true
+        fi
+
+        if [ "$bridge_connected" -ne 1 ]; then
+          /usr/bin/env python3 "\(toolPath)" bridge-open "https://clawdhome.ai" >/dev/null 2>&1 || {
+            echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
+            echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
+          }
+          echo "opencli-prelaunch=done" >> "$LOG" 2>&1 || true
+        fi
 
         for _ in {1..40}; do
           status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"
@@ -1401,7 +1410,7 @@ enum BrowserAccountManager {
         - `clawdhome-browser launch [url]`：底层启动命令，通常无需直接使用。
         常见浏览器打开命令已被接管：`open <url>`、`google-chrome <url>`、`chrome <url>`、`chromium <url>`、`xdg-open <url>` 会自动跳到 `clawdhome-browser open <url>`；无 URL 时默认打开 `https://clawdhome.ai`。
 
-        如果该用户已安装 `opencli`，ClawdHome 会把真实入口保存在 `opencli.clawdhome-real`，并用 wrapper 接管 `opencli`：每次运行 OpenCLI 前会先自动执行 `clawdhome-browser bridge-open https://clawdhome.ai`，确保 Browser Bridge 已加载并连接到该用户的 ClawdHome Chrome。
+        如果该用户已安装 `opencli`，ClawdHome 会把真实入口保存在 `opencli.clawdhome-real`，并用 wrapper 接管 `opencli`：运行 OpenCLI 时会先检查 Browser Bridge 连接状态，仅在未连接时才自动执行 `clawdhome-browser bridge-open https://clawdhome.ai`。
 
         如果当前命令行用户没有 macOS 图形会话，`launch` 可能会被系统拒绝；此时请让用户在 ClawdHome 中点击“打开浏览器账号”完成初始化。
         """
@@ -1448,6 +1457,7 @@ ACTIVE_PORT_PATH = os.path.join(PROFILE_PATH, "DevToolsActivePort")
 LAUNCHER_PATH = os.path.expanduser("~/.clawdhome/tools/clawdhome-browser/clawdhome-browser-launcher")
 LEGACY_LAUNCHER_PATH = os.path.expanduser("~/.openclaw/tools/clawdhome-browser/clawdhome-browser-launcher")
 CHROME_APP = "/Applications/Google Chrome.app"
+CHROME_BINARY = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 DEBUG_LOG_PATH = os.path.expanduser("~/.clawdhome/browser/debug.log")
 
 def debug_log(message):
@@ -1510,11 +1520,54 @@ def browser_process_running(profile_path):
         debug_log(f"browser_process_running ps_fail error={exc!r}")
         return False
     for text in result.stdout.splitlines():
-        if "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome " not in text:
+        if CHROME_BINARY not in text:
             continue
         if f"--user-data-dir={profile_path}" in text or profile_path in text:
             return True
     return False
+
+def lock_file_in_use(profile_path):
+    lock_path = os.path.join(profile_path, "SingletonLock")
+    if not os.path.exists(lock_path):
+        return False
+    try:
+        result = subprocess.run(
+            ["/usr/sbin/lsof", "-t", lock_path],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except Exception as exc:
+        debug_log(f"lock_file_in_use lsof_fail path={lock_path!r} error={exc!r}")
+        return False
+    pids = [line.strip() for line in result.stdout.splitlines() if line.strip().isdigit()]
+    if not pids:
+        debug_log(f"lock_file_in_use no_holder path={lock_path!r}")
+        return False
+    for pid in pids:
+        try:
+            cmd = subprocess.run(
+                ["/bin/ps", "-p", pid, "-o", "command="],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).stdout.strip()
+        except Exception:
+            continue
+        if CHROME_BINARY in cmd:
+            debug_log(f"lock_file_in_use holder pid={pid} path={lock_path!r}")
+            return True
+    debug_log(f"lock_file_in_use holder_not_chrome pids={pids!r} path={lock_path!r}")
+    return False
+
+def profile_runtime_active(profile_path):
+    running = browser_process_running(profile_path)
+    lock_held = lock_file_in_use(profile_path)
+    active = running or lock_held
+    debug_log(f"profile_runtime_active profile={profile_path!r} process_running={running} lock_held={lock_held} active={active}")
+    return active
 
 def chrome_profile_processes(profile_path):
     try:
@@ -1530,12 +1583,18 @@ def chrome_profile_processes(profile_path):
         return []
     pids = []
     for line in result.stdout.splitlines():
-        text = line.strip()
-        if "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome " not in text:
+        raw = line.strip()
+        if not raw:
             continue
-        if f"--user-data-dir={profile_path}" not in text and profile_path not in text:
+        parts = raw.split(None, 1)
+        if not parts:
             continue
-        pid = text.split(" ", 1)[0]
+        pid = parts[0]
+        command = parts[1] if len(parts) > 1 else ""
+        if CHROME_BINARY not in command:
+            continue
+        if f"--user-data-dir={profile_path}" not in command and profile_path not in command:
+            continue
         if pid.isdigit():
             pids.append(pid)
     return pids
@@ -1586,6 +1645,36 @@ def hide_browser_if_requested():
         stderr=subprocess.DEVNULL,
     )
 
+def open_url_via_app(target):
+    try:
+        result = subprocess.run(
+            ["/usr/bin/open", "-a", "Google Chrome", target],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        debug_log(f"open_url_via_app ok url={target!r} stdout={result.stdout.strip()!r} stderr={result.stderr.strip()!r}")
+        return True
+    except subprocess.CalledProcessError as exc:
+        debug_log(f"open_url_via_app fail url={target!r} rc={exc.returncode} stdout={(exc.stdout or '').strip()!r} stderr={(exc.stderr or '').strip()!r}")
+        return False
+
+def open_url_via_applescript(target):
+    try:
+        script = f'tell application "Google Chrome" to open location "{target}"'
+        subprocess.run(
+            ["/usr/bin/osascript", "-e", script],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        debug_log(f"open_url_via_applescript ok url={target!r}")
+        return True
+    except subprocess.CalledProcessError as exc:
+        debug_log(f"open_url_via_applescript fail url={target!r} rc={exc.returncode}")
+        return False
+
 def command_status():
     debug_log(f"command_status argv={sys.argv!r} user={os.environ.get('USER')!r} path={os.environ.get('PATH')!r}")
     session = load_session_if_present()
@@ -1597,7 +1686,7 @@ def command_status():
         }, ensure_ascii=False, indent=2))
         return
     profile_path = session.get("profilePath", PROFILE_PATH)
-    running = browser_process_running(profile_path)
+    running = profile_runtime_active(profile_path)
     print(json.dumps({
         "ok": running,
         "profilePath": profile_path,
@@ -1620,6 +1709,26 @@ def command_launch(url=None, emit_json=True, require_bridge=False):
         os.makedirs(launch_profile_path, exist_ok=True)
 
     target = url or "about:blank"
+    if existing_session and profile_runtime_active(launch_profile_path):
+        debug_log(f"command_launch reuse-running profile={launch_profile_path!r} target={target!r} require_bridge={require_bridge}")
+        opened = False
+        if target != "about:blank":
+            opened = (
+                open_url_via_app(target)
+                or open_url_via_applescript(target)
+            )
+            if not opened and not require_bridge:
+                fail("检测到该用户浏览器已在运行，但复用打开 URL 失败。为避免重复启动 Chrome，已停止本次拉起。")
+        if target == "about:blank" or opened or require_bridge:
+            hide_browser_if_requested()
+            if emit_json:
+                print(json.dumps({
+                    "ok": True,
+                    "profilePath": launch_profile_path,
+                    "message": "浏览器账号已在运行并复用"
+                }, ensure_ascii=False, indent=2))
+            return
+
     launcher_path = resolve_launcher_path() if existing_session else None
     if existing_session and launcher_path:
         if require_bridge:
@@ -1735,11 +1844,20 @@ if ! /usr/bin/nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
   done
 fi
 
-/usr/bin/env python3 "$HOME/.clawdhome/tools/clawdhome-browser/clawdhome-browser" bridge-open "https://clawdhome.ai" >/dev/null 2>&1 || {
-  echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
-  echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
-}
-echo "opencli-prelaunch=done" >> "$LOG" 2>&1 || true
+bridge_connected=0
+status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"
+if [ -n "${status_json:-}" ] && echo "$status_json" | /usr/bin/grep -q '"extensionConnected":true'; then
+  bridge_connected=1
+  echo "opencli-prelaunch=skip-connected" >> "$LOG" 2>&1 || true
+fi
+
+if [ "$bridge_connected" -ne 1 ]; then
+  /usr/bin/env python3 "$HOME/.clawdhome/tools/clawdhome-browser/clawdhome-browser" bridge-open "https://clawdhome.ai" >/dev/null 2>&1 || {
+    echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
+    echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
+  }
+  echo "opencli-prelaunch=done" >> "$LOG" 2>&1 || true
+fi
 
 for _ in {1..40}; do
   status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"

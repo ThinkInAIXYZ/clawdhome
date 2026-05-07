@@ -259,6 +259,38 @@ enum ManagedUserFilter {
     }
 }
 
+struct HomebrewCacheStats: Codable, Equatable {
+    var path: String
+    var totalBytes: Int64
+    var downloadsBytes: Int64
+    var apiBytes: Int64
+    var otherBytes: Int64
+    var fileCount: Int
+}
+
+struct SharedCacheOverview: Codable, Equatable {
+    var generatedAt: Int64
+    var caches: [SharedCacheItemStats]
+}
+
+struct SharedCacheItemStats: Codable, Equatable, Identifiable {
+    var id: String
+    var name: String
+    var path: String
+    var totalBytes: Int64
+    var fileCount: Int
+    var supportsRefresh: Bool
+    var supportsClear: Bool
+    var breakdown: [SharedCacheBreakdown]
+}
+
+struct SharedCacheBreakdown: Codable, Equatable, Identifiable {
+    var label: String
+    var bytes: Int64
+
+    var id: String { label }
+}
+
 // MARK: - 运行时配置（~/.clawdhome/runtime.json）
 
 /// ClawdHome 写入的 shrimp 运行时声明，是识别引擎的唯一锚点。

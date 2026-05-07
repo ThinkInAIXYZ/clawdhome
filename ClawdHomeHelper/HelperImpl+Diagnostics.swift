@@ -1038,7 +1038,7 @@ extension ClawdHomeHelperImpl {
         let zshrcPath = "\(home)/.zshrc"
         let npmrcPath = "\(home)/.npmrc"
 
-        let requiredExports = UserEnvContract.zprofileRequiredExports()
+        let requiredExports = UserEnvContract.zprofileRequiredExports(username: username)
         let missingExports = missingShellExports(path: zprofilePath, required: requiredExports)
         if missingExports.isEmpty {
             items.append(DiagnosticItem(

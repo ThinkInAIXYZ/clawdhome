@@ -1,6 +1,6 @@
 // ClawdHome/Views/AdoptTeamSheet.swift
 // 领养团队弹窗：确认 Shrimp 名 → 创建 Shrimp → 暂存团队草稿 → 进初始化向导
-// ⚠️ DEPRECATED (v2): 团队初始化入口已集成到 ShrimpInitWizardV2（模板选择步骤）。
+// ⚠️ DEPRECATED (v2): 团队初始化入口已集成到 InstanceInitWizardV2（模板选择步骤）。
 // 本文件保留在 git 历史中，不删除。
 
 import SwiftUI

@@ -250,7 +250,7 @@ extension ClawdHomeHelperImpl {
             // 2. 将 npm 全局环境写入 ~/.zprofile（幂等）
             let profilePath = "/Users/\(username)/.zprofile"
             let existing = (try? String(contentsOfFile: profilePath, encoding: .utf8)) ?? ""
-            let requiredExports = UserEnvContract.zprofileRequiredExports()
+            let requiredExports = UserEnvContract.zprofileRequiredExports(username: username)
             let missingExports = requiredExports.filter { !existing.contains($0) }
             if !missingExports.isEmpty {
                 var exportBlock = "\n"
@@ -375,6 +375,58 @@ extension ClawdHomeHelperImpl {
         } catch {
             helperLog("修复 Homebrew 权限失败 @\(username): \(error.localizedDescription)", level: .warn)
             appendLog("❌ 修复 Homebrew 权限失败：\(error.localizedDescription)\n")
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func getHomebrewSharedCacheStats(withReply reply: @escaping (String) -> Void) {
+        let stats = HomebrewRepairManager.sharedCacheStats()
+        let json = (try? JSONEncoder().encode(stats)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        reply(json)
+    }
+
+    func refreshHomebrewSharedCache(withReply reply: @escaping (Bool, String?) -> Void) {
+        do {
+            let output = try HomebrewRepairManager.refreshSharedCache()
+            reply(true, output)
+        } catch {
+            helperLog("刷新共享 Homebrew 缓存失败: \(error.localizedDescription)", level: .warn)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func clearHomebrewSharedCache(withReply reply: @escaping (Bool, String?) -> Void) {
+        do {
+            try HomebrewRepairManager.clearSharedCache()
+            reply(true, nil)
+        } catch {
+            helperLog("清空共享 Homebrew 缓存失败: \(error.localizedDescription)", level: .warn)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func getSharedCacheOverview(withReply reply: @escaping (String) -> Void) {
+        let overview = HomebrewRepairManager.sharedCacheOverview()
+        let json = (try? JSONEncoder().encode(overview)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        reply(json)
+    }
+
+    func refreshSharedCache(cacheID: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        do {
+            let output = try HomebrewRepairManager.refreshSharedCache(cacheID: cacheID)
+            reply(true, output)
+        } catch {
+            helperLog("更新共享缓存失败 id=\(cacheID): \(error.localizedDescription)", level: .warn)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func clearSharedCache(cacheID: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        do {
+            try HomebrewRepairManager.clearSharedCache(cacheID: cacheID)
+            reply(true, nil)
+        } catch {
+            helperLog("清空共享缓存失败 id=\(cacheID): \(error.localizedDescription)", level: .warn)
             reply(false, error.localizedDescription)
         }
     }
@@ -940,18 +992,212 @@ extension ClawdHomeHelperImpl {
 // MARK: - Shared Homebrew Repair
 
 enum HomebrewRepairManager {
+    private static let sharedInstallLock = NSRecursiveLock()
+
+    @discardableResult
+    static func withSharedCacheInstallLock<T>(
+        username: String,
+        logURL: URL?,
+        _ body: () throws -> T
+    ) rethrows -> T {
+        appendLog(logURL, "\n🔒 等待 Homebrew 安装锁（共享缓存串行）...\n")
+        sharedInstallLock.lock()
+        appendLog(logURL, "✓ 已获取 Homebrew 安装锁 @\(username)\n")
+        defer {
+            sharedInstallLock.unlock()
+            appendLog(logURL, "🔓 已释放 Homebrew 安装锁 @\(username)\n")
+        }
+        return try body()
+    }
 
     static func repair(username: String, logURL: URL?) throws {
+        try withSharedCacheInstallLock(username: username, logURL: logURL) {
+            try repairUnlocked(username: username, logURL: logURL)
+        }
+    }
+
+    private struct SharedCacheDefinition {
+        let id: String
+        let name: String
+        let path: String
+        let supportsRefresh: Bool
+        let supportsClear: Bool
+    }
+
+    private static var sharedCacheDefinitions: [SharedCacheDefinition] {
+        [
+            SharedCacheDefinition(
+                id: "homebrew",
+                name: "Homebrew",
+                path: UserEnvContract.homebrewSharedCacheDir(),
+                supportsRefresh: true,
+                supportsClear: true
+            ),
+            SharedCacheDefinition(
+                id: "npm",
+                name: "npm",
+                path: UserEnvContract.npmSharedCacheDir(),
+                supportsRefresh: false,
+                supportsClear: true
+            ),
+            SharedCacheDefinition(
+                id: "uv",
+                name: "uv",
+                path: UserEnvContract.uvSharedCacheDir(),
+                supportsRefresh: false,
+                supportsClear: true
+            ),
+            SharedCacheDefinition(
+                id: "pip",
+                name: "pip",
+                path: UserEnvContract.pipSharedCacheDir(),
+                supportsRefresh: false,
+                supportsClear: true
+            ),
+        ]
+    }
+
+    static func sharedCacheStats() -> HomebrewCacheStats {
+        let root = UserEnvContract.homebrewSharedCacheDir()
+        let downloads = "\(root)/downloads"
+        let api = "\(root)/api"
+        let total = directoryStats(root)
+        let downloadsStats = directoryStats(downloads)
+        let apiStats = directoryStats(api)
+        let otherBytes = max(0, total.bytes - downloadsStats.bytes - apiStats.bytes)
+        return HomebrewCacheStats(
+            path: root,
+            totalBytes: total.bytes,
+            downloadsBytes: downloadsStats.bytes,
+            apiBytes: apiStats.bytes,
+            otherBytes: otherBytes,
+            fileCount: total.fileCount
+        )
+    }
+
+    static func sharedCacheOverview() -> SharedCacheOverview {
+        let entries = sharedCacheDefinitions.map { definition in
+            let stats = directoryStats(definition.path)
+            let breakdown: [SharedCacheBreakdown]
+            if definition.id == "homebrew" {
+                let downloadsStats = directoryStats("\(definition.path)/downloads")
+                let apiStats = directoryStats("\(definition.path)/api")
+                let otherBytes = max(0, stats.bytes - downloadsStats.bytes - apiStats.bytes)
+                breakdown = [
+                    SharedCacheBreakdown(label: "downloads", bytes: downloadsStats.bytes),
+                    SharedCacheBreakdown(label: "api", bytes: apiStats.bytes),
+                    SharedCacheBreakdown(label: "other", bytes: otherBytes),
+                ]
+            } else {
+                breakdown = []
+            }
+            return SharedCacheItemStats(
+                id: definition.id,
+                name: definition.name,
+                path: definition.path,
+                totalBytes: stats.bytes,
+                fileCount: stats.fileCount,
+                supportsRefresh: definition.supportsRefresh,
+                supportsClear: definition.supportsClear,
+                breakdown: breakdown
+            )
+        }
+        return SharedCacheOverview(
+            generatedAt: Int64(Date().timeIntervalSince1970),
+            caches: entries
+        )
+    }
+
+    static func refreshSharedCache(cacheID: String) throws -> String {
+        let normalized = cacheID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalized {
+        case "all":
+            return try refreshSharedCache()
+        case "homebrew":
+            return try refreshSharedCache()
+        default:
+            throw NSError(
+                domain: "ClawdHomeHelper.SharedCache",
+                code: 400,
+                userInfo: [NSLocalizedDescriptionKey: "缓存 \(cacheID) 暂不支持更新"]
+            )
+        }
+    }
+
+    static func refreshSharedCache() throws -> String {
+        let runner = try resolveSharedCacheRunnerUser()
+        return try withSharedCacheInstallLock(username: runner, logURL: nil) {
+            try prepareSharedCacheForInstall(username: runner, logURL: nil)
+            defer { restoreSharedCacheGuardrails(logURL: nil) }
+
+            let cacheDir = UserEnvContract.homebrewSharedCacheDir()
+            let script = """
+            set -e
+            CACHE_DIR="\(cacheDir)"
+            mkdir -p "$CACHE_DIR"
+            rm -f "$CACHE_DIR"/*.part "$CACHE_DIR"/downloads/*.incomplete 2>/dev/null || true
+
+            brew update
+
+            FORMULAE="ffmpeg pkgconf openssl@3 python@3.12"
+            FAILED=""
+            for f in $FORMULAE; do
+              echo "⬇ 预热: $f"
+              if ! brew fetch --deps --force-bottle "$f"; then
+                FAILED="$FAILED $f"
+              fi
+            done
+
+            if [ -n "$FAILED" ]; then
+              echo "⚠ 以下 formula 预热失败:$FAILED"
+            else
+              echo "✓ 共享 Homebrew 缓存预热完成"
+            fi
+            """
+            return try runBrewAsUser(username: runner, script: script)
+        }
+    }
+
+    static func clearSharedCache(cacheID: String) throws {
+        let normalized = cacheID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let targets: [SharedCacheDefinition]
+        if normalized == "all" {
+            targets = sharedCacheDefinitions.filter { $0.supportsClear }
+        } else if let hit = sharedCacheDefinitions.first(where: { $0.id == normalized && $0.supportsClear }) {
+            targets = [hit]
+        } else {
+            throw NSError(
+                domain: "ClawdHomeHelper.SharedCache",
+                code: 404,
+                userInfo: [NSLocalizedDescriptionKey: "未知缓存类型：\(cacheID)"]
+            )
+        }
+
+        try withSharedCacheInstallLock(username: "cache-admin", logURL: nil) {
+            for target in targets {
+                try clearSharedCacheDirectory(path: target.path)
+                restoreSharedCacheGuardrails(cacheID: target.id, path: target.path)
+            }
+        }
+    }
+
+    static func clearSharedCache() throws {
+        try clearSharedCache(cacheID: "homebrew")
+    }
+
+    private static func repairUnlocked(username: String, logURL: URL?) throws {
         let home = UserEnvContract.home(username: username)
         let profilePath = "\(home)/.zprofile"
-        let sharedCacheRoot = "/var/lib/clawdhome/cache"
         let homebrewCacheDir = UserEnvContract.homebrewSharedCacheDir()
         let nodePath = ConfigWriter.buildNodePath(username: username)
+
+        try prepareSharedCacheForInstall(username: username, logURL: logURL)
+        defer { restoreSharedCacheGuardrails(logURL: logURL) }
 
         let installScript = """
         set -e
         BREW_ROOT="$HOME/.brew"
-        CACHE_DIR="/var/lib/clawdhome/cache/homebrew"
+        CACHE_DIR="\(homebrewCacheDir)"
         CACHE_TAR="$CACHE_DIR/brew-master.tar.gz"
         PART_TAR="$CACHE_TAR.part.$USER.$$"
         BREW_TARBALL_URL="https://github.com/Homebrew/brew/tarball/master"
@@ -983,7 +1229,7 @@ enum HomebrewRepairManager {
         fi
 
         if [ "$cache_fresh" != "1" ]; then
-          rm -f "$PART_TAR"
+          rm -f "$PART_TAR" "$CACHE_TAR.part."*
           echo "⬇ 下载 Homebrew 到缓存..."
           curl --fail --show-error -L --connect-timeout 10 --max-time 180 --retry 2 --retry-delay 2 "$BREW_TARBALL_URL" -o "$PART_TAR"
           mv "$PART_TAR" "$CACHE_TAR"
@@ -992,33 +1238,15 @@ enum HomebrewRepairManager {
         fi
         """
 
-        func appendLog(_ message: String) {
-            guard let logURL else { return }
-            if let fh = FileHandle(forWritingAtPath: logURL.path) {
-                fh.seekToEndOfFile()
-                fh.write(Data(message.utf8))
-                fh.closeFile()
-            }
-        }
-
-        // 共享缓存目录给多用户初始化复用：所有用户可写，避免"第一只虾创建后其余用户不可写"。
-        try FileManager.default.createDirectory(
-            atPath: homebrewCacheDir,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
-        _ = try? FilePermissionHelper.chmod(sharedCacheRoot, mode: "1777")
-        _ = try? FilePermissionHelper.chmod(homebrewCacheDir, mode: "1777")
-        _ = try? FilePermissionHelper.chmodSymbolicRecursive(homebrewCacheDir, expr: "a+rwX")
+        // 每次修复前都兜底接管缓存 tar 文件，避免历史异常中断遗留 root/其他用户归属。
         let cacheTarPath = "\(homebrewCacheDir)/brew-master.tar.gz"
         if FileManager.default.fileExists(atPath: cacheTarPath) {
-            // 缓存文件可能由上一只 Shrimp 用户创建；sticky 共享目录下，后续用户无法替换它。
             _ = try? FilePermissionHelper.chown(cacheTarPath, owner: username)
             _ = try? FilePermissionHelper.chmod(cacheTarPath, mode: "0666")
         }
 
-        appendLog("\n▶ 修复 Homebrew 权限（普通用户目录安装）\n")
-        appendLog("$ \(installScript)\n")
+        appendLog(logURL, "\n▶ 修复 Homebrew 权限（普通用户目录安装）\n")
+        appendLog(logURL, "$ \(installScript)\n")
 
         let envArgs = UserEnvContract
             .orderedRuntimeEnvironment(username: username, nodePath: nodePath)
@@ -1034,12 +1262,12 @@ enum HomebrewRepairManager {
             output = try run("/usr/bin/sudo", args: runArgs)
         }
         if !output.isEmpty {
-            appendLog(output.hasSuffix("\n") ? output : "\(output)\n")
+            appendLog(logURL, output.hasSuffix("\n") ? output : "\(output)\n")
         }
-        appendLog("✓ 已完成 ~/.brew 安装/更新\n")
+        appendLog(logURL, "✓ 已完成 ~/.brew 安装/更新\n")
 
         let existing = (try? String(contentsOfFile: profilePath, encoding: .utf8)) ?? ""
-        let requiredExports = UserEnvContract.zprofileRequiredExports()
+        let requiredExports = UserEnvContract.zprofileRequiredExports(username: username)
         let missingExports = requiredExports.filter { !existing.contains($0) }
         if !missingExports.isEmpty {
             var appendBlock = "\n"
@@ -1058,14 +1286,116 @@ enum HomebrewRepairManager {
                 try data.write(to: URL(fileURLWithPath: profilePath))
             }
             try FilePermissionHelper.chown(profilePath, owner: username)
-            appendLog("✓ 已将 ~/.brew 环境变量写入 ~/.zprofile\n")
+            appendLog(logURL, "✓ 已将 ~/.brew 环境变量写入 ~/.zprofile\n")
         } else {
-            appendLog("✓ ~/.zprofile 已包含 ~/.brew 环境变量配置\n")
+            appendLog(logURL, "✓ ~/.zprofile 已包含 ~/.brew 环境变量配置\n")
         }
 
         // 防御性修正：避免历史 root 执行导致目录归属错误
         _ = try? FilePermissionHelper.chownRecursive("\(home)/.brew", owner: username)
         // 确保 owner 对目录有 traverse 权限、对可执行文件有执行权限（修复 exit 126）
         _ = try? FilePermissionHelper.chmodSymbolicRecursive("\(home)/.brew", expr: "u+rwX")
+    }
+
+    private static func prepareSharedCacheForInstall(username: String, logURL: URL?) throws {
+        let sharedCacheRoot = UserEnvContract.sharedCacheRootDir
+        let homebrewCacheDir = UserEnvContract.homebrewSharedCacheDir()
+        try FileManager.default.createDirectory(
+            atPath: homebrewCacheDir,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+
+        // 共享目录常驻 1777；进入安装窗口时将目录和内容临时接管给当前用户，避免 sticky/O_CREAT 冲突。
+        _ = try? FilePermissionHelper.chmod(sharedCacheRoot, mode: "1777")
+        _ = try? FilePermissionHelper.chmod(homebrewCacheDir, mode: "1777")
+        _ = try? FilePermissionHelper.chownRecursive(homebrewCacheDir, owner: username)
+        _ = try? FilePermissionHelper.chmodSymbolicRecursive(homebrewCacheDir, expr: "u+rwX,go+rwX")
+        appendLog(logURL, "✓ 已接管共享 Homebrew 缓存目录给 \(username)\n")
+    }
+
+    private static func restoreSharedCacheGuardrails(logURL: URL?) {
+        let homebrewCacheDir = UserEnvContract.homebrewSharedCacheDir()
+        _ = try? FilePermissionHelper.chown(homebrewCacheDir, owner: "root", group: "wheel")
+        _ = try? FilePermissionHelper.chmod(homebrewCacheDir, mode: "1777")
+        appendLog(logURL, "✓ 已恢复共享 Homebrew 缓存目录守护权限\n")
+    }
+
+    private static func clearSharedCacheDirectory(path: String) throws {
+        try FileManager.default.createDirectory(
+            atPath: path,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: path) {
+            for entry in entries where entry != "." && entry != ".." {
+                try? FileManager.default.removeItem(atPath: "\(path)/\(entry)")
+            }
+        }
+    }
+
+    private static func restoreSharedCacheGuardrails(cacheID: String, path: String) {
+        _ = try? FilePermissionHelper.chown(path, owner: "root", group: "wheel")
+        switch cacheID {
+        case "homebrew":
+            _ = try? FilePermissionHelper.chmod(path, mode: "1777")
+        case "npm", "uv", "pip":
+            _ = try? FilePermissionHelper.chmodSymbolicRecursive(path, expr: "a+rwX")
+            _ = try? FilePermissionHelper.chmod(path, mode: "1777")
+        default:
+            _ = try? FilePermissionHelper.chmod(path, mode: "1777")
+        }
+    }
+
+    private static func appendLog(_ logURL: URL?, _ message: String) {
+        guard let logURL else { return }
+        if let fh = FileHandle(forWritingAtPath: logURL.path) {
+            fh.seekToEndOfFile()
+            fh.write(Data(message.utf8))
+            fh.closeFile()
+        }
+    }
+
+    private static func resolveSharedCacheRunnerUser() throws -> String {
+        let users = (try? UserManager.listStandardUsers().map(\.username)) ?? []
+        if let user = users.first(where: { FileManager.default.isExecutableFile(atPath: "/Users/\($0)/.brew/bin/brew") }) {
+            return user
+        }
+        throw NSError(
+            domain: "ClawdHomeHelper.HomebrewCache",
+            code: 404,
+            userInfo: [NSLocalizedDescriptionKey: "未找到可用的用户级 Homebrew（~/.brew/bin/brew）"]
+        )
+    }
+
+    private static func runBrewAsUser(username: String, script: String) throws -> String {
+        let nodePath = ConfigWriter.buildNodePath(username: username)
+        let envArgs = UserEnvContract
+            .orderedRuntimeEnvironment(username: username, nodePath: nodePath)
+            .map { "\($0.0)=\($0.1)" }
+        let args = ["-n", "-u", username, "-H", "/usr/bin/env"]
+            + envArgs
+            + ["/bin/sh", "-lc", script]
+        return try run("/usr/bin/sudo", args: args)
+    }
+
+    private static func directoryStats(_ path: String) -> (bytes: Int64, fileCount: Int) {
+        guard FileManager.default.fileExists(atPath: path) else { return (0, 0) }
+        guard let e = FileManager.default.enumerator(
+            at: URL(fileURLWithPath: path),
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles],
+            errorHandler: { _, _ in true }
+        ) else { return (0, 0) }
+
+        var total: Int64 = 0
+        var count = 0
+        while let url = e.nextObject() as? URL {
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true else { continue }
+            total += Int64(values.fileSize ?? 0)
+            count += 1
+        }
+        return (total, count)
     }
 }
