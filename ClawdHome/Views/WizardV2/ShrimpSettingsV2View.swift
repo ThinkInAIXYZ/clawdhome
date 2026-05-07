@@ -202,7 +202,7 @@ struct ShrimpSettingsV2View: View {
             Section(L10n.k("settings_v2.advanced.dm_scope", fallback: "会话隔离（dmScope）")) {
                 Picker(L10n.k("settings_v2.advanced.dm_scope_label", fallback: "dmScope"),
                        selection: $config.sessionDmScope) {
-                    Text("自动（推荐）").tag(Optional<DmScope>.none)
+                    Text(L10n.k("settings_v2.dm_scope.auto", fallback: "自动（推荐）")).tag(Optional<DmScope>.none)
                     Text("main").tag(Optional(DmScope.main))
                     Text("per-peer").tag(Optional(DmScope.perPeer))
                     Text("per-channel-peer").tag(Optional(DmScope.perChannelPeer))

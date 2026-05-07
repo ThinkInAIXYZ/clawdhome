@@ -125,7 +125,7 @@ struct HermesSetupSheet: View {
                     if let version = hermesVersion {
                         Text("v\(version)")
                     } else {
-                        Text("未安装")
+                        Text(L10n.k("hermes.setup.not_installed", fallback: "未安装"))
                             .foregroundStyle(.secondary)
                     }
                 } icon: {
@@ -145,7 +145,7 @@ struct HermesSetupSheet: View {
                 }
             }
         } label: {
-            Text("Hermes 状态")
+            Text(L10n.k("hermes.setup.status_title", fallback: "Hermes 状态"))
                 .font(.subheadline.weight(.medium))
         }
     }
@@ -155,10 +155,10 @@ struct HermesSetupSheet: View {
     private var installSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Hermes Agent 是一个自进化 AI 代理框架，支持 20+ 消息平台，需要 Python 3.11+。")
+                Text(L10n.k("hermes.setup.description", fallback: "Hermes Agent 是一个自进化 AI 代理框架，支持 20+ 消息平台，需要 Python 3.11+。"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                Text("安装步骤：1) 修复 Homebrew 权限  2) 安装 Hermes Agent")
+                Text(L10n.k("hermes.setup.install_steps", fallback: "安装步骤：1) 修复 Homebrew 权限  2) 安装 Hermes Agent"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -178,16 +178,16 @@ struct HermesSetupSheet: View {
                             ProgressView()
                                 .controlSize(.small)
                                 .padding(.trailing, 4)
-                            Text("安装中…")
+                            Text(L10n.k("hermes.setup.installing", fallback: "安装中…"))
                         } else {
-                            Label("安装 Hermes Agent", systemImage: "arrow.down.circle")
+                            Label(L10n.k("hermes.setup.install_action", fallback: "安装 Hermes Agent"), systemImage: "arrow.down.circle")
                         }
                     }
                     .disabled(isInstalling)
                 }
             }
         } label: {
-            Text("安装")
+            Text(L10n.k("hermes.setup.install_button", fallback: "安装"))
             .font(.subheadline.weight(.medium))
         }
     }
@@ -198,13 +198,13 @@ struct HermesSetupSheet: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
                 if installDone {
-                    Label("安装完成，请配置 API 密钥后启动 Gateway。", systemImage: "checkmark.circle.fill")
+                    Label(L10n.k("hermes.setup.install_done", fallback: "安装完成，请配置 API 密钥后启动 Gateway。"), systemImage: "checkmark.circle.fill")
                         .font(.callout)
                         .foregroundStyle(.green)
                 }
 
                 HStack {
-                    Text("用于生成 ~/.hermes/config.yaml 与 ~/.hermes/.env")
+                    Text(L10n.k("hermes.setup.config_hint", fallback: "用于生成 ~/.hermes/config.yaml 与 ~/.hermes/.env"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -214,7 +214,7 @@ struct HermesSetupSheet: View {
                         if isLoadingInitSummary {
                             ProgressView().controlSize(.small)
                         } else {
-                            Label("读取当前配置", systemImage: "arrow.clockwise")
+                            Label(L10n.k("hermes.setup.read_config", fallback: "读取当前配置"), systemImage: "arrow.clockwise")
                         }
                     }
                     .disabled(isLoadingInitSummary || isApplyingInit || isValidatingInit)
@@ -251,26 +251,26 @@ struct HermesSetupSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Base URL (可选)").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("hermes.setup.base_url_optional", fallback: "Base URL (可选)")).font(.caption).foregroundStyle(.secondary)
                     TextField("https://api.openai.com/v1", text: $initModelBaseURL)
                         .textFieldStyle(.roundedBorder)
                 }
 
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("主密钥变量名").font(.caption).foregroundStyle(.secondary)
+                        Text(L10n.k("hermes.setup.primary_key_var", fallback: "主密钥变量名")).font(.caption).foregroundStyle(.secondary)
                         TextField("OPENAI_API_KEY", text: $initPrimarySecretKeyName)
                             .textFieldStyle(.roundedBorder)
                     }
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("主密钥值").font(.caption).foregroundStyle(.secondary)
+                        Text(L10n.k("hermes.setup.primary_key_value", fallback: "主密钥值")).font(.caption).foregroundStyle(.secondary)
                         SecureField("sk-...", text: $initPrimarySecretValue)
                             .textFieldStyle(.roundedBorder)
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("附加环境变量（每行 KEY=VALUE）").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("hermes.setup.extra_env_vars", fallback: "附加环境变量（每行 KEY=VALUE）")).font(.caption).foregroundStyle(.secondary)
                     TextEditor(text: $initEnvLines)
                         .font(.system(.caption, design: .monospaced))
                         .frame(height: 90)
@@ -279,7 +279,7 @@ struct HermesSetupSheet: View {
                                 .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
                         )
                     if !initSummaryEnvKeys.isEmpty {
-                        Text("已存在变量：\(initSummaryEnvKeys.joined(separator: ", "))")
+                        Text(L10n.f("hermes.setup.existing_env_keys", fallback: "已存在变量：%@", initSummaryEnvKeys.joined(separator: ", ")))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
@@ -318,7 +318,7 @@ struct HermesSetupSheet: View {
                         if isValidatingInit {
                             ProgressView().controlSize(.small)
                         } else {
-                            Label("校验配置", systemImage: "checkmark.shield")
+                            Label(L10n.k("hermes.setup.validate_config", fallback: "校验配置"), systemImage: "checkmark.shield")
                         }
                     }
                     .disabled(isApplyingInit || isValidatingInit || isLoadingInitSummary)
@@ -329,7 +329,7 @@ struct HermesSetupSheet: View {
                         if isApplyingInit {
                             ProgressView().controlSize(.small)
                         } else {
-                            Label("应用配置", systemImage: "square.and.arrow.down")
+                            Label(L10n.k("hermes.setup.apply_config", fallback: "应用配置"), systemImage: "square.and.arrow.down")
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -339,7 +339,7 @@ struct HermesSetupSheet: View {
                 }
             }
         } label: {
-            Text("初始化配置")
+            Text(L10n.k("hermes.setup.init_config", fallback: "初始化配置"))
                 .font(.subheadline.weight(.medium))
         }
     }
@@ -353,14 +353,14 @@ struct HermesSetupSheet: View {
                     Button {
                         Task { await startHermes() }
                     } label: {
-                        Label("启动", systemImage: "play.fill")
+                        Label(L10n.k("common.action.start", fallback: "启动"), systemImage: "play.fill")
                     }
                     .disabled(hermesRunning || isStarting || isStopping)
 
                     Button {
                         Task { await stopHermes() }
                     } label: {
-                        Label("停止", systemImage: "stop.fill")
+                        Label(L10n.k("common.action.stop", fallback: "停止"), systemImage: "stop.fill")
                     }
                     .disabled(!hermesRunning || isStarting || isStopping)
 
@@ -376,7 +376,7 @@ struct HermesSetupSheet: View {
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
-                    .help("刷新状态")
+                    .help(L10n.k("common.action.refresh", fallback: "刷新状态"))
                 }
 
                 if let gatewayError {
@@ -387,7 +387,7 @@ struct HermesSetupSheet: View {
                 }
             }
         } label: {
-            Text("Gateway 控制")
+            Text(L10n.k("hermes.setup.gateway_control_title", fallback: "Gateway 控制"))
                 .font(.subheadline.weight(.medium))
         }
     }
@@ -397,7 +397,7 @@ struct HermesSetupSheet: View {
     private var terminalSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                Text("在维护终端中使用 Hermes CLI（独立环境，不含 Node.js/npm）。")
+                Text(L10n.k("hermes.setup.cli_hint", fallback: "在维护终端中使用 Hermes CLI（独立环境，不含 Node.js/npm）。"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
@@ -415,7 +415,7 @@ struct HermesSetupSheet: View {
                 }
             }
         } label: {
-            Text("维护终端")
+            Text(L10n.k("hermes.setup.maintenance_terminal", fallback: "维护终端"))
                 .font(.subheadline.weight(.medium))
         }
     }

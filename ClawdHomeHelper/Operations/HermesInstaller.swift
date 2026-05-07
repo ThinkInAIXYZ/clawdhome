@@ -191,8 +191,6 @@ struct HermesInstaller {
         // 0. 前置检查：目标用户可用的 Python 3.11+
         _ = try findPython(for: username)
 
-        try cleanupAccidentalOpenClawDraftIfNeeded(username: username)
-
         let home = hermesHome(for: username)
 
         // 1. 确保 HERMES_HOME 存在且归属用户
@@ -247,21 +245,6 @@ struct HermesInstaller {
             return try runLogging(exe, args: args, logURL: logURL)
         }
         return try run(exe, args: args)
-    }
-
-    private static func cleanupAccidentalOpenClawDraftIfNeeded(username: String) throws {
-        let openclawDir = "/Users/\(username)/.openclaw"
-        guard FileManager.default.fileExists(atPath: openclawDir) else { return }
-
-        let hasOpenClawBinary = (try? ConfigWriter.findOpenclawBinary(for: username)) != nil
-        let topLevelEntries = (try? FileManager.default.contentsOfDirectory(atPath: openclawDir)) ?? []
-        guard AccidentalOpenClawDraftDetector.shouldDelete(
-            topLevelEntries: topLevelEntries,
-            hasOpenClawBinary: hasOpenClawBinary
-        ) else { return }
-
-        helperLog("[HermesInstaller] 检测到误生成的 .openclaw 草稿目录，安装前清理 @\(username)")
-        try FileManager.default.removeItem(atPath: openclawDir)
     }
 
     // MARK: - 版本查询

@@ -112,7 +112,7 @@ struct HermesQRBindingStep: View {
         VStack(alignment: .leading, spacing: 12) {
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("扫码流程说明", systemImage: "info.circle")
+                    Label(L10n.k("hermes.qr_binding.flow_title", fallback: "扫码流程说明"), systemImage: "info.circle")
                         .font(.callout.weight(.medium))
 
                     Text(instructionText)
@@ -123,11 +123,11 @@ struct HermesQRBindingStep: View {
                         Button {
                             openQRTerminal()
                         } label: {
-                            Label("打开扫码终端", systemImage: "terminal")
+                            Label(L10n.k("hermes.qr_binding.open_terminal", fallback: "打开扫码终端"), systemImage: "terminal")
                         }
                         .buttonStyle(.borderedProminent)
 
-                        Button("稍后完成") {
+                        Button(L10n.k("hermes.qr_binding.defer", fallback: "稍后完成")) {
                             defer_()
                         }
                         .buttonStyle(.bordered)
@@ -145,11 +145,11 @@ struct HermesQRBindingStep: View {
         VStack(alignment: .leading, spacing: 12) {
             GroupBox {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("终端已打开，请在终端窗口完成扫码", systemImage: "terminal.fill")
+                    Label(L10n.k("hermes.qr_binding.terminal_opened", fallback: "终端已打开，请在终端窗口完成扫码"), systemImage: "terminal.fill")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.secondary)
 
-                    Text("完成后回到此页面点【我已扫完】进行验证。若 5 分钟内未确认，本步骤将自动标为【稍后完成】。")
+                    Text(L10n.k("hermes.qr_binding.scan_instruction", fallback: "完成后回到此页面点【我已扫完】进行验证。若 5 分钟内未确认，本步骤将自动标为【稍后完成】。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -157,17 +157,17 @@ struct HermesQRBindingStep: View {
                         Button {
                             Task { await verifyWithDoctor() }
                         } label: {
-                            Label("我已扫完（验证）", systemImage: "checkmark.circle")
+                            Label(L10n.k("hermes.qr_binding.verify", fallback: "我已扫完（验证）"), systemImage: "checkmark.circle")
                         }
                         .buttonStyle(.borderedProminent)
 
-                        Button("稍后完成") {
+                        Button(L10n.k("hermes.qr_binding.defer", fallback: "稍后完成")) {
                             defer_()
                         }
                         .buttonStyle(.bordered)
                         .foregroundStyle(.orange)
 
-                        Button("重新打开终端") {
+                        Button(L10n.k("hermes.qr_binding.reopen", fallback: "重新打开终端")) {
                             openQRTerminal()
                         }
                         .buttonStyle(.bordered)
@@ -184,7 +184,7 @@ struct HermesQRBindingStep: View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
-            Text("正在通过 hermes doctor 验证连接…")
+            Text(L10n.k("hermes.qr_binding.verifying", fallback: "正在通过 hermes doctor 验证连接…"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -194,7 +194,7 @@ struct HermesQRBindingStep: View {
     // MARK: - success：验收通过（短暂）
 
     private var successView: some View {
-        Label("验证通过！", systemImage: "checkmark.circle.fill")
+        Label(L10n.k("hermes.qr_binding.verified", fallback: "验证通过！"), systemImage: "checkmark.circle.fill")
             .font(.callout.weight(.medium))
             .foregroundStyle(.green)
     }
@@ -213,12 +213,12 @@ struct HermesQRBindingStep: View {
                     openQRTerminal()
                     phase = .terminalOpen
                 } label: {
-                    Label("再扫一次", systemImage: "arrow.counterclockwise")
+                    Label(L10n.k("hermes.qr_binding.retry", fallback: "再扫一次"), systemImage: "arrow.counterclockwise")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.orange)
 
-                Button("稍后完成") {
+                Button(L10n.k("hermes.qr_binding.defer", fallback: "稍后完成")) {
                     defer_()
                 }
                 .buttonStyle(.bordered)

@@ -1010,6 +1010,12 @@ enum HomebrewRepairManager {
         )
         _ = try? FilePermissionHelper.chmod(sharedCacheRoot, mode: "1777")
         _ = try? FilePermissionHelper.chmod(homebrewCacheDir, mode: "1777")
+        let cacheTarPath = "\(homebrewCacheDir)/brew-master.tar.gz"
+        if FileManager.default.fileExists(atPath: cacheTarPath) {
+            // 缓存文件可能由上一只 Shrimp 用户创建；sticky 共享目录下，后续用户无法替换它。
+            _ = try? FilePermissionHelper.chown(cacheTarPath, owner: username)
+            _ = try? FilePermissionHelper.chmod(cacheTarPath, mode: "0666")
+        }
 
         appendLog("\n▶ 修复 Homebrew 权限（普通用户目录安装）\n")
         appendLog("$ \(installScript)\n")

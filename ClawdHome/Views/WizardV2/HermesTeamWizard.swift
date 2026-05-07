@@ -30,7 +30,7 @@ struct HermesTeamWizard: View {
                 if isScanning {
                     VStack(spacing: 16) {
                         ProgressView()
-                        Text("正在读取初始化进度…")
+                        Text(L10n.k("hermes.team_wizard.loading", fallback: "正在读取初始化进度…"))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -122,7 +122,7 @@ struct HermesTeamWizard: View {
     private var bottomBar: some View {
         HStack(spacing: 10) {
             if wizardState.currentStep != .install && wizardState.currentStep != .summary {
-                Button("上一步") {
+                Button(L10n.k("hermes.team_wizard.prev_step", fallback: "上一步")) {
                     goBack()
                 }
                 .buttonStyle(.bordered)
@@ -130,7 +130,7 @@ struct HermesTeamWizard: View {
             }
 
             if wizardState.currentStep == .imBinding {
-                Button("跳过此 profile") {
+                Button(L10n.k("hermes.team_wizard.skip_profile", fallback: "跳过此 profile")) {
                     skipCurrentIMProfile()
                 }
                 .buttonStyle(.bordered)
@@ -218,7 +218,7 @@ private struct Step1InstallView: View {
                         if let v = version ?? (wizardState.hermesInstalled ? "已安装" : nil) {
                             Text("Hermes v\(v)")
                         } else {
-                            Text("Hermes 未安装")
+                            Text(L10n.k("hermes.team_wizard.not_installed", fallback: "Hermes 未安装"))
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -237,7 +237,7 @@ private struct Step1InstallView: View {
                     }
 
                     if !wizardState.hermesInstalled {
-                        Text("Hermes Agent 是一个自进化 AI 代理框架，支持 20+ 消息平台，需要 Python 3.11+。")
+                        Text(L10n.k("hermes.setup.description", fallback: "Hermes Agent 是一个自进化 AI 代理框架，支持 20+ 消息平台，需要 Python 3.11+。"))
                             .font(.callout)
                             .foregroundStyle(.secondary)
 
@@ -249,24 +249,24 @@ private struct Step1InstallView: View {
                                 if isInstalling {
                                     HStack(spacing: 6) {
                                         ProgressView().controlSize(.small)
-                                        Text("安装中…")
+                                        Text(L10n.k("hermes.team_wizard.installing", fallback: "安装中…"))
                                     }
                                 } else {
-                                    Label("安装 Hermes Agent", systemImage: "arrow.down.circle")
+                                    Label(L10n.k("hermes.team_wizard.install_action", fallback: "安装 Hermes Agent"), systemImage: "arrow.down.circle")
                                 }
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(isInstalling)
                         }
                     } else {
-                        Label("已安装，正在进入下一步…", systemImage: "checkmark.circle.fill")
+                        Label(L10n.k("hermes.team_wizard.install_done_next", fallback: "已安装，正在进入下一步…"), systemImage: "checkmark.circle.fill")
                             .font(.callout)
                             .foregroundStyle(.green)
                     }
                 }
                 .padding(4)
             } label: {
-                Text("Hermes 状态")
+                Text(L10n.k("hermes.team_wizard.hermes_status", fallback: "Hermes 状态"))
                     .font(.subheadline.weight(.medium))
             }
         }
@@ -320,7 +320,7 @@ private struct Step2MembersView: View {
         VStack(alignment: .leading, spacing: 20) {
             sectionHeader("团队成员清单", icon: "person.2")
 
-            Text("为每个 Hermes Agent 设置唯一 ID、显示名和 Emoji。main（默认角色）始终保留。")
+            Text(L10n.k("hermes.team_wizard.members_hint", fallback: "为每个 Hermes Agent 设置唯一 ID、显示名和 Emoji。main（默认角色）始终保留。"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
@@ -328,7 +328,7 @@ private struct Step2MembersView: View {
                 // 表头
                 HStack(spacing: 10) {
                     Text("Emoji").font(.caption).foregroundStyle(.secondary).frame(width: 56)
-                    Text("显示名").font(.caption).foregroundStyle(.secondary).frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
+                    Text(L10n.k("hermes.team_wizard.display_name", fallback: "显示名")).font(.caption).foregroundStyle(.secondary).frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
                     Text("Profile ID").font(.caption).foregroundStyle(.secondary).frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
                     Text("").frame(width: 24)
                 }
@@ -368,7 +368,7 @@ private struct Step2MembersView: View {
                 Button {
                     addMember()
                 } label: {
-                    Label("添加成员", systemImage: "plus.circle")
+                    Label(L10n.k("hermes.team_wizard.add_member", fallback: "添加成员"), systemImage: "plus.circle")
                 }
                 .buttonStyle(.bordered)
 
@@ -376,7 +376,7 @@ private struct Step2MembersView: View {
 
                 if isCreating {
                     ProgressView().controlSize(.small)
-                    Text("正在创建 profile…")
+                    Text(L10n.k("hermes.team_wizard.creating_profile", fallback: "正在创建 profile…"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -402,7 +402,7 @@ private struct Step2MembersView: View {
                 .disabled(isMain)
 
             // 显示名
-            TextField("显示名", text: member.displayName)
+            TextField(L10n.k("hermes.team_wizard.display_name", fallback: "显示名"), text: member.displayName)
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 120, maxWidth: .infinity)
                 .disabled(isMain)
@@ -418,12 +418,12 @@ private struct Step2MembersView: View {
                             .stroke(!isMain && !idValid ? Color.red.opacity(0.7) : Color.clear, lineWidth: 1.5)
                     )
                 if !isMain && !idValid && !m.id.isEmpty {
-                    Text("ID 格式不合法（小写字母/数字，2-64位）")
+                    Text(L10n.k("hermes.team_wizard.id_invalid", fallback: "ID 格式不合法（小写字母/数字，2-64位）"))
                         .font(.caption2)
                         .foregroundStyle(.red)
                 }
                 if !isMain && isValidProfileID(m.id) && isDuplicateID(m.id, excluding: m.id) {
-                    Text("ID 已存在")
+                    Text(L10n.k("hermes.team_wizard.id_exists", fallback: "ID 已存在"))
                         .font(.caption2)
                         .foregroundStyle(.red)
                 }
@@ -534,7 +534,7 @@ private struct Step3LLMView: View {
         VStack(alignment: .leading, spacing: 20) {
             sectionHeader("共享 LLM 配置", icon: "cpu")
 
-            Text("以下配置将写入所有团队成员的 config.yaml 与 .env。")
+            Text(L10n.k("hermes.team_wizard.llm_hint", fallback: "以下配置将写入所有团队成员的 config.yaml 与 .env。"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
@@ -573,39 +573,39 @@ private struct Step3LLMView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Base URL（可选）").font(.caption).foregroundStyle(.secondary)
+                        Text(L10n.k("hermes.team_wizard.base_url_optional", fallback: "Base URL（可选）")).font(.caption).foregroundStyle(.secondary)
                         TextField("https://api.openai.com/v1", text: $wizardState.sharedModel.modelBaseURL)
                             .textFieldStyle(.roundedBorder)
                     }
 
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("主密钥变量名").font(.caption).foregroundStyle(.secondary)
+                            Text(L10n.k("hermes.team_wizard.primary_key_var", fallback: "主密钥变量名")).font(.caption).foregroundStyle(.secondary)
                             TextField("OPENAI_API_KEY", text: $wizardState.sharedModel.primarySecretKeyName)
                                 .textFieldStyle(.roundedBorder)
                         }
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("密钥值").font(.caption).foregroundStyle(.secondary)
+                            Text(L10n.k("hermes.team_wizard.key_value", fallback: "密钥值")).font(.caption).foregroundStyle(.secondary)
                             SecureField("sk-...", text: $wizardState.sharedModel.primarySecretValue)
                                 .textFieldStyle(.roundedBorder)
                         }
                     }
 
                     if !wizardState.sharedModel.isValid {
-                        Label("Provider 与 Model 不能为空", systemImage: "exclamationmark.triangle")
+                        Label(L10n.k("hermes.team_wizard.provider_model_required", fallback: "Provider 与 Model 不能为空"), systemImage: "exclamationmark.triangle")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
 
                     if wizardState.sharedModel.provider == "custom" && wizardState.sharedModel.modelBaseURL.isEmpty {
-                        Label("provider=custom 时 Base URL 不能为空", systemImage: "exclamationmark.triangle")
+                        Label(L10n.k("hermes.team_wizard.custom_base_url_required", fallback: "provider=custom 时 Base URL 不能为空"), systemImage: "exclamationmark.triangle")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
                 }
                 .padding(4)
             } label: {
-                Text("LLM 设置")
+                Text(L10n.k("hermes.team_wizard.llm_settings", fallback: "LLM 设置"))
                     .font(.subheadline.weight(.medium))
             }
 
@@ -632,7 +632,7 @@ private struct Step3LLMView: View {
             if isApplying {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("正在写入配置…")
+                    Text(L10n.k("hermes.team_wizard.writing_config", fallback: "正在写入配置…"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -732,7 +732,7 @@ private struct Step4IMBindingView: View {
             }
             .padding(.horizontal, 0)
         } else {
-            Text("没有待处理的成员")
+            Text(L10n.k("hermes.team_wizard.no_pending_members", fallback: "没有待处理的成员"))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -740,7 +740,7 @@ private struct Step4IMBindingView: View {
 
     private var memberList: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("团队成员")
+            Text(L10n.k("hermes.team_wizard.team_members", fallback: "团队成员"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 4)
@@ -800,7 +800,7 @@ private struct Step4IMBindingView: View {
     // 平台勾选列表
     private func platformChecklist(member: TeamMember) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("选择要绑定的 IM 平台")
+            Text(L10n.k("hermes.team_wizard.select_im", fallback: "选择要绑定的 IM 平台"))
                 .font(.subheadline.weight(.medium))
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 8)], spacing: 8) {
@@ -868,7 +868,7 @@ private struct Step4IMBindingView: View {
     @ViewBuilder
     private func platformForm(platform: HermesIMPlatformInfo, member: TeamMember) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(platform.displayName) 配置")
+            Text(L10n.f("hermes.team_wizard.platform_config", fallback: "%@ 配置", platform.displayName))
                 .font(.subheadline.weight(.semibold))
 
             if platform.needsTerminalQR {
@@ -900,7 +900,7 @@ private struct Step4IMBindingView: View {
             )
 
             // 补充"跳过此平台"按钮（不同于 deferred：跳过 = 永不绑定）
-            Button("跳过此平台（永不绑定）") {
+            Button(L10n.k("hermes.team_wizard.skip_platform", fallback: "跳过此平台（永不绑定）")) {
                 setBinding(for: member.id, platform: platform.key, status: .skipped)
                 selectedPlatformKey = nil
             }
@@ -955,9 +955,9 @@ private struct Step4IMBindingView: View {
                     Task { await applyBinding(platform: platform, memberID: member.id) }
                 } label: {
                     if isApplying {
-                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text("应用中…") }
+                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L10n.k("hermes.team_wizard.applying", fallback: "应用中…")) }
                     } else {
-                        Label("应用", systemImage: "checkmark.circle")
+                        Label(L10n.k("hermes.team_wizard.apply", fallback: "应用"), systemImage: "checkmark.circle")
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -1009,16 +1009,16 @@ private struct Step4IMBindingView: View {
     // Doctor 验收区
     private func doctorSection(member: TeamMember) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Doctor 验收")
+            Text(L10n.k("hermes.team_wizard.doctor_title", fallback: "Doctor 验收"))
                 .font(.subheadline.weight(.semibold))
 
             let donePlatforms = member.progress.imBindings.filter { $0.value.status == .done }.keys.sorted()
             if donePlatforms.isEmpty {
-                Text("绑定至少一个平台后即可执行验收。")
+                Text(L10n.k("hermes.team_wizard.doctor_hint", fallback: "绑定至少一个平台后即可执行验收。"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                Text("已绑定平台：\(donePlatforms.joined(separator: "、"))")
+                Text(L10n.f("hermes.team_wizard.done_platforms", fallback: "已绑定平台：%@", donePlatforms.joined(separator: "、")))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -1055,16 +1055,16 @@ private struct Step4IMBindingView: View {
                         Task { await runDoctor(member: member) }
                     } label: {
                         if isRunningDoctor {
-                            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("验收中…") }
+                            HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L10n.k("hermes.team_wizard.doctor_running", fallback: "验收中…")) }
                         } else {
-                            Label("执行 Doctor 验收", systemImage: "stethoscope")
+                            Label(L10n.k("hermes.team_wizard.doctor_action", fallback: "执行 Doctor 验收"), systemImage: "stethoscope")
                         }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(isRunningDoctor || donePlatforms.isEmpty)
 
                     if member.progress.doctorPassed {
-                        Label("验收已通过", systemImage: "checkmark.circle.fill")
+                        Label(L10n.k("hermes.team_wizard.doctor_passed", fallback: "验收已通过"), systemImage: "checkmark.circle.fill")
                             .font(.callout)
                             .foregroundStyle(.green)
                     }
@@ -1239,7 +1239,7 @@ private struct Step5GatewayView: View {
         VStack(alignment: .leading, spacing: 20) {
             sectionHeader("Gateway 启动", icon: "play.circle")
 
-            Text("为每个成员注册并启动 Hermes Gateway，默认加入开机自启白名单。")
+            Text(L10n.k("hermes.team_wizard.gateway_hint", fallback: "为每个成员注册并启动 Hermes Gateway，默认加入开机自启白名单。"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
@@ -1251,7 +1251,7 @@ private struct Step5GatewayView: View {
                 }
                 .padding(4)
             } label: {
-                Text("Gateway 状态")
+                Text(L10n.k("hermes.team_wizard.gateway_status", fallback: "Gateway 状态"))
                     .font(.subheadline.weight(.medium))
             }
 
@@ -1283,11 +1283,11 @@ private struct Step5GatewayView: View {
                     Task { await startAllPendingGateways() }
                 } label: {
                     if isProcessing {
-                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text("启动中…") }
+                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L10n.k("hermes.team_wizard.starting", fallback: "启动中…")) }
                     } else if wizardState.members.allSatisfy({ $0.progress.gatewayStarted }) {
-                        Label("全部已启动", systemImage: "checkmark.circle.fill")
+                        Label(L10n.k("hermes.team_wizard.all_started", fallback: "全部已启动"), systemImage: "checkmark.circle.fill")
                     } else {
-                        Label("启动所有 Gateway", systemImage: "play.fill")
+                        Label(L10n.k("hermes.team_wizard.start_all_gateways", fallback: "启动所有 Gateway"), systemImage: "play.fill")
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -1317,13 +1317,13 @@ private struct Step5GatewayView: View {
             Spacer()
             if member.id == currentProcessingID, isProcessing {
                 ProgressView().controlSize(.small)
-                Text("启动中…").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.k("hermes.team_wizard.starting", fallback: "启动中…")).font(.caption).foregroundStyle(.secondary)
             } else if member.progress.gatewayStarted {
-                Label("已启动", systemImage: "checkmark.circle.fill")
+                Label(L10n.k("hermes.team_wizard.profile_started", fallback: "已启动"), systemImage: "checkmark.circle.fill")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.green)
             } else {
-                Label("等待", systemImage: "clock")
+                Label(L10n.k("hermes.team_wizard.profile_waiting", fallback: "等待"), systemImage: "clock")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -1403,7 +1403,7 @@ private struct Step6SummaryView: View {
         VStack(alignment: .leading, spacing: 20) {
             sectionHeader("团队初始化完成", icon: "checkmark.seal.fill")
 
-            Text("恭喜！\(readyCount)/\(wizardState.members.count) 个 agent 已就绪。")
+            Text(L10n.f("hermes.team_wizard.summary_congrats", fallback: "恭喜！%d/%d 个 agent 已就绪。", readyCount, wizardState.members.count))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(readyCount == wizardState.members.count ? .green : .orange)
 
@@ -1415,7 +1415,7 @@ private struct Step6SummaryView: View {
                 }
                 .padding(4)
             } label: {
-                Text("团队状态").font(.subheadline.weight(.medium))
+                Text(L10n.k("hermes.team_wizard.team_status", fallback: "团队状态")).font(.subheadline.weight(.medium))
             }
 
             HStack(spacing: 10) {
@@ -1428,7 +1428,7 @@ private struct Step6SummaryView: View {
 
                 Spacer()
 
-                Button("完成") {
+                Button(L10n.k("common.action.done", fallback: "完成")) {
                     onDismiss()
                 }
                 .buttonStyle(.borderedProminent)
@@ -1448,17 +1448,17 @@ private struct Step6SummaryView: View {
                 Text(member.displayName.isEmpty ? member.id : member.displayName)
                     .font(.callout.weight(.semibold))
                 HStack(spacing: 6) {
-                    Text(member.progress.gatewayStarted ? "运行中" : "已停止")
+                    Text(member.progress.gatewayStarted ? L10n.k("hermes.status.running", fallback: "运行中") : L10n.k("hermes.status.stopped", fallback: "已停止"))
                         .font(.caption)
                         .foregroundStyle(member.progress.gatewayStarted ? .green : .secondary)
                     Text("·")
                         .foregroundStyle(.tertiary)
                         .font(.caption)
-                    Text("绑定 \(doneCount) 个")
+                    Text(L10n.f("hermes.team_wizard.im_bound_count", fallback: "绑定 %d 个", doneCount))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     if deferredCount > 0 {
-                        Text("· 待补 \(deferredCount) 个")
+                        Text(L10n.f("hermes.team_wizard.im_deferred_count", fallback: "· 待补 %d 个", deferredCount))
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }

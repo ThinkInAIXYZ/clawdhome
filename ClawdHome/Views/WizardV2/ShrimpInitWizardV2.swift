@@ -402,9 +402,9 @@ struct ShrimpInitWizardV2: View {
     private var selectEngineView: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("选择引擎")
+                Text(L10n.k("wizard.engine_select_title", fallback: "选择引擎"))
                     .font(.title2).fontWeight(.semibold)
-                Text("先确定该虾的运行引擎，再进入后续初始化步骤。")
+                Text(L10n.k("wizard.engine_select_hint", fallback: "先确定该虾的运行引擎，再进入后续初始化步骤。"))
                     .foregroundStyle(.secondary)
             }
 
@@ -611,7 +611,7 @@ struct ShrimpInitWizardV2: View {
     private var basicEnvView: some View {
         if selectedEngine == .hermes {
             VStack(alignment: .leading, spacing: 0) {
-                Text("安装 Hermes 运行环境")
+                Text(L10n.k("wizard.hermes_env.heading", fallback: "安装 Hermes 运行环境"))
                     .font(.title2).fontWeight(.semibold)
                     .padding(.bottom, 12)
 
@@ -624,14 +624,14 @@ struct ShrimpInitWizardV2: View {
                             .foregroundStyle(.red)
                             .lineLimit(2)
                     } else if envReady {
-                        Label("Hermes 环境就绪", systemImage: "checkmark.circle.fill")
+                        Label(L10n.k("wizard.hermes_env.ready", fallback: "Hermes 环境就绪"), systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                             .font(.system(size: 13, weight: .medium))
                         hermesEnvPhaseStepperView
                     } else if isInstallingEnv {
                         hermesEnvPhaseStepperView
                     } else {
-                        Button("安装 Hermes") { runEnvInstall() }
+                        Button(L10n.k("wizard.hermes_env.install_btn", fallback: "安装 Hermes")) { runEnvInstall() }
                             .buttonStyle(.borderedProminent)
                         hermesEnvPhaseStepperView
                     }
@@ -640,12 +640,12 @@ struct ShrimpInitWizardV2: View {
                 .padding(.bottom, 16)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("安装终端（可交互）")
+                    Text(L10n.k("wizard.hermes_env.terminal_title", fallback: "安装终端（可交互）"))
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                     HStack(spacing: 10) {
-                        Label("支持键盘输入，可在异常时人工介入", systemImage: "keyboard")
+                        Label(L10n.k("wizard.hermes_env.terminal_hint", fallback: "支持键盘输入，可在异常时人工介入"), systemImage: "keyboard")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -655,7 +655,7 @@ struct ShrimpInitWizardV2: View {
                         .buttonStyle(.borderless)
                         .disabled(!isInstallingEnv)
                         if let code = hermesInstallExitCode {
-                            Text("最近退出码: \(code)")
+                            Text(L10n.f("wizard.hermes_env.exit_code", fallback: "最近退出码: %d", code))
                                 .font(.caption2)
                                 .foregroundStyle(code == 0 ? Color.secondary : Color.orange)
                         }
@@ -678,7 +678,7 @@ struct ShrimpInitWizardV2: View {
                             .stroke(Color.secondary.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                             .frame(minHeight: 160)
                             .overlay {
-                                Text("点击“安装 Hermes”后将启动可交互终端。")
+                                Text(L10n.k("wizard.hermes_env.terminal_placeholder", fallback: "点击「安装 Hermes」后将启动可交互终端。"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -727,12 +727,12 @@ struct ShrimpInitWizardV2: View {
                 .padding(.bottom, 16)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("安装终端（日志跟踪）")
+                    Text(L10n.k("wizard_v2.basic_env.terminal_title", fallback: "安装终端（日志跟踪）"))
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                     HStack(spacing: 10) {
-                        Label("统一 SwiftTerm 显示（日志 tail 模式）", systemImage: "terminal")
+                        Label(L10n.k("wizard_v2.basic_env.terminal_hint", fallback: "统一 SwiftTerm 显示（日志 tail 模式）"), systemImage: "terminal")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -740,7 +740,7 @@ struct ShrimpInitWizardV2: View {
                             openclawLogTerminalControl.sendInterrupt()
                         }
                         .buttonStyle(.borderless)
-                        Button("重连日志") {
+                        Button(L10n.k("wizard_v2.basic_env.reconnect_log", fallback: "重连日志")) {
                             openclawLogTerminalRunToken = UUID()
                         }
                         .buttonStyle(.borderless)
@@ -874,23 +874,23 @@ struct ShrimpInitWizardV2: View {
 
     private var hermesSetupView: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Hermes 配置")
+            Text(L10n.k("wizard.hermes_setup.heading", fallback: "Hermes 配置"))
                 .font(.title2).fontWeight(.semibold)
                 .padding(.bottom, 4)
-            Text("通过 hermes setup 交互式向导完成模型、密钥等配置。")
+            Text(L10n.k("wizard.hermes_setup.hint", fallback: "通过 hermes setup 交互式向导完成模型、密钥等配置。"))
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 12)
 
             HStack(spacing: 12) {
                 if hermesSetupDone {
-                    Label("配置向导已完成", systemImage: "checkmark.circle.fill")
+                    Label(L10n.k("wizard.hermes_setup.done", fallback: "配置向导已完成"), systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.system(size: 13, weight: .medium))
                 } else if let code = hermesSetupExitCode, code != 0 {
-                    Label("向导异常退出（code \(code)），可重新运行。", systemImage: "exclamationmark.triangle.fill")
+                    Label(L10n.f("wizard.hermes_setup.exit_abnormal", fallback: "向导异常退出（code %d），可重新运行。", code), systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(.orange)
-                    Button("重新运行") {
+                    Button(L10n.k("wizard.hermes_setup.rerun", fallback: "重新运行")) {
                         hermesSetupExitCode = nil
                         hermesSetupDone = false
                         hermesSetupTerminalRunToken = UUID()
@@ -908,12 +908,12 @@ struct ShrimpInitWizardV2: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
-                    Label("支持键盘输入，按向导提示完成配置", systemImage: "keyboard")
+                    Label(L10n.k("wizard.hermes_setup.keyboard_hint", fallback: "支持键盘输入，按向导提示完成配置"), systemImage: "keyboard")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
                     if let code = hermesSetupExitCode {
-                        Text("退出码: \(code)")
+                        Text(L10n.f("wizard.hermes_setup.exit_code", fallback: "退出码: %d", code))
                             .font(.caption2)
                             .foregroundStyle(code == 0 ? Color.secondary : Color.orange)
                     }
@@ -944,14 +944,14 @@ struct ShrimpInitWizardV2: View {
         }
         .padding(24)
         .confirmationDialog(
-            "尚未完成 Hermes 配置",
+            L10n.k("wizard.hermes_setup.skip_confirm_title", fallback: "尚未完成 Hermes 配置"),
             isPresented: $showHermesSetupSkipConfirm,
             titleVisibility: .visible
         ) {
-            Button("继续创建", role: .destructive) { advance() }
+            Button(L10n.k("wizard.hermes_setup.skip_confirm_proceed", fallback: "继续创建"), role: .destructive) { advance() }
             Button(L10n.k("common.cancel", fallback: "取消"), role: .cancel) {}
         } message: {
-            Text("hermes setup 尚未成功完成，模型 / API Key 等可能未配置。继续将直接创建 profile，启动后可能需要再次进入 Hermes 配置。")
+            Text(L10n.k("wizard.hermes_setup.skip_confirm_message", fallback: "hermes setup 尚未成功完成，模型 / API Key 等可能未配置。继续将直接创建 profile，启动后可能需要再次进入 Hermes 配置。"))
         }
     }
 
@@ -1057,7 +1057,7 @@ struct ShrimpInitWizardV2: View {
                         .padding(.horizontal, 16)
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text("已耗时 \(saveElapsedText(now: context.date))")
+                    Text(L10n.f("wizard_v2.done.elapsed", fallback: "已耗时 %@", saveElapsedText(now: context.date)))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1117,12 +1117,11 @@ struct ShrimpInitWizardV2: View {
 
     private var summaryText: String {
         if selectedEngine == .hermes {
-            return "Hermes 引擎初始化完成"
+            return L10n.k("wizard_v2.done.hermes_summary", fallback: "Hermes 引擎初始化完成")
         }
         let agentCount = agents.count
         let botCount = imAccounts.count
-        return L10n.k("wizard_v2.done.summary",
-                      fallback: "\(agentCount) 个 Agent，\(botCount) 个 IM Bot 绑定")
+        return L10n.f("wizard_v2.done.summary", fallback: "%d 个 Agent，%d 个 IM Bot 绑定", agentCount, botCount)
     }
 
     @MainActor
