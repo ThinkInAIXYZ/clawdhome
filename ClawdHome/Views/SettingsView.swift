@@ -1182,6 +1182,7 @@ private struct AboutTab: View {
     @State private var isProbing = false
     @State private var isRestarting = false
     @State private var updateCheckMessage: String? = nil
+    @State private var showAppUpdateSheet = false
 
     private var appVersion: String {
         let info = Bundle.main.infoDictionary
@@ -1349,6 +1350,10 @@ private struct AboutTab: View {
             Spacer()
         }
         .task { await probe() }
+        .sheet(isPresented: $showAppUpdateSheet) {
+            AppUpdateSheet()
+                .environment(updater)
+        }
     }
 
     private func probe() async {
@@ -1386,6 +1391,7 @@ private struct AboutTab: View {
                 fallback: "检查失败：%@",
                 err
             )
+            showAppUpdateSheet = false
             return
         }
         if updater.appNeedsUpdate, let latest = updater.appLatestVersion {
@@ -1394,8 +1400,10 @@ private struct AboutTab: View {
                 fallback: "发现新版本：v%@",
                 latest
             )
+            showAppUpdateSheet = true
         } else {
             updateCheckMessage = L10n.k("views.settings_view.up_to_date", fallback: "当前已是最新版本")
+            showAppUpdateSheet = false
         }
     }
 }

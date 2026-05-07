@@ -14,9 +14,11 @@ struct UpgradeConfirmSheet: View {
     var onConfirm: (_ version: String, _ backup: Bool) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// 持久化备份偏好（默认开）
     @AppStorage("upgradeAutoBackup") private var autoBackup = true
     @State private var upgradeRequested = false
+    @State private var animateInstallingStatus = false
 
     private var canClose: Bool { !isInstalling }
 
@@ -98,8 +100,24 @@ struct UpgradeConfirmSheet: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     if isInstalling {
-                        Label(L10n.k("upgrade.confirm.status.installing", fallback: "升级中…"), systemImage: "arrow.triangle.2.circlepath")
-                            .font(.subheadline.weight(.medium))
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .rotationEffect(.degrees((animateInstallingStatus && !reduceMotion) ? 360 : 0))
+                                .animation(
+                                    reduceMotion ? nil : .linear(duration: 0.9).repeatForever(autoreverses: false),
+                                    value: animateInstallingStatus
+                                )
+                            Text(L10n.k("upgrade.confirm.status.installing", fallback: "升级中…"))
+                                .opacity((animateInstallingStatus && !reduceMotion) ? 0.62 : 1)
+                                .scaleEffect((animateInstallingStatus && !reduceMotion) ? 0.985 : 1, anchor: .leading)
+                                .animation(
+                                    reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                                    value: animateInstallingStatus
+                                )
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .onAppear { animateInstallingStatus = true }
+                        .onDisappear { animateInstallingStatus = false }
                     } else if let installError, !installError.isEmpty {
                         Label(L10n.k("upgrade.confirm.status.failed", fallback: "升级失败"), systemImage: "xmark.circle.fill")
                             .font(.subheadline.weight(.medium))

@@ -5,6 +5,10 @@ import Darwin
 import AppKit
 import SwiftUI
 
+extension Notification.Name {
+    static let openUpgradeSheet = Notification.Name("ClawdHome.openUpgradeSheet")
+}
+
 private enum UserEntryWindowTarget: String {
     case detail = "claw-detail"
     case initWizard = "user-init-wizard"
@@ -774,6 +778,16 @@ struct ClawPoolView: View {
                         openPreferredWindow(for: claw)
                     } onDoubleClick: {
                         openPreferredWindow(for: claw)
+                    } onUpgrade: {
+                        openPreferredWindow(for: claw)
+                        // 延迟发送通知，等窗口打开后 UserDetailView 接收
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            NotificationCenter.default.post(
+                                name: .openUpgradeSheet,
+                                object: nil,
+                                userInfo: ["username": claw.username]
+                            )
+                        }
                     } onOpenWebUI: {
                         Task { await openWebUI(for: claw) }
                     } onTerminal: {
@@ -1388,6 +1402,7 @@ private struct ClawCard: View {
     var isOpeningWebUI: Bool = false
     let onTap: () -> Void
     var onDoubleClick: (() -> Void)? = nil
+    var onUpgrade: (() -> Void)? = nil
     let onOpenWebUI: () -> Void
     let onTerminal: () -> Void
     let onDropFiles: ([URL]) -> Void
@@ -1458,6 +1473,12 @@ private struct ClawCard: View {
                             if outdated {
                                 Image(systemName: "arrow.up.circle.fill")
                                     .foregroundStyle(Color.orange)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if outdated, let onUpgrade {
+                                onUpgrade()
                             }
                         }
                     } else {

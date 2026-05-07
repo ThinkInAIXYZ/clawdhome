@@ -9811,6 +9811,24 @@
         }
       }
     },
+    "user.detail.auto.file_exists": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File exists"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件存在"
+          }
+        }
+      }
+    },
     "user.detail.auto.file_folder_select": {
       "comment": "",
       "extractionState": "stale",
@@ -9847,6 +9865,24 @@
         }
       }
     },
+    "user.detail.auto.file_size": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File size"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件大小"
+          }
+        }
+      }
+    },
     "user.detail.auto.files": {
       "comment": "",
       "extractionState": "stale",
@@ -9861,6 +9897,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "文件"
+          }
+        }
+      }
+    },
+    "user.detail.auto.executable_file": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Executable file"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可执行文件"
           }
         }
       }

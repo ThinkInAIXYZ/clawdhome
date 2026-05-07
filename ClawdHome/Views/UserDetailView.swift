@@ -284,6 +284,7 @@ struct UserDetailView: View {
     @State private var showRollbackConfirm = false
     @State private var isRollingBack = false
     @State private var showInstallConsole = false
+    @State private var versionSpinnerAnimating = false
     @State private var showLogoutConfirm = false
     @State private var isLoggingOut = false
     @State private var showFlashFreezeConfirm = false
@@ -610,6 +611,15 @@ struct UserDetailView: View {
             DiagnosticsSheet(user: user) { diagResult in
                 lastHealthCheck = diagResult
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openUpgradeSheet)) { notification in
+            guard let username = notification.userInfo?["username"] as? String,
+                  username == user.username,
+                  !isInstalling, !isRollingBack,
+                  updater.needsUpdate(user.openclawVersion),
+                  let latest = updater.latestVersion else { return }
+            pendingUpgradeVersion = latest
+            showUpgradeConfirm = true
         }
         .sheet(isPresented: $showUpgradeConfirm) {
             UpgradeConfirmSheet(
@@ -1609,8 +1619,18 @@ struct UserDetailView: View {
                 Text(v)
                     .foregroundStyle(updater.needsUpdate(user.openclawVersion) ? .orange : .primary)
                 if isInstalling || isRollingBack {
-                    Text(isRollingBack ? L10n.k("user.detail.auto.rollback", fallback: "回退中…") : L10n.k("user.detail.auto.upgrade", fallback: "升级中…"))
-                        .font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .rotationEffect(.degrees(versionSpinnerAnimating ? 360 : 0))
+                            .animation(
+                                .linear(duration: 0.9).repeatForever(autoreverses: false),
+                                value: versionSpinnerAnimating
+                            )
+                            .onAppear { versionSpinnerAnimating = true }
+                            .onDisappear { versionSpinnerAnimating = false }
+                        Text(isRollingBack ? L10n.k("user.detail.auto.rollback", fallback: "回退中…") : L10n.k("user.detail.auto.upgrade", fallback: "升级中…"))
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
                 } else {
                     if updater.needsUpdate(user.openclawVersion),
                        let latest = updater.latestVersion {
@@ -5287,9 +5307,9 @@ private struct ProcessDetailSheet: View {
                         detailRow(L10n.k("user.detail.auto.start", fallback: "启动时间"), value: formatTime(resolved.startTime))
                         detailRow(L10n.k("user.detail.auto.port", fallback: "监听端口"), value: resolved.listeningPorts.isEmpty ? "—" : resolved.listeningPorts.joined(separator: ", "))
                         Divider().padding(.vertical, 2)
-                        detailRow(L10n.k("user.detail.auto.file", fallback: "可执行文件"), value: resolved.executablePath ?? "—")
-                        detailRow(L10n.k("user.detail.auto.file", fallback: "文件存在"), value: resolved.executableExists ? L10n.k("user.detail.auto.yes", fallback: "是") : L10n.k("user.detail.auto.no", fallback: "否"))
-                        detailRow(L10n.k("user.detail.auto.file", fallback: "文件大小"), value: resolved.executableFileSizeBytes.map(FormatUtils.formatBytes) ?? "—")
+                        detailRow(L10n.k("user.detail.auto.executable_file", fallback: "可执行文件"), value: resolved.executablePath ?? "—")
+                        detailRow(L10n.k("user.detail.auto.file_exists", fallback: "文件存在"), value: resolved.executableExists ? L10n.k("user.detail.auto.yes", fallback: "是") : L10n.k("user.detail.auto.no", fallback: "否"))
+                        detailRow(L10n.k("user.detail.auto.file_size", fallback: "文件大小"), value: resolved.executableFileSizeBytes.map(FormatUtils.formatBytes) ?? "—")
                         detailRow(L10n.k("user.detail.auto.created_at", fallback: "创建时间"), value: formatTime(resolved.executableCreatedAt))
                         detailRow(L10n.k("user.detail.auto.modified_at", fallback: "修改时间"), value: formatTime(resolved.executableModifiedAt))
                         detailRow(L10n.k("user.detail.auto.accessed_at", fallback: "访问时间"), value: formatTime(resolved.executableAccessedAt))
@@ -5382,13 +5402,12 @@ private struct ProcessColumnHeader: View {
     var body: some View {
         HStack(spacing: 0) {
             pidCol(right: $widths.name) { onSort(.pid) }
-            nameCol(right: $widths.command) { onSort(.name) }
+            nameCol { onSort(.name) }
             commandCol(right: $widths.cpu)
             cpuCol(right: $widths.mem) { onSort(.cpu) }
             memCol(right: $widths.uptime) { onSort(.mem) }
             uptimeCol(right: $widths.ports) { onSort(.uptime) }
             resizableText(L10n.k("user.detail.auto.port", fallback: "端口"), width: $widths.ports, min: 84, max: 360)
-            Spacer(minLength: 0)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -5401,18 +5420,23 @@ private struct ProcessColumnHeader: View {
         sortBtn("PID", field: .pid, width: $widths.pid, min: 50, max: 120, align: .trailing,
                 rightWidth: right, rightMin: 96, rightMax: 320, action: action)
     }
-    @ViewBuilder private func nameCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
+    @ViewBuilder private func nameCol(action: @escaping () -> Void) -> some View {
         if viewMode == .flat {
             sortBtn(L10n.k("user.detail.auto.process", fallback: "进程名"), field: .name, width: $widths.name, min: 96, max: 320, align: .leading,
-                    rightWidth: right, rightMin: 160, rightMax: 900, action: action)
+                    action: action)
         } else {
-            resizableText(L10n.k("user.detail.auto.process", fallback: "进程名"), width: $widths.name, min: 96, max: 320,
-                          rightWidth: right, rightMin: 160, rightMax: 900)
+            resizableText(L10n.k("user.detail.auto.process", fallback: "进程名"), width: $widths.name, min: 96, max: 320)
         }
     }
     @ViewBuilder private func commandCol(right: Binding<CGFloat>) -> some View {
-        resizableText("Command", width: $widths.command, min: 160, max: 900,
-                      rightWidth: right, rightMin: 48, rightMax: 120)
+        // Command 列为弹性列，自动填充剩余空间
+        Text("Command")
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+            .overlay(alignment: .trailing) {
+                resizeHandle(width: right, min: 48, max: 120)
+            }
     }
     @ViewBuilder private func cpuCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
         sortBtn("CPU%", field: .cpu, width: $widths.cpu, min: 48, max: 120, align: .trailing,
@@ -5431,6 +5455,7 @@ private struct ProcessColumnHeader: View {
     private func sortBtn(_ label: String, field: ProcessTabView.SortField,
                          width: Binding<CGFloat>, min: CGFloat, max: CGFloat, align: Alignment,
                          rightWidth: Binding<CGFloat>? = nil, rightMin: CGFloat = 0, rightMax: CGFloat = 0,
+                         defaultWidth: CGFloat = 0, defaultRightWidth: CGFloat = 0,
                          action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 2) {
@@ -5446,25 +5471,30 @@ private struct ProcessColumnHeader: View {
         .frame(width: width.wrappedValue, alignment: align)
         .padding(.horizontal, 4)
         .overlay(alignment: .trailing) {
-            resizeHandle(width: width, min: min, max: max, rightWidth: rightWidth, rightMin: rightMin, rightMax: rightMax)
+            resizeHandle(width: width, min: min, max: max, rightWidth: rightWidth, rightMin: rightMin, rightMax: rightMax,
+                         defaultWidth: defaultWidth, defaultRightWidth: defaultRightWidth)
         }
     }
 
     private func resizableText(_ label: String, width: Binding<CGFloat>, min: CGFloat, max: CGFloat,
-                               rightWidth: Binding<CGFloat>? = nil, rightMin: CGFloat = 0, rightMax: CGFloat = 0) -> some View {
+                               rightWidth: Binding<CGFloat>? = nil, rightMin: CGFloat = 0, rightMax: CGFloat = 0,
+                               defaultWidth: CGFloat = 0, defaultRightWidth: CGFloat = 0) -> some View {
         Text(label)
             .lineLimit(1)
             .frame(width: width.wrappedValue, alignment: .leading)
             .padding(.horizontal, 4)
             .overlay(alignment: .trailing) {
-                resizeHandle(width: width, min: min, max: max, rightWidth: rightWidth, rightMin: rightMin, rightMax: rightMax)
+                resizeHandle(width: width, min: min, max: max, rightWidth: rightWidth, rightMin: rightMin, rightMax: rightMax,
+                             defaultWidth: defaultWidth, defaultRightWidth: defaultRightWidth)
             }
     }
 
     private func resizeHandle(width: Binding<CGFloat>, min: CGFloat, max: CGFloat,
-                              rightWidth: Binding<CGFloat>? = nil, rightMin: CGFloat = 0, rightMax: CGFloat = 0) -> some View {
+                              rightWidth: Binding<CGFloat>? = nil, rightMin: CGFloat = 0, rightMax: CGFloat = 0,
+                              defaultWidth: CGFloat = 0, defaultRightWidth: CGFloat = 0) -> some View {
         ResizeGrip(width: width, minWidth: min, maxWidth: max,
-                   rightWidth: rightWidth, rightMinWidth: rightMin, rightMaxWidth: rightMax)
+                   rightWidth: rightWidth, rightMinWidth: rightMin, rightMaxWidth: rightMax,
+                   defaultWidth: defaultWidth, defaultRightWidth: defaultRightWidth)
     }
 }
 
@@ -5520,7 +5550,7 @@ private struct ProcessRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
-                .frame(width: widths.command, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
 
             // CPU%
@@ -5551,8 +5581,6 @@ private struct ProcessRow: View {
                 .truncationMode(.tail)
                 .frame(width: widths.ports, alignment: .leading)
                 .padding(.horizontal, 4)
-
-            Spacer(minLength: 0)
         }
         .padding(.vertical, 2)
     }
@@ -5565,6 +5593,8 @@ private struct ResizeGrip: View {
     let rightWidth: Binding<CGFloat>?
     let rightMinWidth: CGFloat
     let rightMaxWidth: CGFloat
+    var defaultWidth: CGFloat = 0
+    var defaultRightWidth: CGFloat = 0
     @State private var baseWidth: CGFloat = 0
     @State private var baseRightWidth: CGFloat = 0
 
@@ -5608,6 +5638,17 @@ private struct ResizeGrip: View {
                         baseRightWidth = 0
                     }
             )
+            .onTapGesture(count: 2) {
+                // 双击重置为默认宽度
+                if defaultWidth > 0 {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        width = defaultWidth
+                        if let rightWidth, defaultRightWidth > 0 {
+                            rightWidth.wrappedValue = defaultRightWidth
+                        }
+                    }
+                }
+            }
             .overlay(alignment: .center) {
                 Rectangle()
                     .fill(Color.secondary.opacity(0.28))
