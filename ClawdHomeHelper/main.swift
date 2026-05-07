@@ -106,6 +106,11 @@ private struct HelperLogRecord: Codable {
     let channel: String
     let message: String
     let pid: Int32
+    let username: String?
+    let requestId: String?
+    let component: String?
+    let event: String?
+    let fields: [String: String]?
 }
 
 private func isHelperDebugLoggingEnabled() -> Bool {
@@ -139,8 +144,36 @@ private func setHelperDebugLoggingEnabled(_ enabled: Bool) -> Bool {
     }
 }
 
-func helperLog(_ message: String, level: LogLevel = .info, channel: LogChannel = .primary) {
+func helperLog(
+    _ message: String,
+    level: LogLevel = .info,
+    channel: LogChannel = .primary,
+    username: String? = nil,
+    requestID: String? = nil,
+    component: String? = nil,
+    event: String? = nil,
+    fields: [String: String]? = nil
+) {
     let safeMessage = LogRedactor.redact(message)
+    func normalized(_ text: String?) -> String? {
+        guard let value = text?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+    let safeFields: [String: String]? = {
+        guard let fields else { return nil }
+        var output: [String: String] = [:]
+        for (key, value) in fields {
+            let k = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            let v = LogRedactor.redact(value).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !k.isEmpty, !v.isEmpty {
+                output[k] = v
+            }
+        }
+        return output.isEmpty ? nil : output
+    }()
+
     let debugEnabled = isHelperDebugLoggingEnabled()
     if !debugEnabled {
         // 非 DEBUG 模式下控制日志量：仅保留核心日志与警告/错误。
@@ -163,7 +196,12 @@ func helperLog(_ message: String, level: LogLevel = .info, channel: LogChannel =
             level: level.rawValue,
             channel: channel.tag,
             message: safeMessage,
-            pid: getpid()
+            pid: getpid(),
+            username: normalized(username),
+            requestId: normalized(requestID),
+            component: normalized(component),
+            event: normalized(event),
+            fields: safeFields
         )
         let lineData: Data
         if let encoded = try? helperLogEncoder.encode(record) {
@@ -171,7 +209,17 @@ func helperLog(_ message: String, level: LogLevel = .info, channel: LogChannel =
             d.append(0x0A)
             lineData = d
         } else {
-            lineData = Data("[\(record.ts)] [\(record.level)] [\(record.channel)] \(safeMessage)\n".utf8)
+            var segments = ["[\(record.ts)]", "[\(record.level)]", "[\(record.channel)]"]
+            if let username = record.username { segments.append("[user=\(username)]") }
+            if let requestId = record.requestId { segments.append("[req=\(requestId)]") }
+            if let component = record.component {
+                if let event = record.event {
+                    segments.append("[\(component).\(event)]")
+                } else {
+                    segments.append("[\(component)]")
+                }
+            }
+            lineData = Data("\(segments.joined(separator: " ")) \(safeMessage)\n".utf8)
         }
         helperLogHandle?.write(lineData)
 
@@ -3084,130 +3132,97 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         return items
     }
 
-    // MARK: 诊断 - 配置校验
+    // MARK: 诊断 - 配置校验（直接读取 openclaw.json 验证，不依赖 CLI）
 
     private func diagConfig(username: String, fix: Bool) -> [DiagnosticItem] {
         var items: [DiagnosticItem] = []
+        let configPath = "/Users/\(username)/.openclaw/openclaw.json"
 
-        guard let openclawPath = try? ConfigWriter.findOpenclawBinary(for: username) else {
+        // 1. 检查文件是否存在
+        guard FileManager.default.fileExists(atPath: configPath) else {
             items.append(DiagnosticItem(
                 id: "config-skip", group: .config, severity: "info",
                 title: "跳过配置校验",
-                detail: "OpenClaw 未安装",
+                detail: "openclaw.json 不存在",
                 fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
             return items
         }
 
-        let nodePath = ConfigWriter.buildNodePath(username: username)
-        let baseArgs = ["-n", "-u", username, "-H", "/usr/bin/env", "PATH=\(nodePath)"]
-        let doctorArgs = baseArgs + [openclawPath, "doctor", "--json"]
+        // 2. 读取并解析 JSON
+        guard let data = FileManager.default.contents(atPath: configPath) else {
+            items.append(DiagnosticItem(
+                id: "config-read-fail", group: .config, severity: "critical",
+                title: "配置文件无法读取",
+                detail: configPath,
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+            return items
+        }
 
-        do {
-            let output = try run("/usr/bin/sudo", args: doctorArgs)
-            let problems = parseDoctorOutput(output)
-            if problems.isEmpty {
-                items.append(DiagnosticItem(
-                    id: "config-ok", group: .config, severity: "ok",
-                    title: "配置校验通过",
-                    detail: "openclaw.json 合法",
-                    fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
-            } else if fix {
-                let fixArgs = baseArgs + [openclawPath, "doctor", "--fix"]
-                _ = try? run("/usr/bin/sudo", args: fixArgs)
-                if let postOutput = try? run("/usr/bin/sudo", args: doctorArgs) {
-                    let postProblems = parseDoctorOutput(postOutput)
-                    let postIDs = Set(postProblems.map { $0.id })
-                    for p in problems {
-                        items.append(DiagnosticItem(
-                            id: p.id, group: .config, severity: p.severity,
-                            title: p.title, detail: p.detail,
-                            fixable: true, fixed: !postIDs.contains(p.id),
-                            fixError: nil, latencyMs: nil))
-                    }
-                } else {
-                    for p in problems {
-                        items.append(DiagnosticItem(
-                            id: p.id, group: .config, severity: p.severity,
-                            title: p.title, detail: p.detail,
-                            fixable: true, fixed: false,
-                            fixError: "修复后重新检查失败", latencyMs: nil))
-                    }
-                }
-            } else {
-                items += problems
-            }
-        } catch {
-            let errorDetail: String
-            if case ShellError.nonZeroExit(_, _, let stderr) = error, !stderr.isEmpty {
-                errorDetail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            } else {
-                errorDetail = error.localizedDescription
-            }
-            let configPath = "/Users/\(username)/.openclaw/openclaw.json"
-            if let data = FileManager.default.contents(atPath: configPath),
-               (try? JSONSerialization.jsonObject(with: data)) == nil {
-                items.append(DiagnosticItem(
-                    id: "config-json-invalid", group: .config, severity: "critical",
-                    title: "openclaw.json 格式错误",
-                    detail: "文件不是合法 JSON",
-                    fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
-            } else {
-                items.append(DiagnosticItem(
-                    id: "config-doctor-fail", group: .config, severity: "warn",
-                    title: "配置校验命令失败",
-                    detail: errorDetail,
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            items.append(DiagnosticItem(
+                id: "config-json-invalid", group: .config, severity: "critical",
+                title: "openclaw.json 格式错误",
+                detail: "文件不是合法 JSON",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+            return items
+        }
+
+        // 3. 校验关键字段
+        var problems: [DiagnosticItem] = []
+
+        // gateway 配置
+        if let gw = root["gateway"] as? [String: Any] {
+            if gw["port"] == nil {
+                problems.append(DiagnosticItem(
+                    id: "config-no-gw-port", group: .config, severity: "warn",
+                    title: "缺少 gateway.port",
+                    detail: "Gateway 端口未配置",
                     fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
             }
+            if gw["auth"] == nil {
+                problems.append(DiagnosticItem(
+                    id: "config-no-gw-auth", group: .config, severity: "warn",
+                    title: "缺少 gateway.auth",
+                    detail: "Gateway 认证未配置",
+                    fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+            }
+        } else {
+            problems.append(DiagnosticItem(
+                id: "config-no-gateway", group: .config, severity: "warn",
+                title: "缺少 gateway 配置段",
+                detail: "Gateway 未配置，可能无法启动",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+        }
+
+        // models 配置
+        if root["models"] == nil {
+            problems.append(DiagnosticItem(
+                id: "config-no-models", group: .config, severity: "warn",
+                title: "缺少 models 配置段",
+                detail: "未配置任何模型提供商",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+        }
+
+        // auth 配置
+        if root["auth"] == nil {
+            problems.append(DiagnosticItem(
+                id: "config-no-auth", group: .config, severity: "info",
+                title: "缺少 auth 配置段",
+                detail: "未配置认证 profile",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+        }
+
+        if problems.isEmpty {
+            items.append(DiagnosticItem(
+                id: "config-ok", group: .config, severity: "ok",
+                title: "配置校验通过",
+                detail: "openclaw.json 合法，关键字段完整",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+        } else {
+            items += problems
         }
 
         return items
-    }
-
-    /// 解析 openclaw doctor --json 输出
-    private func parseDoctorOutput(_ output: String) -> [DiagnosticItem] {
-        guard let data = output.data(using: .utf8) else { return [] }
-        var rawList: [[String: Any]] = []
-        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            rawList = (obj["problems"] as? [[String: Any]])
-                ?? (obj["issues"] as? [[String: Any]])
-                ?? (obj["findings"] as? [[String: Any]]) ?? []
-        } else if let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-            rawList = arr
-        }
-        return rawList.enumerated().map { i, raw in
-            let id       = (raw["id"] as? String) ?? "config-\(i)"
-            let severity = (raw["severity"] as? String) ?? "warn"
-            let title    = (raw["title"] as? String) ?? (raw["name"] as? String) ?? "配置问题"
-            let detail   = (raw["detail"] as? String)
-                ?? (raw["description"] as? String)
-                ?? (raw["message"] as? String) ?? ""
-            return DiagnosticItem(id: "config-\(id)", group: .config, severity: severity,
-                title: title, detail: detail,
-                fixable: true, fixed: nil, fixError: nil, latencyMs: nil)
-        }
-    }
-
-    private func parseAuditOutput(_ output: String) -> [DiagnosticItem] {
-        guard let data = output.data(using: .utf8) else { return [] }
-        var rawList: [[String: Any]] = []
-        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            rawList = (obj["findings"] as? [[String: Any]])
-                ?? (obj["issues"] as? [[String: Any]])
-                ?? (obj["problems"] as? [[String: Any]]) ?? []
-        } else if let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-            rawList = arr
-        }
-        return rawList.enumerated().map { i, raw in
-            let id       = (raw["id"] as? String) ?? "security-\(i)"
-            let severity = (raw["severity"] as? String) ?? "warn"
-            let title    = (raw["title"] as? String) ?? (raw["name"] as? String) ?? "安全问题"
-            let detail   = (raw["detail"] as? String)
-                ?? (raw["description"] as? String)
-                ?? (raw["message"] as? String) ?? ""
-            return DiagnosticItem(id: "security-\(id)", group: .security, severity: severity,
-                title: title, detail: detail,
-                fixable: true, fixed: nil, fixError: nil, latencyMs: nil)
-        }
     }
 
     // MARK: 诊断 - 安全审计
@@ -3858,31 +3873,72 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
     // MARK: - 角色定义 Git 管理
 
     func initPersonaGitRepo(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
-        helperLog("[PersonaGit] initRepo user=\(username)", level: .debug)
+        let requestID = UUID().uuidString
+        helperLog(
+            "[PersonaGit] initRepo",
+            level: .debug,
+            username: username,
+            requestID: requestID,
+            component: "PersonaGit",
+            event: "initRepo"
+        )
         do {
             try PersonaGitManager.initRepo(username: username)
             reply(true, nil)
         } catch {
-            helperLog("[PersonaGit] initRepo error: \(error)", level: .error)
+            helperLog(
+                "[PersonaGit] initRepo error: \(error)",
+                level: .error,
+                username: username,
+                requestID: requestID,
+                component: "PersonaGit",
+                event: "initRepo"
+            )
             reply(false, error.localizedDescription)
         }
     }
 
     func commitPersonaFile(username: String, filename: String, message: String,
                            withReply reply: @escaping (Bool, String?) -> Void) {
-        helperLog("[PersonaGit] commitFile user=\(username) file=\(filename)", level: .debug)
+        let requestID = UUID().uuidString
+        helperLog(
+            "[PersonaGit] commitFile",
+            level: .debug,
+            username: username,
+            requestID: requestID,
+            component: "PersonaGit",
+            event: "commitFile",
+            fields: ["filename": filename]
+        )
         do {
             try PersonaGitManager.commitFile(username: username, filename: filename, message: message)
             reply(true, nil)
         } catch {
-            helperLog("[PersonaGit] commitFile error: \(error)", level: .error)
+            helperLog(
+                "[PersonaGit] commitFile error: \(error)",
+                level: .error,
+                username: username,
+                requestID: requestID,
+                component: "PersonaGit",
+                event: "commitFile",
+                fields: ["filename": filename]
+            )
             reply(false, error.localizedDescription)
         }
     }
 
     func getPersonaFileHistory(username: String, filename: String,
                                withReply reply: @escaping (String?, String?) -> Void) {
-        helperLog("[PersonaGit] getHistory user=\(username) file=\(filename)", level: .debug)
+        let requestID = UUID().uuidString
+        helperLog(
+            "[PersonaGit] getHistory",
+            level: .debug,
+            username: username,
+            requestID: requestID,
+            component: "PersonaGit",
+            event: "getHistory",
+            fields: ["filename": filename]
+        )
         do {
             let commits = try PersonaGitManager.getHistory(username: username, filename: filename)
             let encoder = JSONEncoder()
@@ -3890,31 +3946,73 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             let data = try encoder.encode(commits)
             reply(String(data: data, encoding: .utf8), nil)
         } catch {
-            helperLog("[PersonaGit] getHistory error: \(error)", level: .error)
+            helperLog(
+                "[PersonaGit] getHistory error: \(error)",
+                level: .error,
+                username: username,
+                requestID: requestID,
+                component: "PersonaGit",
+                event: "getHistory",
+                fields: ["filename": filename]
+            )
             reply(nil, error.localizedDescription)
         }
     }
 
     func getPersonaFileDiff(username: String, filename: String, commitHash: String,
                             withReply reply: @escaping (String?, String?) -> Void) {
-        helperLog("[PersonaGit] getDiff user=\(username) file=\(filename) hash=\(commitHash)", level: .debug)
+        let requestID = UUID().uuidString
+        helperLog(
+            "[PersonaGit] getDiff",
+            level: .debug,
+            username: username,
+            requestID: requestID,
+            component: "PersonaGit",
+            event: "getDiff",
+            fields: ["filename": filename, "commitHash": commitHash]
+        )
         do {
             let diff = try PersonaGitManager.getDiff(username: username, filename: filename, commitHash: commitHash)
             reply(diff, nil)
         } catch {
-            helperLog("[PersonaGit] getDiff error: \(error)", level: .error)
+            helperLog(
+                "[PersonaGit] getDiff error: \(error)",
+                level: .error,
+                username: username,
+                requestID: requestID,
+                component: "PersonaGit",
+                event: "getDiff",
+                fields: ["filename": filename, "commitHash": commitHash]
+            )
             reply(nil, error.localizedDescription)
         }
     }
 
     func restorePersonaFileToCommit(username: String, filename: String, commitHash: String,
                                     withReply reply: @escaping (Bool, String?) -> Void) {
-        helperLog("[PersonaGit] restoreToCommit user=\(username) file=\(filename) hash=\(commitHash)", level: .debug)
+        let requestID = UUID().uuidString
+        helperLog(
+            "[PersonaGit] restoreToCommit",
+            level: .debug,
+            username: username,
+            requestID: requestID,
+            component: "PersonaGit",
+            event: "restoreToCommit",
+            fields: ["filename": filename, "commitHash": commitHash]
+        )
         do {
             try PersonaGitManager.restoreToCommit(username: username, filename: filename, commitHash: commitHash)
             reply(true, nil)
         } catch {
-            helperLog("[PersonaGit] restoreToCommit error: \(error)", level: .error)
+            helperLog(
+                "[PersonaGit] restoreToCommit error: \(error)",
+                level: .error,
+                username: username,
+                requestID: requestID,
+                component: "PersonaGit",
+                event: "restoreToCommit",
+                fields: ["filename": filename, "commitHash": commitHash]
+            )
             reply(false, error.localizedDescription)
         }
     }
