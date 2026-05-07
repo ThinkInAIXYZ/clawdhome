@@ -36,6 +36,12 @@ struct ShrimpSettingsV2View: View {
     @State private var isLoadingPlugins = false
     @State private var pluginInstallTarget = ""
     @State private var pluginError: String?
+    @State private var browserAccountStatus: BrowserAccountStatus?
+    @State private var opencliVersion: String?
+    @State private var isInstallingBrowserTool = false
+    @State private var isInstallingOpenCLI = false
+    @State private var isRunningOpenCLIDoctor = false
+    @State private var dependencyMessage: String?
 
     enum SettingsTab: String, CaseIterable {
         case agents, model, advanced
@@ -218,9 +224,85 @@ struct ShrimpSettingsV2View: View {
                     .font(.caption)
                 }
             }
+
+            Section("依赖工具") {
+                dependencyRow(
+                    title: "浏览器工具",
+                    subtitle: "用于 OAuth 登录、网页自动化与授权回调。",
+                    statusText: browserAccountStatus?.toolInstalled == true ? "已安装" : "未安装",
+                    statusColor: browserAccountStatus?.toolInstalled == true ? .green : .secondary,
+                    actionTitle: isInstallingBrowserTool ? "安装中…" : "安装/重装"
+                ) {
+                    installBrowserTool()
+                }
+                .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
+
+                dependencyRow(
+                    title: "OpenCLI",
+                    subtitle: "统一自动化 CLI，便于后续网站工具编排与执行。",
+                    statusText: opencliVersion.map { "已安装（\($0)）" } ?? "未安装",
+                    statusColor: opencliVersion == nil ? .secondary : .green,
+                    actionTitle: isInstallingOpenCLI ? "安装中…" : "安装/升级"
+                ) {
+                    installOpenCLI()
+                }
+                .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
+
+                HStack(spacing: 10) {
+                    Button(isRunningOpenCLIDoctor ? "检测中…" : "运行 OpenCLI Doctor") {
+                        runOpenCLIDoctor()
+                    }
+                    .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor || opencliVersion == nil)
+
+                    Spacer()
+                    Button("刷新状态") {
+                        refreshDependencyToolsStatus()
+                    }
+                    .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
+                }
+
+                if let dependencyMessage {
+                    Text(dependencyMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
         .padding()
+        .onAppear {
+            refreshDependencyToolsStatus()
+        }
+    }
+
+    private func dependencyRow(
+        title: String,
+        subtitle: String,
+        statusText: String,
+        statusColor: Color,
+        actionTitle: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(statusText)
+                .font(.caption)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(statusColor.opacity(0.12))
+                .foregroundStyle(statusColor)
+                .clipShape(Capsule())
+            Button(actionTitle, action: action)
+                .buttonStyle(.bordered)
+        }
+        .padding(.vertical, 2)
     }
 
     // MARK: - Tab 6: Plugins
@@ -368,6 +450,71 @@ struct ShrimpSettingsV2View: View {
                 } else {
                     pluginError = err
                 }
+            }
+        }
+    }
+
+    private func refreshDependencyToolsStatus() {
+        Task {
+            let status = await helperClient.getBrowserAccountStatus(username: user.username)
+            let version = await helperClient.getOpenCLIVersion(username: user.username)
+            await MainActor.run {
+                browserAccountStatus = status
+                opencliVersion = version
+            }
+        }
+    }
+
+    private func installBrowserTool() {
+        isInstallingBrowserTool = true
+        dependencyMessage = nil
+        Task {
+            do {
+                _ = try await helperClient.installBrowserAccountTool(username: user.username)
+                await MainActor.run {
+                    dependencyMessage = "浏览器工具安装完成。"
+                }
+            } catch {
+                await MainActor.run {
+                    dependencyMessage = "浏览器工具安装失败：\(error.localizedDescription)"
+                }
+            }
+            await MainActor.run {
+                isInstallingBrowserTool = false
+            }
+            refreshDependencyToolsStatus()
+        }
+    }
+
+    private func installOpenCLI() {
+        isInstallingOpenCLI = true
+        dependencyMessage = nil
+        Task {
+            do {
+                try await helperClient.installOpenCLI(username: user.username)
+                await MainActor.run {
+                    dependencyMessage = "OpenCLI 安装完成。"
+                }
+            } catch {
+                await MainActor.run {
+                    dependencyMessage = "OpenCLI 安装失败：\(error.localizedDescription)"
+                }
+            }
+            await MainActor.run {
+                isInstallingOpenCLI = false
+            }
+            refreshDependencyToolsStatus()
+        }
+    }
+
+    private func runOpenCLIDoctor() {
+        isRunningOpenCLIDoctor = true
+        dependencyMessage = nil
+        Task {
+            let (ok, output) = await helperClient.runOpenCLIDoctor(username: user.username)
+            await MainActor.run {
+                dependencyMessage = ok ? "Doctor 通过：\(output.trimmingCharacters(in: .whitespacesAndNewlines))" : "Doctor 失败：\(output)"
+                isRunningOpenCLIDoctor = false
             }
         }
     }

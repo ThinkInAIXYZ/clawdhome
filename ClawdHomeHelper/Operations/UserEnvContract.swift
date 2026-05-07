@@ -16,6 +16,7 @@ enum UserEnvContract {
         "HOMEBREW_PREFIX",
         "HOMEBREW_CELLAR",
         "HOMEBREW_REPOSITORY",
+        "HOMEBREW_CACHE",
         "NPM_CONFIG_PREFIX",
         "npm_config_prefix",
         "NPM_CONFIG_CACHE",
@@ -45,6 +46,10 @@ enum UserEnvContract {
         "/var/lib/clawdhome/cache/npm"
     }
 
+    static func homebrewSharedCacheDir() -> String {
+        "/var/lib/clawdhome/cache/homebrew"
+    }
+
     /// ~/.zprofile 里要求存在的关键 export（顺序即最终建议顺序）
     static func zprofileRequiredExports() -> [String] {
         [
@@ -52,6 +57,7 @@ enum UserEnvContract {
             "export HOMEBREW_PREFIX=\"$HOME/.brew\"",
             "export HOMEBREW_CELLAR=\"$HOME/.brew/Cellar\"",
             "export HOMEBREW_REPOSITORY=\"$HOME/.brew\"",
+            "export HOMEBREW_CACHE=\"/var/lib/clawdhome/cache/homebrew\"",
             "export NPM_CONFIG_PREFIX=\"$HOME/.npm-global\"",
             "export npm_config_prefix=\"$HOME/.npm-global\"",
             "export NPM_CONFIG_CACHE=\"/var/lib/clawdhome/cache/npm\"",
@@ -68,6 +74,7 @@ enum UserEnvContract {
         let brew = brewRoot(username: username)
         let npmGlobal = npmGlobalDir(username: username)
         let npmCache = npmSharedCacheDir()
+        let homebrewCache = homebrewSharedCacheDir()
         let npmrc = npmUserConfig(username: username)
         var env: [String: String] = [
             "HOME": homeDir,
@@ -75,6 +82,7 @@ enum UserEnvContract {
             "HOMEBREW_PREFIX": brew,
             "HOMEBREW_CELLAR": "\(brew)/Cellar",
             "HOMEBREW_REPOSITORY": brew,
+            "HOMEBREW_CACHE": homebrewCache,
             "NPM_CONFIG_PREFIX": npmGlobal,
             "npm_config_prefix": npmGlobal,
             "NPM_CONFIG_CACHE": npmCache,
