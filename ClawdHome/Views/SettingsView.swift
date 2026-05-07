@@ -93,11 +93,11 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("代理") {
-                Toggle("为虾用户启用代理", isOn: $proxyEnabled)
+            Section(L10n.k("views.settings_view.proxy", fallback: "代理")) {
+                Toggle(L10n.k("views.settings_view.enable_proxy_for_shrimp_users", fallback: "为虾用户启用代理"), isOn: $proxyEnabled)
 
                 Group {
-                    Picker("协议", selection: $proxySchemeRaw) {
+                    Picker(L10n.k("views.settings_view.proxy_scheme", fallback: "协议"), selection: $proxySchemeRaw) {
                         ForEach(ProxyScheme.allCases) { scheme in
                             Text(scheme.title).tag(scheme.rawValue)
                         }
@@ -105,28 +105,36 @@ private struct GeneralSettingsTab: View {
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 240)
 
-                    LabeledContent("服务器") {
+                    LabeledContent(L10n.k("views.settings_view.proxy_server", fallback: "服务器")) {
                         HStack(spacing: 8) {
-                            TextField("", text: $proxyHost, prompt: Text("地址（例如 127.0.0.1）"))
+                            TextField(
+                                "",
+                                text: $proxyHost,
+                                prompt: Text(L10n.k("views.settings_view.proxy_host_prompt", fallback: "地址（例如 127.0.0.1）"))
+                            )
                                 .textFieldStyle(.roundedBorder)
                             Text(":")
                                 .foregroundStyle(.secondary)
-                            TextField("", text: $proxyPort, prompt: Text("端口"))
+                            TextField("", text: $proxyPort, prompt: Text(L10n.k("views.settings_view.proxy_port", fallback: "端口")))
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 70)
                         }
                     }
 
-                    LabeledContent("认证") {
+                    LabeledContent(L10n.k("views.settings_view.proxy_authentication", fallback: "认证")) {
                         HStack(spacing: 8) {
-                            TextField("", text: $proxyUsername, prompt: Text("用户名（可选）"))
+                            TextField("", text: $proxyUsername, prompt: Text(L10n.k("views.settings_view.proxy_username_optional", fallback: "用户名（可选）")))
                                 .textFieldStyle(.roundedBorder)
-                            SecureField("", text: $proxyPassword, prompt: Text("密码（可选）"))
+                            SecureField("", text: $proxyPassword, prompt: Text(L10n.k("views.settings_view.proxy_password_optional", fallback: "密码（可选）")))
                                 .textFieldStyle(.roundedBorder)
                         }
                     }
 
-                    TextField("绕过代理", text: $proxyNoProxy, prompt: Text("用逗号分隔，例如 localhost,127.0.0.1"))
+                    TextField(
+                        L10n.k("views.settings_view.proxy_bypass", fallback: "绕过代理"),
+                        text: $proxyNoProxy,
+                        prompt: Text(L10n.k("views.settings_view.proxy_bypass_prompt", fallback: "用逗号分隔，例如 localhost,127.0.0.1"))
+                    )
                         .textFieldStyle(.roundedBorder)
                 }
                 .disabled(!proxyEnabled)
@@ -139,7 +147,7 @@ private struct GeneralSettingsTab: View {
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "macwindow")
-                                Text("读取系统代理")
+                                Text(L10n.k("views.settings_view.load_system_proxy", fallback: "读取系统代理"))
                             }
                         }
                         
@@ -162,7 +170,12 @@ private struct GeneralSettingsTab: View {
                     }
                 }
 
-                Text("将写入虾用户环境变量：HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY（含小写同名），并重启运行中的 Gateway。")
+                Text(
+                    L10n.k(
+                        "views.settings_view.proxy_apply_hint",
+                        fallback: "将写入虾用户环境变量：HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY（含小写同名），并重启运行中的 Gateway。"
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

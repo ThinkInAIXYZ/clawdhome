@@ -168,6 +168,47 @@ final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigatio
     }
 }
 
+private func resolvedRoleMarketLocaleIdentifier() -> String {
+    let selected = UserDefaults.standard.string(forKey: "appLanguage") ?? AppLanguage.system.rawValue
+    guard let appLanguage = AppLanguage(rawValue: selected) else { return "en" }
+
+    switch appLanguage {
+    case .english:
+        return "en"
+    case .chineseSimplified:
+        return "zh-CN"
+    case .system:
+        let preferred = Locale.preferredLanguages.first?.lowercased() ?? "en"
+        return preferred.hasPrefix("zh") ? "zh-CN" : "en"
+    }
+}
+
+private func javaScriptStringLiteral(_ value: String) -> String {
+    let data = try? JSONSerialization.data(withJSONObject: [value], options: [])
+    guard let data,
+          let encoded = String(data: data, encoding: .utf8),
+          encoded.count >= 2 else {
+        return "\"en\""
+    }
+    return String(encoded.dropFirst().dropLast())
+}
+
+private func makeRoleMarketConfiguration(coordinator: RoleMarketCoordinator, localeIdentifier: String) -> WKWebViewConfiguration {
+    let config = WKWebViewConfiguration()
+    let localeLiteral = javaScriptStringLiteral(localeIdentifier)
+    let bootstrap = "window.__clawdhomeLocale = \(localeLiteral);"
+    let script = WKUserScript(source: bootstrap, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+    config.userContentController.addUserScript(script)
+    config.userContentController.add(coordinator, name: "ClawdHomeBridge")
+    return config
+}
+
+private func applyRoleMarketLocale(_ localeIdentifier: String, to webView: WKWebView) {
+    let localeLiteral = javaScriptStringLiteral(localeIdentifier)
+    let script = "window.__clawdhomeLocale = \(localeLiteral); window.setAppLocale && window.setAppLocale(\(localeLiteral));"
+    webView.evaluateJavaScript(script, completionHandler: nil)
+}
+
 // MARK: - WebView 预热单例缓存
 
 /// App 启动后可提前预热，角色中心打开时直接复用，消除冷启动延迟。
@@ -184,8 +225,10 @@ final class RoleMarketWebViewCache {
         guard webView == nil else { return }
 
         let c = RoleMarketCoordinator()
-        let config = WKWebViewConfiguration()
-        config.userContentController.add(c, name: "ClawdHomeBridge")
+        let config = makeRoleMarketConfiguration(
+            coordinator: c,
+            localeIdentifier: resolvedRoleMarketLocaleIdentifier()
+        )
 
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = c
@@ -209,6 +252,7 @@ final class RoleMarketWebViewCache {
 struct RoleMarketWebView: NSViewRepresentable {
     // coordinator 由外部传入（来自缓存单例或当场新建）
     let coordinator: RoleMarketCoordinator
+    let localeIdentifier: String
 
     func makeCoordinator() -> RoleMarketCoordinator { coordinator }
 
@@ -216,13 +260,16 @@ struct RoleMarketWebView: NSViewRepresentable {
         // 优先复用预热好的缓存，命中时直接返回，零延迟
         if let cached = RoleMarketWebViewCache.shared.webView {
             print("[RoleMarketWebView] Using prewarmed WebView")
+            applyRoleMarketLocale(localeIdentifier, to: cached)
             return cached
         }
 
         // 缓存未命中（未预热或首次）：降级为当场创建
         print("[RoleMarketWebView] Cache miss — creating WebView on demand")
-        let config = WKWebViewConfiguration()
-        config.userContentController.add(context.coordinator, name: "ClawdHomeBridge")
+        let config = makeRoleMarketConfiguration(
+            coordinator: context.coordinator,
+            localeIdentifier: localeIdentifier
+        )
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
@@ -237,7 +284,9 @@ struct RoleMarketWebView: NSViewRepresentable {
         return webView
     }
 
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
+    func updateNSView(_ nsView: WKWebView, context: Context) {
+        applyRoleMarketLocale(localeIdentifier, to: nsView)
+    }
 }
 
 // MARK: - RoleMarketView（主 View）
@@ -266,10 +315,14 @@ struct RoleMarketView: View {
         RoleMarketWebViewCache.shared.coordinator ?? RoleMarketCoordinator()
     }
 
+    private var localeIdentifier: String {
+        resolvedRoleMarketLocaleIdentifier()
+    }
+
     var body: some View {
         ZStack {
             // WebView 层：加载完成前透明（opacity=0），避免白屏
-            RoleMarketWebView(coordinator: coordinator)
+            RoleMarketWebView(coordinator: coordinator, localeIdentifier: localeIdentifier)
                 .opacity(isPageLoaded ? 1 : 0)
                 .animation(.easeIn(duration: 0.25), value: isPageLoaded)
 

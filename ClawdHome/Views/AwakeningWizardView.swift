@@ -65,7 +65,12 @@ struct AwakeningWizardView: View {
                     .font(.system(size: 12))
                     .foregroundColor(.green)
                     .padding(.top, 1)
-                Text("您正在将此数字生命基因从云端下载到您的本地设备。所有后续数据交互、知识库构建都将发生在您的物理节点内，绝对隐私，云端隔离。")
+                Text(
+                    L10n.k(
+                        "views.awakening_wizard_view.privacy_banner",
+                        fallback: "您正在将此数字生命基因从云端下载到您的本地设备。所有后续数据交互、知识库构建都将发生在您的物理节点内，绝对隐私，云端隔离。"
+                    )
+                )
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .lineSpacing(1.5)
@@ -90,11 +95,11 @@ struct AwakeningWizardView: View {
                     }
 
                     HStack {
-                        Text("请点击“← 返回”修改后重试。")
+                        Text(L10n.k("views.awakening_wizard_view.fix_and_retry_hint", fallback: "请点击“← 返回”修改后重试。"))
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                         Spacer()
-                        Button("返回修改") {
+                        Button(L10n.k("views.awakening_wizard_view.back_to_edit", fallback: "返回修改")) {
                             step = 2
                         }
                         .buttonStyle(.bordered)
@@ -113,11 +118,11 @@ struct AwakeningWizardView: View {
             // 底部按钮
             HStack(spacing: 12) {
                 if step > 1 {
-                    Button("← 返回") { step -= 1 }
+                    Button(L10n.k("views.awakening_wizard_view.back", fallback: "← 返回")) { step -= 1 }
                         .buttonStyle(.bordered)
                         .disabled(isSubmitting)
                 } else {
-                    Button("取消") {
+                    Button(L10n.k("views.awakening_wizard_view.cancel", fallback: "取消")) {
                         isPresented = false
                         onDismiss?()
                     }
@@ -126,7 +131,15 @@ struct AwakeningWizardView: View {
                 }
 
                 Button(action: handleNext) {
-                    Text(step == 3 ? (isSubmitting ? "唤醒中…" : "正式唤醒 🦞") : "下一步 →")
+                    Text(
+                        step == 3
+                        ? (
+                            isSubmitting
+                            ? L10n.k("views.awakening_wizard_view.awakening", fallback: "唤醒中…")
+                            : L10n.k("views.awakening_wizard_view.awaken_now", fallback: "正式唤醒 🦞")
+                        )
+                        : L10n.k("views.awakening_wizard_view.next", fallback: "下一步 →")
+                    )
                         .font(.system(size: 13, weight: .semibold))
                         .padding(.horizontal, 8)
                 }
@@ -157,9 +170,9 @@ struct AwakeningWizardView: View {
                     VStack(spacing: 10) {
                         ProgressView()
                             .controlSize(.large)
-                        Text("正在创建虾并启动初始化向导…")
+                        Text(L10n.k("views.awakening_wizard_view.creating_shrimp_and_starting_wizard", fallback: "正在创建虾并启动初始化向导…"))
                             .font(.system(size: 13, weight: .semibold))
-                        Text("通常需要 3-8 秒，请稍候")
+                        Text(L10n.k("views.awakening_wizard_view.usually_takes_3_8_seconds", fallback: "通常需要 3-8 秒，请稍候"))
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
@@ -188,7 +201,7 @@ struct AwakeningWizardView: View {
         submitError = nil
         if step == 2 {
             guard isValidOSUsername(osUsername) else {
-                osUsernameError = "以字母开头，只允许字母、数字、下划线"
+                osUsernameError = L10n.k("views.awakening_wizard_view.os_username_error", fallback: "以字母开头，只允许字母、数字、下划线")
                 return
             }
             osUsernameError = nil
@@ -295,21 +308,21 @@ struct Step1View: View {
                 DNAFileEditor(
                     icon: "heart.text.square.fill",
                     iconColor: .pink,
-                    title: "核心价值观",
+                    title: L10n.k("views.awakening_wizard_view.soul_title", fallback: "核心价值观"),
                     subtitle: "SOUL",
                     text: $editedSoul
                 )
                 DNAFileEditor(
                     icon: "person.text.rectangle.fill",
                     iconColor: .purple,
-                    title: "身份设定",
+                    title: L10n.k("views.awakening_wizard_view.identity_title", fallback: "身份设定"),
                     subtitle: "IDENTITY",
                     text: $editedIdentity
                 )
                 DNAFileEditor(
                     icon: "person.crop.circle.fill",
                     iconColor: .orange,
-                    title: "我的画像",
+                    title: L10n.k("views.awakening_wizard_view.user_title", fallback: "我的画像"),
                     subtitle: "USER",
                     text: $editedUser
                 )
@@ -398,24 +411,24 @@ struct Step2View: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("给 TA 起个名字")
+            Text(L10n.k("views.awakening_wizard_view.name_your_companion", fallback: "给 TA 起个名字"))
                 .font(.system(size: 18, weight: .bold))
                 .padding(.top, 4)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text("显示名")
+                Text(L10n.k("views.awakening_wizard_view.display_name", fallback: "显示名"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.secondary)
-                TextField("角色显示名称", text: $displayName)
+                TextField(L10n.k("views.awakening_wizard_view.role_display_name", fallback: "角色显示名称"), text: $displayName)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 14))
             }
 
             VStack(alignment: .leading, spacing: 5) {
-                Text("独立 macOS 用户名（安全隔离）")
+                Text(L10n.k("views.awakening_wizard_view.independent_macos_username", fallback: "独立 macOS 用户名（安全隔离）"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.secondary)
-                TextField("系统用户名", text: $osUsername)
+                TextField(L10n.k("views.awakening_wizard_view.system_username", fallback: "系统用户名"), text: $osUsername)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 14))
                     .onChange(of: osUsername) { _ in osUsernameError = nil }
@@ -443,24 +456,24 @@ struct Step3View: View {
                 .font(.system(size: 48))
                 .padding(.top, 8)
 
-            Text("即将唤醒")
+            Text(L10n.k("views.awakening_wizard_view.about_to_awaken", fallback: "即将唤醒"))
                 .font(.system(size: 15))
                 .foregroundColor(.secondary)
 
             VStack(spacing: 0) {
-                AwakeningInfoRow(label: "角色原型", value: dna.name)
+                AwakeningInfoRow(label: L10n.k("views.awakening_wizard_view.role_prototype", fallback: "角色原型"), value: dna.name)
                 Divider().padding(.horizontal, 4)
-                AwakeningInfoRow(label: "显示名", value: displayName)
+                AwakeningInfoRow(label: L10n.k("views.awakening_wizard_view.display_name", fallback: "显示名"), value: displayName)
                 Divider().padding(.horizontal, 4)
-                AwakeningInfoRow(label: "OS 用户名", value: osUsername)
+                AwakeningInfoRow(label: L10n.k("views.awakening_wizard_view.os_username", fallback: "OS 用户名"), value: osUsername)
                 Divider().padding(.horizontal, 4)
-                AwakeningInfoRow(label: "分类", value: dna.category)
+                AwakeningInfoRow(label: L10n.k("views.awakening_wizard_view.category", fallback: "分类"), value: dna.category)
             }
             .padding(.horizontal, 4)
             .background(Color(nsColor: .controlBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 12))
 
-            Text("确认后，TA 将在本地正式落户 🦞")
+            Text(L10n.k("views.awakening_wizard_view.confirm_to_awaken_locally", fallback: "确认后，TA 将在本地正式落户 🦞"))
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)

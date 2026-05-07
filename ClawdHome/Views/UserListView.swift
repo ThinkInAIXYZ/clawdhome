@@ -1321,9 +1321,9 @@ private struct AddClawSheet: View {
             VStack(spacing: 6) {
                 Text("🦞")
                     .font(.system(size: 40))
-                Text("领养虾苗")
+                Text(L10n.k("views.user_list_view.adopt_shrimp", fallback: "领养虾苗"))
                     .font(.system(size: 20, weight: .bold))
-                Text("从角色中心挑选一个数字生命，或直接创建空白账号")
+                Text(L10n.k("views.user_list_view.adopt_sheet_subtitle", fallback: "从角色中心挑选一个数字生命，或直接创建空白账号"))
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -1340,9 +1340,9 @@ private struct AddClawSheet: View {
                         Text("🎭")
                             .font(.system(size: 28))
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("去角色中心领养")
+                            Text(L10n.k("views.user_list_view.go_to_role_market", fallback: "去角色中心领养"))
                                 .font(.system(size: 15, weight: .semibold))
-                            Text("浏览并挑选预设角色，个性化定制后唤醒")
+                            Text(L10n.k("views.user_list_view.go_to_role_market_desc", fallback: "浏览并挑选预设角色，个性化定制后唤醒"))
                                 .font(.system(size: 12))
                                 .foregroundStyle(.white.opacity(0.8))
                         }
@@ -1368,10 +1368,10 @@ private struct AddClawSheet: View {
                             .foregroundStyle(.primary)
                             .frame(width: 32)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("直接创建")
+                            Text(L10n.k("views.user_list_view.create_directly", fallback: "直接创建"))
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(.primary)
-                            Text("创建一个空白 macOS 账号，自行配置")
+                            Text(L10n.k("views.user_list_view.create_blank_macos_account", fallback: "创建一个空白 macOS 账号，自行配置"))
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         }

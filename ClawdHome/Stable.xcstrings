@@ -1831,6 +1831,24 @@
         }
       }
     },
+    "auto.content_view.role_market": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Role Center"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "角色中心"
+          }
+        }
+      }
+    },
     "auto.content_view.coming_soon": {
       "comment": "",
       "extractionState": "stale",
@@ -17946,6 +17964,24 @@
         }
       }
     },
+    "views.user_list_view.adopt_sheet_subtitle": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick a digital companion from the Role Center, or create a blank account directly."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从角色中心挑选一个数字生命，或直接创建空白账号"
+          }
+        }
+      }
+    },
     "views.user_list_view.cancel": {
       "extractionState": "stale",
       "localizations": {
@@ -17993,6 +18029,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "虾塘"
+          }
+        }
+      }
+    },
+    "views.user_list_view.go_to_role_market": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adopt from Role Center"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "去角色中心领养"
+          }
+        }
+      }
+    },
+    "views.user_list_view.go_to_role_market_desc": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse preset roles, customize them, and awaken one."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浏览并挑选预设角色，个性化定制后唤醒"
           }
         }
       }
@@ -20851,6 +20923,1950 @@
           "stringUnit": {
             "state": "translated",
             "value": "−%@ 行"
+          }
+        }
+      }
+    },
+    "clawd_home_app.auth_assist": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auth Assistant"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "授权辅助"
+          }
+        }
+      }
+    },
+    "clawd_home_app.copy_device_code": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Device Code"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制验证码"
+          }
+        }
+      }
+    },
+    "clawd_home_app.device_code_copied": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device code copied."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证码已复制。"
+          }
+        }
+      }
+    },
+    "clawd_home_app.open_auth_page": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Authorization Page"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开授权页"
+          }
+        }
+      }
+    },
+    "role_market.title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Role Center"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "角色中心"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.about_to_awaken": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About to awaken"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即将唤醒"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.awaken_now": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Awaken Now 🦞"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正式唤醒 🦞"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.awakening": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Awakening..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "唤醒中…"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.back": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "← Back"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "← 返回"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.back_to_edit": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to Edit"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "返回修改"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.cancel": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.category": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Category"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分类"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.confirm_to_awaken_locally": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After confirmation, it will be fully awakened on your local machine 🦞"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确认后，TA 将在本地正式落户 🦞"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.creating_shrimp_and_starting_wizard": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creating shrimp and starting initialization wizard..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在创建虾并启动初始化向导…"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.display_name": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display Name"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示名"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.fix_and_retry_hint": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please click “← Back” to edit and try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请点击“← 返回”修改后重试。"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.independent_macos_username": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Independent macOS Username (Security Isolation)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "独立 macOS 用户名（安全隔离）"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.name_your_companion": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name your companion"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "给 TA 起个名字"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.next": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next →"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下一步 →"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.os_username": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OS Username"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OS 用户名"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.privacy_banner": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are downloading this digital companion's DNA from the cloud to your local device. All subsequent data interactions and knowledge-base building will happen on your physical node, with full privacy and cloud isolation."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "您正在将此数字生命基因从云端下载到您的本地设备。所有后续数据交互、知识库构建都将发生在您的物理节点内，绝对隐私，云端隔离。"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.role_display_name": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Role Display Name"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "角色显示名称"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.role_prototype": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Role Prototype"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "角色原型"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.system_username": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System Username"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统用户名"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.os_username_error": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Must start with a letter and contain only letters, digits, or underscores"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以字母开头，只允许字母、数字、下划线"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.soul_title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Core Values"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "核心价值观"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.identity_title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identity"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "身份设定"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.user_title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "User Profile"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我的画像"
+          }
+        }
+      }
+    },
+    "views.awakening_wizard_view.usually_takes_3_8_seconds": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This usually takes 3–8 seconds. Please wait."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通常需要 3-8 秒，请稍候"
+          }
+        }
+      }
+    },
+    "views.clone_claw_sheet.current_status": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current status: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前状态：%@"
+          }
+        }
+      }
+    },
+    "views.settings_view.enable_proxy_for_shrimp_users": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable proxy for shrimp users"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为虾用户启用代理"
+          }
+        }
+      }
+    },
+    "views.settings_view.load_system_proxy": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load System Proxy"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取系统代理"
+          }
+        }
+      }
+    },
+    "views.settings_view.proxy": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代理"
+          }
+        }
+      }
+    },
+    "views.settings_view.proxy_apply_hint": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will write shrimp user environment variables: HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY (including lowercase variants), then restart running Gateway processes."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将写入虾用户环境变量：HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY（含小写同名），并重启运行中的 Gateway。"
+          }
+        }
+      }
+    },
+    "views.settings_view.proxy_authentication": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "认证"
+          }
+        }
+      }
+    },
+    "views.settings_view.proxy_bypass": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bypass Proxy"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "绕过代理"
+          }
+        }
+      }
+    },
+    "views.settings_view.proxy_bypass_prompt": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comma-separated, e.g. localhost,127.0.0.1"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用逗号分隔，例如 localhost,127.0.0.1"
+          }
+        }
+      }
+    },
+    "views.settings_view.proxy_host_prompt": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Address (e.g. 127.0.0.1)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地址（例如 127.0.0.1）"
+          }
+        }
+      }
+    },
+    "views.settings_view.proxy_password_optional": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password (Optional)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "密码（可选）"
+          }
+        }
+      }
+    },
+    "views.settings_view.proxy_port": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Port"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端口"
+          }
+        }
+      }
+    },
+    "views.settings_view.proxy_scheme": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scheme"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "协议"
+          }
+        }
+      }
+    },
+    "views.settings_view.proxy_server": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器"
+          }
+        }
+      }
+    },
+    "views.settings_view.proxy_username_optional": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Username (Optional)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用户名（可选）"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.configuration_mode": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configuration Mode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "配置方式"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.current_model": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前：%@"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.current_model_from_cli_hint": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current model comes from \"More Models (CLI)\". You can switch to a model supported by the built-in UI below."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前模型来自“更多模型（命令行）”，可在下方切换到内置 UI 支持模型。"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.delete_authorization_hint": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If a system authorization prompt appears, click \"Allow\". If you denied it or no prompt appeared, quit and try again. You can also remove this user in \"System Settings → Users & Groups\"."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果系统弹出授权窗口，请点击“允许”。如果你拒绝了，或者没有出现，请退出程序后重新操作。你也可以前往“系统设置 → 用户与群组”删除该用户。"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.delete_success_closing": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted successfully, closing..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除成功，即将关闭…"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.delete_user_subtitle": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This action cannot be undone. Please choose how to handle the personal folder."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此操作不可恢复，请选择个人文件夹处理方式。"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.delete_user_title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete user @%@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除用户 @%@"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.fallback_cli_recommended": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fallback models are best managed via CLI."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回退模型建议在命令行中管理。"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.fallback_models": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fallback: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "降级：%@"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.fallback_none": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fallback: None"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "降级：无"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.more_models": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More Models"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更多模型"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.more_models_desc": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configure interactively via command line, with full model and fallback strategy support."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过命令行交互配置，支持完整模型与回退策略。"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.open_cli_config": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open CLI Configuration"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开命令行配置"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.qiniu_ai_models": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qiniu AI Models"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qiniu AI 模型"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.zai_models": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zhipu Z.AI Models"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "智谱 Z.AI 模型"
+          }
+        }
+      }
+    },
+    "views.user_list_view.create_blank_macos_account": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a blank macOS account and configure it manually"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建一个空白 macOS 账号，自行配置"
+          }
+        }
+      }
+    },
+    "views.user_list_view.create_directly": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create Directly"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直接创建"
+          }
+        }
+      }
+    },
+    "auto.app_update_banner.installing_subtitle": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ClawdHome will restart automatically after installation."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成安装后会自动重启"
+          }
+        }
+      }
+    },
+    "auto.app_update_banner.installing_title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installer Started"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装器已启动"
+          }
+        }
+      }
+    },
+    "auto.app_update_banner.waiting_for_install": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installer opened. ClawdHome will reopen automatically after installation."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装器已打开。完成安装后，ClawdHome 会自动重新打开。"
+          }
+        }
+      }
+    },
+    "channel.runtime.exit.success_autoclose": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pairing completed. This window will close automatically."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "检测到配对已完成，窗口将自动关闭。"
+          }
+        }
+      }
+    },
+    "channel.runtime.pairing.detected_autoclose": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detected “configured/success” hint. Window will close automatically in 2 seconds."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已检测到“配置成功/完成”提示，窗口将在 2 秒后自动关闭。"
+          }
+        }
+      }
+    },
+    "services.helper_client.clone_cancel_failed": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to cancel cloning"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "终止克隆失败"
+          }
+        }
+      }
+    },
+    "services.helper_client.clone_cancel_username_required": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to cancel cloning: target username is empty"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "终止克隆失败：目标用户名为空"
+          }
+        }
+      }
+    },
+    "services.helper_client.clone_scan_timeout": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone scan timed out. Please try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "克隆扫描超时，请重试"
+          }
+        }
+      }
+    },
+    "services.helper_client.clone_timeout": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clone timed out. Retry and check helper logs."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "克隆超时，请重试并检查 helper 日志"
+          }
+        }
+      }
+    },
+    "services.update_checker.install_complete_reopen_manually": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installer has completed. If ClawdHome does not reopen automatically, open it manually."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装器已完成。如 ClawdHome 未自动重新打开，请手动启动。"
+          }
+        }
+      }
+    },
+    "user.detail.auto.confirm_normal_freeze": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm Normal Freeze"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确认普通冻结"
+          }
+        }
+      }
+    },
+    "user.detail.auto.confirm_pause_freeze": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm Pause Freeze"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确认暂停冻结"
+          }
+        }
+      }
+    },
+    "user.detail.auto.normal_freeze": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normal Freeze"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "普通冻结"
+          }
+        }
+      }
+    },
+    "user.detail.auto.pause_freeze": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause Freeze"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂停冻结"
+          }
+        }
+      }
+    },
+    "user.detail.model_config.builtin_ui_title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Built-in Model Configuration (Kimi / MiniMax / Qiniu / Z.AI)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内置模型配置（Kimi / MiniMax / Qiniu / Z.AI）"
+          }
+        }
+      }
+    },
+    "views.clone_claw_sheet.cancel_clone": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel Clone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "终止克隆"
+          }
+        }
+      }
+    },
+    "views.clone_claw_sheet.cancel_failed": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to cancel clone: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "终止克隆失败：%@"
+          }
+        }
+      }
+    },
+    "views.clone_claw_sheet.cancel_requested": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel requested. Stopping clone..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已请求终止克隆，正在停止…"
+          }
+        }
+      }
+    },
+    "views.clone_claw_sheet.cancelling": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelling..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "终止中…"
+          }
+        }
+      }
+    },
+    "views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_running_confirmed": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[finish] [\\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway running state confirmed.\\n"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[finish] [\\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 运行状态已确认。\\n"
+          }
+        }
+      }
+    },
+    "views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_status_sync_timeout": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[finish] [\\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway status sync timed out. Overview polling will continue refreshing.\\n"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[finish] [\\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 状态同步超时，概览页会在后续轮询中继续刷新。\\n"
+          }
+        }
+      }
+    },
+    "views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_waiting_gateway_running_state": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[finish] [\\(Self.finishProgressTimeFormatter.string(from: Date()))] Waiting for Gateway to enter running state (\\(attempt)/\\(maxAttempts))...\\n"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[finish] [\\(Self.finishProgressTimeFormatter.string(from: Date()))] 等待 Gateway 进入运行态（\\(attempt)/\\(maxAttempts)）…\\n"
+          }
+        }
+      }
+    },
+    "views.user_list_view.processing": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creating..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建中…"
+          }
+        }
+      }
+    },
+    "wizard.inject_role.subtitle": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Define core values, identity, and profile for the role. Leave blank to keep defaults."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "定义角色的核心价值观、身份设定和画像。留空则保留默认设定。"
+          }
+        }
+      }
+    },
+    "wizard.inject_role.title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inject Role"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "注入角色"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.alert.closed_message": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The terminal window was closed. This step may be incomplete. If you already finished configuration, you can continue."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命令行窗口已关闭，这一步可能尚未完成。若确认配置已经完成，仍可继续下一步。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.alert.detected_message": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detected that model configuration appears complete. You can proceed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "检测到模型配置已生效。你可以继续下一步。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.alert.detected_title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model Configuration Detected"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "检测到模型配置"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.alert.failed_message": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal command failed or was interrupted. You can reopen terminal and retry."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命令行执行失败或中断。你可以重新打开命令行继续配置。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.alert.incomplete_title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model Step May Be Incomplete"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型步骤可能未完成"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.alert.success_message": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal exited normally, but no default model is detected yet. If you've completed configuration, you can still continue."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命令行窗口已正常退出，但当前还没检测到默认模型。若你已经在命令行里完成了需要的配置，可以继续下一步。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.alert.success_title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command Completed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命令已执行完成"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.confirm_complete": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark Complete and Continue"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标记已完成并继续"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.desc": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can also open terminal and run `openclaw configure --section model` directly. After closing terminal, the wizard will verify completion."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "也可以直接打开命令行执行 `openclaw configure --section model`。关闭窗口后，向导会确认这一步是否完成。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.group": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advanced Method"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高阶方式"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.open": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configure via Terminal"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过命令行配置"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.open_hint": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal config window is open. Close it after finishing or canceling, then this step will prompt for next action."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命令行配置窗口已打开。完成或取消后关闭窗口，这里会提示是否进入下一步。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.reopen": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal Window Opened"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命令行窗口已打开"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.stay_on_step": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stay on Current Step"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "留在当前步骤"
+          }
+        }
+      }
+    },
+    "wizard.model_config.command.window_title": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model Configuration Terminal"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型配置命令行"
+          }
+        }
+      }
+    },
+    "wizard.model_config.skip": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip This Step"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跳过此步骤"
+          }
+        }
+      }
+    },
+    "wizard.openclaw_version.latest": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Latest Version"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最新版本"
+          }
+        }
+      }
+    },
+    "wizard.provider.no_results": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching results"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到匹配项"
+          }
+        }
+      }
+    },
+    "wizard.provider.search": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search Provider..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索 Provider..."
+          }
+        }
+      }
+    },
+    "wizard.step.inject_role": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inject Role"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "注入角色"
+          }
+        }
+      }
+    },
+    "app.user_init_wizard.user_missing": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This user has been deleted or not loaded yet"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该用户已被删除或尚未加载"
+          }
+        }
+      }
+    },
+    "user.detail.auto.init_wizard_opened_in_separate_window": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Initialization flow for this shrimp is open in a separate window and no longer shares management tabs like overview."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该虾的初始化流程已在独立窗口中打开，不再与概览等管理标签共用。"
+          }
+        }
+      }
+    },
+    "user.detail.auto.reopen": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reopen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新打开"
           }
         }
       }

@@ -91,6 +91,23 @@ struct ClawdHomeApp: App {
         .windowResizability(.automatic)
         .defaultSize(width: 920, height: 660)
 
+        WindowGroup(id: "user-init-wizard", for: String.self) { $username in
+            if let name = username {
+                UserInitWizardWindow(username: name)
+                    .environment(helperClient)
+                    .environment(shrimpPool)
+                    .environment(updater)
+                    .environment(modelStore)
+                    .environment(keychainStore)
+                    .environment(gatewayHub)
+                    .environment(maintenanceWindowRegistry)
+                    .environment(\.locale, appLanguage.locale)
+            }
+        }
+        .windowStyle(.titleBar)
+        .windowResizability(.automatic)
+        .defaultSize(width: 980, height: 720)
+
         WindowGroup(id: "channel-onboarding", for: String.self) { $payload in
             ChannelOnboardingWindow(payload: payload)
                 .environment(helperClient)
@@ -411,12 +428,12 @@ private struct MaintenanceTerminalWindowContent: View {
     private var authAssistBar: some View {
         if latestAuthorizeURL != nil || latestDeviceCode != nil {
             HStack(spacing: 10) {
-                Label("授权辅助", systemImage: "key.horizontal")
+                Label(L10n.k("clawd_home_app.auth_assist", fallback: "授权辅助"), systemImage: "key.horizontal")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 if let url = latestAuthorizeURL {
-                    Button("打开授权页") { _ = NSWorkspace.shared.open(url) }
+                    Button(L10n.k("clawd_home_app.open_auth_page", fallback: "打开授权页")) { _ = NSWorkspace.shared.open(url) }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                     Text(url.absoluteString)
@@ -427,7 +444,9 @@ private struct MaintenanceTerminalWindowContent: View {
                 }
 
                 if let code = latestDeviceCode {
-                    Button("复制验证码") { copyText(code, success: "验证码已复制。") }
+                    Button(L10n.k("clawd_home_app.copy_device_code", fallback: "复制验证码")) {
+                        copyText(code, success: L10n.k("clawd_home_app.device_code_copied", fallback: "验证码已复制。"))
+                    }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                     Text(code)
@@ -741,6 +760,33 @@ private struct ClawDetailWindow: View {
                 )
                 .navigationTitle("@\(username)")
             }
+        }
+    }
+}
+
+private struct UserInitWizardWindow: View {
+    let username: String
+
+    @Environment(ShrimpPool.self) private var pool
+    @Environment(\.dismiss) private var dismiss
+
+    private var user: ManagedUser? {
+        pool.users.first { $0.username == username }
+    }
+
+    var body: some View {
+        if let user {
+            UserInitWizardView(user: user) { sessionVisible in
+                if !sessionVisible {
+                    dismiss()
+                }
+            }
+        } else {
+            ContentUnavailableView(
+                "@\(username)",
+                systemImage: "person.slash",
+                description: Text(L10n.k("app.user_init_wizard.user_missing", fallback: "该用户已被删除或尚未加载"))
+            )
         }
     }
 }

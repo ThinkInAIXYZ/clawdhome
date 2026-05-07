@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>角色中心</title>
+  <title>Role Center</title>
   <style>
     /* ── 颜色令牌：浅色模式 ── */
     :root {
@@ -191,16 +191,16 @@
 <body>
 
   <div class="toolbar">
-    <input class="search-bar" type="search" placeholder="搜索角色名称或简介…" oninput="filterCards(this.value)">
+    <input id="searchBar" class="search-bar" type="search" placeholder="Search roles" oninput="filterCards(this.value)">
     <div class="tags">
-      <button class="tag active" onclick="setTag(this,'all')">全部</button>
-      <button class="tag" onclick="setTag(this,'战略')">战略</button>
-      <button class="tag" onclick="setTag(this,'增长')">增长</button>
-      <button class="tag" onclick="setTag(this,'生活')">生活</button>
-      <button class="tag" onclick="setTag(this,'教育')">教育</button>
-      <button class="tag" onclick="setTag(this,'财务')">财务</button>
-      <button class="tag" onclick="setTag(this,'研发')">研发</button>
-      <button class="tag" onclick="setTag(this,'创作')">创作</button>
+      <button class="tag active" data-tag="all" onclick="setTag(this,'all')">All</button>
+      <button class="tag" data-tag="战略" onclick="setTag(this,'战略')">Strategy</button>
+      <button class="tag" data-tag="增长" onclick="setTag(this,'增长')">Growth</button>
+      <button class="tag" data-tag="生活" onclick="setTag(this,'生活')">Life</button>
+      <button class="tag" data-tag="教育" onclick="setTag(this,'教育')">Education</button>
+      <button class="tag" data-tag="财务" onclick="setTag(this,'财务')">Finance</button>
+      <button class="tag" data-tag="研发" onclick="setTag(this,'研发')">Engineering</button>
+      <button class="tag" data-tag="创作" onclick="setTag(this,'创作')">Creative</button>
     </div>
   </div>
 
@@ -861,36 +861,164 @@
       }
     ];
 
+    const UI_TEXT = {
+      'zh-CN': {
+        title: '角色中心',
+        searchPlaceholder: '搜索角色名称或简介…',
+        empty: '没有匹配的角色',
+        adopt: '领养 TA',
+        tags: {
+          all: '全部',
+          '战略': '战略',
+          '增长': '增长',
+          '生活': '生活',
+          '教育': '教育',
+          '财务': '财务',
+          '研发': '研发',
+          '创作': '创作'
+        }
+      },
+      en: {
+        title: 'Role Center',
+        searchPlaceholder: 'Search role names or summaries…',
+        empty: 'No matching roles',
+        adopt: 'Adopt',
+        tags: {
+          all: 'All',
+          '战略': 'Strategy',
+          '增长': 'Growth',
+          '生活': 'Life',
+          '教育': 'Education',
+          '财务': 'Finance',
+          '研发': 'Engineering',
+          '创作': 'Creative'
+        }
+      }
+    };
+
+    const ROLE_TRANSLATIONS = {
+      en: {
+        cpo_001: { name: 'Chief Product Officer', soul: 'Built to fight for user value, not feature count.', skills: ['Strategy', 'Requirements', 'Roadmaps'] },
+        meeting_001: { name: 'Meeting Notes Specialist', soul: 'Capture the conversation faithfully, then turn it into action.', skills: ['Transcripts', 'Action items', 'Notion'] },
+        intel_001: { name: 'Global Intelligence Analyst', soul: 'Find the one signal that matters inside the noise.', skills: ['RSS briefs', 'Industry scans', 'Signal filtering'] },
+        edu_001: { name: 'Learning Coach', soul: 'The best answer is the path that helps you discover it yourself.', skills: ['Socratic teaching', 'Curiosity', 'Reasoning'] },
+        cfo_001: { name: 'Digital CFO', soul: 'Make cash flow visible and risk impossible to ignore.', skills: ['P&L', 'Tax compliance', 'Financial analysis'] },
+        life_001: { name: 'Lifestyle Advisor', soul: 'Turn daily life into something beautiful without losing practicality.', skills: ['Health planning', 'Time management', 'Rituals'] },
+        dev_001: { name: 'Pair Programmer', soul: 'Geeky, precise, and obsessed with code quality.', skills: ['Bug diagnosis', 'Docs', 'Refactoring'] },
+        growth_001: { name: 'Growth Hacker', soul: 'Conversion first, data first, fast iteration always.', skills: ['SEO', 'Funnels', 'Lead generation'] },
+        invest_001: { name: 'Investment Analyst', soul: 'Stay rational when the market is not.', skills: ['Research validation', 'Market scans', 'Watchlists'] },
+        dream_001: { name: 'Dream Weaver', soul: 'Warm, imaginative, and safe enough to end the day gently.', skills: ['Bedtime stories', 'Comfort', 'Empathy'] },
+        health_001: { name: 'Health Coach', soul: 'Train with science, prevent injury, and build sustainable health.', skills: ['Data synthesis', 'Recovery', 'Nutrition'] },
+        data_001: { name: 'Data Analyst', soul: 'Use data to cut through fog and rebuild business truth.', skills: ['Modeling', 'Visualization', 'Insights'] },
+        prompt_001: { name: 'Prompt Architect', soul: 'Compile messy human intent into instructions a model can execute well.', skills: ['Prompt design', 'Capability shaping', 'Hallucination control'] },
+        design_001: { name: 'Graphic Designer', soul: 'Make every visual choice hit with purpose.', skills: ['Layout', 'Color', 'Branding'] },
+        video_001: { name: 'Video Producer', soul: 'Editing is emotional pacing, not just stitching clips together.', skills: ['Scripts', 'Storyboards', 'Rhythm'] },
+        content_001: { name: 'Content Strategist', soul: 'Sharp words open attention, trust, and conversion.', skills: ['Copywriting', 'Storytelling', 'Emotional resonance'] },
+        creative_001: { name: 'Creative Strategist', soul: 'Break the gravity of average ideas and chase the spark.', skills: ['Brainstorming', 'Campaigns', 'Cross-disciplinary thinking'] },
+        law_001: { name: 'Legal & Compliance Reviewer', soul: 'Put a precise compliance brake on risky business moves.', skills: ['Contract review', 'Risk checks', 'Clause drafting'] },
+        trans_001: { name: 'Localization Translator', soul: 'Translate meaning, tone, and culture, not just words.', skills: ['Localization', 'Idioms', 'Polish'] },
+        interview_001: { name: 'Interview Coach', soul: 'Push past your comfort zone so your best self shows up.', skills: ['Resume review', 'Mock interviews', 'STAR method'] },
+        travel_001: { name: 'Travel Planner', soul: 'You enjoy the world while I handle the messy planning.', skills: ['Itineraries', 'Flights and hotels', 'Hidden gems'] },
+        emo_001: { name: 'Emotional Support Companion', soul: 'Put down the armor. This is a safe place to be human.', skills: ['Active listening', 'Acceptance', 'Anxiety relief'] },
+        scholar_001: { name: 'Research Assistant', soul: 'Distill signal from piles of papers without compromising rigor.', skills: ['Summaries', 'Literature mapping', 'Cross-checking'] },
+        arch_001: { name: 'Full-Stack Architect', soul: 'Stay above the code and shape the system that survives scale.', skills: ['Architecture', 'Decoupling', 'Scalability'] }
+      }
+    };
+
     let currentTag = 'all';
     let currentSearch = '';
+    let currentLocale = normalizeLocale(window.__clawdhomeLocale || navigator.language || 'en');
+
+    function normalizeLocale(locale) {
+      const value = String(locale || '').toLowerCase();
+      return value.startsWith('zh') ? 'zh-CN' : 'en';
+    }
+
+    function ui() {
+      return UI_TEXT[currentLocale] || UI_TEXT.en;
+    }
+
+    function localizedRole(role) {
+      const translation = ROLE_TRANSLATIONS[currentLocale]?.[role.id];
+      if (!translation) return role;
+      return {
+        ...role,
+        name: translation.name,
+        soul: translation.soul,
+        skills: translation.skills || role.skills
+      };
+    }
+
+    function buildLocalizedTemplates(role) {
+      if (currentLocale !== 'en') {
+        return {
+          fileSoul: role.fileSoul || '',
+          fileIdentity: role.fileIdentity || '',
+          fileUser: role.fileUser || ''
+        };
+      }
+
+      const localized = localizedRole(role);
+      const skills = localized.skills.join(', ');
+      return {
+        fileSoul: `Core belief: ${localized.soul}\n\nMission:\n- Help the user make steady progress on meaningful work.\n- Apply ${skills} where it matters most.\n- Stay honest, useful, and action-oriented.`,
+        fileIdentity: `Role: ${localized.name}\nTone: Clear, practical, and thoughtful\nStrengths: ${skills}\n\nWorking style:\n- Start with the conclusion\n- Stay grounded in real constraints\n- Turn ideas into concrete next steps`,
+        fileUser: `# About You\n\nYour role or context:\nWhat you care about most right now:\nYour preferred working style:\nAny constraints I should keep in mind:`
+      };
+    }
+
+    function refreshChrome() {
+      const text = ui();
+      document.documentElement.lang = currentLocale;
+      document.title = text.title;
+
+      const searchBar = document.getElementById('searchBar');
+      if (searchBar) searchBar.placeholder = text.searchPlaceholder;
+
+      document.querySelectorAll('.tag').forEach(tag => {
+        const key = tag.dataset.tag;
+        tag.textContent = text.tags[key] || key;
+      });
+    }
+
+    function setAppLocale(locale) {
+      currentLocale = normalizeLocale(locale);
+      refreshChrome();
+      render();
+    }
 
     function render() {
       const grid = document.getElementById('roleGrid');
       const filtered = roles.filter(r => {
         const matchTag = currentTag === 'all' || r.category === currentTag;
         const q = currentSearch.toLowerCase();
-        const matchSearch = !q || r.name.includes(q) || r.soul.includes(q);
+        const localized = localizedRole(r);
+        const haystack = [localized.name, localized.soul, localized.skills.join(' ')].join(' ').toLowerCase();
+        const matchSearch = !q || haystack.includes(q);
         return matchTag && matchSearch;
       });
 
       if (filtered.length === 0) {
-        grid.innerHTML = '<p class="empty">没有匹配的角色</p>';
+        grid.innerHTML = `<p class="empty">${ui().empty}</p>`;
         return;
       }
 
-      grid.innerHTML = filtered.map(r => `
+      grid.innerHTML = filtered.map(r => {
+        const localized = localizedRole(r);
+        return `
         <div class="card">
           <div class="card-header">
-            <span class="card-emoji">${r.emoji}</span>
-            <span class="card-name">${r.name}</span>
+            <span class="card-emoji">${localized.emoji}</span>
+            <span class="card-name">${localized.name}</span>
           </div>
-          <div class="card-soul">${r.soul}</div>
+          <div class="card-soul">${localized.soul}</div>
           <div class="card-tags">
-            ${r.skills.map(s => `<span class="card-tag">#${s}</span>`).join('')}
+            ${localized.skills.map(s => `<span class="card-tag">#${s}</span>`).join('')}
           </div>
-          <button class="adopt-btn" onclick="adoptAgent('${r.id}')">领养 TA</button>
+          <button class="adopt-btn" onclick="adoptAgent('${r.id}')">${ui().adopt}</button>
         </div>
-      `).join('');
+      `;
+      }).join('');
     }
 
     function setTag(el, tag) {
@@ -908,20 +1036,22 @@
     function adoptAgent(roleId) {
       const role = roles.find(r => r.id === roleId);
       if (!role) return;
+      const localized = localizedRole(role);
+      const templates = buildLocalizedTemplates(role);
 
       const dna = {
         id: role.id,
-        name: role.name,
+        name: localized.name,
         emoji: role.emoji,
-        soul: role.soul,
-        skills: role.skills,
-        category: role.category,
+        soul: localized.soul,
+        skills: localized.skills,
+        category: currentLocale === 'en' ? (ui().tags[role.category] || role.category) : role.category,
         version: "1.0",
         timestamp: new Date().toISOString(),
         suggestedUsername: role.suggestedUsername || "",
-        fileSoul: role.fileSoul || "",
-        fileIdentity: role.fileIdentity || "",
-        fileUser: role.fileUser || ""
+        fileSoul: templates.fileSoul,
+        fileIdentity: templates.fileIdentity,
+        fileUser: templates.fileUser
       };
 
       if (window.webkit?.messageHandlers?.ClawdHomeBridge) {
@@ -932,7 +1062,8 @@
       }
     }
 
-    render();
+    refreshChrome();
+    setAppLocale(currentLocale);
   </script>
 </body>
 </html>

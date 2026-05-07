@@ -289,10 +289,21 @@ struct UserDetailView: View {
     @State private var quickTransferLastPaths: [String] = []
     // Tab
     @State private var selectedTab: ClawTab = .overview
+    @State private var hasOpenedStandaloneInitWindow = false
     private var shouldPinWindowTopmost: Bool {
         !user.isAdmin
         && user.clawType == .macosUser
         && (user.initStep != nil || hasPendingInitWizard)
+    }
+
+    private var initPresentationRoute: UserInitPresentationRoute {
+        resolveUserInitPresentation(
+            versionChecked: versionChecked,
+            hasInitStep: user.initStep != nil,
+            hasPendingInitWizard: hasPendingInitWizard,
+            isAdmin: user.isAdmin,
+            isMacOSUser: user.clawType == .macosUser
+        )
     }
 
     var body: some View {
@@ -306,9 +317,11 @@ struct UserDetailView: View {
                 forceOnboardingAtEntry = true
                 versionChecked = false
             }
+            maybeOpenStandaloneInitWindow()
         }
         .onChange(of: user.username) { _, _ in
             forceOnboardingAtEntry = false
+            hasOpenedStandaloneInitWindow = false
             if pool.consumeNeedsOnboarding(username: user.username) {
                 forceOnboardingAtEntry = true
             }
@@ -322,6 +335,18 @@ struct UserDetailView: View {
         .onDisappear {
             gatewayURLTokenPollTask?.cancel()
             gatewayURLTokenPollTask = nil
+        }
+        .onChange(of: user.initStep) { _, newValue in
+            if newValue == nil && hasPendingInitWizard {
+                Task { await refreshStatus() }
+            }
+        }
+        .onChange(of: initPresentationRoute) { _, newRoute in
+            if newRoute == .standaloneWizard {
+                maybeOpenStandaloneInitWindow()
+            } else {
+                hasOpenedStandaloneInitWindow = false
+            }
         }
     }
 
@@ -562,40 +587,55 @@ struct UserDetailView: View {
 
     @ViewBuilder
     private var overviewContent: some View {
-        if !versionChecked && user.initStep == nil {
+        switch initPresentationRoute {
+        case .loading:
             // 正在检查环境
             ProgressView(L10n.k("user.detail.auto.text_f522c76d24", fallback: "检查环境…"))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .task { await refreshStatus() }
-        } else if !user.isAdmin
-            && user.clawType == .macosUser
-            && (user.initStep != nil || hasPendingInitWizard) {
-            // 初始化向导
-            UserInitWizardView(user: user) { sessionVisible in
-                hasPendingInitWizard = sessionVisible
-                if !sessionVisible {
-                    user.initStep = nil
-                    forceOnboardingAtEntry = false
-                    Task { await refreshStatus() }
+        case .standaloneWizard:
+            standaloneInitWizardNotice
+        case .detailTabs:
+            if user.isAdmin && versionChecked && user.openclawVersion == nil {
+                ContentUnavailableView(
+                    L10n.k("user.detail.auto.adminnot_installed_openclaw", fallback: "管理员账号未安装 openclaw"),
+                    systemImage: "shield.lefthalf.filled",
+                    description: Text(L10n.k("user.detail.auto.admin_accounts_only_support_basic_management_installation_and", fallback: "管理员账号仅支持基础管理，不支持在该账号执行安装或初始化。"))
+                )
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        statusSection
+                        quickTransferSection
+                        configSection
+                        actionsSection
+                        dangerZoneSection
+                    }
+                    .padding(20)
                 }
             }
-        } else if user.isAdmin && versionChecked && user.openclawVersion == nil {
-            ContentUnavailableView(
-                L10n.k("user.detail.auto.adminnot_installed_openclaw", fallback: "管理员账号未安装 openclaw"),
-                systemImage: "shield.lefthalf.filled",
-                description: Text(L10n.k("user.detail.auto.admin_accounts_only_support_basic_management_installation_and", fallback: "管理员账号仅支持基础管理，不支持在该账号执行安装或初始化。"))
-            )
-        } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    statusSection
-                    quickTransferSection
-                    configSection
-                    actionsSection
-                    dangerZoneSection
-                }
-                .padding(20)
+        }
+    }
+
+    private var standaloneInitWizardNotice: some View {
+        ContentUnavailableView {
+            Label(L10n.k("user.detail.auto.setup_wizard", fallback: "初始化向导"), systemImage: "wand.and.stars")
+        } description: {
+            Text(L10n.k("user.detail.auto.init_wizard_opened_in_separate_window", fallback: "该虾的初始化流程已在独立窗口中打开，不再与概览等管理标签共用。"))
+        } actions: {
+            Button(L10n.k("user.detail.auto.reopen", fallback: "重新打开")) {
+                openStandaloneInitWindow(force: true)
             }
+            .buttonStyle(.borderedProminent)
+
+            Button(L10n.k("user.detail.auto.refresh", fallback: "刷新状态")) {
+                Task { await refreshStatus() }
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            maybeOpenStandaloneInitWindow()
         }
     }
 
@@ -981,7 +1021,7 @@ struct UserDetailView: View {
                         .frame(width: 80, alignment: .leading)
                     VStack(alignment: .leading, spacing: 4) {
                         if let def = defaultModel {
-                            Text("当前：\(def)")
+                            Text(L10n.f("views.user_detail_view.current_model", fallback: "当前：%@", String(describing: def)))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -1782,9 +1822,23 @@ struct UserDetailView: View {
             hasPendingInitWizard = true
             versionChecked = true
             actionError = nil
+            openStandaloneInitWindow(force: true)
         } catch {
             actionError = L10n.f("views.user_detail_view.text_ceb875b6", fallback: "重新进入初始化向导失败：%@", String(describing: error.localizedDescription))
         }
+    }
+
+    private func maybeOpenStandaloneInitWindow() {
+        guard initPresentationRoute == .standaloneWizard else { return }
+        openStandaloneInitWindow(force: false)
+    }
+
+    private func openStandaloneInitWindow(force: Bool) {
+        if !force && hasOpenedStandaloneInitWindow {
+            return
+        }
+        hasOpenedStandaloneInitWindow = true
+        openWindow(id: "user-init-wizard", value: user.username)
     }
 
     private func applyLoadedNpmRegistry(_ registryURL: String) {
@@ -2555,9 +2609,9 @@ struct DeleteUserSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             // 标题（避免转义符视觉噪音）
             VStack(alignment: .leading, spacing: 3) {
-                Text("删除用户 @\(username)")
+                Text(L10n.f("views.user_detail_view.delete_user_title", fallback: "删除用户 @%@", String(describing: username)))
                     .font(.headline)
-                Text("此操作不可恢复，请选择个人文件夹处理方式。")
+                Text(L10n.k("views.user_detail_view.delete_user_subtitle", fallback: "此操作不可恢复，请选择个人文件夹处理方式。"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -2577,7 +2631,7 @@ struct DeleteUserSheet: View {
                 HStack(alignment: .center, spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
-                    Text("删除成功，即将关闭…")
+                    Text(L10n.k("views.user_detail_view.delete_success_closing", fallback: "删除成功，即将关闭…"))
                         .font(.subheadline)
                 }
                 .padding(10)
@@ -2593,7 +2647,7 @@ struct DeleteUserSheet: View {
                         Text(L10n.k("user.detail.auto.deleting_please_wait", fallback: "删除中，请稍候…"))
                             .font(.caption)
                             .fontWeight(.semibold)
-                        Text("如果系统弹出授权窗口，请点击“允许”。如果你拒绝了，或者没有出现，请退出程序后重新操作。你也可以前往“系统设置 → 用户与群组”删除该用户。")
+                        Text(L10n.k("views.user_detail_view.delete_authorization_hint", fallback: "如果系统弹出授权窗口，请点击“允许”。如果你拒绝了，或者没有出现，请退出程序后重新操作。你也可以前往“系统设置 → 用户与群组”删除该用户。"))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -4200,21 +4254,25 @@ private struct KimiMinimaxModelConfigPanel: View {
 
             if let currentDefaultModel {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("当前：\(currentDefaultModel)")
+                    Text(L10n.f("views.user_detail_view.current_model", fallback: "当前：%@", String(describing: currentDefaultModel)))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Text(
                         currentFallbackModels.isEmpty
-                        ? "降级：无"
-                        : "降级：\(currentFallbackModels.joined(separator: " · "))"
+                        ? L10n.k("views.user_detail_view.fallback_none", fallback: "降级：无")
+                        : L10n.f(
+                            "views.user_detail_view.fallback_models",
+                            fallback: "降级：%@",
+                            String(describing: currentFallbackModels.joined(separator: " · "))
+                        )
                     )
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
                     .truncationMode(.middle)
-                    Text("回退模型建议在命令行中管理。")
+                    Text(L10n.k("views.user_detail_view.fallback_cli_recommended", fallback: "回退模型建议在命令行中管理。"))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -4228,7 +4286,7 @@ private struct KimiMinimaxModelConfigPanel: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Picker("配置方式", selection: $configMode) {
+                Picker(L10n.k("views.user_detail_view.configuration_mode", fallback: "配置方式"), selection: $configMode) {
                     ForEach(ConfigMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
@@ -4237,21 +4295,24 @@ private struct KimiMinimaxModelConfigPanel: View {
 
                 if configMode == .cliMore {
                     HStack(spacing: 6) {
-                        Label("更多模型", systemImage: "terminal")
+                        Label(L10n.k("views.user_detail_view.more_models", fallback: "更多模型"), systemImage: "terminal")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text("通过命令行交互配置，支持完整模型与回退策略。")
+                        Text(L10n.k("views.user_detail_view.more_models_desc", fallback: "通过命令行交互配置，支持完整模型与回退策略。"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    Button("打开命令行配置") {
+                    Button(L10n.k("views.user_detail_view.open_cli_config", fallback: "打开命令行配置")) {
                         openModelConfigTerminal()
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                 } else {
                     if !isCurrentModelSupportedByUI {
-                        Label("当前模型来自“更多模型（命令行）”，可在下方切换到内置 UI 支持模型。", systemImage: "info.circle")
+                        Label(
+                            L10n.k("views.user_detail_view.current_model_from_cli_hint", fallback: "当前模型来自“更多模型（命令行）”，可在下方切换到内置 UI 支持模型。"),
+                            systemImage: "info.circle"
+                        )
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
@@ -4330,7 +4391,7 @@ private struct KimiMinimaxModelConfigPanel: View {
                         }
                     } else if selectedProvider == .qiniu {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Qiniu AI 模型")
+                            Text(L10n.k("views.user_detail_view.qiniu_ai_models", fallback: "Qiniu AI 模型"))
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                             Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedQiniuModel) {
@@ -4345,7 +4406,7 @@ private struct KimiMinimaxModelConfigPanel: View {
                         }
                     } else if selectedProvider == .zai {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("智谱 Z.AI 模型")
+                            Text(L10n.k("views.user_detail_view.zai_models", fallback: "智谱 Z.AI 模型"))
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                             Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedZAIModel) {

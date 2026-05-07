@@ -160,7 +160,7 @@ struct CloneClawSheet: View {
                     .foregroundStyle(.orange)
             }
             if let cloneStatusText, isCloning {
-                Text("当前状态：\(cloneStatusText)")
+                Text(L10n.f("views.clone_claw_sheet.current_status", fallback: "当前状态：%@", String(describing: cloneStatusText)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
