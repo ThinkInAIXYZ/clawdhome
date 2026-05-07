@@ -213,6 +213,10 @@ export async function autoIngest(
     filesWritten: writtenPaths,
   })
 
+  if (writtenPaths.length === 0) {
+    throw new Error(detail)
+  }
+
   return writtenPaths
 }
 
