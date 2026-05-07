@@ -68,11 +68,13 @@ final class MaintenanceTerminalSession {
         let lcCType = inheritedEnv["LC_CTYPE"] ?? lang
         let argv0 = command.first ?? ""
         let argvRest = Array(command.dropFirst())
-        let effectivePath = nodePath
+        let isHermesCommand = (argv0 == "hermes")
         let resolvedExecutable: String
         switch argv0 {
         case "openclaw":
             resolvedExecutable = "\(home)/.npm-global/bin/openclaw"
+        case "hermes":
+            resolvedExecutable = HermesInstaller.hermesExecutable(for: username)
         case "zsh":
             resolvedExecutable = "/bin/zsh"
         case "bash":
@@ -85,9 +87,11 @@ final class MaintenanceTerminalSession {
 
         let bootstrapScript = "stty cols 120 rows 40 >/dev/null 2>&1 || true; exec \"$0\" \"$@\""
 
-        var envArgs = UserEnvContract
-            .orderedRuntimeEnvironment(username: username, nodePath: effectivePath)
-            .map { "\($0.0)=\($0.1)" }
+        // Hermes / OpenClaw 使用完全独立的环境变量（PATH、HOME 等互不混用）
+        let runtimeEnv: [(String, String)] = isHermesCommand
+            ? HermesInstaller.orderedRuntimeEnvironment(username: username)
+            : UserEnvContract.orderedRuntimeEnvironment(username: username, nodePath: nodePath)
+        var envArgs = runtimeEnv.map { "\($0.0)=\($0.1)" }
         envArgs.append(contentsOf: [
             "LANG=\(lang)",
             "LC_ALL=\(lcAll)",
