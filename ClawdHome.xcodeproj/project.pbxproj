@@ -26,6 +26,7 @@
 		154A63E1DAAB7EE61B0B79A5 /* ShrimpPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5F77D9351528C6DEEFC633 /* ShrimpPool.swift */; };
 		161CF0DA6073064097C48EB7 /* GatewayProviderKeySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DDA04FF248DF6DFABA79529 /* GatewayProviderKeySheet.swift */; };
 		16C806CD97F4A5FB8DD95D1C /* DashboardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7E5FF24A0246F866BFF996 /* DashboardModels.swift */; };
+		16C9C690FB4DCA5509D4FC87 /* CreateAgentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0600D2F59788F6F8E907084B /* CreateAgentSheet.swift */; };
 		18454F2283EC4E5E627584DE /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62AE0CAFA22F67436019A51 /* BackupModels.swift */; };
 		1A9602934F0304C7AA1905A6 /* FileInputAcceptFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC4D03808505276353A3AD2 /* FileInputAcceptFilter.swift */; };
 		1BEAF513D61007FDC9394FFF /* ModelDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21010714E9E3C485F8F95B10 /* ModelDetailView.swift */; };
@@ -204,6 +205,7 @@
 		01DAC10B65138DAA2DE36A20 /* MaintenanceTerminalSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceTerminalSession.swift; sourceTree = "<group>"; };
 		0511A43DA0C20592D7181ABD /* RoleMarketView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoleMarketView.swift; sourceTree = "<group>"; };
 		05980B1012E839BAA33AD8CE /* OpenDirectory.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = OpenDirectory.framework; sourceTree = "<group>"; };
+		0600D2F59788F6F8E907084B /* CreateAgentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAgentSheet.swift; sourceTree = "<group>"; };
 		09AC66C79FE1B7EABAA7A9EE /* ConfigCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigCommand.swift; sourceTree = "<group>"; };
 		0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInitPresentationRouting.swift; sourceTree = "<group>"; };
 		0BCB213B1B4677F1FBAC5433 /* SecurityAuditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityAuditView.swift; sourceTree = "<group>"; };
@@ -631,6 +633,7 @@
 				9A692ECF0806042C37B632CB /* CloneClawSheet.swift */,
 				BFC7D68C6A9C0FEAD2BF30EA /* CommandOutputPanel.swift */,
 				3793B8613E7B9D05787DDB8B /* ConfigEditorSheet.swift */,
+				0600D2F59788F6F8E907084B /* CreateAgentSheet.swift */,
 				5FB700C239BC180E618B6D07 /* CustomProviderFormFields.swift */,
 				A8FE553DC729ACE5F8E46933 /* DaemonSetupBanner.swift */,
 				B0C17363344B936997067010 /* DashboardView.swift */,
@@ -886,6 +889,7 @@
 				2B83A4BD11F3D23D044AAE93 /* CommandOutputPanel.swift in Sources */,
 				70983A6303C616757188623F /* ConfigEditorSheet.swift in Sources */,
 				84EE8ABA47536FEBAD8C7E53 /* ContentView.swift in Sources */,
+				16C9C690FB4DCA5509D4FC87 /* CreateAgentSheet.swift in Sources */,
 				C995644F8A8C786C0B5D689D /* CustomProviderFormFields.swift in Sources */,
 				E05E2364346E9729CD25F0A7 /* DaemonInstaller.swift in Sources */,
 				1EF1D1156BEAC282AC695473 /* DaemonSetupBanner.swift in Sources */,
