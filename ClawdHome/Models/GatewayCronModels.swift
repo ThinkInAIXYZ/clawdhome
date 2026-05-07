@@ -1,3 +1,5 @@
+// 简化自 openclaw/apps/macos/Sources/OpenClaw/CronModels.swift
+
 import Foundation
 
 // MARK: - GatewayCronSchedule
