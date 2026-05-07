@@ -763,7 +763,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
         }
     }
 
-    private func handlePollResult(_ snapshot: (Bool, String, Int64, Bool, Int32, String?)) {
+    private func handlePollResult(_ snapshot: (Bool, Data, Int64, Bool, Int32, String?)) {
         polling = false
         let (ok, chunk, nextOffset, exited, exitCode, err) = snapshot
         if !ok {
@@ -777,8 +777,9 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
         offset = nextOffset
         if !chunk.isEmpty {
             feedToTerminal(chunk)
-            onOutput?(chunk)
-            autoOpenOAuthIfNeeded(chunk)
+            let outputText = String(decoding: chunk, as: UTF8.self)
+            onOutput?(outputText)
+            autoOpenOAuthIfNeeded(outputText)
         }
         if exited {
             timer?.invalidate()
@@ -790,6 +791,12 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     private func feedToTerminal(_ text: String) {
         guard let terminalView else { return }
         let bytes = ArraySlice(Array(text.utf8))
+        terminalView.feed(byteArray: bytes)
+    }
+
+    private func feedToTerminal(_ data: Data) {
+        guard let terminalView else { return }
+        let bytes = ArraySlice([UInt8](data))
         terminalView.feed(byteArray: bytes)
     }
 

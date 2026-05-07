@@ -143,15 +143,14 @@ final class MaintenanceTerminalSession {
         try? resize(cols: 120, rows: 40)
     }
 
-    func poll(fromOffset: Int64) -> (chunk: String, nextOffset: Int64, exited: Bool, exitCode: Int32) {
+    func poll(fromOffset: Int64) -> (chunk: Data, nextOffset: Int64, exited: Bool, exitCode: Int32) {
         lock.lock()
         defer { lock.unlock() }
 
         lastPollTime = Date()
         let start = max(0, min(Int(fromOffset), outputBuffer.count))
         let slice = outputBuffer.subdata(in: start..<outputBuffer.count)
-        let text = String(decoding: slice, as: UTF8.self)
-        return (text, Int64(outputBuffer.count), exited, exitCode)
+        return (slice, Int64(outputBuffer.count), exited, exitCode)
     }
 
     func sendInput(_ data: Data) throws {

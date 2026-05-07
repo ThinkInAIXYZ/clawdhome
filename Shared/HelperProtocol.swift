@@ -527,7 +527,7 @@ import Foundation
     func pollMaintenanceTerminalSession(
         sessionID: String,
         fromOffset: Int64,
-        withReply reply: @escaping (Bool, String, Int64, Bool, Int32, String?) -> Void
+        withReply reply: @escaping (Bool, Data, Int64, Bool, Int32, String?) -> Void
     )
 
     /// 向通用维护终端会话写入输入数据（Base64 编码的原始字节）
