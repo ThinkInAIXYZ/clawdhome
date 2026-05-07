@@ -19,7 +19,7 @@ SIGN_PKG ?= false
 NOTARIZE ?= true
 BUILD_ARCHS ?= arm64
 
-.PHONY: help bump-build build build-helper build-release install-helper uninstall-helper pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-dry-run release-notes-draft changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean
+.PHONY: help bump-build build build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-dry-run release-notes-draft changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean
 
 WEBSITE_DIR ?= ../clawdhome_website
 
@@ -33,8 +33,11 @@ help:
 	@echo "  version-next     预览下一个语义化版本号"
 	@echo "  changelog        预览基于 git log 自动生成的发布草稿"
 	@echo "  release-notes-draft  用 claude -p 生成中英文发布说明草稿并打开"
-	@echo "  install-helper   安装 Helper 到系统（需要 sudo）"
-	@echo "  uninstall-helper 卸载 Helper（需要 sudo）"
+	@echo "  install-helper   安装开发 Helper 到系统（dev label，需要 sudo）"
+	@echo "  uninstall-helper 卸载开发 Helper（dev label，需要 sudo）"
+	@echo "  doctor-mode      诊断当前机器处于开发/发布/混合哪种模式"
+	@echo "  switch-release-test  切换到发布包验收模式（清理残留并安装 dist 最新 pkg）"
+	@echo "  capture-incident 现场取证（建议 sudo），输出 /tmp/clawdhome-incident-*.tgz"
 	@echo "  pkg              开发用快速打包（默认不签名）"
 	@echo "  pkg-intel        打包 Intel (x86_64) 安装包"
 	@echo "  pkg-universal    打包 Universal (arm64 + x86_64) 安装包"
@@ -49,6 +52,7 @@ help:
 	@echo "  run-release      直接运行 build/export 里的 Release 包（无需安装）"
 	@echo "  install-pkg      安装最新 pkg 到 /Applications（需要 sudo）"
 	@echo "  log-helper       实时跟踪 Helper 日志（/tmp/clawdhome-helper.log）"
+	@echo "  log-helper-dev   实时跟踪开发 Helper 日志（/tmp/clawdhome-helper-dev.log）"
 	@echo "  log-app          实时跟踪 App 系统日志（os_log）"
 	@echo "  i18n             运行 Stable.xcstrings 本地化检查"
 	@echo "  i18n-check       本地化 CI 检查（未本地化/缺失翻译/占位符一致性）"
@@ -141,6 +145,19 @@ install-helper:
 uninstall-helper:
 	sudo bash scripts/install-helper-dev.sh uninstall
 
+doctor-mode:
+	bash scripts/doctor-helper-mode.sh
+
+switch-release-test:
+	@if [ -n "$(PKG)" ]; then \
+		bash scripts/switch-release-test.sh "$(PKG)"; \
+	else \
+		bash scripts/switch-release-test.sh; \
+	fi
+
+capture-incident:
+	bash scripts/capture-helper-incident.sh
+
 # ── 打包 ──────────────────────────────────────────────────────────────────────
 
 pkg: bump-build
@@ -227,6 +244,9 @@ install-pkg:
 
 log-helper:
 	tail -f /tmp/clawdhome-helper.log
+
+log-helper-dev:
+	tail -f /tmp/clawdhome-helper-dev.log
 
 log-app:
 	log stream --predicate 'subsystem == "ai.clawdhome.mac"' --level debug

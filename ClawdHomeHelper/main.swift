@@ -327,10 +327,30 @@ DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
 // 开机自启：等系统稳定后，为所有被管理用户（UID≥500，非 admin）启动 gateway
 // 使用 launchctl bootstrap user/<uid>，即使用户未登录也能在其 launchd 域中启动服务
 // 若 /var/lib/clawdhome/gateway-autostart-disabled 存在则跳过（用户在设置中关闭了自启）
+#if DEBUG
+let debugEnableAutostartFlag = "/var/lib/clawdhome/debug-enable-boot-autostart"
+if FileManager.default.fileExists(atPath: debugEnableAutostartFlag) {
+    DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 8) {
+        bootAutostartGatewaysIfNeeded()
+    }
+    helperLog("[boot] DEBUG: boot autostart enabled by flag \(debugEnableAutostartFlag)")
+} else {
+    helperLog("[boot] DEBUG: skip boot autostart (create \(debugEnableAutostartFlag) to enable)")
+}
+
+let debugEnableWatchdogFlag = "/var/lib/clawdhome/debug-enable-watchdog"
+if FileManager.default.fileExists(atPath: debugEnableWatchdogFlag) {
+    GatewayWatchdog.shared.start()
+    helperLog("[boot] DEBUG: watchdog enabled by flag \(debugEnableWatchdogFlag)")
+} else {
+    helperLog("[boot] DEBUG: watchdog disabled (create \(debugEnableWatchdogFlag) to enable)")
+}
+#else
 DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 8) {
     bootAutostartGatewaysIfNeeded()
 }
 GatewayWatchdog.shared.start()
 BackupScheduler.shared.start()
+#endif
 
 RunLoop.main.run()

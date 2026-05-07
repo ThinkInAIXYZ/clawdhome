@@ -270,13 +270,23 @@ struct GatewayManager {
     // MARK: - 状态查询
 
     /// - Returns: (isRunning, pid) — pid 为 -1 表示未运行
-    static func status(username: String, uid: Int) -> (running: Bool, pid: Int32) {
+    static func status(
+        username: String,
+        uid: Int,
+        includeProcessFallback: Bool = true
+    ) -> (running: Bool, pid: Int32) {
         let label = "\(gatewayLabel).\(username)"
         guard let output = try? run("/bin/launchctl", args: ["print", "system/\(label)"]) else {
             // service 未注册
             return (false, -1)
         }
         let launchdPID = parseLaunchdPID(from: output)
+        if !includeProcessFallback {
+            if let launchdPID, launchdPID > 0 {
+                return (true, launchdPID)
+            }
+            return (false, -1)
+        }
         return GatewayStatusResolver.resolve(
             launchdPID: launchdPID,
             processes: ProcessManager.listProcesses(username: username)

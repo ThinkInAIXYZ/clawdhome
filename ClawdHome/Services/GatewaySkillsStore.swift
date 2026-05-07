@@ -20,6 +20,8 @@ final class GatewaySkillsStore {
     var searchText: String = ""
 
     private var client: GatewayClient?
+    private var eventTask: Task<Void, Never>?
+    private var pollTask: Task<Void, Never>?
 
     func isBusy(skill: GatewaySkillStatus) -> Bool {
         pendingOps[skill.skillKey] != nil
@@ -30,11 +32,16 @@ final class GatewaySkillsStore {
     func start(client: GatewayClient) async {
         self.client = client
         await refresh()
+        startEventSubscription(client: client)
+        startPolling()
     }
 
     /// 幂等启动：仅在 client 尚未设置时执行完整启动；已有 client 时仅 refresh
     func startIfNeeded(client: GatewayClient) async {
         if self.client != nil {
+            self.client = client
+            if eventTask == nil { startEventSubscription(client: client) }
+            if pollTask == nil { startPolling() }
             await refresh()
             return
         }
@@ -42,6 +49,8 @@ final class GatewaySkillsStore {
     }
 
     func stop() {
+        eventTask?.cancel(); eventTask = nil
+        pollTask?.cancel(); pollTask = nil
         client = nil
         skills = []
         error = nil
@@ -68,14 +77,40 @@ final class GatewaySkillsStore {
 
     func install(skill: GatewaySkillStatus, option: GatewaySkillInstallOption) async {
         await withBusy(skill.skillKey, label: "安装中") {
+            self.statusMessage = "正在安装 \(skill.name)…"
             do {
-                let result = try await self.client?.skillsInstall(
-                    name: skill.name, installId: option.id, timeoutMs: 300_000)
-                self.statusMessage = result?.message
+                guard let client = self.client else { throw GatewayClientError.notConnected }
+                let result = try await client.skillsInstall(name: skill.name, installId: option.id, timeoutMs: 300_000)
+                if !result.ok {
+                    throw GatewaySkillsStoreError.installFailed(Self.formatInstallFailureMessage(result))
+                }
+                let baseMessage = Self.trimmed(result.message)
+                self.statusMessage = baseMessage?.isEmpty == false ? baseMessage : "安装命令已完成，正在验证结果…"
+
+                let verification = await self.waitForInstallCompletion(
+                    skillKey: skill.skillKey,
+                    expectedBins: option.bins,
+                    timeoutSeconds: 20
+                )
+                switch verification {
+                case .ready:
+                    if let msg = baseMessage, !msg.isEmpty {
+                        self.statusMessage = msg
+                    } else {
+                        self.statusMessage = "安装成功"
+                    }
+                case .stillMissing(let bins):
+                    let missing = bins.joined(separator: ", ")
+                    if missing.isEmpty {
+                        self.statusMessage = "安装命令已结束，但状态未及时刷新，请稍后重试刷新。"
+                    } else {
+                        self.statusMessage = "安装命令已结束，但仍缺少依赖: \(missing)"
+                    }
+                }
             } catch {
                 self.statusMessage = error.localizedDescription
+                await self.refresh()
             }
-            await self.refresh()
         }
     }
 
@@ -145,5 +180,132 @@ final class GatewaySkillsStore {
         pendingOps[skillKey] = label
         defer { pendingOps.removeValue(forKey: skillKey) }
         await work()
+    }
+
+    private func startEventSubscription(client: GatewayClient) {
+        eventTask?.cancel()
+        eventTask = Task { [weak self] in
+            for await event in client.eventStream {
+                guard !Task.isCancelled else { break }
+                guard event.name.hasPrefix("skills.") else { continue }
+                await self?.handleSkillsEvent(event)
+            }
+        }
+    }
+
+    private func startPolling() {
+        pollTask?.cancel()
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                guard !Task.isCancelled else { break }
+                await self?.refresh()
+            }
+        }
+    }
+
+    private func handleSkillsEvent(_ event: GatewayEvent) async {
+        if !pendingOps.isEmpty, let msg = Self.messageFromSkillsEvent(event) {
+            statusMessage = msg
+        }
+        await refresh()
+    }
+
+    private func waitForInstallCompletion(
+        skillKey: String,
+        expectedBins: [String],
+        timeoutSeconds: Int
+    ) async -> InstallVerificationResult {
+        let waitSeconds = max(1, timeoutSeconds)
+        let expected = Set(expectedBins)
+        for second in 0..<waitSeconds {
+            pendingOps[skillKey] = second == 0 ? "安装中" : "安装中 \(second)s"
+            await refresh()
+
+            if let current = skills.first(where: { $0.skillKey == skillKey }) {
+                let relevantMissing: [String]
+                if expected.isEmpty {
+                    relevantMissing = current.missing.bins
+                } else {
+                    relevantMissing = current.missing.bins.filter { expected.contains($0) }
+                }
+                if relevantMissing.isEmpty {
+                    return .ready
+                }
+            }
+
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+
+        let fallbackMissing: [String]
+        if let current = skills.first(where: { $0.skillKey == skillKey }) {
+            if expected.isEmpty {
+                fallbackMissing = current.missing.bins
+            } else {
+                fallbackMissing = current.missing.bins.filter { expected.contains($0) }
+            }
+        } else {
+            fallbackMissing = expectedBins
+        }
+        return .stillMissing(fallbackMissing)
+    }
+
+    private static func formatInstallFailureMessage(_ result: GatewaySkillInstallResult) -> String {
+        var segments: [String] = []
+        if let message = trimmed(result.message), !message.isEmpty {
+            segments.append(message)
+        }
+        if let stderrLine = lastNonEmptyLine(result.stderr), !stderrLine.isEmpty {
+            segments.append(stderrLine)
+        } else if let stdoutLine = lastNonEmptyLine(result.stdout), !stdoutLine.isEmpty {
+            segments.append(stdoutLine)
+        }
+        if segments.isEmpty {
+            return "安装失败，网关未返回可用错误信息。"
+        }
+        return "安装失败：\(segments.joined(separator: " | "))"
+    }
+
+    private static func messageFromSkillsEvent(_ event: GatewayEvent) -> String? {
+        guard let payload = event.payload else { return nil }
+        if let message = payload["message"] as? String, let normalized = trimmed(message), !normalized.isEmpty {
+            return normalized
+        }
+        if let status = payload["status"] as? String, let normalized = trimmed(status), !normalized.isEmpty {
+            return normalized
+        }
+        return nil
+    }
+
+    private static func lastNonEmptyLine(_ text: String?) -> String? {
+        guard let text = text else { return nil }
+        let lines = text
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return lines.last.flatMap(trimmed)
+    }
+
+    private static func trimmed(_ text: String?) -> String? {
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+        if text.count <= 240 { return text }
+        let idx = text.index(text.startIndex, offsetBy: 240)
+        return String(text[..<idx]) + "..."
+    }
+}
+
+private enum InstallVerificationResult {
+    case ready
+    case stillMissing([String])
+}
+
+private enum GatewaySkillsStoreError: LocalizedError {
+    case installFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .installFailed(let message):
+            return message
+        }
     }
 }

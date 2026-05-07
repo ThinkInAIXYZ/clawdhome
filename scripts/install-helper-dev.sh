@@ -9,10 +9,12 @@
 
 set -euo pipefail
 
-LABEL="ai.clawdhome.mac.helper"
+LABEL="ai.clawdhome.mac.helper.dev"
+RELEASE_LABEL="ai.clawdhome.mac.helper"
 DEST_DIR="/Library/PrivilegedHelperTools"
 DEST_BINARY="$DEST_DIR/$LABEL"
 PLIST_PATH="/Library/LaunchDaemons/$LABEL.plist"
+RELEASE_PLIST_PATH="/Library/LaunchDaemons/$RELEASE_LABEL.plist"
 
 ACTION="${1:-install}"
 
@@ -38,6 +40,12 @@ install)
         exit 1
     fi
     echo "📦 安装来源：$BUILT_BINARY"
+
+    # 开发态安装时，先停掉 release helper，避免 dev/release 双 helper 并跑导致排查混乱。
+    if launchctl print "system/$RELEASE_LABEL" >/dev/null 2>&1; then
+        echo "🧹 检测到 release helper 正在运行，先停止：$RELEASE_LABEL"
+        launchctl bootout system "$RELEASE_PLIST_PATH" 2>/dev/null || true
+    fi
 
     # 必须先停止旧进程再替换二进制！
     # 否则内核延迟代码页校验会发现磁盘签名不匹配 → SIGKILL: Invalid Page
@@ -69,9 +77,9 @@ install)
     <key>KeepAlive</key>
     <true/>
     <key>StandardErrorPath</key>
-    <string>/tmp/clawdhome-helper.log</string>
+    <string>/tmp/clawdhome-helper-dev.log</string>
     <key>StandardOutPath</key>
-    <string>/tmp/clawdhome-helper.log</string>
+    <string>/tmp/clawdhome-helper-dev.log</string>
 </dict>
 </plist>
 EOF
@@ -80,8 +88,8 @@ EOF
 
     launchctl bootstrap system "$PLIST_PATH"
 
-    echo "✅ ClawdHomeHelper 已安装并启动"
-    echo "   日志：tail -f /tmp/clawdhome-helper.log"
+    echo "✅ ClawdHomeHelper 已安装并启动（dev）"
+    echo "   日志：tail -f /tmp/clawdhome-helper-dev.log"
     echo "   现在可以运行 ClawdHome.app 进行测试"
     ;;
 

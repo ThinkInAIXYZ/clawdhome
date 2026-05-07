@@ -22,6 +22,9 @@ struct BackupView: View {
     @State private var progressText: String?
     @State private var errorMessage: String?
 
+    // 定时备份结果
+    @State private var lastBackupResult: BackupResult?
+
     // Shrimp 筛选
     @State private var selectedShrimpUser: String?
 
@@ -56,6 +59,14 @@ struct BackupView: View {
         }
         .navigationTitle(L10n.k("auto.backup_view.backups", fallback: "备份"))
         .task { await loadData() }
+        .alert(
+            L10n.k("backup.restore.restart.title", fallback: "全局配置已恢复"),
+            isPresented: $showRestartAlert
+        ) {
+            Button(L10n.k("backup.restore.restart.ok", fallback: "好")) {}
+        } message: {
+            Text(L10n.k("backup.restore.restart.message", fallback: "请重新启动 ClawdHome 以加载恢复的配置。"))
+        }
         .sheet(item: $restoreTarget) { entry in
             restoreConfirmSheet(entry)
         }
@@ -121,23 +132,28 @@ struct BackupView: View {
                 }
 
                 // 保留数
-                HStack {
-                    Text(L10n.k("backup.retention.label", fallback: "保留最近"))
-                    Picker("", selection: Binding(
-                        get: { config.retention.maxCount },
-                        set: { newVal in
-                            config.retention.maxCount = newVal
-                            Task { await saveConfig() }
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(L10n.k("backup.retention.label", fallback: "保留最近"))
+                        Picker("", selection: Binding(
+                            get: { config.retention.maxCount },
+                            set: { newVal in
+                                config.retention.maxCount = newVal
+                                Task { await saveConfig() }
+                            }
+                        )) {
+                            Text("3").tag(3)
+                            Text("5").tag(5)
+                            Text("7").tag(7)
+                            Text("14").tag(14)
+                            Text("30").tag(30)
                         }
-                    )) {
-                        Text("3").tag(3)
-                        Text("5").tag(5)
-                        Text("7").tag(7)
-                        Text("14").tag(14)
-                        Text("30").tag(30)
+                        .frame(width: 80)
+                        Text(L10n.k("backup.retention.suffix", fallback: "个备份"))
                     }
-                    .frame(width: 80)
-                    Text(L10n.k("backup.retention.suffix", fallback: "个备份"))
+                    Text(L10n.k("backup.retention.hint", fallback: "每个 Shrimp 和全局配置各自独立计数"))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
 
                 // 备份目录
@@ -156,7 +172,16 @@ struct BackupView: View {
                     .font(.caption)
 
                     Button(L10n.k("backup.dir.reveal", fallback: "显示")) {
-                        NSWorkspace.shared.open(URL(fileURLWithPath: config.backupDir))
+                        let url = URL(fileURLWithPath: config.backupDir)
+                        if FileManager.default.fileExists(atPath: config.backupDir) {
+                            NSWorkspace.shared.open(url)
+                        } else {
+                            // 目录不存在（还未执行过备份），在 Finder 中显示父目录
+                            let parent = url.deletingLastPathComponent()
+                            if FileManager.default.fileExists(atPath: parent.path) {
+                                NSWorkspace.shared.open(parent)
+                            }
+                        }
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
@@ -170,6 +195,17 @@ struct BackupView: View {
                     Text(L10n.f("backup.schedule.last_run", fallback: "上次备份：%@", relative))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                // 定时备份失败告警
+                if let result = lastBackupResult, !result.isSuccess {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.yellow)
+                        Text(L10n.f("backup.schedule.last_failure", fallback: "上次定时备份有 %d 项失败：%@", result.failures.count, result.failures.joined(separator: "；")))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.red)
                 }
             }
             .padding(.top, 4)
@@ -412,6 +448,7 @@ struct BackupView: View {
             config = try await helperClient.getBackupConfig()
             configLoaded = true
             allBackups = try await helperClient.listBackups(destinationDir: config.backupDir)
+            lastBackupResult = try await helperClient.getLastBackupResult()
             if selectedShrimpUser == nil, let first = users.first {
                 selectedShrimpUser = first.username
             }
@@ -442,12 +479,16 @@ struct BackupView: View {
         progressText = nil
     }
 
+    @State private var showRestartAlert = false
+
     private func performRestore(_ entry: BackupListEntry) async {
         isRestoring = true
         errorMessage = nil
         do {
             if entry.backupType == "global" {
                 try await helperClient.restoreGlobal(sourcePath: entry.filePath)
+                // 全局恢复后内存状态已过期，提示重启
+                showRestartAlert = true
             } else if let username = entry.username {
                 try await helperClient.restoreShrimp(
                     username: username,
@@ -509,9 +550,15 @@ struct BackupView: View {
             backupBeforeRestore = true
             restoreTarget = entry
         } else if filename.hasPrefix("shrimp-") {
-            // 提取用户名
-            let parts = filename.replacingOccurrences(of: "shrimp-", with: "").split(separator: "-")
-            let username = parts.first.map(String.init) ?? ""
+            // 提取用户名：文件名格式 shrimp-<username>-<timestamp>.tar.gz
+            // timestamp 格式: yyyy-MM-ddTHHmmss，从末尾匹配
+            let basename = filename.replacingOccurrences(of: ".tar.gz", with: "")
+            let username: String
+            if let range = basename.range(of: #"-\d{4}-\d{2}-\d{2}T\d{6}$"#, options: .regularExpression) {
+                username = String(basename[basename.index(basename.startIndex, offsetBy: 7)..<range.lowerBound])
+            } else {
+                username = String(basename.dropFirst(7).split(separator: "-").first ?? "")
+            }
             let entry = BackupListEntry(
                 filename: filename,
                 filePath: url.path,

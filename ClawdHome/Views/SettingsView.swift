@@ -1280,9 +1280,15 @@ private struct AboutTab: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Helper 未连接，无法执行任何操作。")
                                     .font(.caption)
+                                #if DEBUG
                                 Text(L10n.k("views.settings_view.run_install_helper_dev_sh", fallback: "请运行 sudo scripts/install-helper-dev.sh"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                #else
+                                Text("请重启 Helper；若仍失败，请重新安装官方签名安装包。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                #endif
                             }
                             Spacer()
                             Button("重启 Helper") {
