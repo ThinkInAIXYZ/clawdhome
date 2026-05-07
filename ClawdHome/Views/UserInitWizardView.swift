@@ -3,6 +3,14 @@
 
 import SwiftUI
 
+private let modelConfigMaintenanceContext = "wizard-model-config"
+
+private struct ModelConfigTerminalCloseState: Identifiable {
+    let id = UUID()
+    let exitCode: Int32?
+    let detectedModel: String?
+}
+
 // MARK: - 枚举定义
 
 enum InitStep: Int, CaseIterable {
@@ -295,6 +303,9 @@ struct UserInitWizardView: View {
     @State private var selectedMinimaxModel: MinimaxModel = .m25
     @State private var isApplyingModel = false
     @State private var modelConfigError = ""
+    @State private var activeModelConfigTerminalToken: String? = nil
+    @State private var isModelConfigTerminalOpen = false
+    @State private var pendingModelConfigTerminalClose: ModelConfigTerminalCloseState? = nil
 
     // Step 3: 频道配置
     @State private var selectedChannel: WizardChannelType = .feishu
@@ -417,6 +428,26 @@ struct UserInitWizardView: View {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .maintenanceTerminalWindowClosed)) { notification in
+            guard let userInfo = notification.userInfo,
+                  let token = userInfo["token"] as? String,
+                  let context = userInfo["context"] as? String,
+                  context == modelConfigMaintenanceContext,
+                  token == activeModelConfigTerminalToken else { return }
+            activeModelConfigTerminalToken = nil
+            isModelConfigTerminalOpen = false
+            Task { await handleModelConfigTerminalClosed(userInfo: userInfo) }
+        }
+        .alert(item: $pendingModelConfigTerminalClose) { state in
+            Alert(
+                title: Text(modelConfigTerminalAlertTitle(for: state)),
+                message: Text(modelConfigTerminalAlertMessage(for: state)),
+                primaryButton: .default(Text(L10n.k("wizard.model_config.command.confirm_complete", fallback: "标记已完成并继续"))) {
+                    Task { await markModelStepDone() }
+                },
+                secondaryButton: .cancel(Text(L10n.k("wizard.model_config.command.stay_on_step", fallback: "留在当前步骤")))
+            )
+        }
         .onChange(of: user.username) { _, _ in
             resetWizardStateOnly()
         }
@@ -498,7 +529,7 @@ struct UserInitWizardView: View {
             GroupBox(L10n.k("wizard.openclaw_version.group", fallback: "OpenClaw 版本")) {
                 VStack(alignment: .leading, spacing: 10) {
                     Picker(L10n.k("wizard.openclaw_version.picker", fallback: "OpenClaw 版本"), selection: $selectedOpenclawVersionPreset) {
-                        Text("latest").tag(OpenclawVersionPreset.latest)
+                        Text(L10n.k("wizard.openclaw_version.latest", fallback: "最新版本")).tag(OpenclawVersionPreset.latest)
                         Text(L10n.k("wizard.openclaw_version.custom", fallback: "指定版本")).tag(OpenclawVersionPreset.custom)
                     }
                     .pickerStyle(.segmented)
@@ -567,6 +598,36 @@ struct UserInitWizardView: View {
                     .font(.title3).fontWeight(.semibold)
                 Text(L10n.k("views.user_init_wizard_view.select_provider_api_key_donemodelsconfiguration", fallback: "选择一个 Provider 并填入 API Key，即可完成模型配置。"))
                     .font(.callout).foregroundStyle(.secondary)
+            }
+
+            GroupBox(L10n.k("wizard.model_config.command.group", fallback: "其他方式")) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(
+                        isModelConfigTerminalOpen
+                        ? L10n.k("wizard.model_config.command.open_hint", fallback: "命令行配置窗口已打开。完成或取消后关闭窗口，这里会提示是否进入下一步。")
+                        : L10n.k("wizard.model_config.command.desc", fallback: "也可以直接打开命令行执行 `openclaw configure --section model`。关闭窗口后，向导会确认这一步是否完成。")
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                    HStack(spacing: 12) {
+                        Button(
+                            isModelConfigTerminalOpen
+                            ? L10n.k("wizard.model_config.command.reopen", fallback: "命令行窗口已打开")
+                            : L10n.k("wizard.model_config.command.open", fallback: "通过命令行配置")
+                        ) {
+                            openModelConfigTerminal()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isModelConfigTerminalOpen)
+
+                        Button(L10n.k("wizard.model_config.skip", fallback: "跳过此步骤")) {
+                            Task { await skipModelStep() }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             VStack(spacing: 6) {
@@ -1107,6 +1168,9 @@ struct UserInitWizardView: View {
         selectedWizardProvider = .kimiCoding
         selectedMinimaxModel = .m25
         modelConfigError = ""
+        activeModelConfigTerminalToken = nil
+        isModelConfigTerminalOpen = false
+        pendingModelConfigTerminalClose = nil
         selectedChannel = .feishu
         isStartingOpenclaw = false
         finishProgressMessages = []
@@ -1363,11 +1427,7 @@ struct UserInitWizardView: View {
                 try await applyMinimaxConfig(apiKey: key)
             }
 
-            statuses[InitStep.configureModel.rawValue] = .done
-            currentStep = .configureChannel
-            statuses[InitStep.configureChannel.rawValue] = .running
-            user.initStep = InitStep.configureChannel.title
-            await persistState()
+            await markModelStepDone()
         } catch {
             modelConfigError = error.localizedDescription
         }
@@ -1512,6 +1572,24 @@ struct UserInitWizardView: View {
         currentStep = .finish
         statuses[InitStep.finish.rawValue] = .running
         user.initStep = InitStep.finish.title
+        await persistState()
+    }
+
+    private func markModelStepDone() async {
+        statuses[InitStep.configureModel.rawValue] = .done
+        currentStep = .configureChannel
+        statuses[InitStep.configureChannel.rawValue] = .running
+        user.initStep = InitStep.configureChannel.title
+        modelConfigError = ""
+        await persistState()
+    }
+
+    private func skipModelStep() async {
+        statuses[InitStep.configureModel.rawValue] = .pending
+        currentStep = .configureChannel
+        statuses[InitStep.configureChannel.rawValue] = .running
+        user.initStep = InitStep.configureChannel.title
+        modelConfigError = ""
         await persistState()
     }
 
@@ -1841,6 +1919,62 @@ struct UserInitWizardView: View {
     }
 
     // MARK: - 完成后操作
+
+    private func openModelConfigTerminal() {
+        let completionToken = UUID().uuidString
+        activeModelConfigTerminalToken = completionToken
+        isModelConfigTerminalOpen = true
+        modelConfigError = ""
+        let payload = maintenanceWindowRegistry.makePayload(
+            username: user.username,
+            title: L10n.k("wizard.model_config.command.window_title", fallback: "模型配置命令行"),
+            command: ["openclaw", "configure", "--section", "model"],
+            completionToken: completionToken,
+            completionContext: modelConfigMaintenanceContext
+        )
+        openWindow(id: "maintenance-terminal", value: payload)
+    }
+
+    private func handleModelConfigTerminalClosed(userInfo: [AnyHashable: Any]) async {
+        let exitCode = (userInfo["exitCode"] as? NSNumber)?.int32Value
+        let status = await helperClient.getModelsStatus(username: user.username)
+        let detectedModel = status?.resolvedDefault ?? status?.defaultModel
+        pendingModelConfigTerminalClose = ModelConfigTerminalCloseState(
+            exitCode: exitCode,
+            detectedModel: detectedModel
+        )
+    }
+
+    private func modelConfigTerminalAlertTitle(for state: ModelConfigTerminalCloseState) -> String {
+        if state.detectedModel != nil {
+            return L10n.k("wizard.model_config.command.alert.detected_title", fallback: "检测到模型配置")
+        }
+        if state.exitCode == 0 {
+            return L10n.k("wizard.model_config.command.alert.success_title", fallback: "命令已执行完成")
+        }
+        return L10n.k("wizard.model_config.command.alert.incomplete_title", fallback: "模型步骤可能未完成")
+    }
+
+    private func modelConfigTerminalAlertMessage(for state: ModelConfigTerminalCloseState) -> String {
+        if let detectedModel = state.detectedModel, !detectedModel.isEmpty {
+            return L10n.f(
+                "wizard.model_config.command.alert.detected_message",
+                fallback: "已检测到当前默认模型：%@。如果命令行配置已经完成，可以直接进入下一步。",
+                detectedModel
+            )
+        }
+        if state.exitCode == 0 {
+            return L10n.k("wizard.model_config.command.alert.success_message", fallback: "命令行窗口已正常退出，但当前还没检测到默认模型。若你已经在命令行里完成了需要的配置，可以继续下一步。")
+        }
+        if let exitCode = state.exitCode {
+            return L10n.f(
+                "wizard.model_config.command.alert.failed_message",
+                fallback: "命令行窗口已关闭，进程退出码为 %@。这一步可能尚未完成。若确认配置已经完成，仍可继续下一步。",
+                String(exitCode)
+            )
+        }
+        return L10n.k("wizard.model_config.command.alert.closed_message", fallback: "命令行窗口已关闭，这一步可能尚未完成。若确认配置已经完成，仍可继续下一步。")
+    }
 
     private func openMaintenanceTerminal() {
         let payload = maintenanceWindowRegistry.makePayload(

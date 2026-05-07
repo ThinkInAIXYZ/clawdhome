@@ -131,7 +131,13 @@ struct ClawdHomeApp: App {
 final class MaintenanceWindowRegistry {
     private var nextIndexByUser: [String: Int] = [:]
 
-    func makePayload(username: String, title: String, command: [String]) -> String {
+    func makePayload(
+        username: String,
+        title: String,
+        command: [String],
+        completionToken: String? = nil,
+        completionContext: String? = nil
+    ) -> String {
         let next = (nextIndexByUser[username] ?? 0) + 1
         nextIndexByUser[username] = next
         let req = MaintenanceTerminalWindowRequest(
@@ -139,7 +145,9 @@ final class MaintenanceWindowRegistry {
             username: username,
             title: title,
             command: command,
-            index: next
+            index: next,
+            completionToken: completionToken,
+            completionContext: completionContext
         )
         return req.payload
     }
@@ -151,18 +159,30 @@ struct MaintenanceTerminalWindowRequest: Codable {
     let title: String
     let command: [String]
     let index: Int
+    let completionToken: String?
+    let completionContext: String?
 
     var payload: String {
         guard let data = try? JSONEncoder().encode(self) else { return "" }
         return data.base64EncodedString()
     }
 
-    init(token: String, username: String, title: String, command: [String], index: Int) {
+    init(
+        token: String,
+        username: String,
+        title: String,
+        command: [String],
+        index: Int,
+        completionToken: String? = nil,
+        completionContext: String? = nil
+    ) {
         self.token = token
         self.username = username
         self.title = title
         self.command = command
         self.index = index
+        self.completionToken = completionToken
+        self.completionContext = completionContext
     }
 
     init?(payload: String?) {
@@ -173,6 +193,10 @@ struct MaintenanceTerminalWindowRequest: Codable {
         }
         self = req
     }
+}
+
+extension Notification.Name {
+    static let maintenanceTerminalWindowClosed = Notification.Name("MaintenanceTerminalWindowClosed")
 }
 
 // MARK: - 维护终端快捷命令
@@ -232,6 +256,7 @@ private struct MaintenanceTerminalWindowContent: View {
     @State private var now = Date()
     @State private var outputBuffer = ""
     @State private var didStart = false
+    @State private var didPostCloseNotification = false
 
     private let waitingThreshold: TimeInterval = 8
     private let uiTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -328,6 +353,7 @@ private struct MaintenanceTerminalWindowContent: View {
             now = tick
         }
         .onDisappear {
+            postCloseNotificationIfNeeded()
             terminalControl.terminate()
             appLog("[maintenance-window] closed user=\(request.username) index=\(request.index) title=\(request.title)")
         }
@@ -426,6 +452,22 @@ private struct MaintenanceTerminalWindowContent: View {
         }
     }
 
+    private func postCloseNotificationIfNeeded() {
+        guard !didPostCloseNotification, let completionToken = request.completionToken else { return }
+        didPostCloseNotification = true
+        NotificationCenter.default.post(
+            name: .maintenanceTerminalWindowClosed,
+            object: nil,
+            userInfo: [
+                "token": completionToken,
+                "username": request.username,
+                "title": request.title,
+                "context": request.completionContext ?? "",
+                "exitCode": exitCode.map(NSNumber.init(value:)) ?? NSNull()
+            ]
+        )
+    }
+
     @ViewBuilder
     private func resourceChip(icon: String, title: String, value: String) -> some View {
         Label("\(title) \(value)", systemImage: icon)
@@ -500,28 +542,52 @@ private struct ChannelOnboardingRequest {
 /// 首次出现时把 claw-detail 窗口定位到主窗口右侧区域（侧栏宽度 idealSidebar）
 private struct ClawDetailWindowPositioner: NSViewRepresentable {
     private let idealSidebar: CGFloat = 200
+    private let preferredSize = NSSize(width: 920, height: 660)
+    private let minimumSize = NSSize(width: 820, height: 560)
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { Self.align(view: view, sidebar: idealSidebar) }
+        DispatchQueue.main.async {
+            Self.align(
+                view: view,
+                sidebar: idealSidebar,
+                preferredSize: preferredSize,
+                minimumSize: minimumSize
+            )
+        }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
 
-    private static func align(view: NSView, sidebar: CGFloat) {
+    private static func align(
+        view: NSView,
+        sidebar: CGFloat,
+        preferredSize: NSSize,
+        minimumSize: NSSize
+    ) {
         guard let detailWindow = view.window else { return }
+        detailWindow.contentMinSize = minimumSize
         // 找到主窗口（同进程、可见、非 claw-detail 自身）
         let mainWindow = NSApp.windows.first {
             $0 !== detailWindow && $0.isVisible && $0.contentViewController != nil
         }
         guard let main = mainWindow else { return }
-        // 主窗口右侧 detail 区的屏幕坐标：跳过侧栏
-        let origin = NSPoint(
-            x: main.frame.minX + sidebar,
-            y: main.frame.minY
+        let visibleFrame = main.screen?.visibleFrame ?? detailWindow.screen?.visibleFrame ?? main.frame
+
+        // 主窗口右侧 detail 区的屏幕坐标：跳过侧栏；首开时同时钳住默认尺寸，
+        // 避免被内容理想宽度直接撑成过宽窗口。
+        let originX = min(main.frame.minX + sidebar, visibleFrame.maxX - minimumSize.width)
+        let originY = max(main.frame.minY, visibleFrame.minY)
+        let width = min(preferredSize.width, visibleFrame.maxX - originX)
+        let height = min(preferredSize.height, visibleFrame.maxY - originY)
+        let frame = NSRect(
+            x: max(visibleFrame.minX, originX),
+            y: originY,
+            width: max(minimumSize.width, width),
+            height: max(minimumSize.height, height)
         )
-        detailWindow.setFrameOrigin(origin)
+        detailWindow.setFrame(frame, display: true)
     }
 }
 

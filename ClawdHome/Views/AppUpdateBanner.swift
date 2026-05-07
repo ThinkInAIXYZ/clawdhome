@@ -11,30 +11,52 @@ struct AppUpdateBanner: View {
     @State private var showSheet = false
 
     var body: some View {
-        if updater.appNeedsUpdate {
-            Button { showSheet = true } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .foregroundStyle(.orange)
-                        .font(.system(size: 15))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(L10n.k("auto.app_update_banner.new_version_available", fallback: "有新版本"))
-                            .font(.caption)
-                            .fontWeight(.medium)
-                        Text("v\(updater.appLatestVersion ?? "")")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+        if updater.appNeedsUpdate || updater.isAwaitingAppRelaunch {
+            Group {
+                if updater.isAwaitingAppRelaunch {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.orange)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.k("auto.app_update_banner.installing_title", fallback: "安装器已启动"))
+                                .font(.caption)
+                                .fontWeight(.medium)
+                            Text(L10n.k("auto.app_update_banner.installing_subtitle", fallback: "完成安装后会自动重启"))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
                     }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                } else {
+                    Button { showSheet = true } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .foregroundStyle(.orange)
+                                .font(.system(size: 15))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(L10n.k("auto.app_update_banner.new_version_available", fallback: "有新版本"))
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                Text("v\(updater.appLatestVersion ?? "")")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
             }
-            .buttonStyle(.plain)
             .padding(.horizontal, 8)
             .padding(.bottom, 4)
             .sheet(isPresented: $showSheet) {
@@ -98,7 +120,18 @@ struct AppUpdateSheet: View {
             }
 
             // 进度条 / 按钮区
-            if let progress = updater.appUpdateProgress {
+            if updater.isAwaitingAppRelaunch {
+                VStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.orange)
+                    Text(L10n.k("auto.app_update_banner.waiting_for_install", fallback: "安装器已打开。完成安装后，ClawdHome 会自动重新打开。"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.top, 4)
+            } else if let progress = updater.appUpdateProgress {
                 VStack(spacing: 6) {
                     ProgressView(value: progress)
                         .progressViewStyle(.linear)
@@ -167,5 +200,8 @@ struct AppUpdateSheet: View {
         }
         .padding(24)
         .frame(width: 440)
+        .onChange(of: updater.isAwaitingAppRelaunch) { _, waiting in
+            if waiting { dismiss() }
+        }
     }
 }

@@ -2492,6 +2492,70 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             reply(false, "kill(\(pid), \(signal)) 失败: \(msg)")
         }
     }
+
+    // MARK: - 角色定义 Git 管理
+
+    func initPersonaGitRepo(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("[PersonaGit] initRepo user=\(username)", level: .debug)
+        do {
+            try PersonaGitManager.initRepo(username: username)
+            reply(true, nil)
+        } catch {
+            helperLog("[PersonaGit] initRepo error: \(error)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func commitPersonaFile(username: String, filename: String, message: String,
+                           withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("[PersonaGit] commitFile user=\(username) file=\(filename)", level: .debug)
+        do {
+            try PersonaGitManager.commitFile(username: username, filename: filename, message: message)
+            reply(true, nil)
+        } catch {
+            helperLog("[PersonaGit] commitFile error: \(error)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func getPersonaFileHistory(username: String, filename: String,
+                               withReply reply: @escaping (String?, String?) -> Void) {
+        helperLog("[PersonaGit] getHistory user=\(username) file=\(filename)", level: .debug)
+        do {
+            let commits = try PersonaGitManager.getHistory(username: username, filename: filename)
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(commits)
+            reply(String(data: data, encoding: .utf8), nil)
+        } catch {
+            helperLog("[PersonaGit] getHistory error: \(error)", level: .error)
+            reply(nil, error.localizedDescription)
+        }
+    }
+
+    func getPersonaFileDiff(username: String, filename: String, commitHash: String,
+                            withReply reply: @escaping (String?, String?) -> Void) {
+        helperLog("[PersonaGit] getDiff user=\(username) file=\(filename) hash=\(commitHash)", level: .debug)
+        do {
+            let diff = try PersonaGitManager.getDiff(username: username, filename: filename, commitHash: commitHash)
+            reply(diff, nil)
+        } catch {
+            helperLog("[PersonaGit] getDiff error: \(error)", level: .error)
+            reply(nil, error.localizedDescription)
+        }
+    }
+
+    func restorePersonaFileToCommit(username: String, filename: String, commitHash: String,
+                                    withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("[PersonaGit] restoreToCommit user=\(username) file=\(filename) hash=\(commitHash)", level: .debug)
+        do {
+            try PersonaGitManager.restoreToCommit(username: username, filename: filename, commitHash: commitHash)
+            reply(true, nil)
+        } catch {
+            helperLog("[PersonaGit] restoreToCommit error: \(error)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
 }
 
 // MARK: - XPC 监听器

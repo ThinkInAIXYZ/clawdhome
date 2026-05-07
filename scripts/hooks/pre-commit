@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# pre-commit hook — 拦截提交中的硬编码用户家目录绝对路径
+#
+# 安装：make install-hooks
+# 或手动：cp scripts/hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+set -euo pipefail
+
+pattern='/Users/[A-Za-z0-9._-]+/'
+
+staged_text=$(
+  git diff --cached --unified=0 --no-color -- . \
+    | grep -E '^\+[^+]' \
+    | grep -Ev '^\+\+\+' \
+    || true
+)
+
+if [ -z "$staged_text" ]; then
+  exit 0
+fi
+
+matches=$(printf '%s\n' "$staged_text" | grep -nE "$pattern" || true)
+
+if [ -z "$matches" ]; then
+  exit 0
+fi
+
+echo ""
+echo "❌ 检测到 staged 变更里包含硬编码绝对家目录路径："
+echo ""
+printf '%s\n' "$matches"
+echo ""
+echo "请改为以下之一后再提交："
+echo "  - 相对路径"
+echo "  - ~/..."
+echo "  - /Users/<name>/... 这类脱敏示例"
+echo "  - 通过 NSHomeDirectory() / FileManager / 环境变量动态获取"
+echo ""
+exit 1

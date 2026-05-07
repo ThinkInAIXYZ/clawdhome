@@ -517,6 +517,50 @@ import Foundation
 
     /// 读取 Helper DEBUG 日志开关
     func getHelperDebugLogging(withReply reply: @escaping (Bool) -> Void)
+
+    // MARK: - 角色定义 Git 管理
+
+    /// 初始化 workspace git repo（幂等）
+    /// 实现：mkdir -p ~/.openclaw/workspace → git init → git config user.name/email
+    func initPersonaGitRepo(
+        username: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 提交单个角色文件（保存后触发，每次新建 commit）
+    /// message 格式：「更新 <filename> — <ISO8601>」
+    /// 前置条件：调用方须先确认 writeFile 已成功
+    func commitPersonaFile(
+        username: String,
+        filename: String,
+        message: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 获取某文件的 git log（返回 JSON 编码的 [PersonaCommit]，仅该文件的提交历史）
+    func getPersonaFileHistory(
+        username: String,
+        filename: String,
+        withReply reply: @escaping (String?, String?) -> Void
+    )
+
+    /// 获取某 commit 相对于其父 commit 的 diff（unified diff 字符串）
+    /// 初始 commit（无父）使用 git show <hash> -- <filename>
+    func getPersonaFileDiff(
+        username: String,
+        filename: String,
+        commitHash: String,
+        withReply reply: @escaping (String?, String?) -> Void
+    )
+
+    /// 将单文件恢复到指定 commit 的内容，并产生新 commit
+    /// 若当前内容已与目标一致（nothing to commit），视为成功
+    func restorePersonaFileToCommit(
+        username: String,
+        filename: String,
+        commitHash: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
 }
 
 struct XcodeEnvStatus: Codable, Sendable {

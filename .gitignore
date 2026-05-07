@@ -33,3 +33,4 @@ ClawdHomeHelper/GeneratedVersion.swift
 # 本地命名空间切换脚本（不托管）
 scripts/switch-namespace.local.sh
 .githooks/pre-commit
+.gstack/
