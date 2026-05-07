@@ -225,6 +225,8 @@ struct ShrimpInitWizardV2: View {
     @State private var hermesInstallTerminalRunToken = UUID()
     @State private var hermesInstallTerminalControl = LocalTerminalControl()
     @State private var hermesInstallExitCode: Int32?
+    @State private var hermesLogTerminalRunToken = UUID()
+    @State private var hermesLogTerminalControl = LocalTerminalControl()
     @State private var openclawLogTerminalRunToken = UUID()
     @State private var openclawLogTerminalControl = LocalTerminalControl()
     @AppStorage("nodeDistURL") private var nodeDistURL = NodeDistOption.defaultForInitialization.rawValue
@@ -652,6 +654,7 @@ struct ShrimpInitWizardV2: View {
                 .padding(.bottom, 16)
 
                 VStack(alignment: .leading, spacing: 8) {
+                    let showInteractiveHermesTerminal = (isInstallingEnv && hermesEnvInstallingPhase == .installHermes) || hermesInstallExitCode != nil
                     Text(L10n.k("wizard.hermes_env.terminal_title", fallback: "安装终端（可交互）"))
                         .font(.caption)
                         .fontWeight(.medium)
@@ -662,10 +665,20 @@ struct ShrimpInitWizardV2: View {
                             .foregroundStyle(.secondary)
                         Spacer()
                         Button("Ctrl+C") {
-                            hermesInstallTerminalControl.sendInterrupt()
+                            if showInteractiveHermesTerminal {
+                                hermesInstallTerminalControl.sendInterrupt()
+                            } else {
+                                hermesLogTerminalControl.sendInterrupt()
+                            }
                         }
                         .buttonStyle(.borderless)
                         .disabled(!isInstallingEnv)
+                        if isInstallingEnv, !showInteractiveHermesTerminal {
+                            Button(L10n.k("wizard.hermes.reconnect_log", fallback: "重连日志")) {
+                                hermesLogTerminalRunToken = UUID()
+                            }
+                            .buttonStyle(.borderless)
+                        }
                         if let code = hermesInstallExitCode {
                             Text(L10n.f("wizard.hermes_env.exit_code", fallback: "最近退出码: %d", code))
                                 .font(.caption2)
@@ -674,7 +687,7 @@ struct ShrimpInitWizardV2: View {
                     }
                     .padding(.horizontal, 4)
 
-                    if (isInstallingEnv && hermesEnvInstallingPhase == .installHermes) || hermesInstallExitCode != nil {
+                    if showInteractiveHermesTerminal {
                         HelperMaintenanceTerminalPanel(
                             username: user.username,
                             command: hermesInstallTerminalCommand(),
@@ -685,6 +698,16 @@ struct ShrimpInitWizardV2: View {
                             Task { await handleHermesInstallTerminalExit(code) }
                         }
                         .id(hermesInstallTerminalRunToken)
+                    } else if isInstallingEnv {
+                        HelperMaintenanceTerminalPanel(
+                            username: user.username,
+                            command: hermesLogTailCommand(),
+                            minHeight: 260,
+                            onOutput: nil,
+                            control: hermesLogTerminalControl,
+                            onExit: nil
+                        )
+                        .id(hermesLogTerminalRunToken)
                     } else {
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(Color.secondary.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
@@ -1499,6 +1522,15 @@ struct ShrimpInitWizardV2: View {
 
     private func openclawLogTailCommand() -> [String] {
         let logPath = envLogPath(for: .openclaw)
+        let script = """
+            touch "\(logPath)"
+            exec /usr/bin/tail -n +1 -f "\(logPath)"
+            """
+        return ["bash", "-lc", script]
+    }
+
+    private func hermesLogTailCommand() -> [String] {
+        let logPath = envLogPath(for: .hermes)
         let script = """
             touch "\(logPath)"
             exec /usr/bin/tail -n +1 -f "\(logPath)"
