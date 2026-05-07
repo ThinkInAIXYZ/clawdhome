@@ -1,0 +1,104 @@
+name: ClawdHome
+
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    from: "1.0.0"
+
+options:
+  minimumXcodeVersion: "15.0"
+  deploymentTarget:
+    macOS: "14.0"
+  defaultConfig: Debug
+
+configs:
+  Debug: debug
+  Release: release
+
+targets:
+  ClawdHome:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ClawdHome
+      - path: Shared
+    dependencies:
+      - target: ClawdHomeHelper
+        embed: false
+      - framework: OpenDirectory.framework
+        embed: false
+      - sdk: Charts.framework
+        embed: false
+      - package: SwiftTerm
+    postBuildScripts:
+      - name: "Inject Git Build Number"
+        script: |
+          BUILD_NUM=$(git -C "${SRCROOT}" rev-list --count HEAD 2>/dev/null || echo 0)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1.${BUILD_NUM}" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}" 2>/dev/null || true
+        basedOnDependencyAnalysis: false
+      - name: "Embed Helper into App Bundle"
+        script: |
+          DEST="${CODESIGNING_FOLDER_PATH}/Contents/Library/LaunchDaemons"
+          mkdir -p "$DEST"
+          cp "${BUILT_PRODUCTS_DIR}/ClawdHomeHelper" "$DEST/ClawdHomeHelper"
+          chmod +x "$DEST/ClawdHomeHelper"
+          cp "${SRCROOT}/Resources/io.github.deepjerry.clawdhome.mac.helper.plist" "$DEST/"
+        basedOnDependencyAnalysis: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.deepjerry.clawdhome.mac
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        CODE_SIGN_ENTITLEMENTS: ClawdHome/ClawdHome.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: ClawdHome/Info.plist
+      properties:
+        CFBundleName: ClawdHome
+        CFBundleDisplayName: ClawdHome
+        CFBundleShortVersionString: "1.1.174"
+        CFBundleVersion: "174"
+        NSHumanReadableDescription: OpenClaw 家庭管理器
+        LSApplicationCategoryType: public.app-category.utilities
+
+  ClawdHomeHelper:
+    type: tool
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ClawdHomeHelper
+      - path: Shared
+      - path: Shared/ProcessModels.swift
+      - path: ClawdHomeHelper/GeneratedVersion.swift
+        optional: true
+        type: file
+    preBuildScripts:
+      - name: "Generate Helper Version"
+        script: |
+          BUILD_NUM=$(git -C "${SRCROOT}" rev-list --count HEAD 2>/dev/null || echo 0)
+          OUT="${SRCROOT}/ClawdHomeHelper/GeneratedVersion.swift"
+          echo "// Auto-generated — do not edit" > "$OUT"
+          echo "let kHelperVersion = \"1.1.${BUILD_NUM}\"" >> "$OUT"
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - $(SRCROOT)/ClawdHomeHelper/GeneratedVersion.swift
+    dependencies:
+      - framework: SystemConfiguration.framework
+        embed: false
+      - framework: OpenDirectory.framework
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.deepjerry.clawdhome.mac.helper
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        CODE_SIGN_ENTITLEMENTS: ClawdHomeHelper/ClawdHomeHelper.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES

@@ -1,0 +1,60 @@
+// ClawdHome/Views/DaemonSetupBanner.swift
+
+import SwiftUI
+import ServiceManagement
+
+struct DaemonSetupBanner: View {
+    let installer: DaemonInstaller
+    @State private var isInstalling = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("ClawdHome 需要安装系统服务才能管理用户")
+                    .fontWeight(.medium)
+                Text(installer.statusDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let err = errorMessage {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Spacer()
+
+            if installer.status == .requiresApproval {
+                Button("打开系统设置") {
+                    SMAppService.openSystemSettingsLoginItems()
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Button(isInstalling ? "安装中…" : "安装") {
+                    Task { await install() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isInstalling)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.orange.opacity(0.12))
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private func install() async {
+        isInstalling = true
+        errorMessage = nil
+        do {
+            try installer.install()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isInstalling = false
+    }
+}

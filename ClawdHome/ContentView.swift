@@ -1,0 +1,197 @@
+// ClawdHome/ContentView.swift
+
+import SwiftUI
+
+// MARK: - 顶层导航目的地
+enum NavDestination: Hashable {
+    case dashboard
+    case clawPool
+    case network
+    case aiLab
+    case models
+    case audit
+    case backup
+    case settings
+}
+
+struct ContentView: View {
+    @Environment(HelperClient.self) private var helperClient
+    @Environment(ShrimpPool.self)   private var pool
+    @Environment(UpdateChecker.self) private var updater
+    @Environment(AppLockStore.self) private var lockStore
+    @State private var daemonInstaller = DaemonInstaller()
+    @State private var navSelection: NavDestination? = .dashboard
+    var body: some View {
+        VStack(spacing: 0) {
+            // Helper 未连接时显示安装引导横幅
+            if !helperClient.isConnected {
+                DaemonSetupBanner(installer: daemonInstaller)
+            }
+
+            if let err = pool.loadError {
+                Text("加载用户失败：\(err)")
+                    .foregroundStyle(.red)
+                    .font(.caption)
+                    .padding(8)
+            }
+
+            NavigationSplitView {
+                List(selection: $navSelection) {
+                    Section("日常") {
+                        Label("仪表盘", systemImage: "gauge.with.dots.needle.33percent")
+                            .tag(NavDestination.dashboard)
+                        Label { Text("虾塘") } icon: { Text("🦞") }
+                            .tag(NavDestination.clawPool)
+                    }
+                    Section("服务") {
+                        Label { Text("模型") } icon: { Text("🧠") }
+                            .tag(NavDestination.models)
+                        Label("网络", systemImage: "network")
+                            .tag(NavDestination.network)
+                        Label("AI Lab", systemImage: "flask.fill")
+                            .tag(NavDestination.aiLab)
+                    }
+                    Section("系统") {
+                        Label("安全审计", systemImage: "shield.lefthalf.filled")
+                            .tag(NavDestination.audit)
+                        Label("备份", systemImage: "externaldrive.badge.timemachine")
+                            .tag(NavDestination.backup)
+                        Label("设置", systemImage: "gearshape")
+                            .tag(NavDestination.settings)
+                    }
+                }
+                .listStyle(.sidebar)
+                // Keep sidebar scroll content below the title area on macOS.
+                .contentMargins(.top, 12, for: .scrollContent)
+                .navigationTitle("ClawdHome")
+                .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
+                .safeAreaInset(edge: .bottom) {
+                    VStack(spacing: 0) {
+                        // App 自身更新提示横幅
+                        AppUpdateBanner()
+                            .environment(updater)
+                        HStack(spacing: 6) {
+                            Text("内测版")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text("BETA")
+                                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.orange, Color(red: 0.95, green: 0.2, blue: 0.35)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .clipShape(Capsule())
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                    }
+                }
+                .toolbar {
+                    let upgradeCount = updater.upgradableCount(in: pool.users)
+                    if upgradeCount > 0 {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button { navSelection = .clawPool } label: {
+                                Label("可升级 (\(upgradeCount))",
+                                      systemImage: "arrow.up.circle.fill")
+                                    .foregroundStyle(.blue)
+                            }
+                            .help("有 \(upgradeCount) 只虾可升级到 v\(updater.latestVersion ?? "")")
+                        }
+                    }
+                    if lockStore.isEnabled {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button { lockStore.lock() } label: {
+                                Image(systemName: lockStore.isLocked ? "lock.fill" : "lock.open.fill")
+                                    .foregroundStyle(lockStore.isLocked ? .red : .secondary)
+                            }
+                            .help(lockStore.isLocked ? "已锁定" : "点击锁定 App")
+                            .disabled(lockStore.isLocked)
+                        }
+                    }
+                }
+            } detail: {
+                switch navSelection {
+                case .dashboard, nil:
+                    DashboardView()
+                        .environment(helperClient)
+                case .clawPool:
+                    ClawPoolView(onLoadUsers: { pool.loadUsers() })
+                        .environment(helperClient)
+                case .network:
+                    NetworkPolicyView()
+                        .environment(helperClient)
+                case .models:
+                    #if DEBUG
+                    ModelManagerView()
+                    #else
+                    ComingSoonView(title: "模型", icon: "cpu.fill")
+                    #endif
+                case .aiLab:
+                    AILabView()
+                case .audit:
+                    SecurityAuditView()
+                        .environment(helperClient)
+                        .environment(pool)
+                case .backup:
+                    BackupView(users: pool.users)
+                        .environment(helperClient)
+                case .settings:
+                    SettingsView()
+                        .environment(helperClient)
+                }
+            }
+            .frame(minWidth: 960, minHeight: 560)
+        }
+        // 系统屏幕锁定时自动锁定 App
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(
+                for: NSNotification.Name("com.apple.screenIsLocked")
+            )
+        ) { _ in lockStore.lock() }
+        .overlay {
+            if lockStore.isLocked {
+                AppLockScreen()
+                    .environment(lockStore)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: lockStore.isLocked)
+        .onAppear {
+            let visible = (navSelection == .dashboard || navSelection == nil)
+            pool.setDashboardVisible(visible)
+        }
+        .onChange(of: navSelection) { _, newValue in
+            let visible = (newValue == .dashboard || newValue == nil)
+            pool.setDashboardVisible(visible)
+        }
+    }
+
+}
+
+// MARK: - 敬请期待占位视图
+
+struct ComingSoonView: View {
+    let title: String
+    var icon: String = "sparkles"
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.system(size: 48))
+                .foregroundStyle(.tertiary)
+            Text(title)
+                .font(.title2).fontWeight(.medium)
+            Text("敬请期待")
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle(title)
+    }
+}

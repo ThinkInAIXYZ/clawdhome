@@ -1,0 +1,34 @@
+# Xcode 构建产物
+build/
+dist/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/swiftpm/
+
+# Xcode 自动生成
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+
+# 自动生成
+ClawdHomeHelper/GeneratedVersion.swift
+
+# 个人本地 AI 配置（不提交个人设置）
+.claude/settings.local.json
+
+# 本地命名空间切换脚本（不托管）
+scripts/switch-namespace.local.sh

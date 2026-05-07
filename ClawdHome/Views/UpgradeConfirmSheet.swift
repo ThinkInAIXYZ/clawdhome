@@ -1,0 +1,107 @@
+// ClawdHome/Views/UpgradeConfirmSheet.swift
+// 升级确认 Sheet：显示版本信息、Release Notes 链接、备份开关
+
+import SwiftUI
+
+struct UpgradeConfirmSheet: View {
+    let username: String
+    let currentVersion: String?
+    let targetVersion: String
+    let releaseURL: URL?
+    /// 确认回调：(version, shouldBackup)
+    var onConfirm: (_ version: String, _ backup: Bool) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    /// 持久化备份偏好（默认开）
+    @AppStorage("upgradeAutoBackup") private var autoBackup = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // 标题栏
+            HStack {
+                Image(systemName: "arrow.up.circle.fill")
+                    .foregroundStyle(.green)
+                Text("升级 openclaw").font(.headline)
+                Spacer()
+                Button("取消") { dismiss() }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.escape, modifiers: [])
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 16) {
+                // 版本信息
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                    GridRow {
+                        Text("当前版本").foregroundStyle(.secondary)
+                        Text(currentVersion ?? "未知").monospacedDigit()
+                    }
+                    GridRow {
+                        Text("最新版本").foregroundStyle(.secondary)
+                        Text(targetVersion)
+                            .monospacedDigit()
+                            .foregroundStyle(.green)
+                            .fontWeight(.medium)
+                    }
+                    GridRow {
+                        Text("用户").foregroundStyle(.secondary)
+                        Text("@\(username)")
+                    }
+                }
+
+                Divider()
+
+                // 备份开关
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("升级前自动备份配置", isOn: $autoBackup)
+
+                    if autoBackup {
+                        Text("将在 ~/Documents/ClawdHome Backups/ 保存一份备份，升级后可一键回退。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("不备份则无法回退，请确认已手动保存重要配置。")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                Text("升级期间 Gateway 将暂时停止。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            Divider()
+
+            // 底部操作栏
+            HStack {
+                if let url = releaseURL {
+                    Button("查看更新内容") {
+                        NSWorkspace.shared.open(url)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tint)
+                }
+                Spacer()
+                Button("取消") { dismiss() }
+                    .buttonStyle(.bordered)
+                Button("升级") {
+                    let shouldBackup = autoBackup
+                    dismiss()
+                    onConfirm(targetVersion, shouldBackup)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return, modifiers: [])
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .frame(width: 380)
+    }
+}
