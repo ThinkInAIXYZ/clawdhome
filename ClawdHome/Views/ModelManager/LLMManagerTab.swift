@@ -25,7 +25,10 @@ struct LLMManagerTab: View {
                 }
                 Spacer()
                 Button { showAddSheet = true } label: {
-                    Label(L10n.k("views.model_manager.llmmanager_tab.account", fallback: "添加账户"), systemImage: "plus")
+                    Label(
+                        L10n.k("views.model_manager.llmmanager_tab.add_model", fallback: "添加模型"),
+                        systemImage: "plus"
+                    )
                 }
                 .buttonStyle(.bordered)
             }
@@ -37,9 +40,16 @@ struct LLMManagerTab: View {
                     ContentUnavailableView {
                         Label(L10n.k("views.model_manager.llmmanager_tab.configuration", fallback: "尚未配置模型"), systemImage: "cpu")
                     } description: {
-                        Text(L10n.k("models.llm_manager.empty.desc", fallback: "点击「添加账户」，选择 Provider 和模型型号。\n同一 Provider 可添加多个账户（如主账号、备用账号）。"))
+                        Text(
+                            L10n.k(
+                                "models.llm_manager.empty.add_model_desc",
+                                fallback: "点击「添加模型」，选择 Provider 并一次勾选多个模型。"
+                            )
+                        )
                     } actions: {
-                        Button(L10n.k("views.model_manager.llmmanager_tab.account", fallback: "添加账户")) { showAddSheet = true }
+                        Button(
+                            L10n.k("views.model_manager.llmmanager_tab.add_model", fallback: "添加模型")
+                        ) { showAddSheet = true }
                             .buttonStyle(.borderedProminent)
                     }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -101,8 +111,8 @@ struct LLMManagerTab: View {
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(provider.name).font(.subheadline).fontWeight(.semibold)
-                    Text(provider.providerDisplayName)
+                    Text(provider.displayNameWithAlias).font(.subheadline).fontWeight(.semibold)
+                    Text(provider.providerGroupId)
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Text(L10n.f("views.model_manager.llmmanager_tab.text_498748aa", fallback: "· %@ 个型号", String(describing: provider.modelIds.count)))

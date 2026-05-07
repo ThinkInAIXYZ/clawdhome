@@ -447,6 +447,7 @@ struct LocalProcessNSView: NSViewRepresentable {
 
         let npmGlobalBin = "/Users/\(username)/.npm-global/bin"
         let npmGlobalDir = "/Users/\(username)/.npm-global"
+        let npmSharedCache = "/var/lib/clawdhome/cache/npm"
         let userBrewBin = "/Users/\(username)/.brew/bin"
         let pathEnv  = "\(npmGlobalBin):\(userBrewBin):/usr/bin:/bin"
         let openclawPath = "\(npmGlobalBin)/openclaw"
@@ -462,6 +463,8 @@ struct LocalProcessNSView: NSViewRepresentable {
                            "PATH=\(pathEnv)",
                            "NPM_CONFIG_PREFIX=\(npmGlobalDir)",
                            "npm_config_prefix=\(npmGlobalDir)",
+                           "NPM_CONFIG_CACHE=\(npmSharedCache)",
+                           "npm_config_cache=\(npmSharedCache)",
                            "TERM=xterm-256color",
                            command] + commandArgs
 
