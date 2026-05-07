@@ -300,6 +300,7 @@ struct UserDetailView: View {
     @State private var isDetailSidebarCollapsed = false
     @State private var isOverviewSidebarCollapsed = false
     @State private var hasOpenedStandaloneInitWindow = false
+    @State private var detailAutoRefreshActive = false
     @StateObject private var embeddedOverviewConsoleStore = EmbeddedGatewayConsoleStore()
     private var shouldPinWindowTopmost: Bool {
         !user.isAdmin
@@ -324,6 +325,8 @@ struct UserDetailView: View {
         .background(UserDetailWindowLevelBinder(elevated: shouldPinWindowTopmost))
         .onAppear {
             descriptionDraft = user.profileDescription
+            pool.addLiveSnapshotConsumer()
+            detailAutoRefreshActive = true
             if pool.consumeNeedsOnboarding(username: user.username) {
                 forceOnboardingAtEntry = true
                 versionChecked = false
@@ -344,6 +347,8 @@ struct UserDetailView: View {
             gatewayURL = nil
         }
         .onDisappear {
+            detailAutoRefreshActive = false
+            pool.removeLiveSnapshotConsumer()
             gatewayURLTokenPollTask?.cancel()
             gatewayURLTokenPollTask = nil
         }
@@ -516,6 +521,14 @@ struct UserDetailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task { await refreshStatus() }
+        .task(id: detailAutoRefreshActive) {
+            guard detailAutoRefreshActive else { return }
+            while detailAutoRefreshActive, !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard detailAutoRefreshActive, !Task.isCancelled else { break }
+                await refreshStatus()
+            }
+        }
         .onChange(of: helperClient.isConnected) { _, connected in
             if connected {
                 Task { await refreshStatus() }
@@ -921,8 +934,7 @@ struct UserDetailView: View {
                         .font(.system(size: 14, weight: .semibold, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    if !user.isAdmin,
-                       updater.needsUpdate(user.openclawVersion),
+                    if updater.needsUpdate(user.openclawVersion),
                        let latest = updater.latestVersion {
                         Button(L10n.k("user.detail.version.update_badge", fallback: "有新版本")) {
                             pendingUpgradeVersion = latest
@@ -1038,25 +1050,25 @@ struct UserDetailView: View {
                         Label(L10n.k("views.user_detail_view.os_user_password", fallback: "获取 OS 用户密码"), systemImage: "key")
                     }
 
-                    if !user.isAdmin {
-                        Divider()
+                    Divider()
 
-                        if updater.needsUpdate(user.openclawVersion),
-                           let latest = updater.latestVersion {
-                            Button {
-                                pendingUpgradeVersion = latest
-                                showUpgradeConfirm = true
-                            } label: {
-                                Label(
-                                    L10n.f("user.detail.openclaw.upgrade_to", fallback: "Upgrade openclaw (v%@)", latest),
-                                    systemImage: "arrow.up.circle"
-                                )
-                            }
-                            .disabled(isInstalling || isRollingBack || !helperClient.isConnected)
-
-                            Divider()
+                    if updater.needsUpdate(user.openclawVersion),
+                       let latest = updater.latestVersion {
+                        Button {
+                            pendingUpgradeVersion = latest
+                            showUpgradeConfirm = true
+                        } label: {
+                            Label(
+                                L10n.f("user.detail.openclaw.upgrade_to", fallback: "Upgrade openclaw (v%@)", latest),
+                                systemImage: "arrow.up.circle"
+                            )
                         }
+                        .disabled(isInstalling || isRollingBack || !helperClient.isConnected)
 
+                        Divider()
+                    }
+
+                    if !user.isAdmin {
                         Button {
                             showLogoutConfirm = true
                         } label: {
@@ -1561,8 +1573,7 @@ struct UserDetailView: View {
                     Text(isRollingBack ? L10n.k("user.detail.auto.rollback", fallback: "回退中…") : L10n.k("user.detail.auto.upgrade", fallback: "升级中…"))
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
-                    if !user.isAdmin,
-                       updater.needsUpdate(user.openclawVersion),
+                    if updater.needsUpdate(user.openclawVersion),
                        let latest = updater.latestVersion {
                         Button("↑v\(latest)") {
                             pendingUpgradeVersion = latest
@@ -1572,7 +1583,7 @@ struct UserDetailView: View {
                         .controlSize(.mini)
                         .disabled(!helperClient.isConnected)
                     }
-                    if !user.isAdmin, preUpgradeVersion != nil {
+                    if preUpgradeVersion != nil {
                         Button(L10n.k("user.detail.auto.rollback", fallback: "↩回退")) { showRollbackConfirm = true }
                             .buttonStyle(.bordered)
                             .controlSize(.mini)
@@ -1986,25 +1997,25 @@ struct UserDetailView: View {
                             Label(L10n.k("views.user_detail_view.os_user_password", fallback: "获取 OS 用户密码"), systemImage: "key")
                         }
 
-                        if !user.isAdmin {
-                            Divider()
+                        Divider()
 
-                            if updater.needsUpdate(user.openclawVersion),
-                               let latest = updater.latestVersion {
-                                Button {
-                                    pendingUpgradeVersion = latest
-                                    showUpgradeConfirm = true
-                                } label: {
-                                    Label(
-                                        L10n.f("user.detail.openclaw.upgrade_to", fallback: "Upgrade openclaw (v%@)", latest),
-                                        systemImage: "arrow.up.circle"
-                                    )
-                                }
-                                .disabled(isInstalling || isRollingBack || !helperClient.isConnected)
-
-                                Divider()
+                        if updater.needsUpdate(user.openclawVersion),
+                           let latest = updater.latestVersion {
+                            Button {
+                                pendingUpgradeVersion = latest
+                                showUpgradeConfirm = true
+                            } label: {
+                                Label(
+                                    L10n.f("user.detail.openclaw.upgrade_to", fallback: "Upgrade openclaw (v%@)", latest),
+                                    systemImage: "arrow.up.circle"
+                                )
                             }
+                            .disabled(isInstalling || isRollingBack || !helperClient.isConnected)
 
+                            Divider()
+                        }
+
+                        if !user.isAdmin {
                             Button {
                                 showLogoutConfirm = true
                             } label: {
@@ -4827,7 +4838,7 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         case .minimax: return "MiniMax"
         case .qiniu: return "Qiniu AI"
         case .zai: return "智谱 Z.AI"
-        case .custom: return "Custom"
+        case .custom: return "自定义"
         }
     }
 
@@ -4837,7 +4848,7 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         case .minimax: return "MiniMax API Key"
         case .qiniu: return "Qiniu API Key"
         case .zai: return "智谱 API Key"
-        case .custom: return "Custom API Key"
+        case .custom: return "自定义 API Key"
         }
     }
 
@@ -4929,24 +4940,6 @@ private enum DirectCustomCompatibility: String, CaseIterable, Identifiable {
         switch self {
         case .openai: return "openai-completions"
         case .anthropic: return "anthropic-messages"
-        }
-    }
-}
-
-private enum DirectCustomModelPreset: String, CaseIterable, Identifiable {
-    case gpt41 = "gpt-4.1"
-    case claude37sonnet = "claude-3-7-sonnet"
-    case qwenMax = "qwen-max"
-    case custom = "__custom__"
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .gpt41: return "GPT-4.1"
-        case .claude37sonnet: return "Claude 3.7 Sonnet"
-        case .qwenMax: return "Qwen Max"
-        case .custom: return "自定义模型 ID"
         }
     }
 }
@@ -5092,6 +5085,7 @@ private struct KimiMinimaxModelConfigPanel: View {
 
     @State private var isLoading = true
     @State private var isSaving = false
+    @State private var isRestartingGateway = false
     @State private var selectedProvider: DirectProviderChoice = .qiniu
     @State private var selectedKimiModel: DirectKimiModel = .k2p5
     @State private var selectedMinimaxModel: DirectMinimaxModel = .m27
@@ -5100,8 +5094,11 @@ private struct KimiMinimaxModelConfigPanel: View {
     @State private var customProviderId = ""
     @State private var customBaseURL = "https://api.example.com/v1"
     @State private var customCompatibility: DirectCustomCompatibility = .openai
-    @State private var selectedCustomModelPreset: DirectCustomModelPreset = .gpt41
-    @State private var customModelId = ""
+    @State private var customModelId = "gpt-4.1"
+    @State private var customModelSuggestions: [String] = []
+    @State private var isFetchingCustomModels = false
+    @State private var customModelFetchMessage: String? = nil
+    @State private var customModelFetchError: String? = nil
     @State private var providerKeys: [String: String] = [:]
     @State private var isShowingApiKey = false
     @State private var saveMessage: String? = nil
@@ -5135,7 +5132,7 @@ private struct KimiMinimaxModelConfigPanel: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if selectedProvider == .custom {
             let baseURL = customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            return !apiKey.isEmpty && !baseURL.isEmpty && !effectiveCustomModelId.isEmpty
+            return !baseURL.isEmpty && !effectiveCustomModelId.isEmpty
         }
         return !apiKey.isEmpty
     }
@@ -5146,12 +5143,7 @@ private struct KimiMinimaxModelConfigPanel: View {
     }
 
     private var effectiveCustomModelId: String {
-        switch selectedCustomModelPreset {
-        case .custom:
-            return customModelId.trimmingCharacters(in: .whitespacesAndNewlines)
-        default:
-            return selectedCustomModelPreset.rawValue
-        }
+        customModelId.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
@@ -5209,64 +5201,66 @@ private struct KimiMinimaxModelConfigPanel: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                 } else {
-                    Picker("Provider", selection: $selectedProvider) {
+                    Picker(L10n.k("views.user_detail_view.provider", fallback: "模型提供商"), selection: $selectedProvider) {
                         ForEach(DirectProviderChoice.allCases) { provider in
                             Text(provider.title).tag(provider)
                         }
                     }
                     .pickerStyle(.segmented)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            Text(selectedProvider.apiKeyLabel)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            Spacer()
-                            if let promotionTitle = selectedProvider.promotionTitle,
-                               let promotionURL = selectedProvider.promotionURL {
-                                Button {
-                                    if let url = URL(string: promotionURL) {
-                                        NSWorkspace.shared.open(url)
+                    if selectedProvider != .custom {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 6) {
+                                Text(selectedProvider.apiKeyLabel)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                Spacer()
+                                if let promotionTitle = selectedProvider.promotionTitle,
+                                   let promotionURL = selectedProvider.promotionURL {
+                                    Button {
+                                        if let url = URL(string: promotionURL) {
+                                            NSWorkspace.shared.open(url)
+                                        }
+                                    } label: {
+                                        Label(promotionTitle, systemImage: "gift")
+                                            .font(.caption)
                                     }
-                                } label: {
-                                    Label(promotionTitle, systemImage: "gift")
-                                        .font(.caption)
+                                    .buttonStyle(.borderless)
+                                    .foregroundStyle(Color.accentColor)
                                 }
-                                .buttonStyle(.borderless)
-                                .foregroundStyle(Color.accentColor)
-                            }
-                            if let consoleURL = selectedProvider.consoleURL,
-                               let consoleTitle = selectedProvider.consoleTitle {
-                                Button {
-                                    if let url = URL(string: consoleURL) {
-                                        NSWorkspace.shared.open(url)
+                                if let consoleURL = selectedProvider.consoleURL,
+                                   let consoleTitle = selectedProvider.consoleTitle {
+                                    Button {
+                                        if let url = URL(string: consoleURL) {
+                                            NSWorkspace.shared.open(url)
+                                        }
+                                    } label: {
+                                        Label(consoleTitle, systemImage: "arrow.up.right.square")
+                                            .font(.caption)
                                     }
+                                    .buttonStyle(.borderless)
+                                    .foregroundStyle(Color.accentColor)
+                                }
+                            }
+
+                            HStack(spacing: 8) {
+                                Group {
+                                    if isShowingApiKey {
+                                        TextField(selectedProvider.apiKeyPlaceholder, text: apiKeyBinding)
+                                    } else {
+                                        SecureField(selectedProvider.apiKeyPlaceholder, text: apiKeyBinding)
+                                    }
+                                }
+                                .textFieldStyle(.roundedBorder)
+
+                                Button {
+                                    isShowingApiKey.toggle()
                                 } label: {
-                                    Label(consoleTitle, systemImage: "arrow.up.right.square")
-                                        .font(.caption)
+                                    Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
                                 }
-                                .buttonStyle(.borderless)
-                                .foregroundStyle(Color.accentColor)
+                                .buttonStyle(.bordered)
+                                .help(isShowingApiKey ? L10n.k("user.detail.auto.hide", fallback: "隐藏") : L10n.k("user.detail.auto.show", fallback: "显示"))
                             }
-                        }
-
-                        HStack(spacing: 8) {
-                            Group {
-                                if isShowingApiKey {
-                                    TextField(selectedProvider.apiKeyPlaceholder, text: apiKeyBinding)
-                                } else {
-                                    SecureField(selectedProvider.apiKeyPlaceholder, text: apiKeyBinding)
-                                }
-                            }
-                            .textFieldStyle(.roundedBorder)
-
-                            Button {
-                                isShowingApiKey.toggle()
-                            } label: {
-                                Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
-                            }
-                            .buttonStyle(.bordered)
-                            .help(isShowingApiKey ? L10n.k("user.detail.auto.hide", fallback: "隐藏") : L10n.k("user.detail.auto.show", fallback: "显示"))
                         }
                     }
 
@@ -5330,10 +5324,7 @@ private struct KimiMinimaxModelConfigPanel: View {
                     } else if selectedProvider == .custom {
                         VStack(alignment: .leading, spacing: 10) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(L10n.k("views.user_detail_view.custom_api_compatibility", fallback: "API 兼容（默认 OpenAI）"))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Picker("custom-compatibility", selection: $customCompatibility) {
+                                Picker(L10n.k("views.user_detail_view.custom_compatibility_picker", fallback: "兼容类型"), selection: $customCompatibility) {
                                     ForEach(DirectCustomCompatibility.allCases) { item in
                                         Text(item.title).tag(item)
                                     }
@@ -5341,36 +5332,82 @@ private struct KimiMinimaxModelConfigPanel: View {
                                 .pickerStyle(.segmented)
                             }
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Base URL")
+                                Text(L10n.k("views.user_detail_view.base_url", fallback: "Base URL"))
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.primary)
                                 TextField("https://api.example.com/v1", text: $customBaseURL)
                                     .textFieldStyle(.roundedBorder)
                                     .font(.system(.body, design: .monospaced))
                             }
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(L10n.k("views.user_detail_view.custom_provider_id_optional", fallback: "Provider ID（可选，默认 custom）"))
+                                Text(selectedProvider.apiKeyLabel)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                TextField("custom", text: $customProviderId)
+                                    .foregroundStyle(.primary)
+                                HStack(spacing: 8) {
+                                    Group {
+                                        if isShowingApiKey {
+                                            TextField(selectedProvider.apiKeyPlaceholder, text: apiKeyBinding)
+                                        } else {
+                                            SecureField(selectedProvider.apiKeyPlaceholder, text: apiKeyBinding)
+                                        }
+                                    }
                                     .textFieldStyle(.roundedBorder)
-                                    .font(.system(.body, design: .monospaced))
+
+                                    Button {
+                                        isShowingApiKey.toggle()
+                                    } label: {
+                                        Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .help(isShowingApiKey ? L10n.k("user.detail.auto.hide", fallback: "隐藏") : L10n.k("user.detail.auto.show", fallback: "显示"))
+                                }
                             }
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(L10n.k("views.user_detail_view.custom_model", fallback: "模型"))
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                Picker("custom-model", selection: $selectedCustomModelPreset) {
-                                    ForEach(DirectCustomModelPreset.allCases) { model in
-                                        Text(model.title).tag(model)
+                                    .font(.caption)
+                                    .foregroundStyle(.primary)
+                                TextField(
+                                    L10n.k("views.user_detail_view.custom_model_id_placeholder", fallback: "输入模型 ID（例如 gpt-4.1 / claude-3-7-sonnet）"),
+                                    text: $customModelId
+                                )
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.body, design: .monospaced))
+                                HStack(spacing: 8) {
+                                    Button(isFetchingCustomModels ? "拉取中…" : "从 API 拉取列表") {
+                                        Task { await fetchCustomModels() }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    .disabled(isFetchingCustomModels || customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                                    if !customModelSuggestions.isEmpty {
+                                        Picker(L10n.k("views.user_detail_view.suggested_models", fallback: "可选模型"), selection: $customModelId) {
+                                            ForEach(customModelSuggestions, id: \.self) { item in
+                                                Text(item).tag(item)
+                                            }
+                                        }
+                                        .pickerStyle(.menu)
+                                        .controlSize(.small)
                                     }
                                 }
-                                .pickerStyle(.menu)
-                                if selectedCustomModelPreset == .custom {
-                                    TextField(L10n.k("views.user_detail_view.custom_model_id_placeholder", fallback: "输入模型 ID（例如 gpt-4.1 / claude-3-7-sonnet）"), text: $customModelId)
-                                        .textFieldStyle(.roundedBorder)
-                                        .font(.system(.body, design: .monospaced))
+                                if let customModelFetchMessage {
+                                    Text(customModelFetchMessage)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
                                 }
+                                if let customModelFetchError {
+                                    Text(customModelFetchError)
+                                        .font(.caption2)
+                                        .foregroundStyle(.red)
+                                }
+                            }
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L10n.k("views.user_detail_view.custom_provider_id_optional", fallback: "Provider ID（可选，默认 custom）"))
+                                    .font(.caption)
+                                    .foregroundStyle(.primary)
+                                TextField("custom", text: $customProviderId)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(.body, design: .monospaced))
                             }
                             Text("\(effectiveCustomProviderId)/\(effectiveCustomModelId)")
                                 .font(.system(.caption2, design: .monospaced))
@@ -5390,6 +5427,12 @@ private struct KimiMinimaxModelConfigPanel: View {
                             .foregroundStyle(.red)
                     }
 
+                    if isRestartingGateway {
+                        Label("正在重启 Gateway，配置将在重启后生效…", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     HStack {
                         Button(L10n.k("user.detail.auto.reload", fallback: "重新读取")) {
                             Task { await loadCurrentState() }
@@ -5399,7 +5442,13 @@ private struct KimiMinimaxModelConfigPanel: View {
 
                         Spacer()
 
-                        Button(isSaving ? L10n.k("user.detail.auto.save", fallback: "保存中…") : L10n.k("user.detail.auto.save", fallback: "保存并应用")) {
+                        Button(
+                            isRestartingGateway
+                                ? L10n.k("views.user_detail_view.restarting_gateway", fallback: "重启中…")
+                                : (isSaving
+                                    ? L10n.k("user.detail.auto.save", fallback: "保存中…")
+                                    : L10n.k("user.detail.auto.save", fallback: "保存并应用"))
+                        ) {
                             Task { await applyConfig() }
                         }
                         .buttonStyle(.borderedProminent)
@@ -5485,14 +5534,7 @@ private struct KimiMinimaxModelConfigPanel: View {
                 let parts = primary.split(separator: "/", maxSplits: 1).map(String.init)
                 if parts.count == 2 {
                     customProviderId = parts[0]
-                    let modelId = parts[1]
-                    if let preset = DirectCustomModelPreset.allCases.first(where: { $0 != .custom && $0.rawValue == modelId }) {
-                        selectedCustomModelPreset = preset
-                        customModelId = ""
-                    } else {
-                        selectedCustomModelPreset = .custom
-                        customModelId = modelId
-                    }
+                    customModelId = parts[1]
                 }
             }
         }
@@ -5529,13 +5571,17 @@ private struct KimiMinimaxModelConfigPanel: View {
     private func applyConfig() async {
         let apiKey = (providerKeys[selectedProvider.rawValue] ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !apiKey.isEmpty else {
+        guard selectedProvider == .custom || !apiKey.isEmpty else {
             saveError = L10n.k("user.detail.auto.input_api_key", fallback: "请先输入 API Key")
             return
         }
 
         isSaving = true
-        defer { isSaving = false }
+        isRestartingGateway = false
+        defer {
+            isSaving = false
+            isRestartingGateway = false
+        }
         saveMessage = nil
         saveError = nil
 
@@ -5552,6 +5598,7 @@ private struct KimiMinimaxModelConfigPanel: View {
             case .custom:
                 try await applyCustomConfig(apiKey: apiKey)
             }
+            isRestartingGateway = true
             gatewayHub.markPendingStart(username: user.username)
             try await helperClient.restartGateway(username: user.username)
             saveMessage = L10n.k("user.detail.auto.configuration", fallback: "配置已应用")
@@ -5756,6 +5803,7 @@ private struct KimiMinimaxModelConfigPanel: View {
         let providerId = effectiveCustomProviderId
         let modelId = effectiveCustomModelId
         let baseURL = customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedAPIKey = CustomModelConfigUtils.resolvedAPIKey(apiKey)
 
         guard !modelId.isEmpty else {
             throw HelperError.operationFailed("请先选择模型")
@@ -5777,7 +5825,7 @@ private struct KimiMinimaxModelConfigPanel: View {
             path: "models.providers.\(providerId)",
             value: [
                 "baseUrl": baseURL,
-                "apiKey": apiKey,
+                "apiKey": resolvedAPIKey,
                 "api": customCompatibility.apiType,
                 "models": [[
                     "id": modelId,
@@ -5803,6 +5851,39 @@ private struct KimiMinimaxModelConfigPanel: View {
             path: "agents.defaults.models",
             value: aliasMap
         )
+    }
+
+    private func fetchCustomModels() async {
+        let baseURL = customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !baseURL.isEmpty else {
+            customModelFetchError = "请先填写 Base URL"
+            customModelFetchMessage = nil
+            return
+        }
+
+        isFetchingCustomModels = true
+        customModelFetchError = nil
+        customModelFetchMessage = nil
+        defer { isFetchingCustomModels = false }
+
+        do {
+            let apiKey = (providerKeys[DirectProviderChoice.custom.rawValue] ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let ids = try await CustomModelConfigUtils.fetchModelIDs(baseURL: baseURL, apiKey: apiKey)
+            if ids.isEmpty {
+                customModelSuggestions = []
+                customModelFetchMessage = "已请求成功，但未解析到可用模型 ID（该接口可能不支持标准 list）"
+                return
+            }
+
+            customModelSuggestions = ids
+            if effectiveCustomModelId.isEmpty, let first = ids.first {
+                customModelId = first
+            }
+            customModelFetchMessage = "已拉取 \(ids.count) 个模型"
+        } catch {
+            customModelFetchError = error.localizedDescription
+        }
     }
 
     private func syncMinimaxAgentFiles(apiKey: String, providerModels: [[String: Any]]) async throws {

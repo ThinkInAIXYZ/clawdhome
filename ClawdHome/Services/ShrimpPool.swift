@@ -41,6 +41,8 @@ final class ShrimpPool {
     private var statusPollTask: Task<Void, Never>? = nil
     /// 仅在仪表盘可见时发布快照变更；不可见时继续采集但缓存历史，避免 UI 持续重绘
     private var dashboardVisible: Bool = true
+    /// 其他页面（如 UserDetail）需要实时快照时，通过引用计数申请发布。
+    private var liveSnapshotConsumers: Int = 0
     private var hiddenMachineBuffer: [MachineStats] = []
     private var hiddenNetBuffer: [(inBps: Double, outBps: Double)] = []
     private var hiddenLatestSnapshot: DashboardSnapshot? = nil
@@ -176,13 +178,29 @@ final class ShrimpPool {
         guard dashboardVisible != visible else { return }
         dashboardVisible = visible
 
-        guard visible, let latest = hiddenLatestSnapshot else { return }
+        guard shouldPublishSnapshots, let latest = hiddenLatestSnapshot else { return }
         // hiddenLatest 会在 applySnapshot 时补一帧，这里先去掉重复尾点
         if !hiddenMachineBuffer.isEmpty { _ = hiddenMachineBuffer.removeLast() }
         if !hiddenNetBuffer.isEmpty { _ = hiddenNetBuffer.removeLast() }
         flushHiddenHistory()
         applySnapshot(latest)
         hiddenLatestSnapshot = nil
+    }
+
+    /// 详情页等非 Dashboard 页面可申请实时快照发布，避免“看起来不刷新”。
+    func addLiveSnapshotConsumer() {
+        liveSnapshotConsumers += 1
+        if shouldPublishSnapshots, let latest = hiddenLatestSnapshot {
+            if !hiddenMachineBuffer.isEmpty { _ = hiddenMachineBuffer.removeLast() }
+            if !hiddenNetBuffer.isEmpty { _ = hiddenNetBuffer.removeLast() }
+            flushHiddenHistory()
+            applySnapshot(latest)
+            hiddenLatestSnapshot = nil
+        }
+    }
+
+    func removeLiveSnapshotConsumer() {
+        liveSnapshotConsumers = max(0, liveSnapshotConsumers - 1)
     }
 
     // MARK: - 快速轮询（1 秒）：资源占用 + 机器指标
@@ -201,7 +219,7 @@ final class ShrimpPool {
         guard helperClient.isConnected else { return }
         guard let s = await helperClient.getDashboardSnapshot() else { return }
 
-        if dashboardVisible {
+        if shouldPublishSnapshots {
             flushHiddenHistory()
             applySnapshot(s)
             hiddenLatestSnapshot = nil
@@ -209,6 +227,10 @@ final class ShrimpPool {
             hiddenLatestSnapshot = s
             bufferHiddenHistory(machine: s.machine, shrimps: s.shrimps)
         }
+    }
+
+    private var shouldPublishSnapshots: Bool {
+        dashboardVisible || liveSnapshotConsumers > 0
     }
 
     private func applySnapshot(_ s: DashboardSnapshot) {
