@@ -82,7 +82,7 @@ export async function autoIngest(
   )
 
   if (useActivityStore.getState().items.find((i) => i.id === activityId)?.status === "error") {
-    return []
+    throw new Error(useActivityStore.getState().items.find((i) => i.id === activityId)?.detail ?? "Analysis failed")
   }
 
   // ── Step 2: Generation ────────────────────────────────────────
@@ -121,7 +121,7 @@ export async function autoIngest(
   )
 
   if (useActivityStore.getState().items.find((i) => i.id === activityId)?.status === "error") {
-    return []
+    throw new Error(useActivityStore.getState().items.find((i) => i.id === activityId)?.detail ?? "Generation failed")
   }
 
   // ── Step 3: Write files ───────────────────────────────────────

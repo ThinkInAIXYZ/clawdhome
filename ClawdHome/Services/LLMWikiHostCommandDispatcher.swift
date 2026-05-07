@@ -144,15 +144,19 @@ private enum HostLLMBridge {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         switch config.provider {
-        case "openai", "custom":
+        case "openai", "custom", "minimax":
             if !config.apiKey.isEmpty {
                 request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
             }
-            request.httpBody = try JSONSerialization.data(withJSONObject: [
+            var body: [String: Any] = [
                 "model": config.model,
                 "messages": messages,
                 "stream": false,
-            ])
+            ]
+            if config.provider == "minimax" {
+                body["temperature"] = 1.0
+            }
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
             let (data, response) = try await URLSession.shared.data(for: request)
             try validate(response: response, data: data)
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -161,12 +165,8 @@ private enum HostLLMBridge {
             let content = message?["content"] as? String
             return content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-        case "anthropic", "minimax":
+        case "anthropic":
             request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
-            if config.provider == "minimax", !config.apiKey.isEmpty {
-                request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
-                request.setValue(nil, forHTTPHeaderField: "x-api-key")
-            }
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
             request.setValue("true", forHTTPHeaderField: "anthropic-dangerous-direct-browser-access")
             let system = messages.filter { $0["role"] == "system" }.map { $0["content"] ?? "" }.joined(separator: "\n")
@@ -240,7 +240,7 @@ private enum HostLLMBridge {
         case "ollama":
             return try url(from: openAIEndpoint(base: config.ollamaUrl))
         case "minimax":
-            return try url(from: anthropicEndpoint(base: "https://api.minimaxi.com/anthropic"))
+            return URL(string: "https://api.minimax.io/v1/chat/completions")!
         case "custom":
             return try url(from: openAIEndpoint(base: config.customEndpoint))
         default:
