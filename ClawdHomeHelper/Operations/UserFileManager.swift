@@ -6,6 +6,7 @@ import Foundation
 enum UserFileError: LocalizedError {
     case pathTraversal
     case fileTooLarge
+    case notFound
     case notAFile
     case notADirectory
 
@@ -13,6 +14,7 @@ enum UserFileError: LocalizedError {
         switch self {
         case .pathTraversal:  return "路径超出用户目录范围"
         case .fileTooLarge:   return "文件超过 10MB 限制"
+        case .notFound:       return "No such file or directory"
         case .notAFile:       return "目标不是文件"
         case .notADirectory:  return "目标不是目录"
         }
@@ -94,8 +96,10 @@ struct UserFileManager {
     static func readFile(username: String, relativePath: String) throws -> Data {
         let url = try resolvedPath(username: username, relativePath: relativePath)
         var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
-              !isDir.boolValue else { throw UserFileError.notAFile }
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else {
+            throw UserFileError.notFound
+        }
+        guard !isDir.boolValue else { throw UserFileError.notAFile }
         // 大小检查
         let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
         let size = attrs[.size] as? Int ?? 0
@@ -107,8 +111,10 @@ struct UserFileManager {
     static func readFileTail(username: String, relativePath: String, maxBytes: Int) throws -> Data {
         let url = try resolvedPath(username: username, relativePath: relativePath)
         var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
-              !isDir.boolValue else { throw UserFileError.notAFile }
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else {
+            throw UserFileError.notFound
+        }
+        guard !isDir.boolValue else { throw UserFileError.notAFile }
 
         let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
         let size = attrs[.size] as? Int ?? 0
