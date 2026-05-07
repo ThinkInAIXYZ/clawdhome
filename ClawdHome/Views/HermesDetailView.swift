@@ -85,6 +85,9 @@ struct HermesDetailView: View {
     @State private var showAddManualLoginSite = false
     @State private var manualLoginSiteName = ""
     @State private var manualLoginSiteURL = ""
+    @State private var promptMemoryCurrentInput = ""
+    @State private var promptMemoryRequestedQuery: String?
+    @State private var promptMemoryMenuToken = 0
     @AppStorage("browser.manualLogin.customSites") private var manualLoginCustomSitesRaw = "[]"
 
     private var showMultiAgentEntrypoints: Bool {
@@ -130,6 +133,20 @@ struct HermesDetailView: View {
 
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 6) {
+                    Button {
+                        promptMemoryMenuToken += 1
+                    } label: {
+                        Image(systemName: "text.bubble.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: 34, height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                    .fill(Color(nsColor: .controlBackgroundColor))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Prompt 和随手记")
+
                     if mode == .profiles && showMultiAgentEntrypoints {
                         Button {
                             showNewProfilePopover = true
@@ -217,6 +234,17 @@ struct HermesDetailView: View {
                 }
             }
             .padding(.top, 44)
+
+            PromptMemoryOverlay(
+                username: user.username,
+                currentInput: promptMemoryCurrentInput,
+                requestedQuery: promptMemoryRequestedQuery,
+                requestedMenuToken: promptMemoryMenuToken,
+                onConsumeRequest: { promptMemoryRequestedQuery = nil },
+                onInsert: { text, mode in
+                    insertPromptTextIntoActiveHermesTerminal(text, mode: mode)
+                }
+            )
         }
         .padding(20)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -312,12 +340,24 @@ struct HermesDetailView: View {
     }
 
     private var configBody: some View {
-        HermesTerminalConsole(username: user.username, tabManager: configTabManager, isActive: mode == .config)
+        HermesTerminalConsole(
+            username: user.username,
+            tabManager: configTabManager,
+            isActive: mode == .config,
+            onPromptInputChanged: updatePromptMemoryInput,
+            onPromptMemoryRequest: openPromptMemory
+        )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var shellBody: some View {
-        HermesTerminalConsole(username: user.username, tabManager: shellTabManager, isActive: mode == .terminal)
+        HermesTerminalConsole(
+            username: user.username,
+            tabManager: shellTabManager,
+            isActive: mode == .terminal,
+            onPromptInputChanged: updatePromptMemoryInput,
+            onPromptMemoryRequest: openPromptMemory
+        )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -498,7 +538,9 @@ struct HermesDetailView: View {
                             theme: .black,
                             minHeight: 520,
                             tabTitle: tab.title,
-                            isActive: isActive
+                            isActive: isActive,
+                            onPromptInputChanged: updatePromptMemoryInput,
+                            onPromptMemoryRequest: openPromptMemory
                         )
                         .opacity(isActive ? 1 : 0)
                         .allowsHitTesting(isActive)
@@ -826,6 +868,35 @@ struct HermesDetailView: View {
         return filtered.isEmpty ? chatTabManager.tabs : filtered
     }
 
+    private func updatePromptMemoryInput(_ input: String) {
+        guard promptMemoryCurrentInput != input else { return }
+        promptMemoryCurrentInput = input
+    }
+
+    private func openPromptMemory(_ input: String) {
+        promptMemoryCurrentInput = input
+        promptMemoryRequestedQuery = input
+    }
+
+    private func insertPromptTextIntoActiveHermesTerminal(_ text: String, mode: PromptInsertionMode) {
+        switch self.mode {
+        case .chat:
+            chatTabManager.selectedTab?.session.insertPromptText(text, mode: mode)
+        case .config:
+            configTabManager.selectedTab?.session.insertPromptText(text, mode: mode)
+        case .terminal:
+            shellTabManager.selectedTab?.session.insertPromptText(text, mode: mode)
+        case .profiles, .browser, .files, .processes, .logs:
+            if let session = chatTabManager.selectedTab?.session {
+                session.insertPromptText(text, mode: mode)
+            } else if let session = configTabManager.selectedTab?.session {
+                session.insertPromptText(text, mode: mode)
+            } else {
+                shellTabManager.selectedTab?.session.insertPromptText(text, mode: mode)
+            }
+        }
+    }
+
     private func profileAccentColor(index: Int) -> SwiftUI.Color {
         let palette: [SwiftUI.Color] = [.blue, .teal, .green, .orange, .pink, .indigo, .mint, .red]
         return palette[max(0, index) % palette.count]
@@ -1127,6 +1198,8 @@ private struct HermesChatTerminalPanel: View {
     let minHeight: CGFloat
     let tabTitle: String
     let isActive: Bool
+    var onPromptInputChanged: (String) -> Void = { _ in }
+    var onPromptMemoryRequest: (String) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1151,7 +1224,9 @@ private struct HermesChatTerminalPanel: View {
                 session: session,
                 theme: theme,
                 fontSize: 11,
-                isActive: isActive
+                isActive: isActive,
+                onPromptInputChanged: onPromptInputChanged,
+                onPromptMemoryRequest: onPromptMemoryRequest
             )
             .padding(8)
             .frame(minHeight: minHeight)
@@ -1167,6 +1242,8 @@ private struct HermesChatTerminalNSView: NSViewRepresentable {
     let theme: MaintenanceTerminalTheme
     let fontSize: CGFloat
     let isActive: Bool
+    var onPromptInputChanged: (String) -> Void = { _ in }
+    var onPromptMemoryRequest: (String) -> Void = { _ in }
 
     func makeCoordinator() -> HermesChatTerminalSession {
         session
@@ -1179,12 +1256,10 @@ private struct HermesChatTerminalNSView: NSViewRepresentable {
         tv.nativeForegroundColor = theme.terminalForeground
         tv.nativeBackgroundColor = theme.terminalBackground
         tv.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        context.coordinator.onPromptInputChanged = onPromptInputChanged
+        context.coordinator.onPromptMemoryRequest = onPromptMemoryRequest
         context.coordinator.attachTerminalView(tv)
-        if isActive {
-            DispatchQueue.main.async {
-                tv.window?.makeFirstResponder(tv)
-            }
-        }
+        context.coordinator.updateActiveFocus(isActive, view: tv)
         return tv
     }
 
@@ -1199,10 +1274,10 @@ private struct HermesChatTerminalNSView: NSViewRepresentable {
         if abs(nsView.font.pointSize - fontSize) > 0.01 {
             nsView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
-        if isActive, nsView.window?.firstResponder !== nsView {
-            nsView.window?.makeFirstResponder(nsView)
-        }
+        context.coordinator.onPromptInputChanged = onPromptInputChanged
+        context.coordinator.onPromptMemoryRequest = onPromptMemoryRequest
         context.coordinator.attachTerminalView(nsView)
+        context.coordinator.updateActiveFocus(isActive, view: nsView)
     }
 
     static func dismantleNSView(_ nsView: TerminalView, coordinator: HermesChatTerminalSession) {
@@ -1235,6 +1310,11 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, @preconcurren
     private var lastKnownSize: (cols: Int, rows: Int)?
     private var isReplaying = false
     private var appDidBecomeActiveObserver: NSObjectProtocol?
+    private var wasTerminalActive = false
+    private var promptInputBuffer = ""
+    private var lastPromptTabAt: Date?
+    var onPromptInputChanged: ((String) -> Void)?
+    var onPromptMemoryRequest: ((String) -> Void)?
 
     init(helperClient: HelperClient, username: String, command: [String]) {
         self.helperClient = helperClient
@@ -1286,6 +1366,16 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, @preconcurren
     func detachTerminalView(_ view: TerminalView) {
         guard terminalView === view else { return }
         terminalView = nil
+        wasTerminalActive = false
+    }
+
+    func updateActiveFocus(_ isActive: Bool, view: TerminalView) {
+        defer { wasTerminalActive = isActive }
+        guard isActive, !wasTerminalActive else { return }
+        DispatchQueue.main.async { [weak view] in
+            guard let view else { return }
+            view.window?.makeFirstResponder(view)
+        }
     }
 
     func close() {
@@ -1432,6 +1522,23 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, @preconcurren
         }
     }
 
+    func insertPromptText(_ text: String, mode: PromptInsertionMode) {
+        guard !text.isEmpty else { return }
+        var payload = Data()
+        if mode == .replace {
+            payload.append(0x15)
+            promptInputBuffer = ""
+        }
+        payload.append(contentsOf: text.utf8)
+        sendInput(payload)
+        if mode == .replace {
+            promptInputBuffer = text
+        } else {
+            promptInputBuffer += text
+        }
+        onPromptInputChanged?(promptInputBuffer)
+    }
+
     private func sendResize(cols: Int, rows: Int) {
         guard cols > 0, rows > 0 else { return }
         guard let sessionID else {
@@ -1480,7 +1587,58 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, @preconcurren
 
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
         guard !isReplaying else { return }
+        if handlePromptMemoryInput(data) {
+            return
+        }
         sendInput(Data(data))
+    }
+
+    private func handlePromptMemoryInput(_ data: ArraySlice<UInt8>) -> Bool {
+        let bytes = Array(data)
+        guard !bytes.isEmpty else { return false }
+
+        if bytes.count == 1, bytes[0] == 0x09 {
+            let now = Date()
+            if let lastPromptTabAt, now.timeIntervalSince(lastPromptTabAt) < 1.5 {
+                self.lastPromptTabAt = nil
+                onPromptMemoryRequest?(promptInputBuffer)
+                return true
+            }
+            lastPromptTabAt = now
+            return false
+        }
+        lastPromptTabAt = nil
+
+        if bytes.count == 1 {
+            switch bytes[0] {
+            case 0x03, 0x0D, 0x0A:
+                promptInputBuffer = ""
+                onPromptInputChanged?(promptInputBuffer)
+                return false
+            case 0x15:
+                promptInputBuffer = ""
+                onPromptInputChanged?(promptInputBuffer)
+                return false
+            case 0x7F, 0x08:
+                if !promptInputBuffer.isEmpty {
+                    promptInputBuffer.removeLast()
+                    onPromptInputChanged?(promptInputBuffer)
+                }
+                return false
+            default:
+                break
+            }
+        }
+
+        guard bytes.first != 0x1B,
+              let text = String(data: Data(bytes), encoding: .utf8),
+              !text.isEmpty,
+              text.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else {
+            return false
+        }
+        promptInputBuffer += text
+        onPromptInputChanged?(promptInputBuffer)
+        return false
     }
 
     func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
@@ -1685,6 +1843,8 @@ struct HermesTerminalConsole: View {
     let username: String
     @ObservedObject var tabManager: HermesTerminalTabManager
     var isActive: Bool = true
+    var onPromptInputChanged: (String) -> Void = { _ in }
+    var onPromptMemoryRequest: (String) -> Void = { _ in }
 
     @Environment(HelperClient.self) private var helperClient
     @State private var pendingCloseTabID: UUID?
@@ -1718,7 +1878,9 @@ struct HermesTerminalConsole: View {
                             theme: .black,
                             minHeight: 520,
                             tabTitle: tab.title,
-                            isActive: isActive
+                            isActive: isActive,
+                            onPromptInputChanged: onPromptInputChanged,
+                            onPromptMemoryRequest: onPromptMemoryRequest
                         )
                         .opacity(isActive ? 1 : 0)
                         .allowsHitTesting(isActive)
