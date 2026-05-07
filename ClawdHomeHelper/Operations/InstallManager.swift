@@ -37,7 +37,7 @@ struct InstallManager {
         // 安装前预修正 .openclaw 所有权，避免存量 root-owned 文件阻断新版本启动
         let openclawDirPre = "/Users/\(username)/.openclaw"
         if FileManager.default.fileExists(atPath: openclawDirPre) {
-            _ = try? run("/usr/sbin/chown", args: ["-R", username, openclawDirPre])
+            _ = try? FilePermissionHelper.chownRecursive(openclawDirPre, owner: username)
         }
         let args = ["-u", username, "-H",
                     "env", sudoNodePath(for: username),
@@ -55,10 +55,10 @@ struct InstallManager {
         // 可能以 root 身份写入配置文件，导致 gateway 进程无法读取
         let openclawDir = "/Users/\(username)/.openclaw"
         if FileManager.default.fileExists(atPath: openclawDir) {
-            _ = try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])
+            _ = try? FilePermissionHelper.chownRecursive(openclawDir, owner: username)
         }
         // 修正 npm-global 归属，确保用户可执行
-        _ = try? run("/usr/sbin/chown", args: ["-R", username, prefix])
+        _ = try? FilePermissionHelper.chownRecursive(prefix, owner: username)
         return output
     }
 
@@ -193,13 +193,13 @@ struct InstallManager {
         }
 
         if FileManager.default.fileExists(atPath: npmCacheDir) {
-            try run("/usr/sbin/chown", args: ["-R", username, npmCacheDir])
+            try FilePermissionHelper.chownRecursive(npmCacheDir, owner: username)
         }
         if FileManager.default.fileExists(atPath: npmrcPath) {
-            try run("/usr/sbin/chown", args: [username, npmrcPath])
+            try FilePermissionHelper.chown(npmrcPath, owner: username)
         }
         if FileManager.default.fileExists(atPath: npmGlobal) {
-            try run("/usr/sbin/chown", args: ["-R", username, npmGlobal])
+            try FilePermissionHelper.chownRecursive(npmGlobal, owner: username)
         }
     }
 

@@ -107,8 +107,8 @@ struct GatewayManager {
         if !FileManager.default.fileExists(atPath: logsDir) {
             try? FileManager.default.createDirectory(atPath: logsDir,
                 withIntermediateDirectories: true, attributes: nil)
-            _ = try? run("/usr/sbin/chown", args: ["\(username):\(username)", logsDir])
-            _ = try? run("/bin/chmod", args: ["700", logsDir])
+            _ = try? FilePermissionHelper.chown(logsDir, owner: username)
+            _ = try? FilePermissionHelper.chmod(logsDir, mode: "700")
         }
 
         // 7. 生成期望的 plist 内容
@@ -177,8 +177,7 @@ struct GatewayManager {
 
     private static func writePlist(_ content: String, to path: String) throws {
         try content.write(toFile: path, atomically: true, encoding: .utf8)
-        try run("/usr/sbin/chown", args: ["root:wheel", path])
-        try run("/bin/chmod", args: ["644", path])
+        try FilePermissionHelper.setRootPlistPermissions(path)
     }
 
     // MARK: - 停止

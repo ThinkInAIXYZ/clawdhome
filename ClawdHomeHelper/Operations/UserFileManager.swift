@@ -137,7 +137,7 @@ struct UserFileManager {
         try data.write(to: url, options: .atomic)
         // 纠正所有权：root 写入的文件归还给虾用户
         do {
-            try ClawdHomeHelper.run("/usr/sbin/chown", args: [username, url.path])
+            try FilePermissionHelper.chown(url.path, owner: username)
         } catch {
             helperLog("[FileManager] chown failed for \(url.path): \(error.localizedDescription)", level: .warn)
         }
@@ -247,7 +247,7 @@ struct UserFileManager {
 
         // 解压后纠正所有权
         do {
-            try ClawdHomeHelper.run("/usr/sbin/chown", args: ["-R", username, destDir])
+            try FilePermissionHelper.chownRecursive(destDir, owner: username)
         } catch {
             helperLog("[FileManager] chown -R failed after extract: \(error.localizedDescription)", level: .warn)
         }
@@ -265,7 +265,7 @@ struct UserFileManager {
         var currentUrl = url
         while currentUrl.path != homePath && currentUrl.path.hasPrefix(homePath) && currentUrl.path.count > homePath.count {
             do {
-                try ClawdHomeHelper.run("/usr/sbin/chown", args: [username, currentUrl.path])
+                try FilePermissionHelper.chown(currentUrl.path, owner: username)
             } catch {
                 helperLog("[FileManager] chown failed for \(currentUrl.path): \(error.localizedDescription)", level: .warn)
             }
@@ -274,7 +274,7 @@ struct UserFileManager {
 
         // 纠正所有权（递归处理目标目录自身及其可能已存在的内容）
         do {
-            try ClawdHomeHelper.run("/usr/sbin/chown", args: ["-R", username, url.path])
+            try FilePermissionHelper.chownRecursive(url.path, owner: username)
         } catch {
             helperLog("[FileManager] chown -R failed for \(url.path): \(error.localizedDescription)", level: .warn)
         }
