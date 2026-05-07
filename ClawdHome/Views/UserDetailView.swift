@@ -377,7 +377,8 @@ struct UserDetailView: View {
             initPresentationRoute: initPresentationRoute,
             isAdmin: user.isAdmin,
             versionChecked: versionChecked,
-            hasInstalledOpenClaw: user.openclawVersion != nil
+            hasInstalledOpenClaw: user.openclawVersion != nil,
+            isGatewayOperational: isEffectivelyRunning
         )
     }
 
@@ -801,7 +802,7 @@ struct UserDetailView: View {
         case .standaloneWizard:
             standaloneInitWizardNotice
         case .detailTabs:
-            if user.isAdmin && versionChecked && user.openclawVersion == nil {
+            if user.isAdmin && versionChecked && user.openclawVersion == nil && !isEffectivelyRunning {
                 ContentUnavailableView(
                     L10n.k("user.detail.auto.adminnot_installed_openclaw", fallback: "管理员账号未安装 openclaw"),
                     systemImage: "shield.lefthalf.filled",
@@ -984,12 +985,9 @@ struct UserDetailView: View {
     }
 
     private var overviewQuickActionSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            LazyVGrid(
-                columns: [GridItem(.flexible(), spacing: UserDetailWindowLayout.overviewCompactActionSpacing),
-                          GridItem(.flexible(), spacing: UserDetailWindowLayout.overviewCompactActionSpacing)],
-                spacing: UserDetailWindowLayout.overviewCompactActionSpacing
-            ) {
+        VStack(alignment: .leading, spacing: UserDetailWindowLayout.overviewCompactActionSpacing) {
+            // 第一行：启动/重启 | 终端
+            HStack(spacing: UserDetailWindowLayout.overviewCompactActionSpacing) {
                 overviewCompactActionButton(
                     title: user.isRunning
                         ? L10n.k("user.detail.auto.restart", fallback: "重启")
@@ -1020,6 +1018,16 @@ struct UserDetailView: View {
                 }
 
                 overviewCompactActionButton(
+                    title: L10n.k("user.detail.auto.health_check", fallback: "体检"),
+                    systemImage: "stethoscope",
+                    tint: Color.secondary.opacity(0.08),
+                    foreground: .primary,
+                    disabled: !helperClient.isConnected
+                ) {
+                    showHealthCheck = true
+                }
+
+                overviewCompactActionButton(
                     title: L10n.k("user.detail.auto.terminal", fallback: "终端"),
                     systemImage: "terminal",
                     tint: Color.secondary.opacity(0.08),
@@ -1028,7 +1036,10 @@ struct UserDetailView: View {
                 ) {
                     openTerminal()
                 }
+            }
 
+            // 第二行：冻结 | 更多操作
+            HStack(spacing: UserDetailWindowLayout.overviewCompactActionSpacing) {
                 Menu {
                     if user.isFrozen {
                         Button {
@@ -1066,18 +1077,10 @@ struct UserDetailView: View {
 
                 Menu {
                     Button {
-                        showHealthCheck = true
-                    } label: {
-                        Label(L10n.k("user.detail.auto.health_check", fallback: "体检"), systemImage: "checkmark.shield")
-                    }
-
-                    Button {
                         showPassword = true
                     } label: {
                         Label(L10n.k("views.user_detail_view.os_user_password", fallback: "获取 OS 用户密码"), systemImage: "key")
                     }
-
-                    Divider()
 
                     if updater.needsUpdate(user.openclawVersion),
                        let latest = updater.latestVersion {
@@ -2016,7 +2019,6 @@ struct UserDetailView: View {
 
                         if updater.needsUpdate(user.openclawVersion),
                            let latest = updater.latestVersion {
-                            Divider()
                             Button {
                                 pendingUpgradeVersion = latest
                                 showUpgradeConfirm = true
@@ -2027,11 +2029,11 @@ struct UserDetailView: View {
                                 )
                             }
                             .disabled(isInstalling || isRollingBack || !helperClient.isConnected)
+
+                            Divider()
                         }
 
                         if !user.isAdmin {
-                            Divider()
-
                             Button {
                                 showLogoutConfirm = true
                             } label: {
@@ -2466,11 +2468,18 @@ struct UserDetailView: View {
             xcodeEnvStatus = nil
             return
         }
+
+        // 所有 XPC 调用一次性并行发出，避免分批串行等待
         async let statusResult = helperClient.getGatewayStatus(username: user.username)
-        async let versionResult = helperClient.getOpenclawVersion(username: user.username)
         async let wizardStateResult = loadWizardState()
         async let nodeInstalledResult = helperClient.isNodeInstalled(username: user.username)
         async let xcodeStatusResult = helperClient.getXcodeEnvStatus()
+        async let urlResult = helperClient.getGatewayURL(username: user.username)
+        async let modelsStatusResult = helperClient.getModelsStatus(username: user.username)
+        async let installedVersionResult = helperClient.getOpenclawVersion(username: user.username)
+        async let npmRegistryResult = helperClient.getNpmRegistry(username: user.username)
+
+        // --- 处理结果 ---
 
         if let (running, pid) = try? await statusResult {
             if user.isFrozen {
@@ -2489,23 +2498,28 @@ struct UserDetailView: View {
             }
         }
         guard requestID == refreshStatusGeneration else { return }
-        user.openclawVersion = await versionResult
+
         let wizardState = await wizardStateResult
         let ensuredPending = await ensureOnboardingWizardSessionIfNeeded(
             existingState: wizardState,
             forceOnboarding: forceOnboardingAtEntry
         )
         hasPendingInitWizard = ensuredPending
-        versionChecked = true
         isNodeInstalledReady = await nodeInstalledResult
         xcodeEnvStatus = await xcodeStatusResult
 
-        // 并行加载 Gateway 地址和模型状态（snapshot 由 ShrimpPool 全局维护，无需单独拉取）
-        async let urlResult = helperClient.getGatewayURL(username: user.username)
-        async let modelsStatusResult = helperClient.getModelsStatus(username: user.username)
-        async let npmRegistryResult = helperClient.getNpmRegistry(username: user.username)
-        let (url, modelsStatus, registryURL) = await (urlResult, modelsStatusResult, npmRegistryResult)
+        let (url, modelsStatus, installedVersion, registryURL) = await (
+            urlResult,
+            modelsStatusResult,
+            installedVersionResult,
+            npmRegistryResult
+        )
         guard requestID == refreshStatusGeneration else { return }
+
+        // 统一使用安装探测结果作为“是否已安装”的单一事实来源，避免不同来源互相覆盖导致闪烁。
+        user.openclawVersion = installedVersion
+        versionChecked = true
+
         gatewayURL = url.isEmpty ? nil : url
         if user.isRunning, gatewayToken(from: url) == nil {
             refreshGatewayURLUntilTokenReady()
@@ -4953,6 +4967,7 @@ private struct ProcessTabView: View {
                         widths: columnWidths,
                         onToggle: nil
                     )
+                        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                         .onTapGesture(count: 2) { detailTarget = proc }
                         .simultaneousGesture(
                             TapGesture(count: 1).onEnded {
@@ -4978,6 +4993,7 @@ private struct ProcessTabView: View {
                             }
                         }
                     )
+                    .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                     .onTapGesture(count: 2) { detailTarget = node.entry }
                     .simultaneousGesture(
                         TapGesture(count: 1).onEnded {
@@ -5166,7 +5182,7 @@ private struct ProcessDetailSheet: View {
                         detailRow(L10n.k("user.detail.auto.process_pid", fallback: "父进程 PID"), value: "\(resolved.ppid)")
                         detailRow(L10n.k("user.detail.auto.status", fallback: "状态"), value: resolved.stateLabel)
                         detailRow("CPU", value: String(format: "%.1f%%", resolved.cpuPercent))
-                        detailRow(L10n.k("user.detail.auto.memory", fallback: "内存"), value: resolved.memLabel)
+                        detailRow(L10n.k("user.detail.process.mem", fallback: "内存"), value: resolved.memLabel)
                         detailRow(L10n.k("user.detail.auto.runtime", fallback: "运行时长"), value: resolved.uptimeLabel)
                         detailRow(L10n.k("user.detail.auto.start", fallback: "启动时间"), value: formatTime(resolved.startTime))
                         detailRow(L10n.k("user.detail.auto.port", fallback: "监听端口"), value: resolved.listeningPorts.isEmpty ? "—" : resolved.listeningPorts.joined(separator: ", "))
@@ -5272,6 +5288,7 @@ private struct ProcessColumnHeader: View {
             memCol(right: $widths.uptime) { onSort(.mem) }
             uptimeCol(right: $widths.ports) { onSort(.uptime) }
             resizableText(L10n.k("user.detail.auto.port", fallback: "端口"), width: $widths.ports, min: 84, max: 360)
+            Spacer(minLength: 0)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -5302,7 +5319,7 @@ private struct ProcessColumnHeader: View {
                 rightWidth: right, rightMin: 54, rightMax: 160, action: action)
     }
     @ViewBuilder private func memCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
-        sortBtn(L10n.k("user.detail.auto.memory", fallback: "内存"), field: .mem, width: $widths.mem, min: 54, max: 160, align: .trailing,
+        sortBtn(L10n.k("user.detail.process.mem", fallback: "内存"), field: .mem, width: $widths.mem, min: 54, max: 160, align: .trailing,
                 rightWidth: right, rightMin: 48, rightMax: 160, action: action)
     }
     @ViewBuilder private func uptimeCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
@@ -5435,6 +5452,7 @@ private struct ProcessRow: View {
                 .frame(width: widths.ports, alignment: .leading)
                 .padding(.horizontal, 4)
 
+            Spacer(minLength: 0)
         }
         .padding(.vertical, 2)
     }
@@ -6314,6 +6332,26 @@ private struct KimiMinimaxModelConfigPanel: View {
         saveError = nil
 
         do {
+            // IMPORTANT:
+            // Qiniu must keep legacy direct config-file writes.
+            // OpenClaw does not provide built-in Qiniu models, and we rely on explicit file fields.
+            // Do NOT migrate this provider to gatewayHub.configPatch().
+            if selectedProvider == .qiniu {
+                try await applyQiniuLegacyConfig(apiKey: apiKey, action: action)
+                isRestartingGateway = true
+                gatewayHub.markPendingStart(username: user.username)
+                try await helperClient.restartGateway(username: user.username)
+                saveMessage = L10n.k("user.detail.auto.configuration", fallback: "配置已应用")
+
+                // 刷新当前模型显示
+                let newStatus = await helperClient.getModelsStatus(username: user.username)
+                currentDefaultModel = newStatus?.resolvedDefault ?? newStatus?.defaultModel
+                currentFallbackModels = newStatus?.fallbacks ?? []
+
+                onApplied?()
+                return
+            }
+
             // 1. 构建 config patch + 同步 agent 文件
             let (patch, agentFileSync) = try await buildProviderPatch(apiKey: apiKey)
 
@@ -6368,6 +6406,67 @@ private struct KimiMinimaxModelConfigPanel: View {
         }
     }
 
+    /// Qiniu 配置必须保持 v1.6.0 的 legacy 直写方式（setConfigDirect）。
+    /// 背景：OpenClaw 没有内置 Qiniu 模型；统一 patch 流程可能在后续 schema/迁移中覆盖掉这类外部模型配置。
+    /// 维护要求：请勿替换为 gatewayHub.configPatch。
+    private func applyQiniuLegacyConfig(apiKey: String, action: OldModelAction) async throws {
+        let config = await helperClient.getConfigJSON(username: user.username)
+        let providerModels = DirectQiniuModel.allCases.map(\.providerModelConfig)
+        let newPrimary = selectedQiniuModel.rawValue
+
+        var normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: newPrimary)
+        var fallbacks = (normalizedModelConfig["fallbacks"] as? [String]) ?? []
+        fallbacks.removeAll { $0 == newPrimary }
+        if let oldPrimary = currentDefaultModel, !oldPrimary.isEmpty {
+            fallbacks.removeAll { $0 == oldPrimary }
+            if action == .keepAsFallback {
+                fallbacks.insert(oldPrimary, at: 0)
+            }
+        }
+        if fallbacks.isEmpty {
+            normalizedModelConfig.removeValue(forKey: "fallbacks")
+        } else {
+            normalizedModelConfig["fallbacks"] = fallbacks
+        }
+
+        var aliasMap = ((((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:])
+        for model in DirectQiniuModel.allCases {
+            var aliasConfig = (aliasMap[model.rawValue] as? [String: Any]) ?? [:]
+            aliasConfig["alias"] = model.alias
+            aliasMap[model.rawValue] = aliasConfig
+        }
+
+        try await helperClient.setConfigDirect(username: user.username, path: "env.QINIU_API_KEY", value: apiKey)
+        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "models.providers.qiniu",
+            value: [
+                "baseUrl": "https://api.qnaigc.com/v1",
+                "apiKey": "${QINIU_API_KEY}",
+                "api": "openai-completions",
+                "models": providerModels,
+            ]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "auth.profiles.qiniu:default",
+            value: ["provider": "qiniu", "mode": "api_key"]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "agents.defaults.model",
+            value: normalizedModelConfig
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "agents.defaults.models",
+            value: aliasMap
+        )
+
+        try await syncQiniuAgentFiles(apiKey: apiKey, providerModels: providerModels)
+    }
+
     /// 构建 provider 配置 patch 和 agent 文件同步闭包
     private func buildProviderPatch(apiKey: String) async throws -> (patch: [String: Any], agentFileSync: () async throws -> Void) {
         switch selectedProvider {
@@ -6376,6 +6475,8 @@ private struct KimiMinimaxModelConfigPanel: View {
         case .minimax:
             return try await buildMinimaxPatch(apiKey: apiKey)
         case .qiniu:
+            // NOTE: 正常应用流程由 doApplyConfig 的 qiniu legacy 分支处理。
+            // 这里保留仅用于兼容/回退，勿作为默认路径。
             return try await buildQiniuPatch(apiKey: apiKey)
         case .zai:
             return try await buildZAIPatch(apiKey: apiKey)
@@ -6744,10 +6845,8 @@ private final class EmbeddedGatewayConsoleCoordinator: NSObject, WKNavigationDel
         panel.canChooseFiles = true
         panel.canChooseDirectories = parameters.allowsDirectories
         panel.resolvesAliases = true
-        let allowedContentTypes = resolvedFileInputAllowedContentTypes(pendingFileInputAccept)
-        if !allowedContentTypes.isEmpty {
-            panel.allowedContentTypes = allowedContentTypes
-        }
+        // Allow arbitrary files (e.g. mp3) regardless of web input accept hints.
+        panel.allowedContentTypes = [.item]
 
         panel.begin { response in
             completionHandler(response == .OK ? panel.urls : nil)

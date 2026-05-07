@@ -56,12 +56,14 @@ func shouldEmbedOverviewGatewayConsole(
     initPresentationRoute: UserInitPresentationRoute,
     isAdmin: Bool,
     versionChecked: Bool,
-    hasInstalledOpenClaw: Bool
+    hasInstalledOpenClaw: Bool,
+    isGatewayOperational: Bool
 ) -> Bool {
     guard selectedTabRawValue == "overview" else { return false }
     guard initPresentationRoute == .detailTabs else { return false }
 
-    if isAdmin && versionChecked && !hasInstalledOpenClaw {
+    // 管理员账号：仅当确认未安装且网关也未运行时，才不嵌入控制台区域。
+    if isAdmin && versionChecked && !hasInstalledOpenClaw && !isGatewayOperational {
         return false
     }
 

@@ -105,6 +105,7 @@ struct ClawPoolView: View {
     @State private var quickTransferAlertMessage: String?
     @State private var quickTransferClipboardText = ""
     @State private var windowOpenInFlightUsernames: Set<String> = []
+    @State private var webUIOpenInFlightUsernames: Set<String> = []
     @State private var lastWindowOpenAtByUsername: [String: Date] = [:]
     private var currentUsername: String { NSUserName() }
     /// 默认仅展示标准用户；可在设置中显式开启当前管理员展示。
@@ -127,6 +128,16 @@ struct ClawPoolView: View {
     private var selectedUser: ManagedUser? {
         guard let id = selectedClaw else { return nil }
         return displayedUsers.first { $0.id == id }
+    }
+
+    private var pendingActionMessage: String? {
+        if let username = webUIOpenInFlightUsernames.sorted().first {
+            return "正在打开 @\(username) 的 Web UI…"
+        }
+        if let username = windowOpenInFlightUsernames.sorted().first {
+            return "正在打开 @\(username) 的概览…"
+        }
+        return nil
     }
 
     private func visibleProfileDescription(for claw: ManagedUser) -> String? {
@@ -292,6 +303,16 @@ struct ClawPoolView: View {
                     .padding(8)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                     .padding(12)
+            } else if let pending = pendingActionMessage {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(pending)
+                        .font(.caption)
+                }
+                .padding(8)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .padding(12)
             }
         }
         .confirmationDialog(
@@ -527,9 +548,13 @@ struct ClawPoolView: View {
                 }
             }
             Button { Task { await openWebUI(for: claw) } } label: {
-                Label(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"), systemImage: "globe")
+                if webUIOpenInFlightUsernames.contains(claw.username.lowercased()) {
+                    Label("打开中…", systemImage: "hourglass")
+                } else {
+                    Label(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"), systemImage: "globe")
+                }
             }
-            .disabled(claw.isFrozen)
+            .disabled(claw.isFrozen || webUIOpenInFlightUsernames.contains(claw.username.lowercased()))
         }
     }
 
@@ -700,13 +725,20 @@ struct ClawPoolView: View {
             .width(150)
 
             TableColumn(L10n.k("views.user_list_view.actions", fallback: "操作")) { claw in
+                let isOpeningWebUI = webUIOpenInFlightUsernames.contains(claw.username.lowercased())
                 HStack(spacing: 10) {
                     if claw.openclawVersion != nil {
                         Button { Task { await openWebUI(for: claw) } } label: {
-                            Image(systemName: "globe").foregroundStyle(Color.accentColor)
+                            if isOpeningWebUI {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "globe").foregroundStyle(Color.accentColor)
+                            }
                         }
                         .buttonStyle(.plain)
                         .help(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"))
+                        .disabled(claw.isFrozen || isOpeningWebUI)
                     }
                     Button { openTerminal(for: claw) } label: {
                         Image(systemName: "terminal").foregroundStyle(.secondary)
@@ -736,7 +768,8 @@ struct ClawPoolView: View {
                 ForEach(displayedUsers) { claw in
                     ClawCard(
                         claw: claw,
-                        isSelected: false
+                        isSelected: false,
+                        isOpeningWebUI: webUIOpenInFlightUsernames.contains(claw.username.lowercased())
                     ) {
                         openPreferredWindow(for: claw)
                     } onDoubleClick: {
@@ -783,13 +816,14 @@ struct ClawPoolView: View {
 
         windowOpenInFlightUsernames.insert(usernameKey)
         lastWindowOpenAtByUsername[usernameKey] = now
+        quickActionError = nil
         let hasForcedOnboarding = pool.consumeNeedsOnboarding(username: claw.username)
         Task { @MainActor in
             defer {
                 windowOpenInFlightUsernames.remove(usernameKey)
                 lastWindowOpenAtByUsername[usernameKey] = Date()
             }
-            // 限制解析超时为 3 秒，避免 XPC 调用阻塞 UI（默认 30s 太久）
+            // 限制解析超时为 1.2 秒，避免点击后长时间无反馈
             // 超时则直接打开详情窗口
             let target: UserEntryWindowTarget = await withTaskGroup(of: UserEntryWindowTarget.self) { group in
                 group.addTask {
@@ -801,7 +835,7 @@ struct ClawPoolView: View {
                     )
                 }
                 group.addTask {
-                    try? await Task.sleep(for: .seconds(3))
+                    try? await Task.sleep(for: .milliseconds(1200))
                     return .detail
                 }
                 let result = await group.next() ?? .detail
@@ -1087,6 +1121,12 @@ struct ClawPoolView: View {
     // MARK: - 打开 Web UI
 
     private func openWebUI(for claw: ManagedUser) async {
+        let usernameKey = claw.username.lowercased()
+        guard !webUIOpenInFlightUsernames.contains(usernameKey) else { return }
+        webUIOpenInFlightUsernames.insert(usernameKey)
+        defer { webUIOpenInFlightUsernames.remove(usernameKey) }
+        quickActionError = nil
+
         guard !claw.isFrozen else {
             quickActionError = L10n.k("views.user_list_view.claw_username_claw_freezemode_statuslabel", fallback: "@\(claw.username) \(claw.freezeMode?.statusLabel ?? "已冻结")，请先解除冻结再启动 Gateway")
             return
@@ -1115,9 +1155,14 @@ struct ClawPoolView: View {
             }
         }
         let urlString = await helperClient.getGatewayURL(username: claw.username)
-        if let url = URL(string: urlString), !urlString.isEmpty {
-            NSWorkspace.shared.open(url)
+        guard let url = URL(string: urlString), !urlString.isEmpty else {
+            quickActionError = L10n.k(
+                "views.user_list_view.open_web_ui_url_unavailable",
+                fallback: "打开 Web UI 失败：未获取到可用地址，请稍后重试"
+            )
+            return
         }
+        NSWorkspace.shared.open(url)
     }
 
     // MARK: - 打开终端
@@ -1340,6 +1385,7 @@ private enum ToolSheet: Identifiable {
 private struct ClawCard: View {
     let claw: ManagedUser
     let isSelected: Bool
+    var isOpeningWebUI: Bool = false
     let onTap: () -> Void
     var onDoubleClick: (() -> Void)? = nil
     let onOpenWebUI: () -> Void
@@ -1425,13 +1471,18 @@ private struct ClawCard: View {
                 HStack(spacing: 8) {
                     if claw.openclawVersion != nil {
                         Button { onOpenWebUI() } label: {
-                            Image(systemName: "globe")
-                                .font(.caption)
-                                .foregroundStyle(Color.accentColor)
+                            if isOpeningWebUI {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "globe")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.accentColor)
+                            }
                         }
                         .buttonStyle(.plain)
                         .help(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"))
-                        .disabled(claw.isFrozen)
+                        .disabled(claw.isFrozen || isOpeningWebUI)
                     }
                     Button { onTerminal() } label: {
                         Image(systemName: "terminal")
