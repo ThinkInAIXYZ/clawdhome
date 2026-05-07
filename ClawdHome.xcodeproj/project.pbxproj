@@ -72,6 +72,9 @@
 		7D0B2DAB8F9133C3EDAEA400 /* SessionsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB940018E9820EB6455FA34C /* SessionsTabView.swift */; };
 		7F1931508A7DA6D48319500F /* ShellRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6C76557D6C46315D058A794 /* ShellRunner.swift */; };
 		844ED367CC5266A513A5FADE /* UserInitPresentationRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */; };
+		844ED368CC5266A513A5FADE /* UserDetailWindowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775BF93F05639CCBFCC06 /* UserDetailWindowLayout.swift */; };
+		844ED369CC5266A513A5FADE /* ManagedUserDisplayName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775C093F05639CCBFCC06 /* ManagedUserDisplayName.swift */; };
+		844ED370CC5266A513A5FADE /* FileInputAcceptFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775C193F05639CCBFCC06 /* FileInputAcceptFilter.swift */; };
 		84EE8ABA47536FEBAD8C7E53 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13F07CE9D25F72DDB11AB739 /* ContentView.swift */; };
 		87442F9B989A859F1BCF6FC2 /* GatewayLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81B47FD58BA6519F937D3A52 /* GatewayLog.swift */; };
 		8782D0C95C1470BAA40F3CB3 /* AppLockScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DFA0D3288E6276A9630CE4B /* AppLockScreen.swift */; };
@@ -143,6 +146,9 @@
 		0511A43DA0C20592D7181ABD /* RoleMarketView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoleMarketView.swift; sourceTree = "<group>"; };
 		05980B1012E839BAA33AD8CE /* OpenDirectory.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = OpenDirectory.framework; sourceTree = "<group>"; };
 		0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInitPresentationRouting.swift; sourceTree = "<group>"; };
+		0A5775BF93F05639CCBFCC06 /* UserDetailWindowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDetailWindowLayout.swift; sourceTree = "<group>"; };
+		0A5775C093F05639CCBFCC06 /* ManagedUserDisplayName.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedUserDisplayName.swift; sourceTree = "<group>"; };
+		0A5775C193F05639CCBFCC06 /* FileInputAcceptFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileInputAcceptFilter.swift; sourceTree = "<group>"; };
 		0BCB213B1B4677F1FBAC5433 /* SecurityAuditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityAuditView.swift; sourceTree = "<group>"; };
 		0DFA0D3288E6276A9630CE4B /* AppLockScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockScreen.swift; sourceTree = "<group>"; };
 		0EB9584EDF129A0295EBB14A /* BackupManagerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManagerSheet.swift; sourceTree = "<group>"; };
@@ -392,13 +398,16 @@
 				0067A9F11A4D5E6F708192A3 /* AppUpdateState.swift */,
 				AB7E5FF24A0246F866BFF996 /* DashboardModels.swift */,
 				F71156CAD7673A87034AF0D8 /* FileModels.swift */,
+				0A5775C193F05639CCBFCC06 /* FileInputAcceptFilter.swift */,
 				9CB22903A652976B892FA384 /* HealthCheck.swift */,
 				467287AC8BE705E07CE3C366 /* HelperProtocol.swift */,
 				EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */,
+				0A5775C093F05639CCBFCC06 /* ManagedUserDisplayName.swift */,
 				6474BB5EEF5B87B65666E978 /* NetworkModels.swift */,
 				F76A73EBA6C37473C494E20D /* ProcessModels.swift */,
 				48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */,
 				0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */,
+				0A5775BF93F05639CCBFCC06 /* UserDetailWindowLayout.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -751,6 +760,9 @@
 				BC5CEE02450C97178238E88A /* UserDirectoryService.swift in Sources */,
 				A19DC0FB0FB2383088C47E80 /* UserFilesView.swift in Sources */,
 				D53CB1F3E94D9A56F97653A9 /* UserInitPresentationRouting.swift in Sources */,
+				844ED368CC5266A513A5FADE /* UserDetailWindowLayout.swift in Sources */,
+				844ED369CC5266A513A5FADE /* ManagedUserDisplayName.swift in Sources */,
+				844ED370CC5266A513A5FADE /* FileInputAcceptFilter.swift in Sources */,
 				FA4AA7F683A3E8C096CFCCC8 /* UserInitWizardView.swift in Sources */,
 				F7E5A9A08C640A5E7684F7B1 /* UserListView.swift in Sources */,
 				346939ADEDF99620B1967823 /* UserPasswordStore.swift in Sources */,

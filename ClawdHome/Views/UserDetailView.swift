@@ -4,6 +4,8 @@ import AppKit
 import Carbon.HIToolbox
 import Darwin
 import SwiftUI
+import UniformTypeIdentifiers
+import WebKit
 
 struct QuickFileTransferOutcome {
     let destinationRootPath: String
@@ -252,7 +254,6 @@ struct UserDetailView: View {
     @State private var descriptionDraft: String = ""
     @State private var showModelConfig = false
     @State private var isAdvancedConfigExpanded = false
-    @State private var isMoreActionsExpanded = false
     @State private var npmRegistryOption: NpmRegistryOption = .defaultForInitialization
     @State private var npmRegistryCustomURL: String? = nil
     @State private var npmRegistryError: String? = nil
@@ -279,7 +280,6 @@ struct UserDetailView: View {
     @State private var showFlashFreezeConfirm = false
     @State private var showPauseFreezeConfirm = false
     @State private var showNormalFreezeConfirm = false
-    @State private var autostartEnabled = false
     // 密码
     @State private var showPassword = false
     @State private var logSearchText = ""
@@ -289,7 +289,10 @@ struct UserDetailView: View {
     @State private var quickTransferLastPaths: [String] = []
     // Tab
     @State private var selectedTab: ClawTab = .overview
+    @State private var isDetailSidebarCollapsed = false
+    @State private var isOverviewSidebarCollapsed = false
     @State private var hasOpenedStandaloneInitWindow = false
+    @StateObject private var embeddedOverviewConsoleStore = EmbeddedGatewayConsoleStore()
     private var shouldPinWindowTopmost: Bool {
         !user.isAdmin
         && user.clawType == .macosUser
@@ -354,6 +357,47 @@ struct UserDetailView: View {
 
     private let allTabs: [ClawTab] = [.overview, .characterDef, .files, .processes, .logs, .cron, .skills, .sessions, .memory]
 
+    private var shouldEmbedOverviewConsole: Bool {
+        shouldEmbedOverviewGatewayConsole(
+            selectedTabRawValue: selectedTab.rawValue,
+            initPresentationRoute: initPresentationRoute,
+            isAdmin: user.isAdmin,
+            versionChecked: versionChecked,
+            hasInstalledOpenClaw: user.openclawVersion != nil
+        )
+    }
+
+    private var shouldShowOverviewSidebar: Bool {
+        shouldShowOverviewNativeSidebar(
+            selectedTabRawValue: selectedTab.rawValue,
+            initPresentationRoute: initPresentationRoute
+        )
+    }
+
+    private var detailSidebarShowsLabels: Bool {
+        shouldShowDetailSidebarLabels(isCollapsed: isDetailSidebarCollapsed)
+    }
+
+    private var shouldRenderOverviewSidebar: Bool {
+        shouldRenderOverviewSidebarPanel(
+            selectedTabRawValue: selectedTab.rawValue,
+            initPresentationRoute: initPresentationRoute,
+            isCollapsed: isOverviewSidebarCollapsed
+        )
+    }
+
+    private var currentShrimpStats: ShrimpNetStats? {
+        pool.snapshot?.shrimps.first(where: { $0.username == user.username })
+    }
+
+    private var detailSidebarWidth: CGFloat {
+        isDetailSidebarCollapsed ? 76 : UserDetailWindowLayout.expandedSidebarWidth
+    }
+
+    private var detailSidebarButtonSize: CGFloat {
+        36
+    }
+
     private func tabInfo(_ tab: ClawTab) -> (label: String, icon: String) {
         switch tab {
         case .overview:  return (L10n.k("user.detail.auto.overview", fallback: "概览"), "gauge.with.dots.needle.33percent")
@@ -361,42 +405,86 @@ struct UserDetailView: View {
         case .logs:      return (L10n.k("user.detail.auto.logs", fallback: "日志"), "doc.text.magnifyingglass")
         case .cron:      return (L10n.k("user.detail.auto.scheduled", fallback: "定时"), "clock")
         case .skills:    return ("Skills", "star.leadinghalf.filled")
-        case .characterDef: return (L10n.k("user.detail.auto.character_def", fallback: "角色定义"), "theatermasks")
+        case .characterDef: return (L10n.k("user.detail.auto.character_def", fallback: "角色"), "theatermasks")
         case .sessions:  return (L10n.k("user.detail.auto.sessions", fallback: "会话"), "bubble.left.and.bubble.right")
         case .memory:    return (L10n.k("user.detail.auto.memory", fallback: "记忆"), "brain.head.profile")
         case .processes: return (L10n.k("user.detail.auto.processes", fallback: "进程"), "square.3.layers.3d")
         }
     }
 
-    @ViewBuilder private func tabBarButton(_ tab: ClawTab) -> some View {
+    @ViewBuilder private func sidebarButton(_ tab: ClawTab) -> some View {
         let info = tabInfo(tab)
         let selected = selectedTab == tab
         Button { selectedTab = tab } label: {
-            VStack(spacing: 2) {
-                Label(info.label, systemImage: info.icon)
-                    .font(.caption)
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
-                    .padding(.horizontal, 6).padding(.top, 5).padding(.bottom, 3)
-                Rectangle()
-                    .fill(selected ? Color.accentColor : Color.clear)
-                    .frame(height: 2)
+            HStack(spacing: detailSidebarShowsLabels ? 8 : 0) {
+                Image(systemName: info.icon)
+                    .font(.system(size: 18, weight: selected ? .semibold : .regular))
+                    .frame(width: detailSidebarButtonSize, height: detailSidebarButtonSize)
+                if detailSidebarShowsLabels {
+                    Text(info.label)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
             }
+            .font(.system(size: 14, weight: selected ? .semibold : .medium))
+            .foregroundStyle(selected ? Color.primary : Color.secondary)
+            .padding(.horizontal, detailSidebarShowsLabels ? 10 : 0)
+            .padding(.vertical, detailSidebarShowsLabels ? 4 : 0)
+            .frame(maxWidth: .infinity, alignment: detailSidebarShowsLabels ? .leading : .center)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(selected ? Color.primary.opacity(0.08) : Color.clear)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
-    private var customTabBar: some View {
-        HStack(spacing: 0) {
-            ForEach(allTabs, id: \.self) { tabBarButton($0) }
-            Spacer()
+    private var detailSidebar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if detailSidebarShowsLabels {
+                    Text(L10n.k("user.detail.auto.overview", fallback: "概览"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isDetailSidebarCollapsed.toggle()
+                    }
+                } label: {
+                    Image(systemName: isDetailSidebarCollapsed ? "sidebar.left" : "sidebar.leading")
+                        .frame(width: detailSidebarButtonSize, height: detailSidebarButtonSize)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.primary.opacity(0.05))
+                        )
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, detailSidebarShowsLabels ? 2 : 4)
+            .frame(maxWidth: .infinity)
+
+            ForEach(allTabs, id: \.self) { sidebarButton($0) }
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 14)
+        .frame(
+            minWidth: detailSidebarWidth,
+            idealWidth: detailSidebarWidth,
+            maxWidth: detailSidebarWidth,
+            maxHeight: .infinity,
+            alignment: .topLeading
+        )
         .background(.bar)
     }
 
     @ViewBuilder private var tabContent: some View {
         switch selectedTab {
-        case .overview:  overviewContent
+        case .overview:  overviewTabContent
         case .files:     UserFilesView(users: [user], preselectedUser: user)
         case .logs:
             GatewayLogViewer(username: user.username, externalSearchQuery: $logSearchText)
@@ -407,16 +495,14 @@ struct UserDetailView: View {
         case .memory:    MemoryTabView(username: user.username)
         case .processes:
             ProcessTabView(
-                username: user.username,
-                freezeMode: user.freezeMode,
-                pausedProcessPIDs: user.pausedProcessPIDs
+                username: user.username
             )
         }
     }
 
     private var tabbedContent: some View {
-        VStack(spacing: 0) {
-            customTabBar
+        HStack(spacing: 0) {
+            detailSidebar
             Divider()
             tabContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -450,6 +536,7 @@ struct UserDetailView: View {
         .onChange(of: gatewayHub.readinessMap[user.username]) { _, newReadiness in
             if newReadiness == .ready, user.pid == nil {
                 Task { await refreshStatus() }
+                embeddedOverviewConsoleStore.reloadCurrent()
             } else if newReadiness == .stopped, !user.isRunning {
                 Task { await gatewayHub.disconnect(username: user.username) }
                 gatewayURLTokenPollTask?.cancel()
@@ -586,10 +673,9 @@ struct UserDetailView: View {
     // MARK: - 概览 Tab（原 mainContent）
 
     @ViewBuilder
-    private var overviewContent: some View {
+    private var overviewTabContent: some View {
         switch initPresentationRoute {
         case .loading:
-            // 正在检查环境
             ProgressView(L10n.k("user.detail.auto.text_f522c76d24", fallback: "检查环境…"))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .task { await refreshStatus() }
@@ -603,17 +689,596 @@ struct UserDetailView: View {
                     description: Text(L10n.k("user.detail.auto.admin_accounts_only_support_basic_management_installation_and", fallback: "管理员账号仅支持基础管理，不支持在该账号执行安装或初始化。"))
                 )
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        statusSection
-                        quickTransferSection
-                        configSection
-                        actionsSection
-                        dangerZoneSection
+                embeddedOverviewConsoleContent
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var embeddedOverviewConsoleContent: some View {
+        if shouldShowOverviewSidebar {
+            ZStack(alignment: .topTrailing) {
+                HStack(spacing: 0) {
+                    overviewConsolePane
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    if shouldRenderOverviewSidebar {
+                        Divider()
+                        overviewSidebar
                     }
-                    .padding(20)
+                }
+
+                if !shouldRenderOverviewSidebar {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isOverviewSidebarCollapsed = false
+                        }
+                    } label: {
+                        Image(systemName: "sidebar.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .padding(10)
+                    }
+                    .buttonStyle(.plain)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color(nsColor: .windowBackgroundColor).opacity(0.95))
+                            .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
+                    )
+                    .padding(16)
                 }
             }
+        } else {
+            overviewContent
+        }
+    }
+
+    @ViewBuilder
+    private var overviewConsolePane: some View {
+        if shouldEmbedOverviewConsole,
+           let url = embeddedOverviewConsoleURL {
+            EmbeddedGatewayConsoleView(url: url, store: embeddedOverviewConsoleStore)
+        } else if shouldEmbedOverviewConsole, isEffectivelyRunning {
+            ContentUnavailableView {
+                Label(L10n.k("user.detail.auto.waiting_token", fallback: "等待 Token…"), systemImage: "network")
+            } description: {
+                Text(L10n.k("user.detail.auto.statussync", fallback: "状态同步中…"))
+            }
+        } else if shouldEmbedOverviewConsole {
+            ContentUnavailableView {
+                Label(L10n.k("models.managed_user.not_running", fallback: "未运行"), systemImage: "power")
+            } description: {
+                Text(L10n.k("user.detail.auto.openclaw_needs_start_before_console", fallback: "启动该虾的 Gateway 后，这里会直接显示 Web 控制台。"))
+            }
+        } else {
+            overviewContent
+        }
+    }
+
+    private var embeddedOverviewConsoleURL: URL? {
+        guard shouldEmbedOverviewConsole,
+              isEffectivelyRunning,
+              let urlStr = gatewayURL,
+              !urlStr.isEmpty,
+              gatewayToken(from: urlStr) != nil else { return nil }
+        return URL(string: urlStr)
+    }
+
+    private var shouldShowOverviewSupplementaryCards: Bool {
+        shouldShowOverviewSupplementaryEntries(
+            selectedTabRawValue: selectedTab.rawValue,
+            initPresentationRoute: initPresentationRoute
+        )
+    }
+
+    private var overviewSidebar: some View {
+        ZStack(alignment: .topTrailing) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: UserDetailWindowLayout.overviewSidebarSectionSpacing) {
+                    overviewStatusCard
+                    overviewQuickActionSection
+                    if shouldShowOverviewSupplementaryCards {
+                        overviewSupplementaryEntriesSection
+                    }
+                    overviewResourceCard
+                    overviewOpenConsoleButton
+                }
+                .padding(.horizontal, UserDetailWindowLayout.overviewSidebarPadding)
+                .padding(.top, UserDetailWindowLayout.overviewFloatingHeaderTopPadding)
+                .padding(.bottom, UserDetailWindowLayout.overviewSidebarPadding)
+            }
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isOverviewSidebarCollapsed = true
+                }
+            } label: {
+                Image(systemName: "sidebar.right")
+                    .frame(
+                        width: UserDetailWindowLayout.overviewFloatingToolbarButtonSize,
+                        height: UserDetailWindowLayout.overviewFloatingToolbarButtonSize
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .padding(.trailing, UserDetailWindowLayout.overviewSidebarPadding)
+            .padding(.top, UserDetailWindowLayout.overviewFloatingHeaderTopPadding)
+        }
+        .frame(
+            minWidth: UserDetailWindowLayout.overviewSidebarWidth,
+            idealWidth: UserDetailWindowLayout.overviewSidebarWidth,
+            maxWidth: UserDetailWindowLayout.overviewSidebarWidth,
+            maxHeight: .infinity,
+            alignment: .top
+        )
+        .background(Color(nsColor: .windowBackgroundColor).opacity(0.92), ignoresSafeAreaEdges: [.bottom, .trailing])
+    }
+
+    private var overviewStatusCard: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.secondary.opacity(0.08))
+                Image(systemName: "globe")
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(.primary)
+            }
+            .frame(
+                width: UserDetailWindowLayout.overviewStatusCardIconSize,
+                height: UserDetailWindowLayout.overviewStatusCardIconSize
+            )
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(overviewStatusColor)
+                        .frame(width: 10, height: 10)
+                    Text(readinessLabel)
+                        .font(.system(size: 18, weight: .bold))
+                        .lineLimit(1)
+                }
+                Text(overviewVersionAndPortLabel)
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(UserDetailWindowLayout.overviewStatusCardPadding)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+    }
+
+    private var overviewQuickActionSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LazyVGrid(
+                columns: [GridItem(.flexible(), spacing: UserDetailWindowLayout.overviewCompactActionSpacing),
+                          GridItem(.flexible(), spacing: UserDetailWindowLayout.overviewCompactActionSpacing)],
+                spacing: UserDetailWindowLayout.overviewCompactActionSpacing
+            ) {
+                overviewCompactActionButton(
+                    title: user.isRunning
+                        ? L10n.k("user.detail.auto.restart", fallback: "重启")
+                        : ((gatewayHub.readinessMap[user.username] == .starting)
+                            ? L10n.k("views.user_detail_view.start", fallback: "启动中…")
+                            : L10n.k("user.detail.auto.start_action", fallback: "启动")),
+                    systemImage: "arrow.clockwise",
+                    tint: user.isRunning ? Color.accentColor : Color.cyan.opacity(0.16),
+                    foreground: user.isRunning ? .white : .cyan,
+                    disabled: isLoading
+                        || !helperClient.isConnected
+                        || (!user.isRunning && gatewayHub.readinessMap[user.username] == .starting)
+                ) {
+                    if user.isRunning {
+                        gatewayHub.markPendingStart(username: user.username)
+                        beginGatewayRestartVisualTransition()
+                        performAction { try await helperClient.restartGateway(username: user.username) }
+                    } else {
+                        performAction {
+                            if user.isFrozen {
+                                try await unfreezeUser()
+                            }
+                            gatewayHub.markPendingStart(username: user.username)
+                            beginGatewayRestartVisualTransition()
+                            try await helperClient.startGateway(username: user.username)
+                        }
+                    }
+                }
+
+                overviewCompactActionButton(
+                    title: L10n.k("user.detail.auto.terminal", fallback: "终端"),
+                    systemImage: "terminal",
+                    tint: Color.secondary.opacity(0.08),
+                    foreground: .primary,
+                    disabled: !helperClient.isConnected
+                ) {
+                    openTerminal()
+                }
+
+                Menu {
+                    if user.isFrozen {
+                        Button {
+                            performAction { try await unfreezeUser() }
+                        } label: {
+                            Label(L10n.k("user.detail.auto.unfreeze", fallback: "解除冻结"), systemImage: "play.circle")
+                        }
+                    }
+                    Button {
+                        showPauseFreezeConfirm = true
+                    } label: {
+                        Label(L10n.k("user.detail.auto.pause_freeze_recoverable", fallback: "暂停冻结"), systemImage: "pause.circle")
+                    }
+                    Button {
+                        showNormalFreezeConfirm = true
+                    } label: {
+                        Label(L10n.k("user.detail.auto.freeze_stop_gateway", fallback: "普通冻结"), systemImage: "snowflake")
+                    }
+                    Button(role: .destructive) {
+                        showFlashFreezeConfirm = true
+                    } label: {
+                        Label(L10n.k("user.detail.auto.flash_freeze_emergency_kill", fallback: "速冻"), systemImage: "bolt.fill")
+                    }
+                } label: {
+                    overviewCompactActionLabel(
+                        title: freezeToolbarLabel,
+                        systemImage: user.isFrozen ? "snowflake.circle" : "snowflake",
+                        tint: Color.orange.opacity(0.16),
+                        foreground: .orange
+                    )
+                }
+                .menuStyle(.borderlessButton)
+                .disabled(isLoading || !helperClient.isConnected)
+                .opacity((isLoading || !helperClient.isConnected) ? 0.55 : 1)
+
+                Menu {
+                    Button {
+                        showHealthCheck = true
+                    } label: {
+                        Label(L10n.k("user.detail.auto.health_check", fallback: "体检"), systemImage: "checkmark.shield")
+                    }
+
+                    Button {
+                        showPassword = true
+                    } label: {
+                        Label(L10n.k("views.user_detail_view.os_user_password", fallback: "获取 OS 用户密码"), systemImage: "key")
+                    }
+
+                    if !user.isAdmin {
+                        Divider()
+
+                        Button {
+                            showLogoutConfirm = true
+                        } label: {
+                            Label(L10n.k("user.detail.auto.log_out", fallback: "注销"), systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+
+                        Divider()
+
+                        Button {
+                            showResetConfirm = true
+                        } label: {
+                            Label(L10n.k("user.detail.auto.reset", fallback: "重置生存空间"), systemImage: "arrow.counterclockwise")
+                        }
+                        .disabled(isResetting || !helperClient.isConnected)
+
+                        Button(role: .destructive) {
+                            deleteStep = nil
+                            deleteError = nil
+                            deleteAdminPassword = ""
+                            showDeleteConfirm = true
+                        } label: {
+                            Label(L10n.k("user.detail.auto.deleteuser", fallback: "删除用户"), systemImage: "trash")
+                        }
+                        .disabled(isDeleting || !helperClient.isConnected || isSelf)
+                    }
+                } label: {
+                    overviewCompactActionLabel(
+                        title: L10n.k("user.detail.auto.more_actions", fallback: "更多操作"),
+                        systemImage: "ellipsis.circle",
+                        tint: Color.secondary.opacity(0.06),
+                        foreground: .secondary
+                    )
+                }
+                .menuStyle(.borderlessButton)
+                .disabled(isLoading)
+                .opacity(isLoading ? 0.55 : 1)
+            }
+        }
+    }
+
+    private var overviewSupplementaryEntriesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            overviewSupplementaryCard(
+                title: L10n.k("user.detail.auto.model_configuration", fallback: "模型配置"),
+                subtitle: defaultModel.map { L10n.f("views.user_detail_view.current_model", fallback: "当前：%@", String(describing: $0)) }
+                    ?? L10n.k("user.detail.auto.configuration", fallback: "未配置")
+            ) {
+                HStack(spacing: 8) {
+                    overviewCompactActionButton(
+                        title: L10n.k("user.detail.auto.manage", fallback: "管理"),
+                        systemImage: "slider.horizontal.3",
+                        tint: Color.secondary.opacity(0.08),
+                        foreground: .primary,
+                        disabled: !helperClient.isConnected
+                    ) {
+                        showModelConfig = true
+                    }
+                }
+            }
+
+            overviewSupplementaryCard(
+                title: L10n.k("user.detail.auto.channel", fallback: "IM 绑定"),
+                subtitle: L10n.k("user.detail.auto.feishu_wechat_configuration", fallback: "飞书/微信均通过独立流程扫码绑定，支持首次配置和重新绑定。")
+            ) {
+                HStack(spacing: 8) {
+                    overviewCompactActionButton(
+                        title: L10n.k("user.detail.auto.feishu", fallback: "飞书配对"),
+                        systemImage: "message",
+                        tint: Color.secondary.opacity(0.08),
+                        foreground: .primary,
+                        disabled: !helperClient.isConnected
+                    ) {
+                        openChannelOnboarding(.feishu)
+                    }
+                    overviewCompactActionButton(
+                        title: L10n.k("user.detail.auto.wechat", fallback: "微信配对"),
+                        systemImage: "message.badge",
+                        tint: Color.secondary.opacity(0.08),
+                        foreground: .primary,
+                        disabled: !helperClient.isConnected
+                    ) {
+                        openChannelOnboarding(.weixin)
+                    }
+                }
+            }
+        }
+    }
+
+    private var overviewResourceCard: some View {
+        VStack(spacing: 0) {
+            overviewMetricRow(
+                color: overviewStatusColor,
+                value: overviewCpuMemoryLabel,
+                title: L10n.k("user.detail.auto.resource_usage", fallback: "内存与算力资源")
+            )
+            Divider().opacity(0.55)
+            overviewMetricRow(
+                color: .orange,
+                value: overviewOpenClawStorageLabel,
+                title: L10n.k("user.detail.auto.core_environment_openclaw", fallback: "核心环境 (.openclaw)")
+            )
+            Divider().opacity(0.55)
+            overviewMetricRow(
+                color: .blue,
+                value: overviewHomeStorageLabel,
+                title: L10n.k("user.detail.auto.user_data_partition", fallback: "用户数据区容量")
+            )
+            Divider().opacity(0.55)
+            overviewMetricRow(
+                color: .secondary.opacity(0.25),
+                value: overviewUptimeLabel,
+                title: L10n.k("user.detail.auto.stable_running", fallback: "持续稳定运行")
+            )
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func overviewMetricRow(color: Color, value: String, title: String) -> some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(color)
+                .frame(width: 11, height: 11)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(value)
+                    .font(.system(size: 17, weight: .bold, design: .monospaced))
+                    .lineLimit(1)
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, UserDetailWindowLayout.overviewMetricRowVerticalPadding)
+    }
+
+    private var overviewOpenConsoleButton: some View {
+        Button {
+            guard let url = embeddedOverviewConsoleURL ?? (gatewayURL.flatMap(URL.init(string:))) else { return }
+            NSWorkspace.shared.open(url)
+        } label: {
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Text(L10n.k("user.detail.auto.open_openclaw_web_console", fallback: "打开 Web 控制台"))
+                    .font(.system(size: 13, weight: .semibold))
+                Image(systemName: "arrow.up.right.square")
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer(minLength: 0)
+            }
+            .frame(height: UserDetailWindowLayout.overviewPrimaryButtonHeight)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white)
+        .background(
+            RoundedRectangle(cornerRadius: UserDetailWindowLayout.overviewPrimaryButtonCornerRadius, style: .continuous)
+                .fill(Color.green)
+                .shadow(color: Color.green.opacity(0.14), radius: 12, y: 6)
+        )
+        .disabled(gatewayURL == nil)
+        .opacity(gatewayURL == nil ? 0.6 : 1)
+    }
+
+    private var freezeToolbarLabel: String {
+        if user.isFrozen {
+            return user.freezeMode?.statusLabel ?? L10n.k("user.detail.auto.freeze", fallback: "冻结")
+        }
+        return L10n.k("user.detail.auto.freeze", fallback: "冻结")
+    }
+
+    private func overviewCompactActionButton(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        foreground: Color,
+        disabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            overviewCompactActionLabel(
+                title: title,
+                systemImage: systemImage,
+                tint: tint,
+                foreground: foreground
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.55 : 1)
+    }
+
+    private func overviewCompactActionLabel(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        foreground: Color
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(foreground)
+        .padding(.horizontal, 10)
+        .frame(height: UserDetailWindowLayout.overviewActionButtonHeight)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: UserDetailWindowLayout.overviewActionButtonCornerRadius, style: .continuous)
+                .fill(tint)
+        )
+    }
+
+    private func overviewSupplementaryCard<Content: View>(
+        title: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 14, weight: .bold))
+
+            VStack(alignment: .leading, spacing: 12) {
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                content()
+            }
+            .padding(UserDetailWindowLayout.overviewSupplementaryCardPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: UserDetailWindowLayout.overviewSupplementaryCardCornerRadius, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+        }
+    }
+
+    private var overviewStatusColor: Color {
+        if user.isFrozen {
+            switch user.freezeMode {
+            case .pause: return .blue
+            case .flash: return .orange
+            case .normal, .none: return .cyan
+            }
+        }
+
+        switch gatewayHub.readinessMap[user.username] {
+        case .ready: return .green
+        case .starting: return .orange
+        case .zombie: return .red
+        case .stopped, .none: return user.isRunning ? .orange : .secondary
+        }
+    }
+
+    private var overviewVersionAndPortLabel: String {
+        let version = user.openclawVersionLabel ?? "—"
+        let port = currentShrimpStats?.gatewayPort ?? URL(string: gatewayURL ?? "")?.port
+        if let port {
+            return "\(version) • P:\(port)"
+        }
+        return version
+    }
+
+    private var overviewCpuMemoryLabel: String {
+        let cpu = user.cpuPercent ?? currentShrimpStats?.cpuPercent
+        let mem = user.memRssMB ?? currentShrimpStats?.memRssMB
+        switch (cpu, mem) {
+        case let (.some(cpu), .some(mem)):
+            return String(format: "%.1f%% / %.0f MB", cpu, mem)
+        case let (.some(cpu), .none):
+            return String(format: "%.1f%% / —", cpu)
+        case let (.none, .some(mem)):
+            return String(format: "— / %.0f MB", mem)
+        default:
+            return "— / —"
+        }
+    }
+
+    private var overviewOpenClawStorageLabel: String {
+        guard let bytes = currentShrimpStats?.openclawDirBytes, bytes > 0 else { return "—" }
+        return FormatUtils.formatBytes(bytes)
+    }
+
+    private var overviewHomeStorageLabel: String {
+        guard let bytes = currentShrimpStats?.homeDirBytes, bytes > 0 else { return "—" }
+        return FormatUtils.formatBytes(bytes)
+    }
+
+    private var overviewUptimeLabel: String {
+        guard let startedAt = user.startedAt else { return "—" }
+        return relativeUptimeString(since: startedAt)
+    }
+
+    private func relativeUptimeString(since date: Date) -> String {
+        let interval = max(0, Int(Date().timeIntervalSince(date)))
+        let day = interval / 86_400
+        let hour = (interval % 86_400) / 3_600
+        let minute = (interval % 3_600) / 60
+
+        if day > 0 {
+            return "\(day)天 \(max(hour, 1))小时"
+        }
+        if hour > 0 {
+            return "\(hour)小时 \(max(minute, 1))分钟"
+        }
+        return "\(max(minute, 1))分钟"
+    }
+
+    @ViewBuilder
+    private var overviewContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                statusSection
+                quickTransferSection
+                configSection
+                actionsSection
+                dangerZoneSection
+            }
+            .padding(20)
         }
     }
 
@@ -692,7 +1357,9 @@ struct UserDetailView: View {
 
                 // Gateway 状态
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Gateway").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("user.detail.auto.gateway_status", fallback: "网关状态"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     HStack(spacing: 6) {
                         if isLoading && !versionChecked {
                             ProgressView().scaleEffect(0.7)
@@ -842,29 +1509,12 @@ struct UserDetailView: View {
         if isEffectivelyRunning, let urlStr = gatewayURL, !urlStr.isEmpty,
            gatewayToken(from: urlStr) != nil,
            let nsURL = URL(string: urlStr) {
-            HStack(spacing: 6) {
-                Button {
-                    NSWorkspace.shared.open(nsURL)
-                } label: {
-                    Text(urlStr)
-                        .font(.system(.body, design: .monospaced))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
-                .help(L10n.k("user.detail.auto.open", fallback: "点击在浏览器中打开"))
-
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(urlStr, forType: .string)
-                } label: {
-                    Image(systemName: "doc.on.doc").font(.caption)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help(L10n.k("user.detail.auto.address", fallback: "复制地址"))
+            Button(L10n.k("user.detail.auto.open_openclaw_web_console", fallback: "打开 OpenClaw Web 控制台")) {
+                NSWorkspace.shared.open(nsURL)
             }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .help(L10n.k("user.detail.auto.open", fallback: "点击在浏览器中打开"))
         } else if isEffectivelyRunning {
             HStack(spacing: 6) {
                 ProgressView().scaleEffect(0.6)
@@ -1174,27 +1824,29 @@ struct UserDetailView: View {
                     } else if user.isRunning {
                         Button(L10n.k("user.detail.auto.restart", fallback: "重启")) {
                             gatewayHub.markPendingStart(username: user.username)
+                            beginGatewayRestartVisualTransition()
                             performAction {
                                 try await helperClient.restartGateway(username: user.username)
                             }
                         }
                         .buttonStyle(.borderedProminent)
-
-                        Button(L10n.k("user.detail.auto.stop", fallback: "停止"), role: .destructive) {
-                            gatewayHub.markPendingStopped(username: user.username)
-                            performAction {
-                                try await helperClient.stopGateway(username: user.username)
-                            }
-                        }
-                        .buttonStyle(.bordered)
                     } else {
-                        Button(L10n.k("user.detail.auto.start_action", fallback: "启动")) {
-                            gatewayHub.markPendingStart(username: user.username)
+                        Button(
+                            (gatewayHub.readinessMap[user.username] == .starting)
+                                ? L10n.k("views.user_detail_view.start", fallback: "启动中…")
+                                : L10n.k("user.detail.auto.start_action", fallback: "启动")
+                        ) {
                             performAction {
+                                if user.isFrozen {
+                                    try await unfreezeUser()
+                                }
+                                gatewayHub.markPendingStart(username: user.username)
+                                beginGatewayRestartVisualTransition()
                                 try await helperClient.startGateway(username: user.username)
                             }
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(gatewayHub.readinessMap[user.username] == .starting)
                     }
 
                     Button { openTerminal() } label: {
@@ -1216,47 +1868,58 @@ struct UserDetailView: View {
                         Label(L10n.k("user.detail.auto.freeze", fallback: "冻结…"), systemImage: "snowflake")
                     }
                     .buttonStyle(.bordered)
+                    .tint(.orange)
+
+                    Menu {
+                        Button {
+                            showHealthCheck = true
+                        } label: {
+                            Label(L10n.k("user.detail.auto.health_check", fallback: "体检"), systemImage: "checkmark.shield")
+                        }
+
+                        Button {
+                            showPassword = true
+                        } label: {
+                            Label(L10n.k("views.user_detail_view.os_user_password", fallback: "获取 OS 用户密码"), systemImage: "key")
+                        }
+
+                        if !user.isAdmin {
+                            Divider()
+
+                            Button {
+                                showLogoutConfirm = true
+                            } label: {
+                                Label(L10n.k("user.detail.auto.log_out", fallback: "注销"), systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+
+                            Divider()
+
+                            Button {
+                                showResetConfirm = true
+                            } label: {
+                                Label(L10n.k("user.detail.auto.reset", fallback: "重置生存空间"), systemImage: "arrow.counterclockwise")
+                            }
+                            .disabled(isResetting || !helperClient.isConnected)
+
+                            Button(role: .destructive) {
+                                deleteStep = nil
+                                deleteError = nil
+                                deleteAdminPassword = ""
+                                showDeleteConfirm = true
+                            } label: {
+                                Label(L10n.k("user.detail.auto.deleteuser", fallback: "删除用户"), systemImage: "trash")
+                            }
+                            .disabled(isDeleting || !helperClient.isConnected || isSelf)
+                        }
+                    } label: {
+                        Label(L10n.k("user.detail.auto.more_actions", fallback: "更多操作"), systemImage: "ellipsis.circle")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.secondary)
 
                     Spacer()
                 }
                 .disabled(isLoading || !helperClient.isConnected)
-
-                DisclosureGroup(L10n.k("user.detail.auto.more_actions", fallback: "更多操作"), isExpanded: $isMoreActionsExpanded) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            Button { showPassword = true } label: {
-                                Label(L10n.k("user.detail.auto.password", fallback: "密码"), systemImage: "key")
-                            }
-                            .buttonStyle(.bordered)
-
-                            if !user.isAdmin {
-                                Button(isLoggingOut ? L10n.k("user.detail.auto.text_79a96634ec", fallback: "注销中…") : L10n.k("user.detail.auto.log_out", fallback: "注销")) {
-                                    showLogoutConfirm = true
-                                }
-                                .buttonStyle(.bordered)
-                                .disabled(isLoggingOut)
-                            }
-
-                            Spacer()
-                        }
-
-                        if !user.isAdmin {
-                            Toggle(autostartEnabled ? L10n.k("user.detail.auto.autostart_on", fallback: "自启已开") : L10n.k("user.detail.auto.autostart_off", fallback: "自启已关"), isOn: $autostartEnabled)
-                                .toggleStyle(.button)
-                                .controlSize(.small)
-                                .tint(autostartEnabled ? .green : .secondary)
-                                .help(autostartEnabled ? L10n.k("user.detail.auto.start_gateway_close", fallback: "开机自动启动此虾的 Gateway（点击关闭）") : L10n.k("user.detail.auto.do_not_auto_start_this_shrimp_s_gateway", fallback: "开机不自动启动此虾的 Gateway（点击开启）"))
-                                .onChange(of: autostartEnabled) { _, newValue in
-                                    Task { try? await helperClient.setUserAutostart(username: user.username, enabled: newValue) }
-                                }
-                        } else {
-                            Text(L10n.k("user.detail.auto.admin", fallback: "管理员：基础管理模式"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.top, 6)
-                }
 
                 if !helperClient.isConnected {
                     Text(L10n.k("user.detail.auto.helper_clawdhome", fallback: "Helper 未连接，请先安装 ClawdHome 系统服务"))
@@ -1332,7 +1995,10 @@ struct UserDetailView: View {
 
             ScrollView {
                 KimiMinimaxModelConfigPanel(user: user) {
-                    Task { await refreshModelStatusSummary() }
+                    Task {
+                        beginGatewayRestartVisualTransition()
+                        await refreshModelStatusSummary()
+                    }
                 }
                 .environment(helperClient)
                 .padding(16)
@@ -1346,6 +2012,14 @@ struct UserDetailView: View {
             defaultModel = status.resolvedDefault ?? status.defaultModel
             fallbackModels = status.fallbacks
         }
+    }
+
+    /// 在重启/启动 Gateway 时，先让概览 Web 控制台回到等待态，再轮询新的 token。
+    private func beginGatewayRestartVisualTransition() {
+        gatewayURLTokenPollTask?.cancel()
+        gatewayURLTokenPollTask = nil
+        gatewayURL = nil
+        refreshGatewayURLUntilTokenReady()
     }
 
     // MARK: - 操作封装
@@ -1556,7 +2230,7 @@ struct UserDetailView: View {
         async let statusResult = helperClient.getGatewayStatus(username: user.username)
         async let versionResult = helperClient.getOpenclawVersion(username: user.username)
         async let wizardStateResult = loadWizardState()
-        async let nodeInstalledResult = helperClient.isNodeInstalled()
+        async let nodeInstalledResult = helperClient.isNodeInstalled(username: user.username)
         async let xcodeStatusResult = helperClient.getXcodeEnvStatus()
 
         if let (running, pid) = try? await statusResult {
@@ -1604,8 +2278,6 @@ struct UserDetailView: View {
         fallbackModels = modelsStatus?.fallbacks ?? []
         applyLoadedNpmRegistry(registryURL)
         loadPreUpgradeInfo()
-        autostartEnabled = await helperClient.getUserAutostart(username: user.username)
-
         // Gateway 运行且有地址时，建立 WebSocket 连接（幂等）
         if user.isRunning, let gatewayURLValue = gatewayURL {
             await gatewayHub.connect(username: user.username, gatewayURL: gatewayURLValue)
@@ -2104,37 +2776,6 @@ struct UserDetailView: View {
         }
     }
 
-    private func verifyAdminPassword(user: String, password: String) async throws {
-        let trimmed = password.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            throw HelperError.operationFailed(L10n.k("user.detail.auto.inputadminpassword", fallback: "请输入管理员登录密码"))
-        }
-        try await Task.detached(priority: .userInitiated) {
-            let nodes = ["/Local/Default", "/Search"]
-            var lastError = L10n.k("user.detail.auto.password", fallback: "密码错误或无权限")
-
-            for node in nodes {
-                let proc = Process()
-                proc.executableURL = URL(fileURLWithPath: "/usr/bin/dscl")
-                proc.arguments = [node, "-authonly", user, trimmed]
-                let pipe = Pipe()
-                proc.standardError = pipe
-                proc.standardOutput = pipe
-                try proc.run()
-                proc.waitUntilExit()
-                if proc.terminationStatus == 0 {
-                    return
-                }
-                let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
-                                 encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                if !out.isEmpty { lastError = out }
-            }
-
-            throw HelperError.operationFailed(L10n.f("views.user_detail_view.n_macos", fallback: "管理员密码校验失败：%@\\n请填写该 macOS 账户的登录密码（不是用户名）", String(describing: lastError)))
-        }.value
-    }
-
     private func deleteUserViaSysadminctl(username: String, keepHome: Bool, adminPassword: String) async throws {
         let trimmed = adminPassword.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -2245,6 +2886,24 @@ struct UserDetailView: View {
         }
     }
 
+    private final class ThreadSafeDataBuffer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage = Data()
+
+        func append(_ chunk: Data) {
+            lock.lock()
+            storage.append(chunk)
+            lock.unlock()
+        }
+
+        func snapshot() -> Data {
+            lock.lock()
+            let data = storage
+            lock.unlock()
+            return data
+        }
+    }
+
     private nonisolated func runProcessWithTimeout(
         executable: String,
         arguments: [String],
@@ -2261,15 +2920,12 @@ struct UserDetailView: View {
         let inputPipe = Pipe()
         proc.standardInput = inputPipe
 
-        let lock = NSLock()
-        var collected = Data()
+        let buffer = ThreadSafeDataBuffer()
         let reader = pipe.fileHandleForReading
         reader.readabilityHandler = { handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else { return }
-            lock.lock()
-            collected.append(chunk)
-            lock.unlock()
+            buffer.append(chunk)
         }
 
         let sem = DispatchSemaphore(value: 0)
@@ -2290,10 +2946,8 @@ struct UserDetailView: View {
 
         reader.readabilityHandler = nil
         let tail = reader.readDataToEndOfFile()
-        lock.lock()
-        collected.append(tail)
-        let data = collected
-        lock.unlock()
+        buffer.append(tail)
+        let data = buffer.snapshot()
         let output = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return (proc.terminationStatus, output)
@@ -2306,6 +2960,13 @@ struct UserDetailView: View {
             command: ["zsh", "-l"]
         )
         openWindow(id: "maintenance-terminal", value: payload)
+    }
+
+    private func openChannelOnboarding(_ flow: ChannelOnboardingFlow) {
+        openWindow(
+            id: "channel-onboarding",
+            value: "\(flow.rawValue):\(user.username)"
+        )
     }
 
     private func installOpenclaw(version: String? = nil) async {
@@ -3189,8 +3850,6 @@ private struct ConfigTabView: View {
 
 private struct ProcessTabView: View {
     let username: String
-    let freezeMode: FreezeMode?
-    let pausedProcessPIDs: [Int32]
 
     @Environment(HelperClient.self) private var helperClient
     @State private var processes: [ProcessEntry] = []
@@ -3259,10 +3918,6 @@ private struct ProcessTabView: View {
             selectedPIDs: selectedPIDs,
             processes: processes
         )
-    }
-
-    private var pausedPIDSet: Set<Int32> {
-        freezeMode == .pause ? Set(pausedProcessPIDs) : []
     }
 
     // MARK: - 进程树
@@ -3398,8 +4053,6 @@ private struct ProcessTabView: View {
                         hasChildren: false,
                         isCollapsed: false,
                         widths: columnWidths,
-                        freezeMode: freezeMode,
-                        pausedPIDSet: pausedPIDSet,
                         onToggle: nil
                     )
                         .onTapGesture(count: 2) { detailTarget = proc }
@@ -3419,8 +4072,6 @@ private struct ProcessTabView: View {
                         hasChildren: node.hasChildren,
                         isCollapsed: collapsedPIDs.contains(node.entry.pid),
                         widths: columnWidths,
-                        freezeMode: freezeMode,
-                        pausedPIDSet: pausedPIDSet,
                         onToggle: {
                             if collapsedPIDs.contains(node.entry.pid) {
                                 collapsedPIDs.remove(node.entry.pid)
@@ -3697,15 +4348,14 @@ private struct ProcessDetailSheet: View {
 // MARK: - 列头（独立抽出减轻类型检查压力）
 
 private struct ProcessColumnWidths {
-    var pid: CGFloat = 56
-    var name: CGFloat = 128
-    var command: CGFloat = 420
-    var cpu: CGFloat = 52
-    var mem: CGFloat = 60
-    var state: CGFloat = 44
-    var uptime: CGFloat = 56
-    var ports: CGFloat = 140
-    var purpose: CGFloat = 180
+    var pid: CGFloat = UserDetailWindowLayout.defaultProcessColumns.pid
+    var name: CGFloat = UserDetailWindowLayout.defaultProcessColumns.name
+    var command: CGFloat = UserDetailWindowLayout.defaultProcessColumns.command
+    var cpu: CGFloat = UserDetailWindowLayout.defaultProcessColumns.cpu
+    var mem: CGFloat = UserDetailWindowLayout.defaultProcessColumns.mem
+    var uptime: CGFloat = UserDetailWindowLayout.defaultProcessColumns.uptime
+    var ports: CGFloat = UserDetailWindowLayout.defaultProcessColumns.ports
+    var purpose: CGFloat = UserDetailWindowLayout.defaultProcessColumns.purpose
 }
 
 private struct ProcessColumnHeader: View {
@@ -3721,11 +4371,10 @@ private struct ProcessColumnHeader: View {
             nameCol(right: $widths.command) { onSort(.name) }
             commandCol(right: $widths.cpu)
             cpuCol(right: $widths.mem) { onSort(.cpu) }
-            memCol(right: $widths.state) { onSort(.mem) }
-            resizableText(L10n.k("user.detail.auto.status", fallback: "状态"), width: $widths.state, min: 40, max: 120, rightWidth: $widths.uptime, rightMin: 48, rightMax: 160)
+            memCol(right: $widths.uptime) { onSort(.mem) }
             uptimeCol(right: $widths.ports) { onSort(.uptime) }
-            resizableText(L10n.k("user.detail.auto.port", fallback: "端口"), width: $widths.ports, min: 90, max: 360, rightWidth: $widths.purpose, rightMin: 100, rightMax: 420)
-            resizableText(L10n.k("user.detail.auto.description", fallback: "说明"), width: $widths.purpose, min: 100, max: 420)
+            resizableText(L10n.k("user.detail.auto.port", fallback: "端口"), width: $widths.ports, min: 84, max: 360, rightWidth: $widths.purpose, rightMin: 96, rightMax: 420)
+            resizableText(L10n.k("user.detail.auto.description", fallback: "说明"), width: $widths.purpose, min: 96, max: 420)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -3741,14 +4390,14 @@ private struct ProcessColumnHeader: View {
     @ViewBuilder private func nameCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
         if viewMode == .flat {
             sortBtn(L10n.k("user.detail.auto.process", fallback: "进程名"), field: .name, width: $widths.name, min: 96, max: 320, align: .leading,
-                    rightWidth: right, rightMin: 220, rightMax: 900, action: action)
+                    rightWidth: right, rightMin: 160, rightMax: 900, action: action)
         } else {
             resizableText(L10n.k("user.detail.auto.process", fallback: "进程名"), width: $widths.name, min: 96, max: 320,
-                          rightWidth: right, rightMin: 220, rightMax: 900)
+                          rightWidth: right, rightMin: 160, rightMax: 900)
         }
     }
     @ViewBuilder private func commandCol(right: Binding<CGFloat>) -> some View {
-        resizableText("Command", width: $widths.command, min: 220, max: 900,
+        resizableText("Command", width: $widths.command, min: 160, max: 900,
                       rightWidth: right, rightMin: 48, rightMax: 120)
     }
     @ViewBuilder private func cpuCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
@@ -3757,11 +4406,11 @@ private struct ProcessColumnHeader: View {
     }
     @ViewBuilder private func memCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
         sortBtn(L10n.k("user.detail.auto.memory", fallback: "内存"), field: .mem, width: $widths.mem, min: 54, max: 160, align: .trailing,
-                rightWidth: right, rightMin: 40, rightMax: 120, action: action)
+                rightWidth: right, rightMin: 48, rightMax: 160, action: action)
     }
     @ViewBuilder private func uptimeCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
         sortBtn(L10n.k("user.detail.auto.duration", fallback: "时长"), field: .uptime, width: $widths.uptime, min: 48, max: 160, align: .trailing,
-                rightWidth: right, rightMin: 90, rightMax: 360, action: action)
+                rightWidth: right, rightMin: 84, rightMax: 360, action: action)
     }
 
     @ViewBuilder
@@ -3781,7 +4430,7 @@ private struct ProcessColumnHeader: View {
         }
         .buttonStyle(.plain)
         .frame(width: width.wrappedValue, alignment: align)
-        .padding(.horizontal, 6)
+        .padding(.horizontal, 4)
         .overlay(alignment: .trailing) {
             resizeHandle(width: width, min: min, max: max, rightWidth: rightWidth, rightMin: rightMin, rightMax: rightMax)
         }
@@ -3792,7 +4441,7 @@ private struct ProcessColumnHeader: View {
         Text(label)
             .lineLimit(1)
             .frame(width: width.wrappedValue, alignment: .leading)
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 4)
             .overlay(alignment: .trailing) {
                 resizeHandle(width: width, min: min, max: max, rightWidth: rightWidth, rightMin: rightMin, rightMax: rightMax)
             }
@@ -3813,23 +4462,7 @@ private struct ProcessRow: View {
     let hasChildren: Bool
     let isCollapsed: Bool
     let widths: ProcessColumnWidths
-    let freezeMode: FreezeMode?
-    let pausedPIDSet: Set<Int32>
     let onToggle: (() -> Void)?
-
-    private var stateText: String {
-        if freezeMode == .pause, pausedPIDSet.contains(proc.pid) {
-            return L10n.k("views.user_detail_view.pause_freeze_state", fallback: "已暂停(冻结)")
-        }
-        return proc.stateLabel
-    }
-
-    private var stateColor: Color {
-        if freezeMode == .pause, pausedPIDSet.contains(proc.pid) {
-            return .blue
-        }
-        return .secondary
-    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -3838,7 +4471,7 @@ private struct ProcessRow: View {
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: widths.pid, alignment: .trailing)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 4)
 
             // 进程名（树状模式下含缩进 + 折叠按钮）
             HStack(spacing: 0) {
@@ -3863,7 +4496,7 @@ private struct ProcessRow: View {
                 Spacer(minLength: 0)
             }
             .frame(width: widths.name, alignment: .leading)
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 4)
 
             // Command — 弹性列，可选中，居中截断
             Text(proc.cmdline.isEmpty ? "—" : proc.cmdline)
@@ -3873,34 +4506,27 @@ private struct ProcessRow: View {
                 .truncationMode(.middle)
                 .textSelection(.enabled)
                 .frame(width: widths.command, alignment: .leading)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 4)
 
             // CPU%
             Text(String(format: "%.1f", proc.cpuPercent))
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(proc.cpuPercent > 50 ? .orange : .primary)
                 .frame(width: widths.cpu, alignment: .trailing)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 4)
 
             // 内存
             Text(proc.memLabel)
                 .font(.system(.caption, design: .monospaced))
                 .frame(width: widths.mem, alignment: .trailing)
-                .padding(.horizontal, 6)
-
-            // 状态
-            Text(stateText)
-                .font(.caption2)
-                .foregroundStyle(stateColor)
-                .frame(width: widths.state, alignment: .leading)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 4)
 
             // 时长
             Text(proc.uptimeLabel)
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: widths.uptime, alignment: .trailing)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 4)
 
             // 监听端口
             Text(proc.portsLabel)
@@ -3909,7 +4535,7 @@ private struct ProcessRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(width: widths.ports, alignment: .leading)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 4)
 
             // 进程说明
             Text(proc.purposeDescription)
@@ -3918,7 +4544,7 @@ private struct ProcessRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(width: widths.purpose, alignment: .leading)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 4)
                 .help(proc.purposeDescription)
         }
         .padding(.vertical, 2)
@@ -3988,6 +4614,7 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
     case kimiCoding = "kimi-coding"
     case minimax = "minimax"
     case zai = "zai"
+    case custom = "custom"
 
     var id: String { rawValue }
 
@@ -3997,6 +4624,7 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         case .minimax: return "MiniMax"
         case .qiniu: return "Qiniu AI"
         case .zai: return "智谱 Z.AI"
+        case .custom: return "Custom"
         }
     }
 
@@ -4006,6 +4634,7 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         case .minimax: return "MiniMax API Key"
         case .qiniu: return "Qiniu API Key"
         case .zai: return "智谱 API Key"
+        case .custom: return "Custom API Key"
         }
     }
 
@@ -4015,24 +4644,27 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         case .minimax: return L10n.k("views.user_detail_view.minimax_api_key", fallback: "粘贴 MiniMax API Key")
         case .qiniu: return "sk-..."
         case .zai: return "sk-..."
+        case .custom: return "留空则尝试使用 CUSTOM_API_KEY"
         }
     }
 
-    var consoleURL: String {
+    var consoleURL: String? {
         switch self {
         case .kimiCoding: return "https://www.kimi.com/code/console"
         case .minimax: return "https://platform.minimaxi.com/user-center/basic-information/interface-key"
         case .qiniu: return "https://portal.qiniu.com/ai-inference/api-key?ref=clawdhome.app"
         case .zai: return "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys"
+        case .custom: return nil
         }
     }
 
-    var consoleTitle: String {
+    var consoleTitle: String? {
         switch self {
         case .kimiCoding: return L10n.k("views.user_detail_view.kimi_code", fallback: "Kimi Code 控制台")
         case .minimax: return L10n.k("views.user_detail_view.minimax", fallback: "MiniMax 控制台")
         case .qiniu: return "七牛 API Key"
         case .zai: return "获取 API Key"
+        case .custom: return nil
         }
     }
 
@@ -4057,8 +4689,61 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
             return "免费领取 1000 万 Token"
         case .zai:
             return "95折优惠订阅"
+        case .custom:
+            return nil
         default:
             return nil
+        }
+    }
+}
+
+private enum DirectKimiModel: String, CaseIterable, Identifiable {
+    case k2p5 = "kimi-coding/k2p5"
+
+    var id: String { rawValue }
+
+    var alias: String {
+        switch self {
+        case .k2p5: return "Kimi K2.5"
+        }
+    }
+}
+
+private enum DirectCustomCompatibility: String, CaseIterable, Identifiable {
+    case openai
+    case anthropic
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .openai: return "OpenAI"
+        case .anthropic: return "Anthropic"
+        }
+    }
+
+    var apiType: String {
+        switch self {
+        case .openai: return "openai-completions"
+        case .anthropic: return "anthropic-messages"
+        }
+    }
+}
+
+private enum DirectCustomModelPreset: String, CaseIterable, Identifiable {
+    case gpt41 = "gpt-4.1"
+    case claude37sonnet = "claude-3-7-sonnet"
+    case qwenMax = "qwen-max"
+    case custom = "__custom__"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .gpt41: return "GPT-4.1"
+        case .claude37sonnet: return "Claude 3.7 Sonnet"
+        case .qwenMax: return "Qwen Max"
+        case .custom: return "自定义模型 ID"
         }
     }
 }
@@ -4205,9 +4890,15 @@ private struct KimiMinimaxModelConfigPanel: View {
     @State private var isLoading = true
     @State private var isSaving = false
     @State private var selectedProvider: DirectProviderChoice = .qiniu
+    @State private var selectedKimiModel: DirectKimiModel = .k2p5
     @State private var selectedMinimaxModel: DirectMinimaxModel = .m27
     @State private var selectedQiniuModel: DirectQiniuModel = .deepseekV32
     @State private var selectedZAIModel: DirectZAIModel = .glm5
+    @State private var customProviderId = ""
+    @State private var customBaseURL = "https://api.example.com/v1"
+    @State private var customCompatibility: DirectCustomCompatibility = .openai
+    @State private var selectedCustomModelPreset: DirectCustomModelPreset = .gpt41
+    @State private var customModelId = ""
     @State private var providerKeys: [String: String] = [:]
     @State private var isShowingApiKey = false
     @State private var saveMessage: String? = nil
@@ -4229,10 +4920,6 @@ private struct KimiMinimaxModelConfigPanel: View {
         }
     }
 
-    private var isCurrentModelSupportedByUI: Bool {
-        isModelSupportedInDirectUI(currentDefaultModel)
-    }
-
     private var apiKeyBinding: Binding<String> {
         Binding(
             get: { providerKeys[selectedProvider.rawValue] ?? "" },
@@ -4241,17 +4928,31 @@ private struct KimiMinimaxModelConfigPanel: View {
     }
 
     private var canApply: Bool {
-        !(providerKeys[selectedProvider.rawValue] ?? "")
+        let apiKey = (providerKeys[selectedProvider.rawValue] ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty
+        if selectedProvider == .custom {
+            let baseURL = customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !apiKey.isEmpty && !baseURL.isEmpty && !effectiveCustomModelId.isEmpty
+        }
+        return !apiKey.isEmpty
+    }
+
+    private var effectiveCustomProviderId: String {
+        let value = customProviderId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? "custom" : value
+    }
+
+    private var effectiveCustomModelId: String {
+        switch selectedCustomModelPreset {
+        case .custom:
+            return customModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        default:
+            return selectedCustomModelPreset.rawValue
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(L10n.k("user.detail.model_config.builtin_ui_title", fallback: "内置模型配置（Kimi / MiniMax / Qiniu / Z.AI）"))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
             if let currentDefaultModel {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L10n.f("views.user_detail_view.current_model", fallback: "当前：%@", String(describing: currentDefaultModel)))
@@ -4272,9 +4973,6 @@ private struct KimiMinimaxModelConfigPanel: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
                     .truncationMode(.middle)
-                    Text(L10n.k("views.user_detail_view.fallback_cli_recommended", fallback: "回退模型建议在命令行中管理。"))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
                 }
             }
 
@@ -4308,14 +5006,6 @@ private struct KimiMinimaxModelConfigPanel: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                 } else {
-                    if !isCurrentModelSupportedByUI {
-                        Label(
-                            L10n.k("views.user_detail_view.current_model_from_cli_hint", fallback: "当前模型来自“更多模型（命令行）”，可在下方切换到内置 UI 支持模型。"),
-                            systemImage: "info.circle"
-                        )
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
                     Picker("Provider", selection: $selectedProvider) {
                         ForEach(DirectProviderChoice.allCases) { provider in
                             Text(provider.title).tag(provider)
@@ -4342,16 +5032,19 @@ private struct KimiMinimaxModelConfigPanel: View {
                                 .buttonStyle(.borderless)
                                 .foregroundStyle(Color.accentColor)
                             }
-                            Button {
-                                if let url = URL(string: selectedProvider.consoleURL) {
-                                    NSWorkspace.shared.open(url)
+                            if let consoleURL = selectedProvider.consoleURL,
+                               let consoleTitle = selectedProvider.consoleTitle {
+                                Button {
+                                    if let url = URL(string: consoleURL) {
+                                        NSWorkspace.shared.open(url)
+                                    }
+                                } label: {
+                                    Label(consoleTitle, systemImage: "arrow.up.right.square")
+                                        .font(.caption)
                                 }
-                            } label: {
-                                Label(selectedProvider.consoleTitle, systemImage: "arrow.up.right.square")
-                                    .font(.caption)
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(Color.accentColor)
                             }
-                            .buttonStyle(.borderless)
-                            .foregroundStyle(Color.accentColor)
                         }
 
                         HStack(spacing: 8) {
@@ -4389,11 +5082,23 @@ private struct KimiMinimaxModelConfigPanel: View {
                                 .font(.system(.caption2, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }
-                    } else if selectedProvider == .qiniu {
+                    } else if selectedProvider == .kimiCoding {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(L10n.k("views.user_detail_view.qiniu_ai_models", fallback: "Qiniu AI 模型"))
+                            Text(L10n.k("user.detail.auto.kimi_models", fallback: "Kimi 模型"))
                                 .font(.subheadline)
                                 .fontWeight(.medium)
+                            Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedKimiModel) {
+                                ForEach(DirectKimiModel.allCases) { model in
+                                    Text(model.alias).tag(model)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            Text(selectedKimiModel.rawValue)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if selectedProvider == .qiniu {
+                        VStack(alignment: .leading, spacing: 6) {
                             Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedQiniuModel) {
                                 ForEach(DirectQiniuModel.allCases) { model in
                                     Text(model.alias).tag(model)
@@ -4419,13 +5124,53 @@ private struct KimiMinimaxModelConfigPanel: View {
                                 .font(.system(.caption2, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }
-                    } else {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(L10n.k("user.detail.auto.kimi_models", fallback: "Kimi 当前固定模型"))
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            Text("kimi-coding/k2p5")
-                                .font(.system(.caption, design: .monospaced))
+                    } else if selectedProvider == .custom {
+                        VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L10n.k("views.user_detail_view.custom_api_compatibility", fallback: "API 兼容（默认 OpenAI）"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Picker("custom-compatibility", selection: $customCompatibility) {
+                                    ForEach(DirectCustomCompatibility.allCases) { item in
+                                        Text(item.title).tag(item)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                            }
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Base URL")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField("https://api.example.com/v1", text: $customBaseURL)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(.body, design: .monospaced))
+                            }
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L10n.k("views.user_detail_view.custom_provider_id_optional", fallback: "Provider ID（可选，默认 custom）"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField("custom", text: $customProviderId)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(.body, design: .monospaced))
+                            }
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L10n.k("views.user_detail_view.custom_model", fallback: "模型"))
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                Picker("custom-model", selection: $selectedCustomModelPreset) {
+                                    ForEach(DirectCustomModelPreset.allCases) { model in
+                                        Text(model.title).tag(model)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                if selectedCustomModelPreset == .custom {
+                                    TextField(L10n.k("views.user_detail_view.custom_model_id_placeholder", fallback: "输入模型 ID（例如 gpt-4.1 / claude-3-7-sonnet）"), text: $customModelId)
+                                        .textFieldStyle(.roundedBorder)
+                                        .font(.system(.body, design: .monospaced))
+                                }
+                            }
+                            Text("\(effectiveCustomProviderId)/\(effectiveCustomModelId)")
+                                .font(.system(.caption2, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -4463,6 +5208,9 @@ private struct KimiMinimaxModelConfigPanel: View {
         .onChange(of: selectedProvider) { _, _ in
             saveMessage = nil
             saveError = nil
+            if selectedProvider == .custom && customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                customBaseURL = "https://api.example.com/v1"
+            }
         }
         .task {
             await loadCurrentState()
@@ -4526,6 +5274,23 @@ private struct KimiMinimaxModelConfigPanel: View {
                 }
             } else if primary.hasPrefix("kimi-coding/") {
                 selectedProvider = .kimiCoding
+                if let model = DirectKimiModel(rawValue: primary) {
+                    selectedKimiModel = model
+                }
+            } else if primary.contains("/") {
+                selectedProvider = .custom
+                let parts = primary.split(separator: "/", maxSplits: 1).map(String.init)
+                if parts.count == 2 {
+                    customProviderId = parts[0]
+                    let modelId = parts[1]
+                    if let preset = DirectCustomModelPreset.allCases.first(where: { $0 != .custom && $0.rawValue == modelId }) {
+                        selectedCustomModelPreset = preset
+                        customModelId = ""
+                    } else {
+                        selectedCustomModelPreset = .custom
+                        customModelId = modelId
+                    }
+                }
             }
         }
 
@@ -4540,6 +5305,22 @@ private struct KimiMinimaxModelConfigPanel: View {
         providerKeys[DirectProviderChoice.minimax.rawValue] = minimaxKey
         providerKeys[DirectProviderChoice.qiniu.rawValue] = qiniuKey
         providerKeys[DirectProviderChoice.zai.rawValue] = zaiKey
+
+        if selectedProvider == .custom {
+            let providerId = effectiveCustomProviderId
+            let customProviderConfig = (((config["models"] as? [String: Any])?["providers"] as? [String: Any])?[providerId] as? [String: Any]) ?? [:]
+            if let baseUrl = customProviderConfig["baseUrl"] as? String, !baseUrl.isEmpty {
+                customBaseURL = baseUrl
+            }
+            if let api = customProviderConfig["api"] as? String {
+                customCompatibility = api.contains("anthropic") ? .anthropic : .openai
+            }
+            if let apiKey = customProviderConfig["apiKey"] as? String, !apiKey.isEmpty {
+                providerKeys[DirectProviderChoice.custom.rawValue] = apiKey
+            } else {
+                providerKeys[DirectProviderChoice.custom.rawValue] = ""
+            }
+        }
     }
 
     private func applyConfig() async {
@@ -4565,6 +5346,8 @@ private struct KimiMinimaxModelConfigPanel: View {
                 try await applyQiniuConfig(apiKey: apiKey)
             case .zai:
                 try await applyZAIConfig(apiKey: apiKey)
+            case .custom:
+                try await applyCustomConfig(apiKey: apiKey)
             }
             gatewayHub.markPendingStart(username: user.username)
             try await helperClient.restartGateway(username: user.username)
@@ -4577,7 +5360,8 @@ private struct KimiMinimaxModelConfigPanel: View {
 
     private func applyKimiConfig(apiKey: String) async throws {
         let config = await helperClient.getConfigJSON(username: user.username)
-        let modelId = "kimi-coding/k2p5"
+        let modelId = selectedKimiModel.rawValue
+        let providerModelId = modelId.replacingOccurrences(of: "kimi-coding/", with: "")
         let normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: modelId)
         let agentDir = ".openclaw/agents/main/agent"
 
@@ -4591,8 +5375,8 @@ private struct KimiMinimaxModelConfigPanel: View {
                 "baseUrl": "https://api.kimi.com/coding/",
                 "apiKey": apiKey,
                 "models": [[
-                    "id": "k2p5",
-                    "name": "Kimi for Coding",
+                    "id": providerModelId,
+                    "name": selectedKimiModel.alias,
                     "reasoning": true,
                     "input": ["text", "image"],
                     "cost": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0],
@@ -4629,8 +5413,8 @@ private struct KimiMinimaxModelConfigPanel: View {
             "baseUrl": "https://api.kimi.com/coding/",
             "api": "anthropic-messages",
             "models": [[
-                "id": "k2p5",
-                "name": "Kimi for Coding",
+                "id": providerModelId,
+                "name": selectedKimiModel.alias,
                 "reasoning": true,
                 "input": ["text", "image"],
                 "cost": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0],
@@ -4764,6 +5548,60 @@ private struct KimiMinimaxModelConfigPanel: View {
         try await syncZAIAgentFiles(apiKey: apiKey, providerModels: providerModels)
     }
 
+    private func applyCustomConfig(apiKey: String) async throws {
+        let config = await helperClient.getConfigJSON(username: user.username)
+        let providerId = effectiveCustomProviderId
+        let modelId = effectiveCustomModelId
+        let baseURL = customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !modelId.isEmpty else {
+            throw HelperError.operationFailed("请先选择模型")
+        }
+        guard !baseURL.isEmpty else {
+            throw HelperError.operationFailed("请先填写 Base URL")
+        }
+
+        let primary = "\(providerId)/\(modelId)"
+        let normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: primary)
+        var aliasMap = ((((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:])
+        var aliasConfig = (aliasMap[primary] as? [String: Any]) ?? [:]
+        aliasConfig["alias"] = modelId
+        aliasMap[primary] = aliasConfig
+
+        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "models.providers.\(providerId)",
+            value: [
+                "baseUrl": baseURL,
+                "apiKey": apiKey,
+                "api": customCompatibility.apiType,
+                "models": [[
+                    "id": modelId,
+                    "name": modelId,
+                    "input": ["text"],
+                    "contextWindow": 128000,
+                    "maxTokens": 8192,
+                ]],
+            ]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "auth.profiles.\(providerId):default",
+            value: ["provider": providerId, "mode": "api_key"]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "agents.defaults.model",
+            value: normalizedModelConfig
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "agents.defaults.models",
+            value: aliasMap
+        )
+    }
+
     private func syncMinimaxAgentFiles(apiKey: String, providerModels: [[String: Any]]) async throws {
         let agentDir = ".openclaw/agents/main/agent"
         try await helperClient.createDirectory(username: user.username, relativePath: agentDir)
@@ -4872,11 +5710,224 @@ private struct KimiMinimaxModelConfigPanel: View {
     }
 }
 
-private func isModelSupportedInDirectUI(_ modelId: String?) -> Bool {
-    guard let modelId, !modelId.isEmpty else { return true }
-    if modelId.hasPrefix("kimi-coding/") { return true }
-    if DirectMinimaxModel(rawValue: modelId) != nil { return true }
-    if DirectQiniuModel(rawValue: modelId) != nil { return true }
-    if DirectZAIModel(rawValue: modelId) != nil { return true }
-    return false
+private final class EmbeddedGatewayConsoleCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
+    weak var webView: WKWebView?
+    private var pendingFileInputAccept = ""
+    var onNavigationStateChanged: ((Bool) -> Void)?
+
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        guard navigationAction.targetFrame == nil || navigationAction.targetFrame?.isMainFrame == false,
+              let requestURL = navigationAction.request.url else { return nil }
+        webView.load(URLRequest(url: requestURL))
+        return nil
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping ([URL]?) -> Void
+    ) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.resolvesAliases = true
+        let allowedContentTypes = resolvedFileInputAllowedContentTypes(pendingFileInputAccept)
+        if !allowedContentTypes.isEmpty {
+            panel.allowedContentTypes = allowedContentTypes
+        }
+
+        panel.begin { response in
+            completionHandler(response == .OK ? panel.urls : nil)
+        }
+    }
+
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        download.delegate = self
+    }
+
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        download.delegate = self
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        onNavigationStateChanged?(true)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        onNavigationStateChanged?(false)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        onNavigationStateChanged?(false)
+    }
+
+    func download(
+        _ download: WKDownload,
+        decideDestinationUsing response: URLResponse,
+        suggestedFilename: String,
+        completionHandler: @escaping (URL?) -> Void
+    ) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = suggestedFilename
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+
+        let downloadsURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.directoryURL = downloadsURL
+
+        panel.begin { result in
+            completionHandler(result == .OK ? panel.url : nil)
+        }
+    }
+
+    func downloadDidFinish(_ download: WKDownload) {
+    }
+
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+        NSSound.beep()
+        print("[EmbeddedGatewayConsoleView] download failed: \(error.localizedDescription)")
+    }
+}
+
+private final class EmbeddedGatewayConsoleStore: ObservableObject {
+    private enum LoadState {
+        case idle
+        case loading
+        case loaded
+        case failed
+    }
+
+    let coordinator = EmbeddedGatewayConsoleCoordinator()
+    private(set) var webView: WKWebView?
+    private var loadedURL: String?
+    private var loadState: LoadState = .idle
+    private var lastRetryAt: Date = .distantPast
+    private let retryInterval: TimeInterval = 1.5
+
+    func resolveWebView() -> WKWebView {
+        if let webView {
+            webView.navigationDelegate = coordinator
+            webView.uiDelegate = coordinator
+            coordinator.webView = webView
+            return webView
+        }
+
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .default()
+        configuration.userContentController.add(coordinator, name: "fileInputAccept")
+        configuration.userContentController.addUserScript(.fileInputAcceptCapture)
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.allowsBackForwardNavigationGestures = true
+        webView.navigationDelegate = coordinator
+        webView.uiDelegate = coordinator
+        coordinator.webView = webView
+        coordinator.onNavigationStateChanged = { [weak self] success in
+            guard let self else { return }
+            self.loadState = success ? .loaded : .failed
+        }
+        self.webView = webView
+        return webView
+    }
+
+    func loadIfNeeded(_ url: URL) {
+        let webView = resolveWebView()
+        let urlString = url.absoluteString
+        if loadedURL != urlString {
+            loadedURL = urlString
+            loadState = .loading
+            lastRetryAt = Date()
+            webView.load(URLRequest(url: url))
+            return
+        }
+
+        guard !webView.isLoading else { return }
+        let shouldRetry = (loadState == .failed) || webView.url == nil
+        guard shouldRetry else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastRetryAt) >= retryInterval else { return }
+        loadState = .loading
+        lastRetryAt = now
+        webView.load(URLRequest(url: url))
+    }
+
+    func reloadCurrent() {
+        guard let webView else { return }
+        loadState = .loading
+        lastRetryAt = Date()
+        webView.reload()
+    }
+}
+
+private struct EmbeddedGatewayConsoleView: NSViewRepresentable {
+    let url: URL
+    @ObservedObject var store: EmbeddedGatewayConsoleStore
+
+    func makeCoordinator() -> EmbeddedGatewayConsoleCoordinator {
+        store.coordinator
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let container = NSView(frame: .zero)
+        let webView = store.resolveWebView()
+        attach(webView, to: container)
+        store.loadIfNeeded(url)
+        return container
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        let webView = store.resolveWebView()
+        attach(webView, to: nsView)
+        store.loadIfNeeded(url)
+    }
+
+    private func attach(_ webView: WKWebView, to container: NSView) {
+        guard webView.superview !== container else { return }
+        webView.removeFromSuperview()
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(webView)
+        NSLayoutConstraint.activate([
+            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: container.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+    }
+}
+
+extension EmbeddedGatewayConsoleCoordinator: WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "fileInputAccept" else { return }
+        guard let body = message.body as? [String: Any],
+              let accept = body["accept"] as? String else { return }
+        pendingFileInputAccept = accept
+    }
+}
+
+private extension WKUserScript {
+    static let fileInputAcceptCapture = WKUserScript(
+        source: """
+        (() => {
+          const sendAccept = (target) => {
+            const input = target && target.closest ? target.closest('input[type="file"]') : null;
+            if (!input) return;
+            window.webkit.messageHandlers.fileInputAccept.postMessage({ accept: input.accept || '' });
+          };
+          document.addEventListener('click', (event) => sendAccept(event.target), true);
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') sendAccept(event.target);
+          }, true);
+        })();
+        """,
+        injectionTime: .atDocumentEnd,
+        forMainFrameOnly: false
+    )
 }

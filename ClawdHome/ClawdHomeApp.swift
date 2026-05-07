@@ -65,14 +65,16 @@ struct ClawdHomeApp: App {
         // .contentSize 会随 inspector 列宽变化不断触发窗口 resize，造成约束死循环崩溃
         // .automatic 让窗口可自由拖动，列宽只约束 minimum，不产生反馈
         .windowResizability(.automatic)
-        .defaultSize(width: 1040, height: 660)
+        .defaultSize(
+            width: UserDetailWindowLayout.mainWindowDefaultWidth,
+            height: UserDetailWindowLayout.detailWindowDefaultHeight
+        )
         .commands {
             // 隐藏主窗口L10n.k("clawd_home_app.text_ededdc48", fallback: "新建窗口")菜单项（单主窗口）
             CommandGroup(replacing: .newItem) { }
         }
 
         // 龙虾详情独立窗口：每个 username 唯一，重复触发时置前
-        // 默认宽度略窄于主窗口，避免详情首开过宽
         WindowGroup(id: "claw-detail", for: String.self) { $username in
             if let name = username {
                 ClawDetailWindow(username: name)
@@ -89,7 +91,10 @@ struct ClawdHomeApp: App {
         }
         .windowStyle(.titleBar)
         .windowResizability(.automatic)
-        .defaultSize(width: 920, height: 660)
+        .defaultSize(
+            width: UserDetailWindowLayout.mainWindowDefaultWidth,
+            height: UserDetailWindowLayout.detailWindowDefaultHeight
+        )
 
         WindowGroup(id: "user-init-wizard", for: String.self) { $username in
             if let name = username {
@@ -102,6 +107,7 @@ struct ClawdHomeApp: App {
                     .environment(gatewayHub)
                     .environment(maintenanceWindowRegistry)
                     .environment(\.locale, appLanguage.locale)
+                    .background(UserInitWizardWindowPositioner())
             }
         }
         .windowStyle(.titleBar)
@@ -599,7 +605,7 @@ private struct MaintenanceTerminalWindowContent: View {
                 "username": request.username,
                 "title": request.title,
                 "context": request.completionContext ?? "",
-                "exitCode": exitCode.map(NSNumber.init(value:)) ?? NSNull()
+                "exitCode": (exitCode.map(NSNumber.init(value:)) ?? NSNull()) as Any
             ]
         )
     }
@@ -680,8 +686,14 @@ private struct ChannelOnboardingRequest {
 /// 首次出现时把 claw-detail 窗口定位到主窗口右侧区域（侧栏宽度 idealSidebar）
 private struct ClawDetailWindowPositioner: NSViewRepresentable {
     private let idealSidebar: CGFloat = 200
-    private let preferredSize = NSSize(width: 920, height: 660)
-    private let minimumSize = NSSize(width: 820, height: 560)
+    private let preferredSize = NSSize(
+        width: UserDetailWindowLayout.mainWindowDefaultWidth,
+        height: UserDetailWindowLayout.detailWindowDefaultHeight
+    )
+    private let minimumSize = NSSize(
+        width: UserDetailWindowLayout.detailWindowMinimumWidth,
+        height: UserDetailWindowLayout.detailWindowMinimumHeight
+    )
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
@@ -713,19 +725,64 @@ private struct ClawDetailWindowPositioner: NSViewRepresentable {
         guard let main = mainWindow else { return }
         let visibleFrame = main.screen?.visibleFrame ?? detailWindow.screen?.visibleFrame ?? main.frame
 
-        // 主窗口右侧 detail 区的屏幕坐标：跳过侧栏；首开时同时钳住默认尺寸，
-        // 避免被内容理想宽度直接撑成过宽窗口。
+        // 首开时继承主窗口当前宽度，只在屏幕可见范围内钳制，避免详情窗口首开偏窄。
         let originX = min(main.frame.minX + sidebar, visibleFrame.maxX - minimumSize.width)
         let originY = max(main.frame.minY, visibleFrame.minY)
-        let width = min(preferredSize.width, visibleFrame.maxX - originX)
+        let visibleWidth = visibleFrame.maxX - originX
+        let width = resolvedUserDetailWindowWidth(
+            mainWindowWidth: main.frame.width,
+            visibleWidth: visibleWidth
+        )
         let height = min(preferredSize.height, visibleFrame.maxY - originY)
         let frame = NSRect(
             x: max(visibleFrame.minX, originX),
             y: originY,
-            width: max(minimumSize.width, width),
+            width: width,
             height: max(minimumSize.height, height)
         )
         detailWindow.setFrame(frame, display: true)
+    }
+}
+
+// MARK: - 初始化窗口定位器
+
+/// 首次出现时将初始化窗口高度对齐主窗口高度，避免与主窗口尺寸不一致。
+private struct UserInitWizardWindowPositioner: NSViewRepresentable {
+    private let preferredWidth: CGFloat = 980
+    private let minimumSize = NSSize(width: 860, height: 560)
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            Self.align(view: view, preferredWidth: preferredWidth, minimumSize: minimumSize)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private static func align(view: NSView, preferredWidth: CGFloat, minimumSize: NSSize) {
+        guard let wizardWindow = view.window else { return }
+        wizardWindow.contentMinSize = minimumSize
+
+        let mainWindow = NSApp.windows.first {
+            $0 !== wizardWindow && $0.isVisible && $0.contentViewController != nil
+        }
+        guard let main = mainWindow else { return }
+
+        let visibleFrame = main.screen?.visibleFrame ?? wizardWindow.screen?.visibleFrame ?? main.frame
+        let originX = min(main.frame.minX, visibleFrame.maxX - minimumSize.width)
+        let originY = max(main.frame.minY, visibleFrame.minY)
+        let targetHeight = min(main.frame.height, visibleFrame.maxY - originY)
+        let targetWidth = min(preferredWidth, visibleFrame.maxX - originX)
+
+        let frame = NSRect(
+            x: max(visibleFrame.minX, originX),
+            y: originY,
+            width: max(minimumSize.width, targetWidth),
+            height: max(minimumSize.height, targetHeight)
+        )
+        wizardWindow.setFrame(frame, display: true)
     }
 }
 
