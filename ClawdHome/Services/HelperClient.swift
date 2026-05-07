@@ -13,6 +13,8 @@ enum GatewayStartDiagnosis {
 @Observable
 final class HelperClient {
     private var controlConnection: NSXPCConnection?
+    /// Gateway 生命周期操作专用连接，避免与通用控制调用互相阻塞
+    private var gatewayConnection: NSXPCConnection?
     private var dashboardConnection: NSXPCConnection?
     /// 专用于长时间安装/升级操作，避免阻塞 controlConnection 上的其他 XPC 调用
     private var installConnection: NSXPCConnection?
@@ -75,6 +77,7 @@ final class HelperClient {
         guard connectionGeneration == generation else { return }
         switch label {
         case "control": controlConnection = nil
+        case "gateway": gatewayConnection = nil
         case "dashboard": dashboardConnection = nil
         case "install": installConnection = nil
         case "file": fileConnection = nil
@@ -110,6 +113,7 @@ final class HelperClient {
 
         // 先清理旧连接
         controlConnection?.invalidate()
+        gatewayConnection?.invalidate()
         dashboardConnection?.invalidate()
         installConnection?.invalidate()
         fileConnection?.invalidate()
@@ -117,6 +121,7 @@ final class HelperClient {
         personaReadConnection?.invalidate()
 
         controlConnection = makeConnection(label: "control", generation: gen, affectsConnectivity: true)
+        gatewayConnection = makeConnection(label: "gateway", generation: gen)
         dashboardConnection = makeConnection(label: "dashboard", generation: gen)
         installConnection = makeConnection(label: "install", generation: gen)
         fileConnection = makeConnection(label: "file", generation: gen)
@@ -129,6 +134,7 @@ final class HelperClient {
         connectionGeneration &+= 1
         verifyInFlightGeneration = nil
         controlConnection?.invalidate(); controlConnection = nil
+        gatewayConnection?.invalidate(); gatewayConnection = nil
         dashboardConnection?.invalidate(); dashboardConnection = nil
         installConnection?.invalidate(); installConnection = nil
         fileConnection?.invalidate(); fileConnection = nil
@@ -173,7 +179,7 @@ final class HelperClient {
                         level: .warn
                     )
                 }
-                // 超时类失败在长阻塞任务（如 install/diagnostics）期间可能是"假断连"。
+                // 超时类失败在长阻塞任务（如 install/diagnostics）期间可能是“假断连”。
                 // 若当前已连接，则保持连接状态，避免 maintainConnection 触发重连风暴。
                 if connected {
                     self.isConnected = true
@@ -264,6 +270,13 @@ final class HelperClient {
         return proxyWithLogging(controlConnection)
     }
 
+    private var gatewayProxy: (any ClawdHomeHelperProtocol)? {
+        if gatewayConnection == nil, isConnected {
+            gatewayConnection = makeConnection(label: "gateway", generation: connectionGeneration)
+        }
+        return proxyWithLogging(gatewayConnection)
+    }
+
     private var dashboardProxy: (any ClawdHomeHelperProtocol)? {
         if dashboardConnection == nil, isConnected {
             dashboardConnection = makeConnection(label: "dashboard", generation: connectionGeneration)
@@ -352,7 +365,7 @@ final class HelperClient {
     }
 
     private func isGatewayRunningQuickly(username: String) async -> Bool {
-        guard let proxy = controlProxy else { return false }
+        guard let proxy = gatewayProxy else { return false }
         do {
             let (running, _): (Bool, Int32) = try await xpcCall(timeout: .seconds(3)) { done in
                 proxy.getGatewayStatus(username: username) { running, pid in
@@ -483,7 +496,7 @@ final class HelperClient {
     // MARK: - Gateway 管理
 
     func startGateway(username: String) async throws {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?)
         do {
             (ok, msg) = try await requestWithTimeout(
@@ -519,7 +532,7 @@ final class HelperClient {
     }
 
     func stopGateway(username: String) async throws {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = try await xpcCall { done in
             proxy.stopGateway(username: username) { ok, msg in done((ok, msg)) }
         }
@@ -527,7 +540,7 @@ final class HelperClient {
     }
 
     func restartGateway(username: String) async throws {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = try await xpcCall { done in
             proxy.restartGateway(username: username) { ok, msg in done((ok, msg)) }
         }
@@ -537,7 +550,7 @@ final class HelperClient {
     /// 查询 gateway 运行状态
     /// - Returns: (isRunning, pid)，pid 为 -1 表示未运行或未知
     func getGatewayStatus(username: String) async throws -> (running: Bool, pid: Int32) {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
         return try await xpcCall { done in
             proxy.getGatewayStatus(username: username) { running, pid in
                 done((running, pid))
@@ -863,7 +876,7 @@ final class HelperClient {
 
     /// 返回用户 gateway 的访问 URL
     func getGatewayURL(username: String) async -> String {
-        guard let proxy = controlProxy else { return "" }
+        guard let proxy = gatewayProxy else { return "" }
         do {
             return try await xpcCall { done in
                 proxy.getGatewayURL(username: username) { done($0) }
@@ -1247,6 +1260,7 @@ final class HelperClient {
     /// 获取模型状态（直接读取 openclaw.json，零 CLI 开销）
     func getModelsStatus(username: String) async -> ModelsStatus? {
         let config = await getConfigJSON(username: username)
+        guard !config.isEmpty else { return nil }
         // agents.defaults.model.{primary, fallbacks}
         // OpenClaw schema 字段名为 "fallbacks"（复数）
         let model = (config["agents"] as? [String: Any])
@@ -1261,7 +1275,9 @@ final class HelperClient {
         } else {
             fallbacks = []
         }
-        return ModelsStatus(defaultModel: primary, resolvedDefault: primary, fallbacks: fallbacks, imageModel: nil, imageFallbacks: [])
+        // meta.lastTouchedVersion — openclaw 每次修改配置时写入的版本号
+        let version = (config["meta"] as? [String: Any])?["lastTouchedVersion"] as? String
+        return ModelsStatus(defaultModel: primary, resolvedDefault: primary, fallbacks: fallbacks, imageModel: nil, imageFallbacks: [], installedVersion: version)
     }
 
     /// 设置默认模型（openclaw models set <model>）
@@ -1338,7 +1354,7 @@ final class HelperClient {
             return (try? JSONDecoder().decode([DiagnosticItem].self, from: data)) ?? []
         } catch { return [] }
     }
-
+    
     // MARK: - Helper 生命周期
 
     func getVersion() async throws -> String {

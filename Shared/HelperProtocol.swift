@@ -4,6 +4,13 @@
 
 import Foundation
 
+enum GatewayStartFailureType: Equatable {
+    case nodeToolchainMissing
+    case startupTimeout
+    case xpcUnavailable
+    case other
+}
+
 enum XPCTimeoutPolicy {
     /// 为 XPC 调用增加冗余超时，降低偶发抖动造成的误伤。
     /// 规则：
@@ -15,13 +22,6 @@ enum XPCTimeoutPolicy {
         let slack = min(20, max(3, base / 3))
         return base + slack
     }
-}
-
-enum GatewayStartFailureType: Equatable {
-    case nodeToolchainMissing
-    case startupTimeout
-    case xpcUnavailable
-    case other
 }
 
 enum GatewayStartFailureClassifier {
