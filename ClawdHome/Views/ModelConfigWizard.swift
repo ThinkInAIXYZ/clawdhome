@@ -135,16 +135,14 @@ struct ModelConfigWizard: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 14)
                 Divider()
-                ScrollView {
-                    ProviderModelConfigCore(user: user) { _ in
-                        showAddModel = false
-                        Task { await loadStatus() }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 16)
+                ProviderModelConfigCore(user: user) { _ in
+                    showAddModel = false
+                    Task { await loadStatus() }
                 }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
             }
-            .frame(width: 460, height: 500)
+            .frame(minWidth: 520, maxHeight: 720)
         }
         .sheet(item: editingModelBinding) { item in
             ModelEditSheet(

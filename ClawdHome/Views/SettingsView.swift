@@ -36,6 +36,7 @@ struct SettingsView: View {
 private struct GeneralSettingsTab: View {
     @Environment(HelperClient.self) private var helperClient
     @Environment(ShrimpPool.self) private var pool
+    @Environment(\.openWindow) private var openWindow
     @State private var gatewayAutostart = true
     @State private var showGatewayActivationPreview = false
     @AppStorage("clawPoolShowCurrentAdmin") private var showCurrentAdminInPool = false
@@ -235,6 +236,9 @@ private struct GeneralSettingsTab: View {
             #endif
 
             StorageDirectoriesSection()
+            CacheManagementEntrySection(onOpen: {
+                openWindow(id: "cache-management")
+            })
 
             HelperStatusSection()
 
@@ -1410,6 +1414,289 @@ private struct AboutTab: View {
         } else {
             updateCheckMessage = L10n.k("views.settings_view.up_to_date", fallback: "当前已是最新版本")
             showAppUpdateSheet = false
+        }
+    }
+}
+
+private struct CacheManagementEntrySection: View {
+    let onOpen: () -> Void
+
+    var body: some View {
+        Section(L10n.k("settings.cache.section", fallback: "缓存管理")) {
+            Text(L10n.k("settings.cache.entry.hint", fallback: "在独立窗口管理 Homebrew、npm、uv、pip 缓存。"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button {
+                onOpen()
+            } label: {
+                Label(L10n.k("settings.cache.entry.open", fallback: "打开缓存管理"), systemImage: "externaldrive.badge.gearshape")
+            }
+        }
+    }
+}
+
+struct CacheManagementWindow: View {
+    @Environment(HelperClient.self) private var helperClient
+    @State private var overview: SharedCacheOverview?
+    @State private var isLoading = false
+    @State private var refreshingIDs: Set<String> = []
+    @State private var clearingIDs: Set<String> = []
+    @State private var messageByID: [String: String] = [:]
+    @State private var errorByID: [String: String] = [:]
+    @State private var globalMessage: String?
+    @State private var globalError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            header
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(overview?.caches ?? []) { cache in
+                        cacheRow(cache)
+                    }
+                }
+            }
+            footer
+        }
+        .padding(16)
+        .frame(minWidth: 760, minHeight: 560)
+        .task { await reloadOverview() }
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.k("settings.cache.window.title", fallback: "缓存管理"))
+                    .font(.title2.weight(.semibold))
+                if let generatedAt = overview?.generatedAt {
+                    Text(
+                        L10n.f(
+                            "settings.cache.window.updated_at",
+                            fallback: "最后刷新：%@",
+                            Date(timeIntervalSince1970: TimeInterval(generatedAt)).formatted(date: .omitted, time: .standard)
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Button {
+                Task { await reloadOverview() }
+            } label: {
+                if isLoading {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Label(L10n.k("common.action.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
+                }
+            }
+            .disabled(isLoading || isBusy)
+        }
+    }
+
+    private func cacheRow(_ cache: SharedCacheItemStats) -> some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(localizedCacheName(cache)).font(.headline)
+                    Spacer()
+                    Text(formatBytes(cache.totalBytes))
+                        .monospacedDigit()
+                }
+                HStack {
+                    Text(cache.path)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    Spacer()
+                    Text(L10n.f("settings.cache.file_count", fallback: "%@ 个文件", String(cache.fileCount)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                if !cache.breakdown.isEmpty {
+                    ForEach(cache.breakdown) { item in
+                        HStack {
+                            Text(localizedBreakdownLabel(item.label))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(formatBytes(item.bytes))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                }
+                HStack(spacing: 10) {
+                    if cache.supportsRefresh {
+                        Button {
+                            Task { await refreshCache(cache.id) }
+                        } label: {
+                            if refreshingIDs.contains(cache.id) {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Label(L10n.k("settings.cache.update", fallback: "更新缓存"), systemImage: "square.and.arrow.down")
+                            }
+                        }
+                        .disabled(isBusy)
+                    }
+                    if cache.supportsClear {
+                        Button(role: .destructive) {
+                            Task { await clearCache(cache.id) }
+                        } label: {
+                            if clearingIDs.contains(cache.id) {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Label(L10n.k("settings.cache.clear", fallback: "清空缓存"), systemImage: "trash")
+                            }
+                        }
+                        .disabled(isBusy)
+                    }
+                    Spacer()
+                }
+                if let message = messageByID[cache.id], !message.isEmpty {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let error = errorByID[cache.id], !error.isEmpty {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button(role: .destructive) {
+                    Task { await clearCache("all") }
+                } label: {
+                    if clearingIDs.contains("all") {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Label(L10n.k("settings.cache.clear_all", fallback: "清空全部缓存"), systemImage: "trash.slash")
+                    }
+                }
+                .disabled(isBusy)
+                Spacer()
+            }
+            if let globalMessage, !globalMessage.isEmpty {
+                Text(globalMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let globalError, !globalError.isEmpty {
+                Text(globalError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var isBusy: Bool {
+        isLoading || !refreshingIDs.isEmpty || !clearingIDs.isEmpty
+    }
+
+    private func reloadOverview() async {
+        isLoading = true
+        defer { isLoading = false }
+        overview = await helperClient.getSharedCacheOverview()
+    }
+
+    private func refreshCache(_ cacheID: String) async {
+        refreshingIDs.insert(cacheID)
+        errorByID[cacheID] = nil
+        messageByID[cacheID] = nil
+        globalError = nil
+        globalMessage = nil
+        defer { refreshingIDs.remove(cacheID) }
+
+        do {
+            let output = try await helperClient.refreshSharedCache(cacheID: cacheID)
+            let message = output?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if cacheID == "all" {
+                globalMessage = message
+            } else {
+                messageByID[cacheID] = message
+            }
+            await reloadOverview()
+        } catch {
+            if cacheID == "all" {
+                globalError = error.localizedDescription
+            } else {
+                errorByID[cacheID] = error.localizedDescription
+            }
+        }
+    }
+
+    private func clearCache(_ cacheID: String) async {
+        clearingIDs.insert(cacheID)
+        errorByID[cacheID] = nil
+        messageByID[cacheID] = nil
+        globalError = nil
+        globalMessage = nil
+        defer { clearingIDs.remove(cacheID) }
+
+        do {
+            try await helperClient.clearSharedCache(cacheID: cacheID)
+            if cacheID == "all" {
+                globalMessage = L10n.k("settings.cache.cleared_all", fallback: "已清空全部共享缓存")
+            } else {
+                messageByID[cacheID] = L10n.f(
+                    "settings.cache.cleared_one",
+                    fallback: "已清空 %@ 缓存",
+                    localizedCacheName(for: cacheID)
+                )
+            }
+            await reloadOverview()
+        } catch {
+            if cacheID == "all" {
+                globalError = error.localizedDescription
+            } else {
+                errorByID[cacheID] = error.localizedDescription
+            }
+        }
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    private func localizedCacheName(_ cache: SharedCacheItemStats) -> String {
+        localizedCacheName(for: cache.id, fallback: cache.name)
+    }
+
+    private func localizedCacheName(for cacheID: String, fallback: String? = nil) -> String {
+        switch cacheID {
+        case "homebrew":
+            return L10n.k("settings.cache.kind.homebrew", fallback: fallback ?? "Homebrew")
+        case "npm":
+            return L10n.k("settings.cache.kind.npm", fallback: fallback ?? "npm")
+        case "uv":
+            return L10n.k("settings.cache.kind.uv", fallback: fallback ?? "uv")
+        case "pip":
+            return L10n.k("settings.cache.kind.pip", fallback: fallback ?? "pip")
+        default:
+            return fallback ?? cacheID
+        }
+    }
+
+    private func localizedBreakdownLabel(_ label: String) -> String {
+        switch label {
+        case "downloads":
+            return L10n.k("settings.cache.breakdown.downloads", fallback: "downloads")
+        case "api":
+            return L10n.k("settings.cache.breakdown.api", fallback: "api")
+        case "other":
+            return L10n.k("settings.cache.breakdown.other", fallback: "other")
+        default:
+            return label
         }
     }
 }

@@ -241,11 +241,11 @@ struct HermesQRBindingStep: View {
     private var instructionText: String {
         switch platform.key {
         case "whatsapp":
-            return "点击下方按钮，终端将运行 hermes whatsapp 并显示二维码，用手机 WhatsApp 扫描即可完成配对。"
+            return L10n.k("hermes.qr_binding.instruction.whatsapp", fallback: "Click the button below to run `hermes whatsapp` in terminal. Scan the QR code with WhatsApp on your phone to complete pairing.")
         case "weixin":
-            return "点击下方按钮，终端将进入 hermes gateway setup 交互界面，选择【微信】平台后扫描二维码完成 iLink 登录。"
+            return L10n.k("hermes.qr_binding.instruction.weixin", fallback: "Click the button below to enter `hermes gateway setup` in terminal, choose WeChat platform, then scan QR code to complete iLink login.")
         default:
-            return "点击下方按钮，在终端内完成扫码后回到此页面确认。"
+            return L10n.k("hermes.qr_binding.instruction.default", fallback: "Click the button below, finish QR pairing in terminal, then return here to confirm.")
         }
     }
 
@@ -254,7 +254,7 @@ struct HermesQRBindingStep: View {
         let command = terminalCommand(for: platform.key)
         let payload = maintenanceWindowRegistry.makePayload(
             username: username,
-            title: "扫码绑定 \(platform.displayName) · @\(username)",
+            title: L10n.f("hermes.qr_binding.window_title", fallback: "QR Binding %@ · @%@", platform.displayName, username),
             command: command,
             engine: .hermes
         )
@@ -302,7 +302,7 @@ struct HermesQRBindingStep: View {
 
         guard let data = jsonStr.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            phase = .failed("Doctor 返回结果无法解析：\(jsonStr.prefix(200))")
+            phase = .failed(L10n.f("hermes.qr_binding.error.doctor_parse_failed", fallback: "Failed to parse Doctor output: %@", String(jsonStr.prefix(200))))
             return
         }
 
@@ -315,13 +315,13 @@ struct HermesQRBindingStep: View {
             try? await Task.sleep(for: .milliseconds(600))
             onCompleted()
         case "missing_token":
-            phase = .failed("hermes doctor 报告：\(platform.displayName) 缺少 token（missing_token）。请重新扫码。")
+            phase = .failed(L10n.f("hermes.qr_binding.error.missing_token", fallback: "Hermes doctor reports missing token for %@ (missing_token). Please scan again.", platform.displayName))
         case let s? where !s.isEmpty:
-            phase = .failed("hermes doctor 报告：\(platform.displayName) 连接异常（\(s)）。请重新扫码或稍后完成。")
+            phase = .failed(L10n.f("hermes.qr_binding.error.connection_abnormal", fallback: "Hermes doctor reports abnormal connection for %@ (%@). Please scan again or defer.", platform.displayName, s))
         default:
             // platforms dict 中无此 key，视为 unknown_error（T5.2 约定）
             let rawSnippet = (obj["raw"] as? String)?.prefix(300) ?? ""
-            phase = .failed("hermes doctor 未能确认 \(platform.displayName) 状态（unknown_error）。\(rawSnippet.isEmpty ? "" : "\n\n原始输出：\(rawSnippet)")")
+            phase = .failed(L10n.f("hermes.qr_binding.error.unknown_status", fallback: "Hermes doctor cannot confirm %@ status (unknown_error).%@", platform.displayName, rawSnippet.isEmpty ? "" : L10n.f("hermes.qr_binding.error.raw_output_suffix", fallback: "\n\nRaw output: %@", String(rawSnippet))))
         }
     }
 

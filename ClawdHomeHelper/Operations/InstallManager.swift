@@ -446,7 +446,7 @@ struct InstallManager {
         // 5. .zprofile PATH 导出完整性（利用 UserEnvContract）
         let profilePath = "\(home)/.zprofile"
         let profileContent = (try? String(contentsOfFile: profilePath, encoding: .utf8)) ?? ""
-        let requiredExports = UserEnvContract.zprofileRequiredExports()
+        let requiredExports = UserEnvContract.zprofileRequiredExports(username: username)
         let missingExports = requiredExports.filter { !profileContent.contains($0) }
         if !missingExports.isEmpty {
             issues.append(EnvIssue(
@@ -501,7 +501,7 @@ struct InstallManager {
             case "zprofile-path-incomplete":
                 let profilePath = "\(home)/.zprofile"
                 let existing = (try? String(contentsOfFile: profilePath, encoding: .utf8)) ?? ""
-                let requiredExports = UserEnvContract.zprofileRequiredExports()
+                let requiredExports = UserEnvContract.zprofileRequiredExports(username: username)
                 let missing = requiredExports.filter { !existing.contains($0) }
                 if !missing.isEmpty {
                     var block = "\n"

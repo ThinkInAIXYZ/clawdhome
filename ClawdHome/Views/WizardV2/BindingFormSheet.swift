@@ -21,10 +21,10 @@ struct BindingFormSheet: View {
     @State private var peerId = ""
 
     enum PeerKindOption: String, CaseIterable {
-        case none = "整个账号"
-        case direct = "单聊"
-        case group = "群聊"
-        case channel = "频道"
+        case none = "none"
+        case direct = "direct"
+        case group = "group"
+        case channel = "channel"
 
         var peerKind: Peer.Kind? {
             switch self {
@@ -32,6 +32,15 @@ struct BindingFormSheet: View {
             case .direct: return .direct
             case .group: return .group
             case .channel: return .channel
+            }
+        }
+
+        var localizedTitle: String {
+            switch self {
+            case .none: return L10n.k("binding.peer_kind.none", fallback: "Whole Account")
+            case .direct: return L10n.k("binding.peer_kind.direct", fallback: "Direct Message")
+            case .group: return L10n.k("binding.peer_kind.group", fallback: "Group Chat")
+            case .channel: return L10n.k("binding.peer_kind.channel", fallback: "Channel")
             }
         }
     }
@@ -68,7 +77,7 @@ struct BindingFormSheet: View {
                 Section(L10n.k("binding.peer_section", fallback: "路由到（可选）")) {
                     Picker(L10n.k("binding.peer_type", fallback: "类型"), selection: $peerKind) {
                         ForEach(PeerKindOption.allCases, id: \.rawValue) { opt in
-                            Text(opt.rawValue).tag(opt)
+                            Text(opt.localizedTitle).tag(opt)
                         }
                     }
                     .pickerStyle(.segmented)

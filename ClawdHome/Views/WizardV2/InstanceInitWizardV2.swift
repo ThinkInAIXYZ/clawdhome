@@ -1,4 +1,4 @@
-// ClawdHome/Views/WizardV2/ShrimpInitWizardV2.swift
+// ClawdHome/Views/WizardV2/InstanceInitWizardV2.swift
 // Shrimp 初始化向导 v2（支持双引擎）
 //
 // 步骤：
@@ -156,26 +156,26 @@ private enum WizardV2SavePhase: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .serializeConfig: return "序列化配置"
-        case .writeConfig: return "写入 openclaw.json"
-        case .writeAgentSnapshot: return "写入 Agent 角色快照"
-        case .restartGateway: return "重启 Gateway"
-        case .finalize: return "收尾与状态落盘"
+        case .serializeConfig: return L10n.k("wizard_v2.save_phase.serialize_config", fallback: "Serialize Config")
+        case .writeConfig: return L10n.k("wizard_v2.save_phase.write_config", fallback: "Write openclaw.json")
+        case .writeAgentSnapshot: return L10n.k("wizard_v2.save_phase.write_agent_snapshot", fallback: "Write Agent Snapshot")
+        case .restartGateway: return L10n.k("wizard_v2.save_phase.restart_gateway", fallback: "Restart Gateway")
+        case .finalize: return L10n.k("wizard_v2.save_phase.finalize", fallback: "Finalize")
         }
     }
 
     var hint: String {
         switch self {
         case .serializeConfig:
-            return "正在整理 Agent、IM 与绑定矩阵。"
+            return L10n.k("wizard_v2.save_phase_hint.serialize_config", fallback: "Preparing Agent, IM, and binding matrix.")
         case .writeConfig:
-            return "通过 Helper 原子写入配置文件。"
+            return L10n.k("wizard_v2.save_phase_hint.write_config", fallback: "Writing config file atomically via Helper.")
         case .writeAgentSnapshot:
-            return "写入 pending_v2_agents.json，供网关就绪后补写角色文件。"
+            return L10n.k("wizard_v2.save_phase_hint.write_agent_snapshot", fallback: "Writing pending_v2_agents.json for post-ready role file sync.")
         case .restartGateway:
-            return "会执行 bootout + start，通常最慢（约 5-30 秒）。"
+            return L10n.k("wizard_v2.save_phase_hint.restart_gateway", fallback: "Runs bootout + start, usually the slowest step (about 5-30s).")
         case .finalize:
-            return "保存完成标记并清理临时向导文件。"
+            return L10n.k("wizard_v2.save_phase_hint.finalize", fallback: "Persisting completion status and cleaning temporary wizard files.")
         }
     }
 }
@@ -187,14 +187,14 @@ struct WizardV2InitialRoles {
     static var solo: WizardV2InitialRoles {
         WizardV2InitialRoles(
             teamDNA: nil,
-            agents: [AgentDef(id: "main", displayName: "主 Agent", isDefault: true)]
+            agents: [AgentDef(id: "main", displayName: L10n.k("wizard_v2.default_agent_name", fallback: "Default Agent"), isDefault: true)]
         )
     }
 }
 
 // MARK: - Main Wizard
 
-struct ShrimpInitWizardV2: View {
+struct InstanceInitWizardV2: View {
     let user: ManagedUser
     var initialRoles: WizardV2InitialRoles = .solo
     var onDismiss: (() -> Void)? = nil
@@ -831,7 +831,9 @@ struct ShrimpInitWizardV2: View {
                         Text(L10n.k("shrimp.wizard.browser_tool.description", fallback: "安装用户级 browser wrapper 与授权辅助能力。"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(browserToolInstalled ? "当前状态：已安装" : "当前状态：未安装")
+                        Text(browserToolInstalled
+                             ? L10n.k("wizard_v2.tools.browser.status.installed", fallback: "Current Status: Installed")
+                             : L10n.k("wizard_v2.tools.browser.status.not_installed", fallback: "Current Status: Not Installed"))
                             .font(.caption)
                             .foregroundStyle(browserToolInstalled ? .green : .orange)
                     }
@@ -854,7 +856,9 @@ struct ShrimpInitWizardV2: View {
                 }
 
                 HStack(spacing: 10) {
-                    Button(browserToolInstalled ? "重新安装浏览器工具" : "安装浏览器工具") {
+                    Button(browserToolInstalled
+                           ? L10n.k("wizard_v2.tools.browser.reinstall", fallback: "Reinstall Browser Tool")
+                           : L10n.k("wizard_v2.tools.browser.install", fallback: "Install Browser Tool")) {
                         runToolsInstall()
                     }
                     .buttonStyle(.borderedProminent)
@@ -879,7 +883,9 @@ struct ShrimpInitWizardV2: View {
                 let status = await helperClient.getBrowserAccountStatus(username: user.username)
                 await MainActor.run {
                     browserToolInstalled = status?.toolInstalled == true
-                    toolsMessage = browserToolInstalled ? "已检测到浏览器工具，无需重复安装。" : "未检测到浏览器工具，请先安装。"
+                    toolsMessage = browserToolInstalled
+                        ? L10n.k("wizard_v2.tools.browser.detected", fallback: "Browser Tool detected. No reinstall needed.")
+                        : L10n.k("wizard_v2.tools.browser.not_detected", fallback: "Browser Tool not detected. Please install it first.")
                 }
             }
         }
@@ -1518,7 +1524,7 @@ struct ShrimpInitWizardV2: View {
                     isInstallingEnv = false
                     envInstallingPhase = nil
                     hermesEnvInstallingPhase = nil
-                    envError = "\(phaseTitle)失败：\(error.localizedDescription)"
+                    envError = L10n.f("wizard_v2.phase_failed", fallback: "%@ failed: %@", phaseTitle, error.localizedDescription)
                 }
             }
             return
@@ -1570,7 +1576,7 @@ struct ShrimpInitWizardV2: View {
                 isInstallingEnv = false
                 envInstallingPhase = nil
                 hermesEnvInstallingPhase = nil
-                envError = "\(phaseTitle)失败：\(error.localizedDescription)"
+                envError = L10n.f("wizard_v2.phase_failed", fallback: "%@ failed: %@", phaseTitle, error.localizedDescription)
             }
         }
     }
@@ -1585,12 +1591,12 @@ struct ShrimpInitWizardV2: View {
                 let status = try await helperClient.installBrowserAccountTool(username: user.username)
                 browserToolInstalled = status.toolInstalled
                 if !status.toolInstalled {
-                    toolsError = "浏览器工具安装后状态校验失败，请重试。"
+                    toolsError = L10n.k("wizard_v2.tools.browser.verify_failed", fallback: "Post-install verification failed for Browser Tool. Please retry.")
                 } else {
-                    toolsMessage = "浏览器工具安装完成。"
+                    toolsMessage = L10n.k("wizard_v2.tools.browser.install_success", fallback: "Browser Tool installed successfully.")
                 }
             } catch {
-                toolsError = "安装浏览器工具失败：\(error.localizedDescription)"
+                toolsError = L10n.f("wizard_v2.tools.browser.install_failed", fallback: "Failed to install Browser Tool: %@", error.localizedDescription)
             }
             isInstallingTools = false
         }
@@ -1687,7 +1693,7 @@ struct ShrimpInitWizardV2: View {
             isInstallingEnv = false
             envInstallingPhase = nil
             hermesEnvInstallingPhase = nil
-            envError = "Hermes 安装失败：终端退出码 \(code ?? -1)。可在终端中修复后重试。"
+            envError = L10n.f("wizard_v2.hermes.install_failed_with_exit", fallback: "Hermes install failed: terminal exited with code %d. Fix it in terminal and retry.", Int(code ?? -1))
             return
         }
 
@@ -1697,7 +1703,7 @@ struct ShrimpInitWizardV2: View {
             isInstallingEnv = false
             envInstallingPhase = nil
             hermesEnvInstallingPhase = nil
-            envError = "Hermes 安装校验失败：未读取到版本号。"
+            envError = L10n.k("wizard_v2.hermes.verify_failed_no_version", fallback: "Hermes install verification failed: version not found.")
             return
         }
 
@@ -1708,7 +1714,7 @@ struct ShrimpInitWizardV2: View {
             isInstallingEnv = false
             envInstallingPhase = nil
             hermesEnvInstallingPhase = nil
-            envError = "Hermes Gateway 启动失败：\(error.localizedDescription)"
+            envError = L10n.f("wizard_v2.hermes.gateway_start_failed", fallback: "Failed to start Hermes Gateway: %@", error.localizedDescription)
             return
         }
 
@@ -1746,7 +1752,7 @@ struct ShrimpInitWizardV2: View {
             let username = user.username
             let dnasSnapshot = agentDNAs
             let rolesSnapshot: [AgentDef] = agents.isEmpty
-                ? [AgentDef(id: "main", displayName: "主 Agent", isDefault: true)]
+                ? [AgentDef(id: "main", displayName: L10n.k("wizard_v2.default_agent_name", fallback: "Default Agent"), isDefault: true)]
                 : agents
             Task {
                 await MainActor.run { savePhase = .writeAgentSnapshot }
@@ -1780,7 +1786,7 @@ struct ShrimpInitWizardV2: View {
                 } catch {
                     await MainActor.run {
                         isSaving = false
-                        saveError = "[\(WizardV2SavePhase.writeAgentSnapshot.title)] Hermes profile 初始化失败：\(error.localizedDescription)"
+                        saveError = "[\(WizardV2SavePhase.writeAgentSnapshot.title)] " + L10n.f("wizard_v2.save.hermes_profile_init_failed", fallback: "Hermes profile initialization failed: %@", error.localizedDescription)
                     }
                     return
                 }
@@ -1791,7 +1797,7 @@ struct ShrimpInitWizardV2: View {
                 } catch {
                     await MainActor.run {
                         isSaving = false
-                        saveError = "[\(WizardV2SavePhase.restartGateway.title)] Hermes 网关启动失败：\(error.localizedDescription)"
+                        saveError = "[\(WizardV2SavePhase.restartGateway.title)] " + L10n.f("wizard_v2.save.hermes_gateway_start_failed", fallback: "Hermes gateway start failed: %@", error.localizedDescription)
                     }
                     return
                 }
@@ -1834,7 +1840,7 @@ struct ShrimpInitWizardV2: View {
             } catch {
                 await MainActor.run {
                     isSaving = false
-                    saveError = "[\(WizardV2SavePhase.serializeConfig.title)] 配置序列化失败：\(error.localizedDescription)"
+                    saveError = "[\(WizardV2SavePhase.serializeConfig.title)] " + L10n.f("wizard_v2.save.serialize_failed", fallback: "Config serialization failed: %@", error.localizedDescription)
                 }
                 return
             }
@@ -1845,7 +1851,7 @@ struct ShrimpInitWizardV2: View {
             guard ok else {
                 await MainActor.run {
                     isSaving = false
-                    saveError = "[\(WizardV2SavePhase.writeConfig.title)] " + (err ?? "写入配置失败")
+                    saveError = "[\(WizardV2SavePhase.writeConfig.title)] " + (err ?? L10n.k("wizard_v2.save.write_config_failed", fallback: "Failed to write config"))
                 }
                 return
             }
@@ -1873,7 +1879,7 @@ struct ShrimpInitWizardV2: View {
                 } catch {
                     await MainActor.run {
                         isSaving = false
-                        saveError = "[\(WizardV2SavePhase.writeAgentSnapshot.title)] Agent 角色写入失败：\(error.localizedDescription)"
+                        saveError = "[\(WizardV2SavePhase.writeAgentSnapshot.title)] " + L10n.f("wizard_v2.save.write_agent_snapshot_failed", fallback: "Failed to write Agent snapshot: %@", error.localizedDescription)
                     }
                     return
                 }
@@ -1887,7 +1893,7 @@ struct ShrimpInitWizardV2: View {
             } catch {
                 await MainActor.run {
                     isSaving = false
-                    saveError = "[\(WizardV2SavePhase.restartGateway.title)] 网关重启失败：\(error.localizedDescription)"
+                    saveError = "[\(WizardV2SavePhase.restartGateway.title)] " + L10n.f("wizard_v2.save.restart_gateway_failed", fallback: "Gateway restart failed: %@", error.localizedDescription)
                 }
                 return
             }

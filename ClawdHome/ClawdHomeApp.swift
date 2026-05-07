@@ -178,6 +178,15 @@ struct ClawdHomeApp: App {
         .windowStyle(.titleBar)
         .windowResizability(.automatic)
         .defaultSize(width: 640, height: 560)
+
+        WindowGroup(id: "cache-management") {
+            CacheManagementWindow()
+                .environment(helperClient)
+                .environment(\.locale, appLanguage.locale)
+        }
+        .windowStyle(.titleBar)
+        .windowResizability(.automatic)
+        .defaultSize(width: 860, height: 680)
     }
 
     /// 首次连接，断开后每 5 秒自动重试
@@ -1443,7 +1452,7 @@ private struct ClawDetailWindow: View {
     }
 }
 
-// v2 入口：使用 ShrimpInitWizardV2 替换 UserInitWizardView
+// v2 入口：使用 InstanceInitWizardV2 替换 UserInitWizardView
 // 保留 UserInitWizardWindow 名称避免修改 WindowGroup 注册
 private struct UserInitWizardWindow: View {
     let username: String
@@ -1462,7 +1471,7 @@ private struct UserInitWizardWindow: View {
     var body: some View {
         if let user {
             if let resolvedInitialRoles {
-                ShrimpInitWizardV2(user: user, initialRoles: resolvedInitialRoles) {
+                InstanceInitWizardV2(user: user, initialRoles: resolvedInitialRoles) {
                     dismiss()
                 }
             } else {

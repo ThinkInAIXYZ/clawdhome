@@ -27,12 +27,12 @@ enum HermesTeamWizardStep: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .install:   return "安装 Hermes"
-        case .members:   return "团队成员"
-        case .llm:       return "LLM 配置"
-        case .imBinding: return "IM 绑定"
-        case .gateway:   return "启动 Gateway"
-        case .summary:   return "完成总览"
+        case .install:   return L10n.k("hermes.team_wizard.step.install", fallback: "Install Hermes")
+        case .members:   return L10n.k("hermes.team_wizard.step.members", fallback: "Team Members")
+        case .llm:       return L10n.k("hermes.team_wizard.step.llm", fallback: "LLM Setup")
+        case .imBinding: return L10n.k("hermes.team_wizard.step.im_binding", fallback: "IM Binding")
+        case .gateway:   return L10n.k("hermes.team_wizard.step.gateway", fallback: "Start Gateway")
+        case .summary:   return L10n.k("hermes.team_wizard.step.summary", fallback: "Summary")
         }
     }
 }
@@ -202,7 +202,7 @@ final class HermesTeamWizardState {
         var profileList = fetchedProfiles
         if !profileList.contains(where: { $0.id == "main" }) {
             profileList.insert(
-                AgentProfile(id: "main", name: "默认角色", emoji: "🎭",
+                AgentProfile(id: "main", name: L10n.k("hermes.profile.default_name", fallback: "Default Agent"), emoji: "🎭",
                              modelPrimary: nil, modelFallbacks: [], workspacePath: nil, isDefault: true),
                 at: 0
             )
@@ -219,7 +219,7 @@ final class HermesTeamWizardState {
             members = profileList.map { profile in
                 TeamMember(
                     id: profile.id,
-                    displayName: profile.name.isEmpty ? (profile.id == "main" ? "默认角色" : profile.id) : profile.name,
+                    displayName: profile.name.isEmpty ? (profile.id == "main" ? L10n.k("hermes.profile.default_name", fallback: "Default Agent") : profile.id) : profile.name,
                     emoji: profile.emoji.isEmpty ? (profile.id == "main" ? "🎭" : "🤖") : profile.emoji,
                     progress: ProfileWizardProgress()
                 )
