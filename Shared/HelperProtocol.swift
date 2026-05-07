@@ -4,6 +4,19 @@
 
 import Foundation
 
+enum XPCTimeoutPolicy {
+    /// 为 XPC 调用增加冗余超时，降低偶发抖动造成的误伤。
+    /// 规则：
+    /// - 最小冗余 3 秒
+    /// - 冗余按基础超时的 33% 计算
+    /// - 最大冗余 20 秒
+    static func effectiveTimeoutSeconds(requested requestedSeconds: Int) -> Int {
+        let base = max(1, requestedSeconds)
+        let slack = min(20, max(3, base / 3))
+        return base + slack
+    }
+}
+
 enum ManagedUserFilter {
     static let minimumStandardUID = 500
     private static let systemAccounts: Set<String> = ["nobody", "root", "daemon", "Guest"]
