@@ -43,6 +43,13 @@ import Foundation
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
+    /// 初始化虾的安全文件夹和公共文件夹（幂等，可重复调用）
+    /// 创建 macOS 权限组 + 目录，用于人机文件共享
+    func setupVault(
+        username: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
     /// 以指定用户身份启动 openclaw-gateway（通过 launchctl）
     func startGateway(
         username: String,

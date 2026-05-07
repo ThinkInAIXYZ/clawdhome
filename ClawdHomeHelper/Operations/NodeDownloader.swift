@@ -11,7 +11,7 @@ struct NodeDownloader {
     static let nodeVersion = "v24.9.0"
 
     /// 持久缓存目录（root:wheel 0700，防止非 root 用户投毒）
-    private static let cacheDir = "/Users/Shared/ClawdHome/cache/nodejs"
+    private static let cacheDir = "/var/lib/clawdhome/cache/nodejs"
 
     // MARK: - 公共接口
 

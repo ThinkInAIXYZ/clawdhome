@@ -250,12 +250,12 @@ extension ClawdHomeHelperImpl {
         let nodePath = ConfigWriter.buildNodePath(username: username)
         let home = "/Users/\(username)"
         let profilePath = "\(home)/.zprofile"
-        let sharedCacheRoot = "/Users/Shared/ClawdHome/cache"
+        let sharedCacheRoot = "/var/lib/clawdhome/cache"
         let homebrewCacheDir = "\(sharedCacheRoot)/homebrew"
         let installScript = """
         set -e
         BREW_ROOT="$HOME/.brew"
-        CACHE_DIR="/Users/Shared/ClawdHome/cache/homebrew"
+        CACHE_DIR="/var/lib/clawdhome/cache/homebrew"
         CACHE_TAR="$CACHE_DIR/brew-master.tar.gz"
         PART_TAR="$CACHE_TAR.part.$USER.$$"
         BREW_TARBALL_URL="https://github.com/Homebrew/brew/tarball/master"
@@ -584,6 +584,9 @@ extension ClawdHomeHelperImpl {
                 password: password
             )
             createdTarget = true
+            // 初始化安全文件夹（非阻塞）
+            do { try VaultManager.setupVault(username: request.targetUsername) }
+            catch { helperLog("Vault 自动初始化失败（克隆）@\(request.targetUsername): \(error.localizedDescription)", level: .warn) }
 
             let targetHome = try CloneClawManager.homeDirectory(for: request.targetUsername)
             let targetUID = try UserManager.uid(for: request.targetUsername)

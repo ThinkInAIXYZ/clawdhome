@@ -15,6 +15,29 @@ private enum UserEntryWindowTarget: String {
 }
 
 private enum UserEntryWindowResolver {
+    private static func hasRecoverableWizardProgress(_ state: InitWizardState) -> Bool {
+        guard !state.isCompleted else { return false }
+
+        if state.active {
+            return true
+        }
+
+        return InitStep.allCases.contains { step in
+            let raw = state.steps[step.key] ?? state.steps[step.title] ?? "pending"
+            return raw != "pending"
+        }
+    }
+
+    private static func shouldTreatAsUnfinishedWizardState(
+        _ state: InitWizardState,
+        hasInstalledOpenClaw: Bool
+    ) -> Bool {
+        guard !state.isCompleted else { return false }
+        if hasRecoverableWizardProgress(state) { return true }
+        // 全 pending 的 pre-start 会话仅在未安装 openclaw 时才视为“待初始化”。
+        return !hasInstalledOpenClaw
+    }
+
     static func resolve(
         user: ManagedUser,
         helperClient: HelperClient,
@@ -40,24 +63,17 @@ private enum UserEntryWindowResolver {
         let isGatewayOperational = user.isRunning || readiness == .starting || readiness == .ready
         let state = InitWizardState.from(json: await stateJSONResult)
 
-        let hasUnfinishedWizardState = state.map { !$0.isCompleted } ?? false
-        let hasRecoverableWizardProgress = state.map { state in
-            guard !state.isCompleted else { return false }
-
-            if state.active {
-                return true
-            }
-
-            return InitStep.allCases.contains { step in
-                let raw = state.steps[step.key] ?? state.steps[step.title] ?? "pending"
-                return raw != "pending"
-            }
+        let hasRecoverableProgress = state.map { state in
+            hasRecoverableWizardProgress(state)
+        } ?? false
+        let hasUnfinishedWizardState = state.map {
+            shouldTreatAsUnfinishedWizardState($0, hasInstalledOpenClaw: hasInstalledOpenClaw)
         } ?? false
 
         return shouldOpenUserInitWizardFromEntry(
             hasForcedOnboarding: hasForcedOnboarding,
             hasUnfinishedWizardState: hasUnfinishedWizardState,
-            hasRecoverableWizardProgress: hasRecoverableWizardProgress,
+            hasRecoverableWizardProgress: hasRecoverableProgress,
             hasInstalledOpenClaw: hasInstalledOpenClaw,
             isGatewayOperational: isGatewayOperational,
             isAdmin: user.isAdmin,

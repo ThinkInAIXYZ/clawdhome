@@ -232,6 +232,8 @@ private struct GeneralSettingsTab: View {
             }
             #endif
 
+            StorageDirectoriesSection()
+
             HelperStatusSection()
 
             AppLockSection()
@@ -1404,6 +1406,75 @@ private struct AboutTab: View {
         } else {
             updateCheckMessage = L10n.k("views.settings_view.up_to_date", fallback: "当前已是最新版本")
             showAppUpdateSheet = false
+        }
+    }
+}
+
+// MARK: - 存储目录
+
+private struct StorageDirectoriesSection: View {
+    private struct DirectoryItem: Identifiable {
+        let id = UUID()
+        let label: String
+        let path: String
+        let icon: String
+        let description: String
+    }
+
+    private let directories: [DirectoryItem] = [
+        DirectoryItem(
+            label: "共享空间",
+            path: "/Users/Shared/ClawdHome",
+            icon: "folder.badge.person.crop",
+            description: "公共文件夹和安全文件夹，用于人和虾之间的文件共享"
+        ),
+        DirectoryItem(
+            label: "Helper 数据",
+            path: "/var/lib/clawdhome",
+            icon: "lock.shield",
+            description: "守护进程状态、安装缓存、本地模型（root 专用）"
+        ),
+        DirectoryItem(
+            label: "Helper 日志",
+            path: "/tmp/clawdhome-helper.log",
+            icon: "doc.text",
+            description: "JSONL 格式，最大 2MB，自动轮转"
+        ),
+    ]
+
+    var body: some View {
+        Section(L10n.k("settings.storage.section", fallback: "存储目录")) {
+            ForEach(directories) { dir in
+                directoryRow(dir)
+            }
+        }
+    }
+
+    private func directoryRow(_ dir: DirectoryItem) -> some View {
+        LabeledContent {
+            Button {
+                let url = URL(fileURLWithPath: dir.path)
+                let target = FileManager.default.fileExists(atPath: dir.path)
+                    ? url
+                    : url.deletingLastPathComponent()
+                NSWorkspace.shared.open(target)
+            } label: {
+                Label(L10n.k("settings.storage.reveal_in_finder", fallback: "在 Finder 中显示"), systemImage: "arrow.right.circle")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Label(dir.label, systemImage: dir.icon)
+                Text(dir.path)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                Text(dir.description)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 }

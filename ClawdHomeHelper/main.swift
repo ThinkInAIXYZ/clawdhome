@@ -8,40 +8,77 @@ import Security
 // MARK: - Helper 实现
 
 final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
-    let maintenanceSessionLock = NSLock()
-    var maintenanceSessions: [String: MaintenanceTerminalSession] = [:]
+    private static let maintenanceSessionLock = NSLock()
+    private static var maintenanceSessions: [String: MaintenanceTerminalSession] = [:]
+    private static let maintenanceCleanupInitLock = NSLock()
+    private static var maintenanceCleanupTimer: DispatchSourceTimer?
     let cloneControlLock = NSLock()
     var runningCloneTargets: Set<String> = []
     var cancelledCloneTargets: Set<String> = []
     var cloneStatusByTarget: [String: String] = [:]
-    /// PTY 会话空闲超时（10 分钟无 poll 或进程已退出 60 秒后自动清理）
-    private var sessionCleanupTimer: DispatchSourceTimer?
 
     override init() {
         super.init()
-        startSessionCleanupTimer()
+        Self.startSessionCleanupTimerIfNeeded()
+    }
+
+    func storeMaintenanceSession(_ session: MaintenanceTerminalSession) {
+        Self.maintenanceSessionLock.lock()
+        Self.maintenanceSessions[session.id] = session
+        Self.maintenanceSessionLock.unlock()
+    }
+
+    func maintenanceSession(id: String) -> MaintenanceTerminalSession? {
+        Self.maintenanceSessionLock.lock()
+        let session = Self.maintenanceSessions[id]
+        Self.maintenanceSessionLock.unlock()
+        return session
+    }
+
+    func removeMaintenanceSession(id: String) -> MaintenanceTerminalSession? {
+        Self.maintenanceSessionLock.lock()
+        let session = Self.maintenanceSessions.removeValue(forKey: id)
+        Self.maintenanceSessionLock.unlock()
+        return session
+    }
+
+    private static func maintenanceSessionSnapshot() -> [String: MaintenanceTerminalSession] {
+        maintenanceSessionLock.lock()
+        let snapshot = maintenanceSessions
+        maintenanceSessionLock.unlock()
+        return snapshot
+    }
+
+    private static func removeMaintenanceSessions(ids: [String]) {
+        guard !ids.isEmpty else { return }
+        maintenanceSessionLock.lock()
+        for id in ids {
+            maintenanceSessions.removeValue(forKey: id)
+        }
+        maintenanceSessionLock.unlock()
     }
 
     /// 定期清理空闲/已退出的 PTY 会话，防止 App 崩溃后内存泄漏
-    private func startSessionCleanupTimer() {
+    private static func startSessionCleanupTimerIfNeeded() {
+        maintenanceCleanupInitLock.lock()
+        defer { maintenanceCleanupInitLock.unlock() }
+        guard maintenanceCleanupTimer == nil else { return }
+
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .background))
         timer.schedule(deadline: .now() + 30, repeating: .seconds(30))
-        timer.setEventHandler { [weak self] in
-            self?.sweepStaleSessions()
+        timer.setEventHandler {
+            Self.sweepStaleSessions()
         }
-        sessionCleanupTimer = timer
+        maintenanceCleanupTimer = timer
         timer.resume()
     }
 
-    private func sweepStaleSessions() {
+    private static func sweepStaleSessions() {
         let now = Date()
         let idleTimeout: TimeInterval = 600   // 10 分钟无 poll
         let exitedTimeout: TimeInterval = 60  // 已退出 60 秒
 
-        maintenanceSessionLock.lock()
-        let snapshot = maintenanceSessions
-        maintenanceSessionLock.unlock()
-
+        let snapshot = maintenanceSessionSnapshot()
         var toRemove: [String] = []
         for (id, session) in snapshot {
             let idleSeconds = now.timeIntervalSince(session.lastPollTime)
@@ -55,13 +92,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             }
         }
 
-        if !toRemove.isEmpty {
-            maintenanceSessionLock.lock()
-            for id in toRemove {
-                maintenanceSessions.removeValue(forKey: id)
-            }
-            maintenanceSessionLock.unlock()
-        }
+        removeMaintenanceSessions(ids: toRemove)
     }
 
     func getVersion(withReply reply: @escaping (String) -> Void) {
@@ -153,6 +184,10 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
 // MARK: - XPC 监听器
 
 final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
+    /// 只有 Helper 自身是正式签名产物时，才强制校验调用方签名。
+    /// 这样 `make pkg`（未签名快速包）可正常联通；`pkg-signed/release` 仍保持严格校验。
+    private static let shouldEnforceCallerSignature = isHelperReleaseSigned()
+
     /// 每个 PID 的连接序号（仅递增）和活跃连接数
     private var seqByPID: [Int32: Int] = [:]
     private var activeByPID: [Int32: Int] = [:]
@@ -218,13 +253,48 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
         }
 
         #if !DEBUG
-        // 第二层（仅 Release）：校验调用方的代码签名
-        // 使用 audit token（不可伪造）而非 PID（有 TOCTOU 风险）
-        guard Self.isCodeSignatureValid(connection: connection, pid: pid) else {
-            return false
+        // 第二层（仅 Release）：正式签名 helper 时校验调用方签名。
+        // 使用 audit token（不可伪造）而非 PID（有 TOCTOU 风险）。
+        if Self.shouldEnforceCallerSignature {
+            guard Self.isCodeSignatureValid(connection: connection, pid: pid) else {
+                return false
+            }
+        } else {
+            helperLog("[xpc] auth signature check skipped: helper is not release-signed", level: .warn)
         }
         #endif
 
+        return true
+    }
+
+    /// 判断当前 Helper 是否为正式发布签名（identifier + Team ID）。
+    /// 未签名/adhoc 构建返回 false，用于开发快速包放宽调用方签名校验。
+    private static func isHelperReleaseSigned() -> Bool {
+        var selfCode: SecCode?
+        guard SecCodeCopySelf([], &selfCode) == errSecSuccess, let selfCode else {
+            helperLog("[xpc] self-signature check: SecCodeCopySelf failed", level: .warn)
+            return false
+        }
+
+        let requirementStr = """
+            identifier "ai.clawdhome.mac.helper" \
+            and anchor apple generic \
+            and certificate leaf[subject.OU] = "Y7P5QLKLYG"
+            """
+        var requirement: SecRequirement?
+        guard SecRequirementCreateWithString(requirementStr as CFString, [], &requirement) == errSecSuccess,
+              let requirement else {
+            helperLog("[xpc] self-signature check: invalid requirement string", level: .error)
+            return false
+        }
+
+        let result = SecCodeCheckValidity(selfCode, [], requirement)
+        if result != errSecSuccess {
+            helperLog("[xpc] self-signature check: helper not release-signed (OSStatus=\(result))", level: .warn)
+            return false
+        }
+
+        helperLog("[xpc] self-signature check: helper release signature verified")
         return true
     }
 

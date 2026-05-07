@@ -414,6 +414,15 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
+    /// 初始化虾的安全文件夹（幂等）
+    func setupVault(username: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.setupVault(username: username) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "Vault 初始化失败") }
+    }
+
     /// 删除用户（由 Helper 以 root 执行）
     func deleteUser(username: String, keepHome: Bool, adminUser: String, adminPassword: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }

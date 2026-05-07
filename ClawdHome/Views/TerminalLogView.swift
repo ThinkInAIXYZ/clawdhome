@@ -660,6 +660,8 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     private var polling = false
     private var exitNotified = false
     private var isCleaningUp = false
+    private var transientPollRetryCount = 0
+    private let maxTransientPollRetries = 1
     private var lastResizeSent: (cols: Int, rows: Int)?
     private var pendingResize: (cols: Int, rows: Int)?
     private var openedOAuthURLs: Set<String> = []
@@ -767,6 +769,13 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
         polling = false
         let (ok, chunk, nextOffset, exited, exitCode, err) = snapshot
         if !ok {
+            let message = err ?? ""
+            if shouldRetryPoll(message: message), transientPollRetryCount < maxTransientPollRetries {
+                transientPollRetryCount += 1
+                helperClient.connect(reason: "maintenance poll retry")
+                feedToTerminal("会话连接中断，正在自动重试...\r\n")
+                return
+            }
             if let err, !err.isEmpty {
                 feedToTerminal(L10n.f("views.terminal_log_view.r_n", fallback: "会话错误：%@\r\n", String(describing: err)))
             }
@@ -774,6 +783,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
             timer?.invalidate()
             return
         }
+        transientPollRetryCount = 0
         offset = nextOffset
         if !chunk.isEmpty {
             feedToTerminal(chunk)
@@ -847,6 +857,16 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
         guard !exitNotified else { return }
         exitNotified = true
         onExit?(code)
+    }
+
+    private func shouldRetryPoll(message: String) -> Bool {
+        if message.isEmpty { return false }
+        let lowered = message.lowercased()
+        if message.contains("XPC 调用超时") { return true }
+        if message.contains("未连接") { return true }
+        if lowered.contains("xpc") && lowered.contains("timeout") { return true }
+        if lowered.contains("not connected") { return true }
+        return false
     }
 
     // MARK: TerminalViewDelegate

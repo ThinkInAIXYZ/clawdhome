@@ -15,7 +15,7 @@ struct LocalAITab: View {
     @State private var errorMessage: String? = nil
     @State private var successMessage: String? = nil
 
-    private let modelDir = "/Users/Shared/ClawdHome/models/omlx"
+    private let modelDir = "/var/lib/clawdhome/models/omlx"
 
     var body: some View {
         ScrollView {

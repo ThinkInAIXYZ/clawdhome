@@ -319,11 +319,18 @@ struct UserDetailView: View {
             isMacOSUser: user.clawType == .macosUser
         )
     }
+    private var detailWindowTitle: String {
+        user.fullName.isEmpty ? user.username : user.fullName
+    }
+    private var detailWindowSubtitle: String {
+        "@\(user.username)"
+    }
 
     var body: some View {
         tabbedContent
-        .navigationTitle(user.fullName.isEmpty ? user.username : user.fullName)
-        .navigationSubtitle("@\(user.username)")
+        .navigationTitle(detailWindowTitle)
+        .navigationSubtitle(detailWindowSubtitle)
+        .background(UserDetailWindowTitleBinder(title: detailWindowTitle, subtitle: detailWindowSubtitle))
         .background(UserDetailWindowLevelBinder(elevated: shouldPinWindowTopmost))
         .onAppear {
             descriptionDraft = user.profileDescription
@@ -1414,6 +1421,7 @@ struct UserDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 statusSection
                 quickTransferSection
+                sharedFoldersSection
                 configSection
                 actionsSection
                 dangerZoneSection
@@ -1783,6 +1791,71 @@ struct UserDetailView: View {
             }
         }
         .modifier(OverviewCardModifier())
+    }
+
+    // MARK: - 共享文件夹
+
+    @ViewBuilder
+    private var sharedFoldersSection: some View {
+        let vaultPath = "/Users/Shared/ClawdHome/vaults/\(user.username)"
+        let publicPath = "/Users/Shared/ClawdHome/public"
+        VStack(alignment: .leading, spacing: 14) {
+            Text(L10n.k("user.detail.shared_folders.title", fallback: "共享文件夹")).font(.headline)
+            Divider().opacity(0.55)
+            VStack(alignment: .leading, spacing: 10) {
+                sharedFolderRow(
+                    title: L10n.k("user.detail.shared_folders.vault", fallback: "安全文件夹"),
+                    description: L10n.k("user.detail.shared_folders.vault_desc", fallback: "仅你和这只虾可访问"),
+                    icon: "folder.badge.person.crop",
+                    path: vaultPath
+                )
+                Divider().opacity(0.3)
+                sharedFolderRow(
+                    title: L10n.k("user.detail.shared_folders.public", fallback: "公共文件夹"),
+                    description: L10n.k("user.detail.shared_folders.public_desc", fallback: "所有虾和你共享"),
+                    icon: "folder",
+                    path: publicPath
+                )
+            }
+        }
+        .modifier(OverviewCardModifier())
+    }
+
+    private func sharedFolderRow(title: String, description: String, icon: String, path: String) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Label(title, systemImage: icon)
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button {
+                Task { await openSharedFolder(path: path) }
+            } label: {
+                Label(L10n.k("user.detail.shared_folders.reveal", fallback: "在 Finder 中显示"), systemImage: "arrow.right.circle")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+    }
+
+    private func openSharedFolder(path: String) async {
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: path) {
+            try? await helperClient.setupVault(username: user.username)
+        }
+        let url = URL(fileURLWithPath: path)
+        if fm.fileExists(atPath: path) {
+            NSWorkspace.shared.open(url)
+        } else {
+            // fallback 到父目录
+            let parent = url.deletingLastPathComponent()
+            if fm.fileExists(atPath: parent.path) {
+                NSWorkspace.shared.open(parent)
+            }
+        }
     }
 
     // MARK: - 配置区
@@ -2466,26 +2539,26 @@ struct UserDetailView: View {
         }
         guard requestID == refreshStatusGeneration else { return }
 
+        let installedVersion = await installedVersionResult
+        user.openclawVersion = installedVersion
+        versionChecked = true
+
         let wizardState = await wizardStateResult
         let ensuredPending = await ensureOnboardingWizardSessionIfNeeded(
             existingState: wizardState,
-            forceOnboarding: forceOnboardingAtEntry
+            forceOnboarding: forceOnboardingAtEntry,
+            hasInstalledOpenClaw: installedVersion != nil
         )
         hasPendingInitWizard = ensuredPending
         isNodeInstalledReady = await nodeInstalledResult
         xcodeEnvStatus = await xcodeStatusResult
 
-        let (url, modelsStatus, installedVersion, registryURL) = await (
+        let (url, modelsStatus, registryURL) = await (
             urlResult,
             modelsStatusResult,
-            installedVersionResult,
             npmRegistryResult
         )
         guard requestID == refreshStatusGeneration else { return }
-
-        // 统一使用安装探测结果作为“是否已安装”的单一事实来源，避免不同来源互相覆盖导致闪烁。
-        user.openclawVersion = installedVersion
-        versionChecked = true
 
         gatewayURL = url.isEmpty ? nil : url
         if user.isRunning, gatewayToken(from: url) == nil {
@@ -2553,7 +2626,8 @@ struct UserDetailView: View {
     /// 当首次安装且没有可恢复会话时，自动创建 onboarding 会话。
     private func ensureOnboardingWizardSessionIfNeeded(
         existingState: InitWizardState?,
-        forceOnboarding: Bool
+        forceOnboarding: Bool,
+        hasInstalledOpenClaw: Bool
     ) async -> Bool {
         let shouldForceOnboarding = forceOnboarding
             && !user.isAdmin
@@ -2599,7 +2673,7 @@ struct UserDetailView: View {
                 let readiness = gatewayHub.readinessMap[user.username]
                 return !user.isAdmin
                     && user.clawType == .macosUser
-                    && user.openclawVersion == nil
+                    && !hasInstalledOpenClaw
                     && !(user.isRunning || readiness == .starting || readiness == .ready)
             }
 
@@ -2628,7 +2702,7 @@ struct UserDetailView: View {
             if !state.isCompleted {
                 let shouldKeepOnboarding = shouldForceOnboarding || (!user.isAdmin
                     && user.clawType == .macosUser
-                    && user.openclawVersion == nil)
+                    && !hasInstalledOpenClaw)
                 if shouldKeepOnboarding {
                     user.initStep = nil
                     return true
@@ -2646,7 +2720,7 @@ struct UserDetailView: View {
             user.initStep = nil
             return false
         }
-        guard shouldForceOnboarding || user.openclawVersion == nil else {
+        guard shouldForceOnboarding || !hasInstalledOpenClaw else {
             user.initStep = nil
             return false
         }
@@ -3956,6 +4030,35 @@ struct UserPasswordSheet: View {
 
 /// 让 UserDetailView 自行对 gateway 发 HTTP 探活，
 /// 确保独立窗口或非 Dashboard 页面也能刷新 readiness 状态
+private struct UserDetailWindowTitleBinder: NSViewRepresentable {
+    let title: String
+    let subtitle: String
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            apply(window: view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            apply(window: nsView.window)
+        }
+    }
+
+    private func apply(window: NSWindow?) {
+        guard let window else { return }
+        if window.title != title {
+            window.title = title
+        }
+        if #available(macOS 11.0, *), window.subtitle != subtitle {
+            window.subtitle = subtitle
+        }
+    }
+}
+
 private struct GatewayProbeModifier: ViewModifier {
     let username: String
     let uid: Int
