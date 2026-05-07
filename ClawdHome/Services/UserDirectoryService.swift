@@ -6,7 +6,7 @@ import OpenDirectory
 
 struct UserDirectoryService {
 
-    /// 列出本机所有标准用户（uid ≥ 501，排除系统账户）
+    /// 列出本机所有标准用户（uid ≥ 501，排除系统账户及 _ 开头的服务账户）
     private static func listStandardUsers() throws -> [UserRecord] {
         let session = ODSession.default()
         let node = try ODNode(session: session, type: ODNodeType(kODNodeTypeLocalNodes))
@@ -36,6 +36,7 @@ struct UserDirectoryService {
             guard
                 let username = record.recordName,
                 !systemAccounts.contains(username),
+                !username.hasPrefix("_"),               // 排除 _GnetXPCHelper 等系统服务账户
                 let uidValues = try? record.values(forAttribute: kODAttributeTypeUniqueID),
                 let uidStr = uidValues.first as? String,
                 let uid = Int(uidStr),

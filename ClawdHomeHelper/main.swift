@@ -174,6 +174,171 @@ func helperLog(_ message: String, level: LogLevel = .info, channel: LogChannel =
     }
 }
 
+private struct GatewayIntentionalStopRecord: Codable {
+    let reason: String
+    let createdAt: TimeInterval
+    let ttlSeconds: TimeInterval?
+
+    var expiresAt: TimeInterval? {
+        guard let ttlSeconds else { return nil }
+        return createdAt + ttlSeconds
+    }
+
+    var isExpired: Bool {
+        guard let expiresAt else { return false }
+        return Date().timeIntervalSince1970 >= expiresAt
+    }
+}
+
+private enum GatewayIntentionalStopStore {
+    private static let baseDir = "/var/lib/clawdhome"
+
+    static func mark(username: String, reason: String, ttlSeconds: TimeInterval? = nil) {
+        let record = GatewayIntentionalStopRecord(
+            reason: reason,
+            createdAt: Date().timeIntervalSince1970,
+            ttlSeconds: ttlSeconds
+        )
+        guard let data = try? JSONEncoder().encode(record) else { return }
+        try? FileManager.default.createDirectory(
+            atPath: baseDir,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        FileManager.default.createFile(atPath: path(username: username), contents: data)
+    }
+
+    static func clear(username: String) {
+        try? FileManager.default.removeItem(atPath: path(username: username))
+    }
+
+    static func activeRecord(username: String) -> GatewayIntentionalStopRecord? {
+        let filePath = path(username: username)
+        guard let data = FileManager.default.contents(atPath: filePath),
+              let record = try? JSONDecoder().decode(GatewayIntentionalStopRecord.self, from: data) else {
+            return nil
+        }
+        if record.isExpired {
+            try? FileManager.default.removeItem(atPath: filePath)
+            return nil
+        }
+        return record
+    }
+
+    private static func path(username: String) -> String {
+        "\(baseDir)/\(username)-gateway-intentional-stop.json"
+    }
+}
+
+private func gatewayAutostartGloballyEnabled() -> Bool {
+    !FileManager.default.fileExists(atPath: "/var/lib/clawdhome/gateway-autostart-disabled")
+}
+
+private func userGatewayAutostartEnabled(username: String) -> Bool {
+    !FileManager.default.fileExists(atPath: "/var/lib/clawdhome/\(username)-autostart-disabled")
+}
+
+private func managedGatewayUsers() -> [(username: String, uid: Int)] {
+    var adminNames = Set<String>()
+    if let grp = getgrnam("admin") {
+        var i = 0
+        while let member = grp.pointee.gr_mem?[i] {
+            adminNames.insert(String(cString: member))
+            i += 1
+        }
+    }
+
+    var users: [(username: String, uid: Int)] = []
+    setpwent()
+    defer { endpwent() }
+    while let pw = getpwent() {
+        let uid = pw.pointee.pw_uid
+        let name = String(cString: pw.pointee.pw_name)
+        guard uid >= 500, !name.hasPrefix("_"), !adminNames.contains(name) else { continue }
+        users.append((name, Int(uid)))
+    }
+    return users
+}
+
+private func bootAutostartGatewaysIfNeeded() {
+    guard gatewayAutostartGloballyEnabled() else { return }
+    for user in managedGatewayUsers() {
+        guard userGatewayAutostartEnabled(username: user.username) else { continue }
+        guard GatewayIntentionalStopStore.activeRecord(username: user.username) == nil else { continue }
+        try? GatewayManager.startGateway(username: user.username, uid: user.uid)
+    }
+}
+
+private final class GatewayWatchdog {
+    static let shared = GatewayWatchdog()
+
+    private let queue = DispatchQueue(label: "ai.clawdhome.helper.gateway-watchdog", qos: .background)
+    private let lock = NSLock()
+    private var timer: DispatchSourceTimer?
+    private var retryAfter: [String: Date] = [:]
+
+    func start() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard timer == nil else { return }
+
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 15, repeating: .seconds(5))
+        timer.setEventHandler { [weak self] in
+            self?.runSweep()
+        }
+        self.timer = timer
+        timer.resume()
+    }
+
+    private func runSweep() {
+        guard gatewayAutostartGloballyEnabled() else { return }
+
+        for user in managedGatewayUsers() {
+            guard userGatewayAutostartEnabled(username: user.username) else { continue }
+            if let record = GatewayIntentionalStopStore.activeRecord(username: user.username) {
+                helperLog("[watchdog] skip @\(user.username): intentional stop reason=\(record.reason)", level: .debug)
+                continue
+            }
+
+            let now = Date()
+            lock.lock()
+            let nextRetry = retryAfter[user.username]
+            lock.unlock()
+            if let nextRetry, nextRetry > now { continue }
+
+            let status = GatewayManager.status(username: user.username, uid: user.uid)
+            guard !status.running else {
+                clearRetry(username: user.username)
+                continue
+            }
+
+            helperLog("[watchdog] detected unexpected gateway exit @\(user.username); restarting", level: .error)
+            GatewayLog.log("WATCHDOG_RESTART", username: user.username, detail: "unexpected exit detected; auto-restarting")
+            do {
+                try GatewayManager.startGateway(username: user.username, uid: user.uid)
+                clearRetry(username: user.username)
+            } catch {
+                helperLog("[watchdog] restart failed @\(user.username): \(error.localizedDescription)", level: .error)
+                GatewayLog.log("WATCHDOG_RESTART_FAIL", username: user.username, detail: error.localizedDescription)
+                setRetry(username: user.username, date: now.addingTimeInterval(30))
+            }
+        }
+    }
+
+    private func clearRetry(username: String) {
+        lock.lock()
+        retryAfter.removeValue(forKey: username)
+        lock.unlock()
+    }
+
+    private func setRetry(username: String, date: Date) {
+        lock.lock()
+        retryAfter[username] = date
+        lock.unlock()
+    }
+}
+
 /// 当文件超过阈值时滚动归档（仅在 helperLogQueue 中调用）
 private func rotateHelperLogIfNeeded() {
     guard let attrs = try? FileManager.default.attributesOfItem(atPath: helperLogPath),
@@ -401,6 +566,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         do {
             if let uid = try? UserManager.uid(for: username) {
                 // 删除前先彻底退出目标用户域，避免 dscl 因活跃会话/进程拒绝删除。
+                GatewayIntentionalStopStore.mark(username: username, reason: "delete-user")
                 _ = try? GatewayManager.stopGateway(username: username, uid: uid)
                 _ = try? ClawdHomeHelper.run("/bin/launchctl", args: ["bootout", "user/\(uid)"])
                 Thread.sleep(forTimeInterval: 0.5)
@@ -435,6 +601,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
     func cleanupDeletedUser(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("用户删除后清理 @\(username)")
         UserManager.cleanupDeletedUser(username: username)
+        GatewayIntentionalStopStore.clear(username: username)
         reply(true, nil)
     }
 
@@ -445,6 +612,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         do {
             let uid = try UserManager.uid(for: username)
             try GatewayManager.startGateway(username: username, uid: uid)
+            GatewayIntentionalStopStore.clear(username: username)
             reply(true, nil)
         } catch {
             helperLog("Gateway 启动失败 @\(username): \(error.localizedDescription)", level: .error)
@@ -456,6 +624,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         helperLog("Gateway 停止 @\(username)")
         do {
             let uid = try UserManager.uid(for: username)
+            GatewayIntentionalStopStore.mark(username: username, reason: "manual-stop")
             try GatewayManager.stopGateway(username: username, uid: uid)
             reply(true, nil)
         } catch {
@@ -468,7 +637,9 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         helperLog("Gateway 重启 @\(username)")
         do {
             let uid = try UserManager.uid(for: username)
+            GatewayIntentionalStopStore.mark(username: username, reason: "manual-restart", ttlSeconds: 20)
             try GatewayManager.restartGateway(username: username, uid: uid)
+            GatewayIntentionalStopStore.clear(username: username)
             reply(true, nil)
         } catch {
             helperLog("Gateway 重启失败 @\(username): \(error.localizedDescription)", level: .error)
@@ -481,6 +652,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         do {
             let uid = try UserManager.uid(for: username)
             // 先停止 gateway（忽略错误，可能已停止）
+            GatewayIntentionalStopStore.mark(username: username, reason: "logout")
             try? GatewayManager.stopGateway(username: username, uid: uid)
             // bootout 整个用户 launchd 域，关停所有 launchd 管理的服务
             _ = try? ClawdHomeHelper.run(
@@ -2642,28 +2814,8 @@ DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
 // 使用 launchctl bootstrap user/<uid>，即使用户未登录也能在其 launchd 域中启动服务
 // 若 /var/lib/clawdhome/gateway-autostart-disabled 存在则跳过（用户在设置中关闭了自启）
 DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 8) {
-    guard !FileManager.default.fileExists(atPath: "/var/lib/clawdhome/gateway-autostart-disabled")
-    else { return }
-    var adminNames = Set<String>()
-    if let grp = getgrnam("admin") {
-        var i = 0
-        while let member = grp.pointee.gr_mem?[i] {
-            adminNames.insert(String(cString: member))
-            i += 1
-        }
-    }
-    setpwent()
-    defer { endpwent() }
-    while let pw = getpwent() {
-        let uid = pw.pointee.pw_uid
-        let name = String(cString: pw.pointee.pw_name)
-        guard uid >= 500, !name.hasPrefix("_"), !adminNames.contains(name) else { continue }
-        // 检查用户级自启开关
-        let userDisabledPath = "/var/lib/clawdhome/\(name)-autostart-disabled"
-        guard !FileManager.default.fileExists(atPath: userDisabledPath) else { continue }
-        // 未安装 openclaw 的用户 startGateway 会失败，try? 静默跳过
-        try? GatewayManager.startGateway(username: name, uid: Int(uid))
-    }
+    bootAutostartGatewaysIfNeeded()
 }
+GatewayWatchdog.shared.start()
 
 RunLoop.main.run()

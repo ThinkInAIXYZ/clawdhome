@@ -205,7 +205,19 @@ struct UserFileManager {
         try FileManager.default.createDirectory(at: url,
                                                 withIntermediateDirectories: true,
                                                 attributes: nil)
-        // 纠正所有权（递归）
+        
+        let homePath = "/Users/\(username)"
+        var currentUrl = url
+        while currentUrl.path != homePath && currentUrl.path.hasPrefix(homePath) && currentUrl.path.count > homePath.count {
+            do {
+                try ClawdHomeHelper.run("/usr/sbin/chown", args: [username, currentUrl.path])
+            } catch {
+                helperLog("[FileManager] chown failed for \(currentUrl.path): \(error.localizedDescription)", level: .warn)
+            }
+            currentUrl = currentUrl.deletingLastPathComponent().standardized
+        }
+
+        // 纠正所有权（递归处理目标目录自身及其可能已存在的内容）
         do {
             try ClawdHomeHelper.run("/usr/sbin/chown", args: ["-R", username, url.path])
         } catch {
