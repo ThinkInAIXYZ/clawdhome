@@ -252,6 +252,36 @@ final class GatewayHub {
         }
     }
 
+    /// 通过 Gateway RPC 获取 agent 列表（gateway 运行时使用，比 XPC 读文件更准确）
+    /// - Returns: agent 列表；gateway 未连接或返回空时返回 nil
+    func agentsList(username: String) async -> [AgentProfile]? {
+        guard let client = clients[username] else { return nil }
+        do {
+            guard let payload = try await client.request(method: "agents.list") else { return nil }
+            guard let rawAgents = payload["agents"] as? [[String: Any]] else { return nil }
+            let defaultId = payload["defaultId"] as? String ?? "main"
+
+            let agents: [AgentProfile] = rawAgents.compactMap { entry in
+                guard let id = entry["id"] as? String else { return nil }
+                let name = entry["name"] as? String ?? id
+                let emoji = entry["emoji"] as? String ?? ""
+                let modelPrimary = entry["modelPrimary"] as? String
+                let workspacePath = entry["workspacePath"] as? String
+                return AgentProfile(
+                    id: id,
+                    name: name,
+                    emoji: emoji,
+                    modelPrimary: modelPrimary,
+                    workspacePath: workspacePath,
+                    isDefault: id == defaultId
+                )
+            }
+            return agents.isEmpty ? nil : agents
+        } catch {
+            return nil
+        }
+    }
+
     /// 读取完整配置快照 + baseHash
     func configGetFull(username: String) async throws -> (config: [String: Any], baseHash: String) {
         guard let client = clients[username] else { throw GatewayClientError.notConnected }
