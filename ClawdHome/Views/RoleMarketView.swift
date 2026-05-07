@@ -348,6 +348,7 @@ struct RoleMarketView: View {
             AwakeningWizardView(
                 dna: dna,
                 isPresented: .constant(true),
+                existingUsers: pool.users.map { AwakeningExistingUser(username: $0.username, fullName: $0.fullName) },
                 onDismiss: { adoptedDNA = nil },
                 onAwaken: { username, fullName, description, soul, identity, userProfile in
                     let normalizedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -390,7 +391,7 @@ struct RoleMarketView: View {
                     pool.setDescription(description, for: normalizedUsername)
                     pool.markNeedsOnboarding(username: normalizedUsername)
                     NotificationCenter.default.post(name: .roleMarketAdoptionStarted, object: nil)
-                    openWindow(id: "claw-detail", value: normalizedUsername)
+                    openWindow(id: "user-init-wizard", value: normalizedUsername)
                 }
             )
             .frame(minWidth: 460, minHeight: 560)

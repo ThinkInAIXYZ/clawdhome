@@ -23,9 +23,243 @@ private struct WizardInputSurfaceModifier: ViewModifier {
     }
 }
 
+private struct WizardPanelCardModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
+            )
+    }
+}
+
+private struct WizardWindowTitleBinder: NSViewRepresentable {
+    let title: String
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            apply(window: view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            apply(window: nsView.window)
+        }
+    }
+
+    private func apply(window: NSWindow?) {
+        guard let window else { return }
+        if window.title != title {
+            window.title = title
+        }
+    }
+}
+
 private extension View {
     func wizardInputSurface() -> some View {
         modifier(WizardInputSurfaceModifier())
+    }
+
+    func wizardPanelCard() -> some View {
+        modifier(WizardPanelCardModifier())
+    }
+}
+
+struct GatewayActivationCard: View {
+    let progress: Double
+    let isAnimating: Bool
+    let isShrimpLifted: Bool
+
+    var body: some View {
+        VStack(spacing: 24) {
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.accentColor.opacity(isAnimating ? 0.22 : 0.12),
+                                Color.accentColor.opacity(0.03),
+                                .clear
+                            ],
+                            center: .center,
+                            startRadius: 18,
+                            endRadius: 96
+                        )
+                    )
+                    .frame(width: 196, height: 196)
+                    .blur(radius: 4)
+                    .opacity(isAnimating ? 1 : 0.7)
+
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.98),
+                                Color.accentColor.opacity(0.10)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(0.9), lineWidth: 1)
+                    )
+                    .shadow(color: Color.accentColor.opacity(0.14), radius: 28, x: 0, y: 14)
+                    .frame(width: 160, height: 160)
+
+                Text("🦞")
+                    .font(.system(size: 68))
+                    .offset(y: isShrimpLifted ? -5 : 5)
+                    .scaleEffect(isShrimpLifted ? 1.03 : 0.98)
+            }
+            .frame(maxWidth: .infinity)
+
+            VStack(spacing: 12) {
+                Text(L10n.k("views.user_init_wizard_view.initialization_completed", fallback: "配置完成"))
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(.primary)
+
+                Text(L10n.k("views.user_init_wizard_view.done_overview", fallback: "正在启动 OpenClaw Gateway…"))
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                VStack(spacing: 8) {
+                    ProgressView(value: progress, total: 1)
+                        .progressViewStyle(.linear)
+                        .tint(Color.accentColor)
+                    Text(L10n.k("views.user_init_wizard_view.gateway_activation_hint", fallback: "首次启动可能需要一点时间，请保持窗口开启。"))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: 340)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+    }
+}
+
+private struct EnvironmentSetupWaitingCard: View {
+    let title: String
+    let subtitle: String
+    let rotatingStatus: String
+    let isSceneLifted: Bool
+    let isToolRaised: Bool
+    let isGlowActive: Bool
+
+    var body: some View {
+        let cardWidth: CGFloat = 420
+        let cardHeight: CGFloat = 220
+
+        VStack(spacing: 22) {
+            VStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(.primary)
+
+                Text(subtitle)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 430)
+            }
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.accentColor.opacity(isGlowActive ? 0.16 : 0.10),
+                                Color.blue.opacity(0.05),
+                                Color.white.opacity(0.94)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: cardWidth, height: cardHeight)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(Color.white.opacity(0.75), lineWidth: 1)
+                    )
+                    .shadow(color: Color.accentColor.opacity(0.10), radius: 28, x: 0, y: 18)
+
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.accentColor.opacity(isGlowActive ? 0.22 : 0.14),
+                                Color.accentColor.opacity(0.04),
+                                .clear
+                            ],
+                            center: .center,
+                            startRadius: 20,
+                            endRadius: 110
+                        )
+                    )
+                    .frame(width: 220, height: 220)
+                    .blur(radius: 12)
+                    .offset(y: -18)
+
+                VStack(spacing: 12) {
+                    HStack(spacing: 18) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(Color.white.opacity(0.92))
+                                .frame(width: 112, height: 88)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .stroke(Color.secondary.opacity(0.10), lineWidth: 1)
+                                )
+
+                            VStack(spacing: 8) {
+                                Image(systemName: "house.fill")
+                                    .font(.system(size: 26, weight: .semibold))
+                                    .foregroundStyle(Color.accentColor.opacity(0.90))
+                                Capsule()
+                                    .fill(Color.accentColor.opacity(0.14))
+                                    .frame(width: 54, height: 8)
+                            }
+                        }
+
+                        ZStack {
+                            Text("🦞")
+                                .font(.system(size: 48))
+                                .offset(x: -2, y: isSceneLifted ? -6 : 6)
+                                .scaleEffect(isSceneLifted ? 1.03 : 0.98)
+
+                            Image(systemName: "hammer.fill")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(Color.orange.opacity(0.95))
+                                .rotationEffect(.degrees(isToolRaised ? -28 : 14))
+                                .offset(x: 30, y: isToolRaised ? -28 : -8)
+                        }
+                        .frame(width: 98, height: 98)
+                    }
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(Color.accentColor)
+                        Text(rotatingStatus)
+                            .font(.callout)
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
     }
 }
 
@@ -53,7 +287,7 @@ enum InitStep: Int, CaseIterable {
         case .basicEnvironment: return L10n.k("wizard.step.basic_environment", fallback: "基础环境")
         case .injectRole:       return L10n.k("wizard.step.inject_role", fallback: "注入角色")
         case .configureModel:   return L10n.k("wizard.step.configure_model", fallback: "模型配置")
-        case .configureChannel: return L10n.k("wizard.step.configure_channel", fallback: "频道配置")
+        case .configureChannel: return L10n.k("wizard.step.configure_channel", fallback: "IM 频道配置")
         case .finish:           return L10n.k("wizard.step.finish", fallback: "完成")
         }
     }
@@ -77,6 +311,32 @@ enum InitStep: Int, CaseIterable {
 enum StepStatus: Equatable {
     case pending, running, done
     case failed(String)
+}
+
+private enum BaseEnvProgressPhase: Int, CaseIterable {
+    case xcodeCheck = 1
+    case homebrewRepair
+    case installNode
+    case setupNpmEnv
+    case setNpmRegistry
+    case installOpenclaw
+
+    static var totalCount: Int { allCases.count }
+
+    var title: String {
+        switch self {
+        case .xcodeCheck: return "检查 Xcode 开发环境"
+        case .homebrewRepair: return "修复 Homebrew 权限"
+        case .installNode: return "安装 Node.js"
+        case .setupNpmEnv: return "配置 npm 目录"
+        case .setNpmRegistry: return "设置 npm 安装源"
+        case .installOpenclaw: return "安装 openclaw"
+        }
+    }
+
+    var runningText: String {
+        "(\(rawValue)/\(Self.totalCount)) \(title)…"
+    }
 }
 
 private enum MinimaxModel: String, CaseIterable {
@@ -230,6 +490,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
     case minimax = "minimax"
     case qiniu = "qiniu"
     case zai = "zai"
+    case custom = "custom"
 
     var id: String { rawValue }
 
@@ -239,6 +500,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         case .minimax:    return "MiniMax"
         case .qiniu:      return "Qiniu AI"
         case .zai:        return "智谱 Z.AI"
+        case .custom:     return "Custom Provider"
         }
     }
 
@@ -248,6 +510,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         case .minimax:    return L10n.k("wizard.provider.minimax.subtitle", fallback: "MiniMax M2.5 系列")
         case .qiniu:      return "DeepSeek / GLM / Kimi / Minimax"
         case .zai:        return "GLM系列模型"
+        case .custom:     return "OpenAI / Anthropic compatible"
         }
     }
 
@@ -257,6 +520,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         case .minimax:    return "m.circle"
         case .qiniu:      return "q.circle"
         case .zai:        return "sparkles"
+        case .custom:     return "slider.horizontal.3"
         }
     }
 
@@ -266,6 +530,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         case .minimax:    return "MiniMax API Key"
         case .qiniu:      return "Qiniu API Key"
         case .zai:        return "智谱 API Key"
+        case .custom:     return "Custom API Key"
         }
     }
 
@@ -275,6 +540,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         case .minimax:    return L10n.k("wizard.provider.minimax.api_key.placeholder", fallback: "粘贴 MiniMax API Key")
         case .qiniu:      return "sk-..."
         case .zai:        return "sk-..."
+        case .custom:     return "留空则使用 CUSTOM_API_KEY"
         }
     }
 
@@ -284,6 +550,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         case .minimax:    return "https://platform.minimaxi.com/user-center/basic-information/interface-key"
         case .qiniu:      return "https://portal.qiniu.com/ai-inference/api-key?ref=clawdhome.app"
         case .zai:        return "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys"
+        case .custom:     return "https://platform.openai.com/api-keys"
         }
     }
 
@@ -293,6 +560,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         case .minimax:    return L10n.k("wizard.provider.minimax.console", fallback: "MiniMax 控制台")
         case .qiniu:      return "七牛 API Key"
         case .zai:        return "获取 API Key"
+        case .custom:     return "API Key 参考"
         }
     }
 
@@ -321,6 +589,47 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
             return nil
         }
     }
+}
+
+private enum WizardAuthMethod: String, CaseIterable, Identifiable {
+    case apiKey
+    case secretReference
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .apiKey: return "API Key"
+        case .secretReference: return "Secret Reference"
+        }
+    }
+}
+
+private enum CustomCompatibility: String, CaseIterable, Identifiable {
+    case openai
+    case anthropic
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .openai: return "openai"
+        case .anthropic: return "anthropic"
+        }
+    }
+
+    var apiType: String {
+        switch self {
+        case .openai: return "openai-completions"
+        case .anthropic: return "anthropic-messages"
+        }
+    }
+}
+
+private enum ModelValidationState: Equatable {
+    case idle
+    case validating
+    case success(String)
+    case failure(String)
 }
 
 // MARK: - 进度持久化模型
@@ -419,6 +728,7 @@ struct UserInitWizardView: View {
     @Environment(HelperClient.self) private var helperClient
     @Environment(GatewayHub.self) private var gatewayHub
     @Environment(MaintenanceWindowRegistry.self) private var maintenanceWindowRegistry
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.openWindow) private var openWindow
 
     @State private var statuses: [Int: StepStatus] = [:]
@@ -444,8 +754,14 @@ struct UserInitWizardView: View {
 
     // Step 3: 模型配置
     @State private var selectedWizardProvider: WizardProvider = .kimiCoding
-    @State private var providerSearchText = ""
+    @State private var selectedWizardAuthMethod: WizardAuthMethod = .apiKey
     @State private var wizardApiKey = ""
+    @State private var customSecretReference = ""
+    @State private var customProviderId = ""
+    @State private var customModelId = ""
+    @State private var customModelAlias = ""
+    @State private var customBaseURL = ""
+    @State private var customCompatibility: CustomCompatibility = .openai
     @State private var isShowingApiKey = false
     @State private var minimaxApiKey = ""  // 保留用于持久化反序列化兼容
     @State private var selectedMinimaxModel: MinimaxModel = .m27
@@ -453,6 +769,7 @@ struct UserInitWizardView: View {
     @State private var selectedZAIModel: ZAIModel = .glm5
     @State private var isApplyingModel = false
     @State private var modelConfigError = ""
+    @State private var modelValidationState: ModelValidationState = .idle
     @State private var activeModelConfigTerminalToken: String? = nil
     @State private var isModelConfigTerminalOpen = false
     @State private var pendingModelConfigTerminalClose: ModelConfigTerminalCloseState? = nil
@@ -470,6 +787,13 @@ struct UserInitWizardView: View {
     @State private var isAcceptingXcodeLicense = false
     @State private var isRepairingHomebrewPermission = false
     @State private var xcodeFixMessage: String? = nil
+    @State private var finishAutoStartTriggered = false
+    @State private var activationProgress: Double = 0.08
+    @State private var activationShrimpLifted = false
+    @State private var waitingSceneLifted = false
+    @State private var waitingToolRaised = false
+    @State private var waitingGlowActive = false
+    @State private var baseEnvProgressPhase: BaseEnvProgressPhase = .xcodeCheck
 
     private var selectedOpenclawVersionForInstall: String? {
         switch selectedOpenclawVersionPreset {
@@ -485,59 +809,76 @@ struct UserInitWizardView: View {
         selectedOpenclawVersionForInstall ?? "latest"
     }
 
+    private var wizardTitle: String {
+        L10n.f(
+            "wizard.title",
+            fallback: "初始化 · %@",
+            formatManagedUserDisplayName(fullName: user.fullName, username: user.username)
+        )
+    }
+
+    private var customProviderIdTrimmed: String {
+        customProviderId.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var customModelIdTrimmed: String {
+        customModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var customBaseURLTrimmed: String {
+        customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var effectiveCustomProviderId: String {
+        customProviderIdTrimmed.isEmpty ? "custom" : customProviderIdTrimmed
+    }
+
+    private var availableWizardAuthMethods: [WizardAuthMethod] {
+        selectedWizardProvider == .custom ? [.apiKey, .secretReference] : [.apiKey]
+    }
+
+    private var wizardSectionTitleFont: Font {
+        .system(size: 21, weight: .semibold)
+    }
+
+    @ViewBuilder
+    private var activeContentPanel: some View {
+        if !initiated {
+            preStartPanel
+        } else if hasFailure {
+            failurePanel
+        } else if currentStep == .basicEnvironment {
+            runningPanel
+        } else if currentStep == .injectRole {
+            injectRolePanel
+        } else if currentStep == .configureModel {
+            modelConfigPanel
+        } else if currentStep == .configureChannel {
+            channelConfigPanel
+        } else if currentStep == .finish {
+            finishPanel
+        } else {
+            recoveryPanel
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            // ── 顶部标题栏 ───────────────────────────────────────
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(L10n.f("wizard.title", fallback: "初始化 · %@", user.username))
-                        .font(.headline)
-                    Text(L10n.k("wizard.subtitle.configuring", fallback: "正在配置生存空间"))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                if (currentStep == .basicEnvironment) || isApplyingModel || isStartingOpenclaw {
-                    ProgressView().scaleEffect(0.65)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-
-            Divider()
-
-            // ── 主体：左侧导航 + 右侧内容 ────────────────────────
             HStack(spacing: 0) {
                 leftRail
-                    .frame(width: 160)
-
+                    .frame(width: 246)
                 Divider()
-
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Group {
-                            if !initiated {
-                                preStartPanel
-                            } else if hasFailure {
-                                failurePanel
-                            } else if currentStep == .basicEnvironment {
-                                runningPanel
-                            } else if currentStep == .injectRole {
-                                injectRolePanel
-                            } else if currentStep == .configureModel {
-                                modelConfigPanel
-                            } else if currentStep == .configureChannel {
-                                channelConfigPanel
-                            } else if currentStep == .finish {
-                                finishPanel
-                            } else {
-                                recoveryPanel
-                            }
-                        }
-                        .padding(20)
+                    VStack(alignment: .leading, spacing: 16) {
+                        activeContentPanel
+                            .wizardPanelCard()
 
-                        advancedOptionsPanel
-                            .padding(.horizontal, 20)
+                        if !initiated || currentStep == .basicEnvironment {
+                            advancedOptionsPanel
+                        }
                     }
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 18)
                 }
                 .frame(minWidth: 300)
             }
@@ -572,6 +913,7 @@ struct UserInitWizardView: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
+        .background(WizardWindowTitleBinder(title: wizardTitle))
         .task {
             await loadSavedState()
             while !Task.isCancelled {
@@ -610,20 +952,57 @@ struct UserInitWizardView: View {
         .onChange(of: user.username) { _, _ in
             resetWizardStateOnly()
         }
+        .onChange(of: selectedWizardProvider) { _, _ in
+            if selectedWizardProvider != .custom {
+                selectedWizardAuthMethod = .apiKey
+            } else if customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                customBaseURL = "https://api.example.com/v1"
+            }
+            resetModelValidationState(clearCredential: true)
+        }
+        .onChange(of: selectedWizardAuthMethod) { _, _ in
+            resetModelValidationState(clearCredential: false)
+        }
+        .onChange(of: wizardApiKey) { _, _ in
+            if case .idle = modelValidationState { return }
+            modelValidationState = .idle
+            modelConfigError = ""
+        }
     }
 
     // MARK: - Left Rail
 
     private var leftRail: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(InitStep.allCases, id: \.rawValue) { step in
-                leftRailRow(step: step)
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(InitStep.allCases, id: \.rawValue) { step in
+                    leftRailRow(step: step)
+                }
             }
-            Spacer()
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(0.55))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+            )
+
+            Spacer(minLength: 0)
         }
         .padding(.vertical, 16)
-        .padding(.horizontal, 10)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .padding(.horizontal, 14)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(nsColor: .windowBackgroundColor),
+                    Color(nsColor: .controlBackgroundColor).opacity(0.7),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
     }
 
     @ViewBuilder
@@ -631,7 +1010,7 @@ struct UserInitWizardView: View {
         let status = statuses[step.rawValue] ?? .pending
         let isActive = currentStep == step || (!initiated && step == .basicEnvironment)
 
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Group {
                 switch status {
                 case .done:
@@ -647,31 +1026,58 @@ struct UserInitWizardView: View {
                         .foregroundStyle(isActive ? Color.accentColor : Color.secondary.opacity(0.5))
                 }
             }
-            .font(.footnote)
-            .frame(width: 16)
+            .font(.subheadline)
+            .frame(width: 18)
 
             Text(step.title)
-                .font(.callout)
+                .font(.body)
                 .fontWeight(isActive ? .semibold : .regular)
                 .foregroundStyle(isActive ? .primary : (status == .done ? .secondary : .tertiary))
                 .lineLimit(1)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isActive ? Color.accentColor.opacity(0.1) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(isActive ? Color.accentColor.opacity(0.14) : Color.clear)
+        )
     }
 
     // MARK: - Panels
 
     private var preStartPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.k("wizard.base_env.title", fallback: "基础环境初始化"))
-                    .font(.title3).fontWeight(.semibold)
-                Text(L10n.k("wizard.base_env.subtitle", fallback: "安装 Node.js / npm 环境与 openclaw 核心组件。"))
-                    .font(.callout).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.k("wizard.base_env.title", fallback: "基础环境初始化"))
+                        .font(wizardSectionTitleFont)
+                    Text(L10n.k("wizard.base_env.subtitle", fallback: "安装 Node.js / npm 环境与 openclaw 核心组件。"))
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.96),
+                                    Color.accentColor.opacity(0.14)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.92), lineWidth: 1)
+                        )
+                        .frame(width: 56, height: 56)
+                        .shadow(color: Color.accentColor.opacity(0.12), radius: 12, x: 0, y: 6)
+
+                    Text("🦞")
+                        .font(.system(size: 28))
+                }
             }
 
 
@@ -691,6 +1097,7 @@ struct UserInitWizardView: View {
 
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if isHydratingState {
                 Label(L10n.k("wizard.resume_state.loading", fallback: "正在恢复初始化状态…"), systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
@@ -709,30 +1116,64 @@ struct UserInitWizardView: View {
             .buttonStyle(.borderedProminent)
             .disabled(isHydratingState)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var runningPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.k("wizard.base_env.running.title", fallback: "基础环境初始化"))
-                    .font(.title3).fontWeight(.semibold)
-                Text(L10n.k("wizard.base_env.running.subtitle", fallback: "正在安装依赖，请稍候。此阶段无需重复点击继续。"))
-                    .font(.callout).foregroundStyle(.secondary)
-            }
+            EnvironmentSetupWaitingCard(
+                title: L10n.k("wizard.base_env.running.title", fallback: "基础环境初始化"),
+                subtitle: L10n.k("wizard.base_env.running.subtitle", fallback: "正在准备生存空间并安装依赖，请稍候。此阶段通常需要 1 到 2 分钟，网络较慢时会更久。"),
+                rotatingStatus: waitingStatusMessage,
+                isSceneLifted: waitingSceneLifted,
+                isToolRaised: waitingToolRaised,
+                isGlowActive: waitingGlowActive
+            )
 
-            HStack(spacing: 12) {
+            VStack(spacing: 10) {
                 Button(isCancelling
                        ? L10n.k("wizard.action.terminating", fallback: "正在终止…")
                        : L10n.k("wizard.action.terminate", fallback: "终止初始化")) {
                     isCancelling = true
                     Task {
                         await markRunningStepsAsCancelledAndPersist()
-                        requestCancelInit()
+                        await requestCancelInit()
                         isCancelling = false
                     }
                 }
                 .buttonStyle(.bordered).foregroundStyle(.red)
                 .disabled(isCancelling)
+
+                Text(L10n.k("wizard.base_env.running.keep_open", fallback: "保持窗口开启即可，完成后会自动进入下一步。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .task(id: statuses[InitStep.basicEnvironment.rawValue] == .running) {
+            let isRunning = statuses[InitStep.basicEnvironment.rawValue] == .running
+            guard isRunning else {
+                waitingSceneLifted = false
+                waitingToolRaised = false
+                waitingGlowActive = false
+                baseEnvProgressPhase = .xcodeCheck
+                return
+            }
+
+            baseEnvProgressPhase = .xcodeCheck
+            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+                waitingSceneLifted = true
+                waitingGlowActive = true
+            }
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                waitingToolRaised = true
+            }
+
+            while statuses[InitStep.basicEnvironment.rawValue] == .running {
+                try? await Task.sleep(for: .seconds(2.4))
+                guard statuses[InitStep.basicEnvironment.rawValue] == .running else { break }
+                updateBaseEnvProgressFromLog()
             }
         }
     }
@@ -741,7 +1182,7 @@ struct UserInitWizardView: View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.k("wizard.inject_role.title", fallback: "注入角色"))
-                    .font(.title3).fontWeight(.semibold)
+                    .font(wizardSectionTitleFont)
                 Text(L10n.k("wizard.inject_role.subtitle", fallback: "定义角色的核心价值观、身份设定和画像。留空则保留默认设定。"))
                     .font(.callout).foregroundStyle(.secondary)
             }
@@ -804,145 +1245,115 @@ struct UserInitWizardView: View {
 
     private var modelConfigPanel: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text(L10n.k("views.user_init_wizard_view.select_ai_provider", fallback: "选择 AI Provider"))
-                .font(.title3).fontWeight(.semibold)
-
-            VStack(spacing: 10) {
-                // 搜索框
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.secondary)
-                    TextField(L10n.k("wizard.provider.search", fallback: "搜索 Provider..."), text: $providerSearchText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13))
-                    if !providerSearchText.isEmpty {
-                        Button { providerSearchText = "" } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 10).padding(.vertical, 8)
-                .wizardInputSurface()
-
-                // 供选择的列表，限制高度默认展示3个，支持内滚
-                ScrollView {
-                    VStack(spacing: 6) {
-                        let filteredProviders = WizardProvider.allCases.filter {
-                            providerSearchText.isEmpty ||
-                            $0.displayName.localizedCaseInsensitiveContains(providerSearchText) ||
-                            $0.subtitle.localizedCaseInsensitiveContains(providerSearchText)
-                        }
-                        if filteredProviders.isEmpty {
-                            Text(L10n.k("wizard.provider.no_results", fallback: "未找到匹配项"))
-                                .font(.callout).foregroundStyle(.secondary)
-                                .padding(.vertical, 20)
-                        } else {
-                            ForEach(filteredProviders) { provider in
-                                providerSelectRow(provider)
-                            }
-                        }
-                    }
-                    .padding(.trailing, 4) // 给滚动条留出空间
-                }
-                .frame(height: 160) // 约等于 3 个选项的高度 (每行约46 + 间距)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.k("views.user_init_wizard_view.select_ai_provider", fallback: "选择 AI Provider"))
+                    .font(wizardSectionTitleFont)
+                Text(L10n.k("wizard.model_config.validation.subtitle", fallback: "选择模型提供商并填写认证信息。验证成功后才会进入下一步。"))
+                    .font(.callout).foregroundStyle(.secondary)
             }
+
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.k("wizard.provider.label", fallback: "模型提供商"))
+                        .font(.subheadline).fontWeight(.medium)
+                    Picker(L10n.k("wizard.provider.label", fallback: "模型提供商"), selection: $selectedWizardProvider) {
+                        ForEach(WizardProvider.allCases) { provider in
+                            Text(provider.displayName).tag(provider)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .wizardInputSurface()
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.k("wizard.auth_method.label", fallback: "认证方式"))
+                        .font(.subheadline).fontWeight(.medium)
+                    Picker(L10n.k("wizard.auth_method.label", fallback: "认证方式"), selection: $selectedWizardAuthMethod) {
+                        ForEach(availableWizardAuthMethods) { method in
+                            Text(method.title).tag(method)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .wizardInputSurface()
+                }
+                .frame(maxWidth: .infinity)
+
+                providerMoreModelsRow()
+            }
+            .padding(.bottom, 2)
 
             Divider()
 
             providerDetailForm
+                .padding(.top, 2)
 
-            if !modelConfigError.isEmpty {
+            modelValidationStatusView
+
+            if !modelConfigError.isEmpty, !isValidationFailureState {
                 Label(modelConfigError, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(.red)
             }
 
             HStack(spacing: 12) {
-                Button(isApplyingModel ? L10n.k("views.user_init_wizard_view.save", fallback: "保存中…") : L10n.k("views.user_init_wizard_view.savecontinue", fallback: "保存并继续")) {
+                Button(isApplyingModel ? L10n.k("wizard.model_config.validating", fallback: "验证中…") : L10n.k("wizard.model_config.validate_continue", fallback: "验证并继续")) {
                     Task { await applyModelConfig() }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isApplyingModel || wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-
-            Divider()
-
-            GroupBox(L10n.k("wizard.model_config.command.group", fallback: "高阶方式")) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(
-                        isModelConfigTerminalOpen
-                        ? L10n.k("wizard.model_config.command.open_hint", fallback: "命令行配置窗口已打开。完成或取消后关闭窗口，这里会提示是否进入下一步。")
-                        : L10n.k("wizard.model_config.command.desc", fallback: "也可以直接打开命令行执行 `openclaw configure --section model`。关闭窗口后，向导会确认这一步是否完成。")
-                    )
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-
-                    HStack(spacing: 12) {
-                        Button(
-                            isModelConfigTerminalOpen
-                            ? L10n.k("wizard.model_config.command.reopen", fallback: "命令行窗口已打开")
-                            : L10n.k("wizard.model_config.command.open", fallback: "通过命令行配置")
-                        ) {
-                            openModelConfigTerminal()
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(isModelConfigTerminalOpen)
-
-                        Button(L10n.k("wizard.model_config.skip", fallback: "跳过此步骤")) {
-                            Task { await skipModelStep() }
-                        }
-                        .buttonStyle(.bordered)
-                    }
+                .disabled(modelApplyDisabled)
+                Button(L10n.k("wizard.model_config.skip", fallback: "稍后配置")) {
+                    Task { await skipModelStep() }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .buttonStyle(.bordered)
             }
         }
     }
 
     @ViewBuilder
-    private func providerSelectRow(_ provider: WizardProvider) -> some View {
-        let selected = selectedWizardProvider == provider
+    private func providerMoreModelsRow() -> some View {
         Button {
-            selectedWizardProvider = provider
-            wizardApiKey = ""
-            modelConfigError = ""
+            openModelConfigTerminal()
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary.opacity(0.5))
-                    .font(.body)
-
-                Image(systemName: provider.icon)
-                    .foregroundStyle(selected ? Color.accentColor : .secondary)
-                    .frame(width: 18)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(provider.displayName)
-                        .font(.callout).fontWeight(selected ? .semibold : .regular)
-                        .foregroundStyle(.primary)
-                    Text(provider.subtitle)
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
-                Spacer()
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up.right.square")
+                .font(.caption)
+                Text(L10n.k("wizard.provider.more_models_openclaw_native", fallback: "更多模型（openclaw原生配置）"))
+                    .font(.caption)
             }
-            .padding(.horizontal, 12).padding(.vertical, 10)
-            .background(selected ? Color.accentColor.opacity(0.07) : Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(selected ? Color.accentColor.opacity(0.4) : Color.clear, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
+            .foregroundStyle(Color.accentColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
+        .disabled(isModelConfigTerminalOpen)
     }
 
     @ViewBuilder
     private var providerDetailForm: some View {
         let provider = selectedWizardProvider
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(Color.accentColor.opacity(0.14))
+                        .frame(width: 30, height: 30)
+                    Image(systemName: provider.icon)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.accentColor)
+                }
+                Text(provider.displayName)
+                    .font(wizardSectionTitleFont)
+                Text(provider.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(provider.apiKeyLabel)
@@ -958,7 +1369,7 @@ struct UserInitWizardView: View {
                                 Text(promotionTitle).font(.caption)
                             }
                         }
-                        .buttonStyle(.borderless).foregroundStyle(Color.accentColor)
+                        .buttonStyle(.borderless).foregroundStyle(Color.red)
                     }
                     Button {
                         if let url = URL(string: provider.consoleURL) { NSWorkspace.shared.open(url) }
@@ -971,86 +1382,160 @@ struct UserInitWizardView: View {
                     .buttonStyle(.borderless).foregroundStyle(Color.accentColor)
                 }
 
-                HStack(spacing: 8) {
-                    Group {
-                        if isShowingApiKey {
-                            TextField(provider.apiKeyPlaceholder, text: $wizardApiKey)
-                        } else {
-                            SecureField(provider.apiKeyPlaceholder, text: $wizardApiKey)
+                if provider == .custom {
+                    VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L10n.k("wizard.custom.api_compatibility", fallback: "API 兼容（默认 OpenAI）"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Picker("custom-compatibility", selection: $customCompatibility) {
+                                ForEach(CustomCompatibility.allCases) { item in
+                                    Text(item.title).tag(item)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Base URL")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField("https://api.example.com/v1", text: $customBaseURL)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L10n.k("wizard.custom.model_id", fallback: "模型ID"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField(L10n.k("wizard.custom.model_id_placeholder", fallback: "例如 gpt-4.1 / claude-3-7-sonnet"), text: $customModelId)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L10n.k("wizard.custom.model_alias", fallback: "模型ID别名"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField(L10n.k("wizard.custom.model_alias_placeholder", fallback: "例如：自定义 GPT-4.1"), text: $customModelAlias)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.body)
                         }
                     }
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-
-                    Button {
-                        isShowingApiKey.toggle()
-                    } label: {
-                        Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help(isShowingApiKey ? L10n.k("views.user_init_wizard_view.hide", fallback: "隐藏") : L10n.k("views.user_init_wizard_view.show", fallback: "显示"))
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .wizardInputSurface()
+
+                if selectedWizardAuthMethod == .apiKey {
+                    VStack(spacing: 6) {
+                        HStack(spacing: 8) {
+                            Group {
+                                if isShowingApiKey {
+                                    TextField(provider.apiKeyPlaceholder, text: $wizardApiKey)
+                                } else {
+                                    SecureField(provider.apiKeyPlaceholder, text: $wizardApiKey)
+                                }
+                            }
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13))
+
+                            Button {
+                                isShowingApiKey.toggle()
+                            } label: {
+                                Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .help(isShowingApiKey ? L10n.k("views.user_init_wizard_view.hide", fallback: "隐藏") : L10n.k("views.user_init_wizard_view.show", fallback: "显示"))
+                        }
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.25))
+                            .frame(height: 1)
+                    }
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 4)
+                } else if provider == .custom {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("secret reference")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("env:VAR / ${VAR} / provider:account", text: $customSecretReference)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                    }
+                }
             }
 
             if provider == .minimax {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型")).font(.subheadline).fontWeight(.medium)
-                    HStack(spacing: 12) {
-                        Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedMinimaxModel) {
-                            ForEach(MinimaxModel.allCases, id: \.self) { model in
-                                Text(model.providerName).tag(model)
-                            }
+                HStack(spacing: 10) {
+                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型"))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedMinimaxModel) {
+                        ForEach(MinimaxModel.allCases, id: \.self) { model in
+                            Text(model.providerName).tag(model)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .frame(minWidth: 160)
-
-                        Text(selectedMinimaxModel.rawValue)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    Text(selectedMinimaxModel.rawValue)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
                 }
             } else if provider == .qiniu {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型")).font(.subheadline).fontWeight(.medium)
-                    HStack(spacing: 12) {
-                        Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedQiniuModel) {
-                            ForEach(QiniuModel.allCases, id: \.self) { model in
-                                Text(model.alias).tag(model)
-                            }
+                HStack(spacing: 10) {
+                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型"))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedQiniuModel) {
+                        ForEach(QiniuModel.allCases, id: \.self) { model in
+                            Text(model.alias).tag(model)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .frame(minWidth: 160)
-
-                        Text(selectedQiniuModel.rawValue)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    Text(selectedQiniuModel.rawValue)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
                 }
             } else if provider == .zai {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型")).font(.subheadline).fontWeight(.medium)
-                    HStack(spacing: 12) {
-                        Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedZAIModel) {
-                            ForEach(ZAIModel.allCases, id: \.self) { model in
-                                Text(model.alias).tag(model)
-                            }
+                HStack(spacing: 10) {
+                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型"))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedZAIModel) {
+                        ForEach(ZAIModel.allCases, id: \.self) { model in
+                            Text(model.alias).tag(model)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .frame(minWidth: 160)
-
-                        Text(selectedZAIModel.rawValue)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    Text(selectedZAIModel.rawValue)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var modelValidationStatusView: some View {
+        switch modelValidationState {
+        case .idle:
+            Label(L10n.k("wizard.model_config.validation.idle", fallback: "未验证。点击“验证并继续”后会执行实时连通性检查。"), systemImage: "questionmark.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .validating:
+            Label(L10n.k("wizard.model_config.validation.running", fallback: "正在验证 Provider 配置…"), systemImage: "clock.arrow.circlepath")
+                .font(.caption)
+                .foregroundStyle(Color.accentColor)
+        case let .success(message):
+            Label(message, systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.green)
+        case let .failure(message):
+            Label(message, systemImage: "xmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.red)
         }
     }
 
@@ -1064,15 +1549,18 @@ struct UserInitWizardView: View {
             return selectedQiniuModel.rawValue
         case .zai:
             return selectedZAIModel.rawValue
+        case .custom:
+            guard !customModelIdTrimmed.isEmpty else { return "" }
+            return "\(effectiveCustomProviderId)/\(customModelIdTrimmed)"
         }
     }
 
     private var channelConfigPanel: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.k("views.user_init_wizard_view.channel", fallback: "绑定频道"))
-                    .font(.title3).fontWeight(.semibold)
-                Text(L10n.k("views.user_init_wizard_view.select_done", fallback: "选择要接入的沟通渠道，完成配对后虾即可收发消息。"))
+                Text(L10n.k("views.user_init_wizard_view.channel", fallback: "IM 绑定"))
+                    .font(wizardSectionTitleFont)
+                Text(L10n.k("views.user_init_wizard_view.select_done", fallback: "选择要接入的 IM 频道，完成配对后虾即可收发消息。"))
                     .font(.callout).foregroundStyle(.secondary)
             }
 
@@ -1092,8 +1580,8 @@ struct UserInitWizardView: View {
         VStack(spacing: 8) {
             channelBindingRow(
                 channel: .feishu,
-                title: L10n.k("views.user_init_wizard_view.feishu", fallback: "飞书扫码绑定"),
-                subtitle: L10n.k("views.user_init_wizard_view.done", fallback: "在独立窗口生成二维码，扫码完成配对。")
+                title: L10n.k("views.user_init_wizard_view.feishu", fallback: "飞书 IM 扫码绑定"),
+                subtitle: L10n.k("views.user_init_wizard_view.done", fallback: "在独立窗口生成二维码，扫码完成 IM 频道配对。")
             ) {
                 selectedChannel = .feishu
                 openWindow(
@@ -1103,14 +1591,20 @@ struct UserInitWizardView: View {
             }
             channelBindingRow(
                 channel: .weixin,
-                title: L10n.k("views.user_init_wizard_view.wechat", fallback: "微信扫码绑定"),
-                subtitle: L10n.k("views.user_init_wizard_view.donewechat", fallback: "在独立窗口生成二维码，扫码完成微信配对。")
+                title: L10n.k("views.user_init_wizard_view.wechat", fallback: "微信 IM 扫码绑定"),
+                subtitle: L10n.k("views.user_init_wizard_view.donewechat", fallback: "在独立窗口生成二维码，扫码完成微信 IM 频道配对。")
             ) {
                 selectedChannel = .weixin
                 openWindow(
                     id: "channel-onboarding",
                     value: "\(ChannelOnboardingFlow.weixin.rawValue):\(user.username)"
                 )
+            }
+            channelNativeConfigRow(
+                title: L10n.k("wizard.channel.more_im_bindings", fallback: "更多 IM 频道绑定"),
+                subtitle: L10n.k("wizard.channel.more_im_bindings_hint", fallback: "通过 openclaw 原生配置界面进行操作。")
+            ) {
+                openIMChannelNativeConfig()
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))
@@ -1167,45 +1661,79 @@ struct UserInitWizardView: View {
         }
     }
 
-    private var finishPanel: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
-                    Text(L10n.k("views.user_init_wizard_view.initialization_completed", fallback: "初始化完成")).font(.title3).fontWeight(.semibold)
+    private func channelNativeConfigRow(
+        title: String,
+        subtitle: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: "terminal")
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 18)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.callout)
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
                 }
-                Text(L10n.k("views.user_init_wizard_view.models_channelconfigurationdone", fallback: "基础环境、模型、频道配置步骤已完成。"))
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 12) {
-                Button(L10n.k("views.user_init_wizard_view.back", fallback: "上一步")) { Task { await moveBackToChannelStep() } }
-                    .buttonStyle(.bordered).foregroundStyle(.secondary).disabled(isStartingOpenclaw)
-
-                Button(isStartingOpenclaw ? L10n.k("views.user_detail_view.start", fallback: "启动中…") : L10n.k("views.user_init_wizard_view.start_openclaw", fallback: "立即启动 OpenClaw")) {
-                    Task { await finishAndStartOpenclaw() }
+                Spacer()
+                HStack(spacing: 4) {
+                    Text(L10n.k("views.user_init_wizard_view.open", fallback: "点击打开"))
+                        .font(.caption)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
                 }
-                .buttonStyle(.borderedProminent).disabled(isStartingOpenclaw)
-
-                Button(L10n.k("views.user_init_wizard_view.start", fallback: "稍后启动")) { Task { await completeWizardOnly() } }
-                    .buttonStyle(.bordered).foregroundStyle(.secondary).disabled(isStartingOpenclaw)
+                .foregroundStyle(.secondary)
             }
-
-            finishProgressPanel
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8))
         }
+        .buttonStyle(.plain)
     }
 
-    @ViewBuilder
-    private var finishProgressPanel: some View {
-        if !finishProgressMessages.isEmpty {
-            GroupBox(L10n.k("views.user_init_wizard_view.current_progress", fallback: "当前进度")) {
+    private var finishPanel: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            GatewayActivationCard(
+                progress: activationProgress,
+                isAnimating: isStartingOpenclaw,
+                isShrimpLifted: activationShrimpLifted
+            )
+
+            if !isStartingOpenclaw {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(finishProgressMessages.enumerated()), id: \.offset) { _, line in
-                        Text(line).font(.caption).foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+                        Text(L10n.k("views.user_init_wizard_view.initialization_completed", fallback: "配置完成")).font(wizardSectionTitleFont)
                     }
+                    Text(L10n.k("views.user_init_wizard_view.models_channelconfigurationdone", fallback: "正在启动 OpenClaw Gateway…"))
+                        .font(.callout).foregroundStyle(.secondary)
                 }
-                .padding(.vertical, 2)
+            }
+        }
+        .task {
+            guard !finishAutoStartTriggered, !isStartingOpenclaw else { return }
+            finishAutoStartTriggered = true
+            await finishAndStartOpenclaw()
+        }
+        .task(id: isStartingOpenclaw) {
+            guard isStartingOpenclaw else {
+                activationShrimpLifted = false
+                return
+            }
+
+            activationProgress = max(activationProgress, 0.12)
+            withAnimation(.easeInOut(duration: 1.3).repeatForever(autoreverses: true)) {
+                activationShrimpLifted = true
+            }
+
+            while isStartingOpenclaw && activationProgress < 0.9 {
+                try? await Task.sleep(for: .milliseconds(220))
+                if !isStartingOpenclaw { break }
+                activationProgress = min(0.9, activationProgress + 0.035)
             }
         }
     }
@@ -1215,7 +1743,7 @@ struct UserInitWizardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                    Text(L10n.k("views.user_init_wizard_view.step_failed", fallback: "步骤失败")).font(.title3).fontWeight(.semibold)
+                    Text(L10n.k("views.user_init_wizard_view.step_failed", fallback: "步骤失败")).font(wizardSectionTitleFont)
                 }
                 Text(L10n.k("views.user_init_wizard_view.check_log_output_details_then_retry_restart", fallback: "请查看日志输出了解详情，然后重试或重新开始。"))
                     .font(.callout).foregroundStyle(.secondary)
@@ -1231,8 +1759,10 @@ struct UserInitWizardView: View {
             HStack(spacing: 12) {
                 Button(L10n.k("views.user_init_wizard_view.retry_failed_step", fallback: "重试失败步骤")) { Task { await retryFromFailure() } }
                     .buttonStyle(.borderedProminent)
+                    .disabled(isCancelling || isRunningInitFlow)
                 Button(L10n.k("views.user_init_wizard_view.restart", fallback: "重新开始")) { resetWizard() }
                     .buttonStyle(.bordered).foregroundStyle(.secondary)
+                    .disabled(isCancelling || isRunningInitFlow)
             }
         }
     }
@@ -1341,7 +1871,7 @@ struct UserInitWizardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.clockwise.circle").foregroundStyle(.orange)
-                    Text(L10n.k("views.user_init_wizard_view.initialization_paused", fallback: "初始化已暂停")).font(.title3).fontWeight(.semibold)
+                    Text(L10n.k("views.user_init_wizard_view.initialization_paused", fallback: "初始化已暂停")).font(wizardSectionTitleFont)
                 }
                 Text(L10n.k("views.user_init_wizard_view.resume_detected_pending_steps", fallback: "检测到步骤未运行但未完成，可继续执行剩余步骤。"))
                     .font(.callout).foregroundStyle(.secondary)
@@ -1352,7 +1882,7 @@ struct UserInitWizardView: View {
                 Button(L10n.k("views.user_init_wizard_view.re_initialize", fallback: "重新初始化")) {
                     isCancelling = true
                     Task {
-                        requestCancelInit()
+                        await requestCancelInit()
                         isCancelling = false
                         resetWizard()
                     }
@@ -1364,7 +1894,6 @@ struct UserInitWizardView: View {
 
     private var advancedOptionsPanel: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // 可点击的标题行
             Button {
                 showAdvancedOptions.toggle()
             } label: {
@@ -1379,9 +1908,13 @@ struct UserInitWizardView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
 
             if showAdvancedOptions {
+                Divider()
+                    .padding(.horizontal, 12)
+
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(L10n.k("views.user_init_wizard_view.npm", fallback: "npm 安装源")).font(.subheadline).fontWeight(.medium)
@@ -1405,11 +1938,16 @@ struct UserInitWizardView: View {
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .padding(.bottom, 12)
             }
         }
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+        )
     }
 
     // MARK: - 步骤执行
@@ -1454,9 +1992,16 @@ struct UserInitWizardView: View {
         customOpenclawVersion = ""
         showTerminal = false
         wizardApiKey = ""
+        customSecretReference = ""
+        selectedWizardAuthMethod = .apiKey
         isShowingApiKey = false
         minimaxApiKey = ""
         selectedWizardProvider = .kimiCoding
+        customProviderId = ""
+        customModelId = ""
+        customModelAlias = ""
+        customBaseURL = ""
+        customCompatibility = .openai
         selectedMinimaxModel = .m27
         selectedQiniuModel = .deepseekV32
         selectedZAIModel = .glm5
@@ -1464,12 +2009,17 @@ struct UserInitWizardView: View {
         roleIdentity = ""
         roleUser = ""
         modelConfigError = ""
+        modelValidationState = .idle
         activeModelConfigTerminalToken = nil
         isModelConfigTerminalOpen = false
         pendingModelConfigTerminalClose = nil
         selectedChannel = .feishu
         isStartingOpenclaw = false
         finishProgressMessages = []
+        waitingSceneLifted = false
+        waitingToolRaised = false
+        waitingGlowActive = false
+        baseEnvProgressPhase = .xcodeCheck
         user.initStep = nil
     }
 
@@ -1494,6 +2044,7 @@ struct UserInitWizardView: View {
         defer { isRunningInitFlow = false }
 
         // 在进入长流程前先做 Xcode 预检，避免失败/运行面板来回闪动。
+        baseEnvProgressPhase = .xcodeCheck
         appendLog(L10n.k("views.user_init_wizard_view.checking_xcode_environment_log", fallback: "\n▶ 检查 Xcode 开发环境\n"))
         do {
             try await ensureXcodeEnvironmentReady()
@@ -1520,6 +2071,7 @@ struct UserInitWizardView: View {
         await persistState()
         onSessionActiveChanged?(true)
 
+        baseEnvProgressPhase = .homebrewRepair
         appendLog("\n▶ \(String(localized: "wizard.homebrew.repair.start", defaultValue: "修复 Homebrew 权限（可选）"))\n")
         do {
             try await conn.repairHomebrewPermission(username: user.username)
@@ -1529,13 +2081,13 @@ struct UserInitWizardView: View {
             appendLog("⚠️ \(String(localized: "wizard.homebrew.repair.failed", defaultValue: "Homebrew 权限修复失败（已跳过，不影响初始化）"))：\(error.localizedDescription)\n")
         }
 
-        let autoSteps: [(title: String, run: () async throws -> Void)] = [
-            (L10n.k("views.user_init_wizard_view.node_js", fallback: "安装 Node.js"), { try await conn.installNode(username: user.username, nodeDistURL: nodeDistURL) }),
-            (L10n.k("views.user_init_wizard_view.configuration_npm_directory", fallback: "配置 npm 目录"), { try await conn.setupNpmEnv(username: user.username) }),
-            (L10n.k("views.user_init_wizard_view.settings_npm", fallback: "设置 npm 安装源"), {
+        let autoSteps: [(phase: BaseEnvProgressPhase, title: String, run: () async throws -> Void)] = [
+            (.installNode, L10n.k("views.user_init_wizard_view.node_js", fallback: "安装 Node.js"), { try await conn.installNode(username: user.username, nodeDistURL: nodeDistURL) }),
+            (.setupNpmEnv, L10n.k("views.user_init_wizard_view.configuration_npm_directory", fallback: "配置 npm 目录"), { try await conn.setupNpmEnv(username: user.username) }),
+            (.setNpmRegistry, L10n.k("views.user_init_wizard_view.settings_npm", fallback: "设置 npm 安装源"), {
                 try await conn.setNpmRegistry(username: user.username, registry: selectedNpmRegistry.rawValue)
             }),
-            (L10n.k("views.user_init_wizard_view.openclaw_openclawversionlabelforui", fallback: "安装 openclaw (\(openclawVersionLabelForUI))"), {
+            (.installOpenclaw, L10n.k("views.user_init_wizard_view.openclaw_openclawversionlabelforui", fallback: "安装 openclaw (\(openclawVersionLabelForUI))"), {
                 try await conn.installOpenclaw(
                     username: user.username,
                     version: selectedOpenclawVersionForInstall
@@ -1544,6 +2096,7 @@ struct UserInitWizardView: View {
         ].compactMap { $0 }
 
         for item in autoSteps {
+            baseEnvProgressPhase = item.phase
             appendLog("\n▶ \(item.title)\n")
             do {
                 try await item.run()
@@ -1718,6 +2271,14 @@ struct UserInitWizardView: View {
     }
 
     private func retryFromFailure() async {
+        // 终止后的失败属于“可恢复状态”，重试时先清理，避免被 hasFailure 持续拦截。
+        let cancelledMessage = L10n.k("views.user_init_wizard_view.terminated", fallback: "已终止")
+        for step in InitStep.allCases {
+            if case .failed(let message) = statuses[step.rawValue], message == cancelledMessage {
+                statuses[step.rawValue] = .pending
+            }
+        }
+
         if case .failed = statuses[InitStep.basicEnvironment.rawValue] {
             statuses[InitStep.basicEnvironment.rawValue] = .pending
             await runInitSteps()
@@ -1755,28 +2316,209 @@ struct UserInitWizardView: View {
     }
 
     private func applyModelConfig() async {
-        let key = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
+        if let validationError = await validateModelConfigInput() {
+            modelValidationState = .failure(validationError)
+            modelConfigError = validationError
+            return
+        }
 
         isApplyingModel = true
         modelConfigError = ""
+        modelValidationState = .validating
         defer { isApplyingModel = false }
 
         do {
-            switch selectedWizardProvider {
-            case .kimiCoding:
-                try await applyKimiCodingConfig(apiKey: key)
-            case .minimax:
-                try await applyMinimaxConfig(apiKey: key)
-            case .qiniu:
-                try await applyQiniuConfig(apiKey: key)
-            case .zai:
-                try await applyZAIConfig(apiKey: key)
-            }
-
+            try await writeSelectedModelConfig()
+            try await probeSelectedProvider()
+            modelValidationState = .success(
+                L10n.f(
+                    "wizard.model_config.validation.success_provider",
+                    fallback: "%@ 验证成功，正在进入下一步。",
+                    selectedWizardProvider.displayName
+                )
+            )
             await markModelStepDone()
         } catch {
-            modelConfigError = error.localizedDescription
+            let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolved = message.isEmpty
+                ? L10n.k("wizard.model_config.validation.failed", fallback: "Provider 验证失败，请检查配置后重试。")
+                : message
+            modelValidationState = .failure(resolved)
+            modelConfigError = resolved
+        }
+    }
+
+    private var modelApplyDisabled: Bool {
+        if isApplyingModel { return true }
+        if selectedWizardProvider == .custom {
+            let hasModel = !customModelIdTrimmed.isEmpty
+            let hasBaseURL = !customBaseURLTrimmed.isEmpty
+            if !hasModel || !hasBaseURL { return true }
+            switch selectedWizardAuthMethod {
+            case .apiKey:
+                return false
+            case .secretReference:
+                return customSecretReference.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+        }
+        return wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func writeSelectedModelConfig() async throws {
+        switch selectedWizardProvider {
+        case .kimiCoding:
+            let apiKey = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            try await applyKimiCodingConfig(apiKey: apiKey)
+        case .minimax:
+            let apiKey = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            try await applyMinimaxConfig(apiKey: apiKey)
+        case .qiniu:
+            let apiKey = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            try await applyQiniuConfig(apiKey: apiKey)
+        case .zai:
+            let apiKey = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            try await applyZAIConfig(apiKey: apiKey)
+        case .custom:
+            try await applyCustomProviderConfig()
+        }
+    }
+
+    private func probeSelectedProvider() async throws {
+        let providerToProbe: String = {
+            if selectedWizardProvider == .custom { return effectiveCustomProviderId }
+            return selectedWizardProvider.rawValue
+        }()
+        let args = ["models", "status", "--probe-provider", providerToProbe, "--probe-timeout", "10000"]
+        let (ok, output) = await helperClient.runOpenclawCommand(username: user.username, args: args)
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ok else {
+            if trimmed.isEmpty {
+                throw HelperError.operationFailed(L10n.k("wizard.model_config.validation.failed_generic", fallback: "验证失败，未收到 Provider 返回信息。"))
+            }
+            throw HelperError.operationFailed(trimmed)
+        }
+    }
+
+    private func validateModelConfigInput() async -> String? {
+        if selectedWizardProvider != .custom {
+            let key = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if key.isEmpty {
+                return L10n.k("wizard.model_config.validation.empty_key", fallback: "请先输入 API Key，再执行验证。")
+            }
+            return nil
+        }
+
+        if customModelIdTrimmed.isEmpty {
+            return "请先填写 custom-model-id。"
+        }
+        if customBaseURLTrimmed.isEmpty {
+            return "请先填写 custom-base-url。"
+        }
+
+        switch selectedWizardAuthMethod {
+        case .apiKey:
+            let key = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if key.isEmpty {
+                let existing = await helperClient.getConfig(username: user.username, key: "env.CUSTOM_API_KEY")
+                if existing == nil || existing?.isEmpty == true {
+                    return "未输入 custom API Key，且 env.CUSTOM_API_KEY 未配置。"
+                }
+            }
+            return nil
+        case .secretReference:
+            return await validateCustomSecretReference()
+        }
+    }
+
+    private func validateCustomSecretReference() async -> String? {
+        let raw = customSecretReference.trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.isEmpty {
+            return "Secret Reference 不能为空。"
+        }
+        if raw.hasPrefix("${"), raw.hasSuffix("}") {
+            let envName = String(raw.dropFirst(2).dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+            if envName.isEmpty { return "环境变量引用格式错误。示例：${CUSTOM_API_KEY}" }
+            let existing = await helperClient.getConfig(username: user.username, key: "env.\(envName)")
+            if existing == nil || existing?.isEmpty == true {
+                return "环境变量 \(envName) 未配置（预检失败）。"
+            }
+            return nil
+        }
+        if raw.hasPrefix("env:") {
+            let envName = String(raw.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
+            if envName.isEmpty { return "env 引用格式错误。示例：env:CUSTOM_API_KEY" }
+            let existing = await helperClient.getConfig(username: user.username, key: "env.\(envName)")
+            if existing == nil || existing?.isEmpty == true {
+                return "环境变量 \(envName) 未配置（预检失败）。"
+            }
+            return nil
+        }
+        if raw.contains(":") {
+            if !GlobalSecretsStore.shared.has(secretKey: raw) {
+                return "provider ref \(raw) 不存在于全局 secrets（预检失败）。"
+            }
+            return nil
+        }
+        return "Secret Reference 格式不支持。请使用 env:VAR / ${VAR} / provider:account。"
+    }
+
+    private func resolvedCustomAPIKeyValue() -> String {
+        switch selectedWizardAuthMethod {
+        case .apiKey:
+            let direct = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if direct.isEmpty {
+                return "${CUSTOM_API_KEY}"
+            }
+            return direct
+        case .secretReference:
+            let raw = customSecretReference.trimmingCharacters(in: .whitespacesAndNewlines)
+            if raw.hasPrefix("env:") {
+                let envName = String(raw.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
+                return "${\(envName)}"
+            }
+            return raw
+        }
+    }
+
+    private func applyCustomProviderConfig() async throws {
+        let providerId = effectiveCustomProviderId
+        let modelId = customModelIdTrimmed
+        let modelPrimary = "\(providerId)/\(modelId)"
+        let alias = customModelAlias.trimmingCharacters(in: .whitespacesAndNewlines)
+        let config = await helperClient.getConfigJSON(username: user.username)
+        let existingModel = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:]
+        var modelAliasMap = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:]
+        var normalizedModelConfig: [String: Any] = ["primary": modelPrimary]
+        if let arr = existingModel["fallback"] as? [String], !arr.isEmpty {
+            normalizedModelConfig["fallback"] = arr
+        } else if let single = existingModel["fallback"] as? String, !single.isEmpty {
+            normalizedModelConfig["fallback"] = [single]
+        }
+        if !alias.isEmpty {
+            modelAliasMap[modelPrimary] = ["alias": alias]
+        }
+
+        let providerPayload: [String: Any] = [
+            "baseUrl": customBaseURLTrimmed,
+            "apiKey": resolvedCustomAPIKeyValue(),
+            "api": customCompatibility.apiType,
+            "models": [[
+                "id": modelId,
+                "name": alias.isEmpty ? modelId : alias,
+                "reasoning": true,
+                "input": ["text", "image"],
+                "cost": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0],
+                "contextWindow": 262144,
+                "maxTokens": 32768,
+            ]],
+        ]
+
+        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
+        try await helperClient.setConfigDirect(username: user.username, path: "models.providers.\(providerId)", value: providerPayload)
+        try await helperClient.setConfigDirect(username: user.username, path: "auth.profiles.\(providerId):default", value: ["provider": providerId, "mode": "api_key"])
+        try await helperClient.setConfigDirect(username: user.username, path: "agents.defaults.model", value: normalizedModelConfig)
+        if !alias.isEmpty {
+            try await helperClient.setConfigDirect(username: user.username, path: "agents.defaults.models", value: modelAliasMap)
         }
     }
 
@@ -2048,6 +2790,7 @@ struct UserInitWizardView: View {
         currentStep = .finish
         statuses[InitStep.finish.rawValue] = .running
         user.initStep = InitStep.finish.title
+        finishAutoStartTriggered = false
         await persistState()
     }
 
@@ -2066,6 +2809,7 @@ struct UserInitWizardView: View {
         statuses[InitStep.configureChannel.rawValue] = .running
         user.initStep = InitStep.configureChannel.title
         modelConfigError = ""
+        modelValidationState = .idle
         await persistState()
     }
 
@@ -2075,14 +2819,7 @@ struct UserInitWizardView: View {
         statuses[InitStep.configureChannel.rawValue] = .pending
         statuses[InitStep.finish.rawValue] = .pending
         user.initStep = InitStep.configureModel.title
-        await persistState()
-    }
-
-    private func moveBackToChannelStep() async {
-        currentStep = .configureChannel
-        statuses[InitStep.configureChannel.rawValue] = .running
-        statuses[InitStep.finish.rawValue] = .pending
-        user.initStep = InitStep.configureChannel.title
+        finishAutoStartTriggered = false
         await persistState()
     }
 
@@ -2101,13 +2838,10 @@ struct UserInitWizardView: View {
         isStartingOpenclaw = true
         defer { isStartingOpenclaw = false }
         finishProgressMessages = []
-        appendFinishProgress(L10n.k("views.user_init_wizard_view.done_overview", fallback: "初始化已完成，正在进入概览页…"))
+        activationProgress = 0.12
+        appendFinishProgress(L10n.k("views.user_init_wizard_view.done_overview", fallback: "正在启动 OpenClaw Gateway…"))
 
-        // 先退出向导回到概览页，再在后台继续启动流程，避免用户停留在初始化界面。
         gatewayHub.markPendingStart(username: user.username)
-        await completeWizardOnly()
-        appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_switched_overview_continuing", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 已切换到概览页，继续后台启动 Gateway。\n"))
-
         appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_starting_gateway", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在启动 Gateway…\n"))
 
         do {
@@ -2115,14 +2849,21 @@ struct UserInitWizardView: View {
             user.isRunning = true
             user.pid = nil
             user.startedAt = nil
+            activationProgress = 1
             appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_started_successfully", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动成功。\n"))
             await syncGatewayStateAfterStart()
+            try? await Task.sleep(for: .milliseconds(280))
+            await completeWizardOnly()
+            openWindow(id: "claw-detail", value: user.username)
+            try? await Task.sleep(for: .milliseconds(360))
+            dismiss()
         } catch {
-            // 启动失败不阻断完成状态，用户可在列表页再次启动
             user.isRunning = false
             user.pid = nil
             user.startedAt = nil
             gatewayHub.markPendingStopped(username: user.username)
+            activationProgress = 0.12
+            statuses[InitStep.finish.rawValue] = .failed(error.localizedDescription)
             appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_start_failed", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动失败：\(error.localizedDescription)\n"))
         }
     }
@@ -2160,51 +2901,6 @@ struct UserInitWizardView: View {
         }
 
         appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_status_sync_timeout", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 状态同步超时，概览页会在后续轮询中继续刷新。\n"))
-    }
-
-    private func waitForGatewayURLWithToken(
-        maxAttempts: Int = 20,
-        retryDelayNanoseconds: UInt64 = 500_000_000,
-        emitProgress: Bool = true
-    ) async -> String? {
-        if emitProgress {
-            appendFinishProgress(L10n.k("views.user_init_wizard_view.web_ui_token", fallback: "正在获取 Web UI Token…"))
-        } else {
-            appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_fetching_web_ui", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在获取 Web UI Token…\n"))
-        }
-        for attempt in 1...maxAttempts {
-            let urlString = await helperClient.getGatewayURL(username: user.username)
-            if gatewayToken(from: urlString) != nil {
-                if emitProgress {
-                    appendFinishProgress(L10n.k("views.user_init_wizard_view.token", fallback: "Token 获取成功。"))
-                } else {
-                    appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_token_acquired_successfully", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Token 获取成功。\n"))
-                }
-                return urlString
-            }
-            if attempt < maxAttempts {
-                if emitProgress {
-                    appendFinishProgress(L10n.k("views.user_init_wizard_view.token_attempt_maxattempts_continuewaiting", fallback: "Token 暂未就绪（\(attempt)/\(maxAttempts)），继续等待…"))
-                } else {
-                    appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_token_not_ready", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Token 暂未就绪（\(attempt)/\(maxAttempts)），继续等待…\n"))
-                }
-                try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
-            }
-        }
-        if emitProgress {
-            appendFinishProgress(L10n.k("views.user_init_wizard_view.token_open_web_ui", fallback: "Token 获取超时，未自动打开 Web UI。"))
-        } else {
-            appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_token_request_timed", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Token 获取超时，未自动打开 Web UI。\n"))
-        }
-        return nil
-    }
-
-    private func gatewayToken(from gatewayURL: String) -> String? {
-        guard let components = URLComponents(string: gatewayURL),
-              let fragment = components.fragment,
-              fragment.hasPrefix("token=") else { return nil }
-        let token = String(fragment.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
-        return token.isEmpty ? nil : token
     }
 
     private func appendFinishProgress(_ text: String) {
@@ -2277,6 +2973,58 @@ struct UserInitWizardView: View {
         await applySavedState(saved)
     }
 
+    private var waitingStatusMessage: String {
+        baseEnvProgressPhase.runningText
+    }
+
+    private func updateBaseEnvProgressFromLog() {
+        let path = "/tmp/clawdhome-init-\(user.username).log"
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8), !text.isEmpty else { return }
+
+        let markers: [(marker: String, phase: BaseEnvProgressPhase)] = [
+            ("▶ 检查 Xcode 开发环境", .xcodeCheck),
+            ("▶ 修复 Homebrew 权限", .homebrewRepair),
+            ("▶ 安装 Node.js", .installNode),
+            ("▶ 配置 npm 目录", .setupNpmEnv),
+            ("▶ 设置 npm 安装源", .setNpmRegistry),
+            ("▶ 安装 openclaw", .installOpenclaw)
+        ]
+
+        var best: (loc: Int, phase: BaseEnvProgressPhase)? = nil
+        for item in markers {
+            let range = (text as NSString).range(of: item.marker, options: .backwards)
+            guard range.location != NSNotFound else { continue }
+            if let current = best {
+                if range.location > current.loc {
+                    best = (range.location, item.phase)
+                }
+            } else {
+                best = (range.location, item.phase)
+            }
+        }
+
+        guard let detected = best?.phase else { return }
+        if detected.rawValue > baseEnvProgressPhase.rawValue {
+            baseEnvProgressPhase = detected
+        }
+    }
+
+    private var isValidationFailureState: Bool {
+        if case .failure = modelValidationState { return true }
+        return false
+    }
+
+    private func resetModelValidationState(clearCredential: Bool) {
+        if clearCredential {
+            wizardApiKey = ""
+            customSecretReference = ""
+            customModelAlias = ""
+            isShowingApiKey = false
+        }
+        modelConfigError = ""
+        modelValidationState = .idle
+    }
+
     private func applySavedState(_ saved: InitWizardState) async {
         wizardMode = saved.mode
         hydrateDraftSelectionsIfNeeded(from: saved)
@@ -2317,6 +3065,13 @@ struct UserInitWizardView: View {
                 selectedZAIModel = model
             } else if saved.modelName.hasPrefix("kimi-coding/") {
                 selectedWizardProvider = .kimiCoding
+            } else if saved.modelName.contains("/") {
+                let parts = saved.modelName.split(separator: "/", maxSplits: 1).map(String.init)
+                if parts.count == 2 {
+                    selectedWizardProvider = .custom
+                    customProviderId = parts[0]
+                    customModelId = parts[1]
+                }
             }
         }
 
@@ -2439,14 +3194,12 @@ struct UserInitWizardView: View {
         }
     }
 
-    /// 非阻塞地请求 Helper 终止初始化流程，避免 UI 因回调延迟而卡住。
-    private func requestCancelInit() {
+    /// 请求 Helper 终止初始化流程；等待取消完成，避免“重试”与“终止”发生竞态。
+    private func requestCancelInit() async {
         let username = user.username
         let conn = wizardConn
-        Task {
-            await conn?.cancelInit(username: username)
-            await helperClient.cancelInit(username: username)
-        }
+        await conn?.cancelInit(username: username)
+        await helperClient.cancelInit(username: username)
     }
 
     // MARK: - 完成后操作
@@ -2462,6 +3215,15 @@ struct UserInitWizardView: View {
             command: ["openclaw", "configure", "--section", "model"],
             completionToken: completionToken,
             completionContext: modelConfigMaintenanceContext
+        )
+        openWindow(id: "maintenance-terminal", value: payload)
+    }
+
+    private func openIMChannelNativeConfig() {
+        let payload = maintenanceWindowRegistry.makePayload(
+            username: user.username,
+            title: L10n.k("wizard.channel.native_config.window_title", fallback: "IM 频道原生配置"),
+            command: ["openclaw", "channels", "add"]
         )
         openWindow(id: "maintenance-terminal", value: payload)
     }
@@ -2514,33 +3276,6 @@ struct UserInitWizardView: View {
             command: ["zsh", "-l"]
         )
         openWindow(id: "maintenance-terminal", value: payload)
-    }
-
-    // 保留统一入口：若未来需要在完成页直接打开 Web，可复用此流程。
-    private func openWebUI() async {
-        finishProgressMessages = []
-        if !user.isRunning {
-            appendFinishProgress(L10n.k("views.user_init_wizard_view.gateway_start", fallback: "Gateway 未运行，正在启动…"))
-            do {
-                gatewayHub.markPendingStart(username: user.username)
-                try await helperClient.startGateway(username: user.username)
-                user.isRunning = true
-                appendFinishProgress(L10n.k("views.user_init_wizard_view.gateway_start_success", fallback: "Gateway 启动成功。"))
-            } catch {
-                appendFinishProgress(L10n.k("views.user_init_wizard_view.gateway_start_error_localizeddescription", fallback: "Gateway 启动失败：\(error.localizedDescription)"))
-            }
-        } else {
-            appendFinishProgress(L10n.k("views.user_init_wizard_view.gateway", fallback: "Gateway 已运行。"))
-        }
-
-        let tokenReadyURL = await waitForGatewayURLWithToken()
-        if let tokenReadyURL,
-           let url = URL(string: tokenReadyURL),
-           !tokenReadyURL.isEmpty {
-            appendFinishProgress(L10n.k("views.user_init_wizard_view.open_web_ui", fallback: "正在打开 Web UI…"))
-            NSWorkspace.shared.open(url)
-            appendFinishProgress(L10n.k("views.user_init_wizard_view.web_ui_open", fallback: "Web UI 已打开。"))
-        }
     }
 
     private static let finishProgressTimeFormatter: DateFormatter = {

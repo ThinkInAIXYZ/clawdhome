@@ -23,3 +23,79 @@ func resolveUserInitPresentation(
 
     return .detailTabs
 }
+
+func shouldOpenUserInitWizardFromEntry(
+    hasForcedOnboarding: Bool,
+    hasUnfinishedWizardState: Bool,
+    hasRecoverableWizardProgress: Bool,
+    hasInstalledOpenClaw: Bool,
+    isGatewayOperational: Bool,
+    isAdmin: Bool,
+    isMacOSUser: Bool
+) -> Bool {
+    guard !isAdmin, isMacOSUser else { return false }
+
+    if hasForcedOnboarding || hasRecoverableWizardProgress {
+        return true
+    }
+
+    // 入口规则：只要初始化状态未完成，统一进入初始化窗口，避免先开详情再被详情页二次拉起向导。
+    if hasUnfinishedWizardState {
+        return true
+    }
+
+    if !hasInstalledOpenClaw && !isGatewayOperational {
+        return false
+    }
+
+    return false
+}
+
+func shouldEmbedOverviewGatewayConsole(
+    selectedTabRawValue: String,
+    initPresentationRoute: UserInitPresentationRoute,
+    isAdmin: Bool,
+    versionChecked: Bool,
+    hasInstalledOpenClaw: Bool
+) -> Bool {
+    guard selectedTabRawValue == "overview" else { return false }
+    guard initPresentationRoute == .detailTabs else { return false }
+
+    if isAdmin && versionChecked && !hasInstalledOpenClaw {
+        return false
+    }
+
+    return true
+}
+
+func shouldShowOverviewNativeSidebar(
+    selectedTabRawValue: String,
+    initPresentationRoute: UserInitPresentationRoute
+) -> Bool {
+    selectedTabRawValue == "overview" && initPresentationRoute == .detailTabs
+}
+
+func shouldShowDetailSidebarLabels(isCollapsed: Bool) -> Bool {
+    !isCollapsed
+}
+
+func shouldRenderOverviewSidebarPanel(
+    selectedTabRawValue: String,
+    initPresentationRoute: UserInitPresentationRoute,
+    isCollapsed: Bool
+) -> Bool {
+    shouldShowOverviewNativeSidebar(
+        selectedTabRawValue: selectedTabRawValue,
+        initPresentationRoute: initPresentationRoute
+    ) && !isCollapsed
+}
+
+func shouldShowOverviewSupplementaryEntries(
+    selectedTabRawValue: String,
+    initPresentationRoute: UserInitPresentationRoute
+) -> Bool {
+    shouldShowOverviewNativeSidebar(
+        selectedTabRawValue: selectedTabRawValue,
+        initPresentationRoute: initPresentationRoute
+    )
+}
