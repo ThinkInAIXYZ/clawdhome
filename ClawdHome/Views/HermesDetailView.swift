@@ -1389,6 +1389,7 @@ struct HermesDetailContainer: View {
     @State private var actionError: String? = nil
     @State private var showHealthCheck = false
     @State private var showHermesSetup = false
+    @State private var showTeamWizard = false
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
     @State private var deleteHomeOption: DeleteHomeOption = .deleteHome
@@ -1457,6 +1458,9 @@ struct HermesDetailContainer: View {
         }
         .sheet(isPresented: $showHermesSetup) {
             HermesSetupSheet(user: user)
+        }
+        .sheet(isPresented: $showTeamWizard) {
+            HermesTeamWizard(username: user.username)
         }
         .sheet(isPresented: $showHealthCheck) {
             DiagnosticsSheet(user: user, engineHint: "hermes")
@@ -1582,6 +1586,19 @@ struct HermesDetailContainer: View {
                 Divider()
                     .padding(.horizontal, 10)
                     .padding(.bottom, 4)
+
+                // 团队初始化向导入口（PR-4，≤3次点击：打开 Hermes 详情 → 点此按钮）
+                Button {
+                    showTeamWizard = true
+                } label: {
+                    Label("团队初始化", systemImage: "wand.and.stars")
+                        .font(.system(size: 12))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+
                 Button(role: .destructive) {
                     showDeleteConfirm = true
                 } label: {

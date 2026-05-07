@@ -132,6 +132,7 @@
 		87E35AE6191AA52D671EFC99 /* ConfigCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09AC66C79FE1B7EABAA7A9EE /* ConfigCommand.swift */; };
 		8846B8802FACD8C78C40CEAB /* ProviderKeySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A583A7B98571015C5E62789E /* ProviderKeySheet.swift */; };
 		8880D4FA5302740F6CD8F7B2 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B9025469C59B7EE328F10ED /* main.swift */; };
+		88EC653755F61E5113FC2B85 /* HermesTeamWizard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 339C3611ECC7586DDB587C8C /* HermesTeamWizard.swift */; };
 		8ABC91BB2196F6C05E6647C9 /* AppUpdateState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F2D77C8262C551CBD26BA2 /* AppUpdateState.swift */; };
 		8AFA4AD60DEB4B506A0D2A6A /* GatewayCronStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9D81E7B672B2A82591FEF1B /* GatewayCronStore.swift */; };
 		8DA5C8174C08A39388CA8388 /* PersonaDefView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77787365CF9FCFC1BABE9B81 /* PersonaDefView.swift */; };
@@ -217,7 +218,9 @@
 		F038BD4755FE71793AC88B55 /* HelperImpl+Hermes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89DB8110D061B70D84B4392F /* HelperImpl+Hermes.swift */; };
 		F13F8D9CE464C91C4DF946C0 /* CLIHelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBDE77F357454890EF4F97AF /* CLIHelperClient.swift */; };
 		F3BACBA96D148CEBC298F69A /* FileInputAcceptFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC4D03808505276353A3AD2 /* FileInputAcceptFilter.swift */; };
+		F3DB84F3DA6F906957AFB80C /* HermesIMPlatformDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EACE9A00A249D24BACFC8D2 /* HermesIMPlatformDirectory.swift */; };
 		F4729432DEE4FC8B67C7DDEF /* HelperSharedTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0680BCD6FCF288D2B143355 /* HelperSharedTypes.swift */; };
+		F4821DC2D2B8E40EDECCE4BB /* HermesTeamWizardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C407027BD93490400EE402 /* HermesTeamWizardState.swift */; };
 		F7301DCF176A07CEF3E14128 /* UserAdoptionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */; };
 		F7840BAD3978447C9CF012D5 /* AgentListEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7642815724059E4D93CC56E0 /* AgentListEditor.swift */; };
 		F7E5A9A08C640A5E7684F7B1 /* UserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */; };
@@ -248,6 +251,7 @@
 		0BCB213B1B4677F1FBAC5433 /* SecurityAuditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityAuditView.swift; sourceTree = "<group>"; };
 		0DFA0D3288E6276A9630CE4B /* AppLockScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockScreen.swift; sourceTree = "<group>"; };
 		0E9752B678217A482704DF5A /* HermesConfigWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesConfigWriter.swift; sourceTree = "<group>"; };
+		0EACE9A00A249D24BACFC8D2 /* HermesIMPlatformDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesIMPlatformDirectory.swift; sourceTree = "<group>"; };
 		0EB9584EDF129A0295EBB14A /* BackupManagerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManagerSheet.swift; sourceTree = "<group>"; };
 		13F07CE9D25F72DDB11AB739 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		14984A3D87B04508056F24CF /* UserManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserManager.swift; sourceTree = "<group>"; };
@@ -265,6 +269,7 @@
 		304E3BEE50A0653474FF27FC /* DaemonInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaemonInstaller.swift; sourceTree = "<group>"; };
 		32ACC218308D2CE4322109FC /* TerminalLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalLogView.swift; sourceTree = "<group>"; };
 		335F70B73CF355F93B436AFA /* AppUpdateHeartbeatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateHeartbeatService.swift; sourceTree = "<group>"; };
+		339C3611ECC7586DDB587C8C /* HermesTeamWizard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesTeamWizard.swift; sourceTree = "<group>"; };
 		33B505153AFE9BDEFAF27F0D /* Output.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Output.swift; sourceTree = "<group>"; };
 		34938F121B712D4BEADB0796 /* UpdateCheckPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheckPolicy.swift; sourceTree = "<group>"; };
 		3551CFADD2A6045F6096E2DD /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
@@ -416,6 +421,7 @@
 		F115A85A4379CCBE8899FDB8 /* AgentManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentManager.swift; sourceTree = "<group>"; };
 		F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneClawModels.swift; sourceTree = "<group>"; };
 		F15483BD5BB3DE26EC5C82BB /* Stable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Stable.xcstrings; sourceTree = "<group>"; };
+		F1C407027BD93490400EE402 /* HermesTeamWizardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesTeamWizardState.swift; sourceTree = "<group>"; };
 		F32760673784B8C2FA774E74 /* HelperImpl+Agent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Agent.swift"; sourceTree = "<group>"; };
 		F3D52045A2822C8DE4579737 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
 		F6385281719FDB35F18456F6 /* HermesInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesInstaller.swift; sourceTree = "<group>"; };
@@ -467,6 +473,7 @@
 				7F26137ECBA9185EB4744FD6 /* AddBotSheet.swift */,
 				7642815724059E4D93CC56E0 /* AgentListEditor.swift */,
 				519C02F90956251A6A7DCB79 /* BindingFormSheet.swift */,
+				339C3611ECC7586DDB587C8C /* HermesTeamWizard.swift */,
 				E8D30C318D8605B241FB8378 /* IMAccountListEditor.swift */,
 				67CAB911E8CA15AEFAEA037C /* ShrimpInitWizardV2.swift */,
 				93B358D3DD9D3DFC500E47B0 /* ShrimpSettingsV2View.swift */,
@@ -612,6 +619,8 @@
 				510B37F51235580E44933A19 /* GatewaySkillModels.swift */,
 				89D6CAF4FF1A5DD31BFE266E /* GlobalModelStore.swift */,
 				9EFDF0452F0C6492C04DDB63 /* GlobalSecretsStore.swift */,
+				0EACE9A00A249D24BACFC8D2 /* HermesIMPlatformDirectory.swift */,
+				F1C407027BD93490400EE402 /* HermesTeamWizardState.swift */,
 				77A62354E2723BF8150EDAF6 /* ManagedUser.swift */,
 				502BBF84DE690AD43299985F /* ModelsStatus.swift */,
 				41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */,
@@ -1044,7 +1053,10 @@
 				13E72438B5B5A0997D964566 /* HelperProtocol.swift in Sources */,
 				462985A17FC6A34B92A464CE /* HelperSharedTypes.swift in Sources */,
 				BB1B829AD74CEC55CAA80BF1 /* HermesDetailView.swift in Sources */,
+				F3DB84F3DA6F906957AFB80C /* HermesIMPlatformDirectory.swift in Sources */,
 				27C97FA9F5B16B80D8EB0443 /* HermesSetupSheet.swift in Sources */,
+				88EC653755F61E5113FC2B85 /* HermesTeamWizard.swift in Sources */,
+				F4821DC2D2B8E40EDECCE4BB /* HermesTeamWizardState.swift in Sources */,
 				2CF7C0595A716DFF0C0584B0 /* IMAccountListEditor.swift in Sources */,
 				15908189FA6D0E6D5A51F417 /* IMAccountModelsV2.swift in Sources */,
 				83A90CD423D6367CB0BDF071 /* IMBotProvisioner.swift in Sources */,
