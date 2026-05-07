@@ -355,60 +355,6 @@ extension Notification.Name {
     static let channelOnboardingAutoDetected = Notification.Name("ChannelOnboardingAutoDetected")
 }
 
-// MARK: - 维护终端快捷命令
-
-private struct OpenClawQuickCommand: Identifiable {
-    let id = UUID()
-    let label: String
-    let command: String
-}
-
-private let hermesQuickCommandSections: [(section: String, items: [OpenClawQuickCommand])] = [
-    (L10n.k("app.maintenance.quick.section.query_diagnose", fallback: "查询 / 诊断"), [
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.version", fallback: "版本查询"), command: "hermes --version"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.status", fallback: "状态概览"), command: "hermes status"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.profile_list", fallback: "角色列表"), command: "hermes profile list"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.gateway_status", fallback: "网关状态"), command: "hermes gateway status"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.doctor", fallback: "系统体检"), command: "hermes doctor"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.logs", fallback: "实时日志"), command: "hermes logs --follow"),
-    ]),
-    (L10n.k("app.maintenance.quick.section.config_control", fallback: "配置 / 控制"), [
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.setup", fallback: "交互配置"), command: "hermes setup"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.gateway_restart", fallback: "重启网关"), command: "hermes gateway restart"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.hermes.channels_list", fallback: "频道列表"), command: "hermes channels list"),
-    ]),
-    (L10n.k("app.maintenance.quick.section.upgrade_maintenance", fallback: "升级 / 维护"), [
-        OpenClawQuickCommand(
-            label: L10n.k("app.maintenance.quick.hermes.upgrade_latest", fallback: "升级到最新"),
-            command: "hermes --version; npm install -g @nousresearch/hermes-agent@latest; hermes --version"
-        ),
-    ]),
-]
-
-private let openClawQuickCommandSections: [(section: String, items: [OpenClawQuickCommand])] = [
-    (L10n.k("app.maintenance.quick.section.query_diagnose", fallback: "查询 / 诊断"), [
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.version", fallback: "版本查询"), command: "openclaw --version"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.status_overview", fallback: "状态概览"), command: "openclaw status"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.model_status", fallback: "模型状态"), command: "openclaw models status --probe"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.connected_devices", fallback: "已连设备"), command: "openclaw devices list"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.system_check", fallback: "系统体检"), command: "openclaw doctor"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.security_audit", fallback: "安全审计"), command: "openclaw security audit"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.live_logs", fallback: "实时日志"), command: "openclaw logs --follow"),
-    ]),
-    (L10n.k("app.maintenance.quick.section.config_control", fallback: "配置 / 控制"), [
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.configure", fallback: "交互配置"), command: "openclaw configure"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.auto_fix", fallback: "自动修复"), command: "openclaw doctor --fix"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.channel_login", fallback: "频道登录"), command: "openclaw channels login"),
-        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.restart_service", fallback: "重启服务"), command: "openclaw gateway restart"),
-    ]),
-    (L10n.k("app.maintenance.quick.section.upgrade_maintenance", fallback: "升级 / 维护"), [
-        OpenClawQuickCommand(
-            label: L10n.k("app.maintenance.quick.command.upgrade_latest", fallback: "升级到最新"),
-            command: "openclaw --version; npm install -g openclaw@latest; openclaw --version"
-        ),
-    ]),
-]
-
 // MARK: - 通用维护终端窗口
 
 private struct MaintenanceTerminalWindow: View {
@@ -801,9 +747,9 @@ private struct MaintenanceTerminalWindowContent: View {
         switch request.engine {
         case .openclaw:
             Menu {
-                ForEach(openClawQuickCommandSections, id: \.section) { group in
-                    Section(group.section) {
-                        ForEach(group.items) { cmd in
+                ForEach(TerminalEngine.openclaw.quickCommandSections) { group in
+                    Section(group.title) {
+                        ForEach(group.commands) { cmd in
                             Button {
                                 terminalControl.sendLine(cmd.command)
                             } label: {
@@ -819,9 +765,9 @@ private struct MaintenanceTerminalWindowContent: View {
             .fixedSize()
         case .hermes:
             Menu {
-                ForEach(hermesQuickCommandSections, id: \.section) { group in
-                    Section(group.section) {
-                        ForEach(group.items) { cmd in
+                ForEach(TerminalEngine.hermes.quickCommandSections) { group in
+                    Section(group.title) {
+                        ForEach(group.commands) { cmd in
                             Button {
                                 terminalControl.sendLine(cmd.command)
                             } label: {

@@ -139,6 +139,7 @@
 		8ABC91BB2196F6C05E6647C9 /* AppUpdateState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F2D77C8262C551CBD26BA2 /* AppUpdateState.swift */; };
 		8AFA4AD60DEB4B506A0D2A6A /* GatewayCronStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9D81E7B672B2A82591FEF1B /* GatewayCronStore.swift */; };
 		8DA5C8174C08A39388CA8388 /* PersonaDefView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77787365CF9FCFC1BABE9B81 /* PersonaDefView.swift */; };
+		8DA89622EFC5E38763E1A569 /* TerminalEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 531AA964B9C5C7B48EADBB4A /* TerminalEngine.swift */; };
 		8DF359DE93EFFFFA2E49695F /* Charts.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2BD15AFBF24DE05D57194904 /* Charts.framework */; };
 		8E42CC7896C536E4FA02A426 /* UpdateCheckPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34938F121B712D4BEADB0796 /* UpdateCheckPolicy.swift */; };
 		8E9250B96F709346BC0A1158 /* UserAdoptionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */; };
@@ -199,6 +200,7 @@
 		D52DD786FA8DF4AF93FB00ED /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43A99B25B70AE3C7A8C23AB /* SettingsView.swift */; };
 		D53CB1F3E94D9A56F97653A9 /* UserInitPresentationRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */; };
 		D62D974485C073E7D1CB9E9B /* MemoryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E37D8B7B0C66ACFBDB383D1 /* MemoryTabView.swift */; };
+		D6E0B1621438E54CF0FC23B1 /* ShrimpTerminalSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287C8C8C9920E754BBF4920C /* ShrimpTerminalSession.swift */; };
 		D6EF58593D4B981753E3AA4D /* DiagnosticsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C19F01A93D19BBDF5814CC6 /* DiagnosticsSheet.swift */; };
 		D70C9279F930D35A75C85E24 /* ManagedUserDisplayName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58D6A0A3A03533CF7E7AC045 /* ManagedUserDisplayName.swift */; };
 		DA1F41ECCF5EF07721BC8FCF /* AppLockStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B639FCB2D3020F3E95F7EFC /* AppLockStore.swift */; };
@@ -231,6 +233,7 @@
 		F7840BAD3978447C9CF012D5 /* AgentListEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7642815724059E4D93CC56E0 /* AgentListEditor.swift */; };
 		F7E5A9A08C640A5E7684F7B1 /* UserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */; };
 		FB35463F40D9D7B9C7166E4E /* OpenDirectory.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 05980B1012E839BAA33AD8CE /* OpenDirectory.framework */; };
+		FB7D971D2B9D0FD2554D23AE /* ShrimpTerminalConsole.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E425508BA41878AC00716C8 /* ShrimpTerminalConsole.swift */; };
 		FBCAA5C027073F120856AC08 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6474BB5EEF5B87B65666E978 /* NetworkModels.swift */; };
 		FC9E4F1ABDB750EFB88AFA36 /* UserDetailWindowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54777C27B432E10D49786DE9 /* UserDetailWindowLayout.swift */; };
 		FD7FF04B316FD5DFE140F7E4 /* BackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E6E607472BCCB5C61A50EA /* BackupView.swift */; };
@@ -271,6 +274,7 @@
 		1DDA04FF248DF6DFABA79529 /* GatewayProviderKeySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayProviderKeySheet.swift; sourceTree = "<group>"; };
 		21010714E9E3C485F8F95B10 /* ModelDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDetailView.swift; sourceTree = "<group>"; };
 		21D5AE60DA0449BC16B42DAA /* FallbackManagerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackManagerSheet.swift; sourceTree = "<group>"; };
+		287C8C8C9920E754BBF4920C /* ShrimpTerminalSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrimpTerminalSession.swift; sourceTree = "<group>"; };
 		2BD15AFBF24DE05D57194904 /* Charts.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Charts.framework; path = System/Library/Frameworks/Charts.framework; sourceTree = SDKROOT; };
 		2F837F1CD97FBADD4A87A567 /* ClawdHomeHelper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClawdHomeHelper.entitlements; sourceTree = "<group>"; };
 		304E3BEE50A0653474FF27FC /* DaemonInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaemonInstaller.swift; sourceTree = "<group>"; };
@@ -303,12 +307,14 @@
 		4B68AC78663361B35065DD8F /* HermesGatewayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesGatewayManager.swift; sourceTree = "<group>"; };
 		4D1FC0407326B7C36C904EC2 /* ExecCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExecCommand.swift; sourceTree = "<group>"; };
 		4E294E274D560257BC77114C /* ModelPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerSheet.swift; sourceTree = "<group>"; };
+		4E425508BA41878AC00716C8 /* ShrimpTerminalConsole.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrimpTerminalConsole.swift; sourceTree = "<group>"; };
 		502BBF84DE690AD43299985F /* ModelsStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsStatus.swift; sourceTree = "<group>"; };
 		50BF8C6365FBBA9CA2C07D90 /* ApplyCredentialSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplyCredentialSheet.swift; sourceTree = "<group>"; };
 		510B37F51235580E44933A19 /* GatewaySkillModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewaySkillModels.swift; sourceTree = "<group>"; };
 		5177F3CC658EC613A8D76CF1 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		519C02F90956251A6A7DCB79 /* BindingFormSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BindingFormSheet.swift; sourceTree = "<group>"; };
 		5251FBFE31D537EBF8F2C581 /* AwakeningWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AwakeningWizardView.swift; sourceTree = "<group>"; };
+		531AA964B9C5C7B48EADBB4A /* TerminalEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalEngine.swift; sourceTree = "<group>"; };
 		54673332FA3CBD020381CD20 /* NetworkPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkPolicyView.swift; sourceTree = "<group>"; };
 		54777C27B432E10D49786DE9 /* UserDetailWindowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDetailWindowLayout.swift; sourceTree = "<group>"; };
 		5589A294DB8520AF114FFFC3 /* DeleteUserSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteUserSheet.swift; sourceTree = "<group>"; };
@@ -469,6 +475,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		03603C7F2D82C260130134F0 /* Terminal */ = {
+			isa = PBXGroup;
+			children = (
+				4E425508BA41878AC00716C8 /* ShrimpTerminalConsole.swift */,
+				287C8C8C9920E754BBF4920C /* ShrimpTerminalSession.swift */,
+				531AA964B9C5C7B48EADBB4A /* TerminalEngine.swift */,
+			);
+			path = Terminal;
+			sourceTree = "<group>";
+		};
 		0836569296D71804D39AAEE4 /* ChannelOnboarding */ = {
 			isa = PBXGroup;
 			children = (
@@ -799,6 +815,7 @@
 				67B0925580BD2EF371BC98D4 /* WizardModels.swift */,
 				0836569296D71804D39AAEE4 /* ChannelOnboarding */,
 				78E04859045A1EC490479CDF /* ModelManager */,
+				03603C7F2D82C260130134F0 /* Terminal */,
 				377E0B3148FF68A97BD0BFA3 /* WizardV2 */,
 			);
 			path = Views;
@@ -1110,8 +1127,11 @@
 				BCD7B492044FEED6A2D492CF /* ShrimpInitWizardV2.swift in Sources */,
 				154A63E1DAAB7EE61B0B79A5 /* ShrimpPool.swift in Sources */,
 				4782C1ED1CE9598D4CF6AB21 /* ShrimpSettingsV2View.swift in Sources */,
+				FB7D971D2B9D0FD2554D23AE /* ShrimpTerminalConsole.swift in Sources */,
+				D6E0B1621438E54CF0FC23B1 /* ShrimpTerminalSession.swift in Sources */,
 				9E7081ED0038EE8867ADADD5 /* SkillsTabView.swift in Sources */,
 				E0ED6F92E9AE39B2FEDD39E7 /* TTSManagerTab.swift in Sources */,
+				8DA89622EFC5E38763E1A569 /* TerminalEngine.swift in Sources */,
 				2372A09285FD2D12851D0C62 /* TerminalLogView.swift in Sources */,
 				8E42CC7896C536E4FA02A426 /* UpdateCheckPolicy.swift in Sources */,
 				4853C793D4CFACBA2205144A /* UpdateChecker.swift in Sources */,
