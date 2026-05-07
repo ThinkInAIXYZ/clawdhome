@@ -3401,25 +3401,50 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
 // MARK: - XPC 监听器
 
 final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
+    /// 每个 PID 的连接序号（仅递增）和活跃连接数
+    private var seqByPID: [Int32: Int] = [:]
+    private var activeByPID: [Int32: Int] = [:]
+    private let lock = NSLock()
+
+    /// 根据同一 PID 的连接序号推断连接用途（App 按固定顺序创建）
+    private static let channelLabels = ["control", "dashboard", "install", "file", "process", "personaRead"]
+
     func listener(_ listener: NSXPCListener,
                   shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
         let pid = connection.processIdentifier
-        helperLog("[xpc] incoming connection pid=\(pid)")
+
+        // 如果该 PID 没有活跃连接（首次或全部断开后重连），重置序号
+        lock.lock()
+        if activeByPID[pid, default: 0] == 0 {
+            seqByPID[pid] = 0
+        }
+        let seq = seqByPID[pid, default: 0]
+        seqByPID[pid] = seq + 1
+        activeByPID[pid, default: 0] += 1
+        lock.unlock()
+        let channel = seq < Self.channelLabels.count ? Self.channelLabels[seq] : "#\(seq)"
+
+        helperLog("[xpc] incoming pid=\(pid) channel=\(channel)")
         guard Self.isCallerAuthorized(connection) else {
-            // 拒绝非 ClawdHome.app 发起的连接
-            helperLog("[xpc] rejected connection pid=\(pid)", level: .warn)
+            helperLog("[xpc] rejected pid=\(pid) channel=\(channel)", level: .warn)
+            lock.lock()
+            activeByPID[pid, default: 1] -= 1
+            lock.unlock()
             return false
         }
-        connection.invalidationHandler = {
-            helperLog("[xpc] invalidated pid=\(pid)")
+        connection.invalidationHandler = { [weak self] in
+            helperLog("[xpc] invalidated pid=\(pid) channel=\(channel)")
+            self?.lock.lock()
+            self?.activeByPID[pid, default: 1] -= 1
+            self?.lock.unlock()
         }
         connection.interruptionHandler = {
-            helperLog("[xpc] interrupted pid=\(pid)", level: .warn)
+            helperLog("[xpc] interrupted pid=\(pid) channel=\(channel)", level: .warn)
         }
         connection.exportedInterface = NSXPCInterface(with: ClawdHomeHelperProtocol.self)
         connection.exportedObject = ClawdHomeHelperImpl()
         connection.resume()
-        helperLog("[xpc] accepted connection pid=\(pid)")
+        helperLog("[xpc] accepted pid=\(pid) channel=\(channel)")
         return true
     }
 
@@ -3428,8 +3453,9 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
     ///   1. 调用方进程属于 admin 组（纯 sysctl + getgrouplist，无子进程，DEBUG + Release 均生效）
     ///   2. 代码签名为 ClawdHome.app（DEBUG 跳过，Release 用 auditToken 强制校验）
     private static func isCallerAuthorized(_ connection: NSXPCConnection) -> Bool {
-        // 调用方必须属于 admin 组
         let pid = connection.processIdentifier
+
+        // 第一层：调用方必须属于 admin 组
         guard let uid = Self.uid(ofPID: pid) else {
             helperLog("[xpc] auth reject pid=\(pid): uid lookup failed", level: .warn)
             return false
@@ -3438,6 +3464,59 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
             helperLog("[xpc] auth reject pid=\(pid) uid=\(uid): not in admin group", level: .warn)
             return false
         }
+
+        #if !DEBUG
+        // 第二层（仅 Release）：校验调用方的代码签名
+        // 使用 audit token（不可伪造）而非 PID（有 TOCTOU 风险）
+        guard Self.isCodeSignatureValid(connection: connection, pid: pid) else {
+            return false
+        }
+        #endif
+
+        return true
+    }
+
+    /// 使用 audit token 校验调用方的代码签名
+    /// 要求：bundle ID = ai.clawdhome.mac，Team ID = Y7P5QLKLYG
+    private static func isCodeSignatureValid(connection: NSXPCConnection, pid: Int32) -> Bool {
+        // 通过 KVC 获取 audit token（macOS 10.7+ 可用，非 App Store 分发无影响）
+        guard let tokenValue = connection.value(forKey: "auditToken") as? NSValue else {
+            helperLog("[xpc] auth reject pid=\(pid): cannot read auditToken", level: .warn)
+            return false
+        }
+
+        var token = audit_token_t()
+        tokenValue.getValue(&token)
+
+        // 用 audit token 获取调用方的 SecCode 引用
+        var code: SecCode?
+        let tokenData = Data(bytes: &token, count: MemoryLayout<audit_token_t>.size)
+        let attrs = [kSecGuestAttributeAudit: tokenData] as CFDictionary
+        guard SecCodeCopyGuestWithAttributes(nil, attrs, [], &code) == errSecSuccess,
+              let code else {
+            helperLog("[xpc] auth reject pid=\(pid): SecCode lookup failed", level: .warn)
+            return false
+        }
+
+        // 校验签名要求：bundle ID + Team ID
+        let requirementStr = """
+            identifier "ai.clawdhome.mac" \
+            and anchor apple generic \
+            and certificate leaf[subject.OU] = "Y7P5QLKLYG"
+            """
+        var requirement: SecRequirement?
+        guard SecRequirementCreateWithString(requirementStr as CFString, [], &requirement) == errSecSuccess,
+              let requirement else {
+            helperLog("[xpc] auth reject pid=\(pid): invalid requirement string", level: .error)
+            return false
+        }
+
+        let result = SecCodeCheckValidity(code, [], requirement)
+        if result != errSecSuccess {
+            helperLog("[xpc] auth reject pid=\(pid): code signature mismatch (OSStatus=\(result))", level: .warn)
+            return false
+        }
+
         return true
     }
 
@@ -3465,6 +3544,22 @@ let listener = NSXPCListener(machServiceName: kHelperMachServiceName)
 let delegate = ListenerDelegate()
 listener.delegate = delegate
 listener.resume()
+
+// 注册信号处理器，记录 Helper 被终止的原因
+for sig: Int32 in [SIGTERM, SIGINT, SIGQUIT, SIGHUP] {
+    signal(sig) { caught in
+        let name: String
+        switch caught {
+        case SIGTERM: name = "SIGTERM"
+        case SIGINT:  name = "SIGINT"
+        case SIGQUIT: name = "SIGQUIT"
+        case SIGHUP:  name = "SIGHUP"
+        default:      name = "SIG\(caught)"
+        }
+        helperLog("[lifecycle] 收到 \(name)，Helper 即将退出", level: .warn)
+        exit(caught == SIGTERM ? 0 : 1)
+    }
+}
 
 // 启动仪表盘数据采集（双频 Timer：1s 动态指标 / 60s 静态指标）
 helperLog("Helper 启动")
