@@ -106,6 +106,12 @@ private enum WizardChannelType: String {
     case feishu
 }
 
+private enum WizardXcodeHealthState {
+    case checking
+    case healthy
+    case unhealthy
+}
+
 private enum WizardProvider: String, CaseIterable, Identifiable {
     case kimiCoding = "kimi-coding"
     case minimax = "minimax"
@@ -175,6 +181,7 @@ struct InitWizardState: Codable {
     var active: Bool = false
     var currentStep: String?
     var steps: [String: String] = [:]
+    var stepErrors: [String: String] = [:]
     var npmRegistry: String?
     var modelName: String = ""
     var channelType: String = ""
@@ -182,7 +189,7 @@ struct InitWizardState: Codable {
     var completedAt: Date?
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, mode, active, currentStep, steps, npmRegistry, modelName, channelType, updatedAt, completedAt
+        case schemaVersion, mode, active, currentStep, steps, stepErrors, npmRegistry, modelName, channelType, updatedAt, completedAt
     }
 
     init() {}
@@ -194,6 +201,7 @@ struct InitWizardState: Codable {
         active = try c.decodeIfPresent(Bool.self, forKey: .active) ?? false
         currentStep = try c.decodeIfPresent(String.self, forKey: .currentStep)
         steps = try c.decodeIfPresent([String: String].self, forKey: .steps) ?? [:]
+        stepErrors = try c.decodeIfPresent([String: String].self, forKey: .stepErrors) ?? [:]
         npmRegistry = try c.decodeIfPresent(String.self, forKey: .npmRegistry)
         modelName = try c.decodeIfPresent(String.self, forKey: .modelName) ?? ""
         channelType = try c.decodeIfPresent(String.self, forKey: .channelType) ?? ""
@@ -285,6 +293,10 @@ struct UserInitWizardView: View {
     // Step 4: 完成
     @State private var isStartingOpenclaw = false
     @State private var finishProgressMessages: [String] = []
+    @State private var xcodeEnvStatus: XcodeEnvStatus? = nil
+    @State private var isInstallingXcodeCLT = false
+    @State private var isAcceptingXcodeLicense = false
+    @State private var xcodeFixMessage: String? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -463,7 +475,7 @@ struct UserInitWizardView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
 
-            Button(hasPartialProgress ? "继续初始化" : "开始初始化") {
+            Button(hasPartialProgress ? "从当前进度继续" : "开始初始化") {
                 initiated = true
                 Task {
                     if hasPartialProgress { await resumePendingStep() }
@@ -480,16 +492,11 @@ struct UserInitWizardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("基础环境初始化")
                     .font(.title3).fontWeight(.semibold)
-                Text("正在安装依赖，请稍候…")
+                Text("正在安装依赖，请稍候。此阶段无需重复点击继续。")
                     .font(.callout).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 12) {
-                if !isRunningInitFlow {
-                    Button("继续初始化") { Task { await runInitSteps() } }
-                        .buttonStyle(.borderedProminent)
-                }
-
                 Button(isCancelling ? "正在终止…" : "终止初始化") {
                     isCancelling = true
                     Task {
@@ -796,6 +803,9 @@ struct UserInitWizardView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+            if isBasicEnvironmentFailed {
+                xcodeQuickFixPanel
+            }
             HStack(spacing: 12) {
                 Button("重试失败步骤") { Task { await retryFromFailure() } }
                     .buttonStyle(.borderedProminent)
@@ -803,6 +813,99 @@ struct UserInitWizardView: View {
                     .buttonStyle(.bordered).foregroundStyle(.secondary)
             }
         }
+    }
+
+    @ViewBuilder
+    private var xcodeQuickFixPanel: some View {
+        let status = xcodeEnvStatus
+        let healthState: WizardXcodeHealthState = {
+            guard let status else { return .checking }
+            return status.isHealthy ? .healthy : .unhealthy
+        }()
+        let iconName: String = {
+            switch healthState {
+            case .checking: return "clock"
+            case .healthy: return "checkmark.circle.fill"
+            case .unhealthy: return "exclamationmark.triangle.fill"
+            }
+        }()
+        let iconColor: Color = {
+            switch healthState {
+            case .checking: return .secondary
+            case .healthy: return .green
+            case .unhealthy: return .orange
+            }
+        }()
+        let bgColor: Color = {
+            switch healthState {
+            case .checking: return Color.secondary.opacity(0.08)
+            case .healthy: return Color.green.opacity(0.08)
+            case .unhealthy: return Color.orange.opacity(0.08)
+            }
+        }()
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: iconName)
+                    .foregroundStyle(iconColor)
+                    .font(.caption)
+                Text("开发环境修复")
+                    .font(.subheadline).fontWeight(.medium)
+                Spacer()
+                if isInstallingXcodeCLT || isAcceptingXcodeLicense {
+                    ProgressView().scaleEffect(0.6)
+                }
+                Button("刷新状态") { Task { await refreshXcodeEnvStatus() } }
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+            }
+
+            if let status {
+                Label(status.commandLineToolsInstalled ? "CLT 已安装" : "CLT 未安装",
+                      systemImage: status.commandLineToolsInstalled ? "checkmark" : "xmark")
+                    .font(.caption)
+                    .foregroundStyle(status.commandLineToolsInstalled ? Color.secondary : Color.orange)
+                Label(status.licenseAccepted ? "Xcode license 已接受" : "Xcode license 未接受",
+                      systemImage: status.licenseAccepted ? "checkmark" : "xmark")
+                    .font(.caption)
+                    .foregroundStyle(status.licenseAccepted ? Color.secondary : Color.orange)
+            } else {
+                Text("环境状态读取中…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 10) {
+                Button(isInstallingXcodeCLT ? "安装中…" : "安装开发工具") {
+                    Task { await installXcodeCommandLineToolsFromWizard() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+
+                Button(isAcceptingXcodeLicense ? "处理中…" : "同意 Xcode 许可") {
+                    Task { await acceptXcodeLicenseFromWizard() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+
+                Button("打开软件更新") {
+                    openSoftwareUpdate()
+                }
+                .buttonStyle(.bordered)
+                .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+            }
+
+            if let msg = xcodeFixMessage, !msg.isEmpty {
+                Text(msg)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(bgColor)
+        )
     }
 
     private var recoveryPanel: some View {
@@ -816,7 +919,7 @@ struct UserInitWizardView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
-                Button("继续") { Task { await resumePendingStep() } }
+                Button("继续剩余步骤") { Task { await resumePendingStep() } }
                     .buttonStyle(.borderedProminent)
                 Button("重新初始化") {
                     isCancelling = true
@@ -889,6 +992,11 @@ struct UserInitWizardView: View {
         statuses.values.contains { if case .failed = $0 { return true }; return false }
     }
 
+    private var isBasicEnvironmentFailed: Bool {
+        if case .failed = statuses[InitStep.basicEnvironment.rawValue] { return true }
+        return false
+    }
+
     private var latestFailureMessage: String? {
         for step in InitStep.allCases {
             if case .failed(let message) = statuses[step.rawValue],
@@ -943,6 +1051,23 @@ struct UserInitWizardView: View {
         isRunningInitFlow = true
         defer { isRunningInitFlow = false }
 
+        // 在进入长流程前先做 Xcode 预检，避免失败/运行面板来回闪动。
+        appendLog("\n▶ 检查 Xcode 开发环境\n")
+        do {
+            try await ensureXcodeEnvironmentReady()
+            appendLog("✓ Xcode 开发环境已就绪\n")
+        } catch {
+            let message = error.localizedDescription
+            appendLog("❌ \(message)\n")
+            wizardMode = .onboarding
+            currentStep = .basicEnvironment
+            statuses[InitStep.basicEnvironment.rawValue] = .failed(message)
+            user.initStep = InitStep.basicEnvironment.title
+            onSessionActiveChanged?(true)
+            await persistState(activeOverride: true)
+            return
+        }
+
         if wizardConn == nil { wizardConn = WizardConnection() }
         guard let conn = wizardConn else { return }
 
@@ -973,9 +1098,10 @@ struct UserInitWizardView: View {
                 }
                 appendLog("❌ \(message)\n")
                 statuses[InitStep.basicEnvironment.rawValue] = .failed(message)
-                user.initStep = nil
-                currentStep = nil
-                await persistState()
+                // 失败时保持在基础环境步骤，避免 active=false 导致向导被父视图收起。
+                user.initStep = InitStep.basicEnvironment.title
+                currentStep = .basicEnvironment
+                await persistState(activeOverride: true)
                 return
             }
         }
@@ -985,6 +1111,66 @@ struct UserInitWizardView: View {
         statuses[InitStep.configureModel.rawValue] = .running
         user.initStep = InitStep.configureModel.title
         await persistState()
+    }
+
+    private func ensureXcodeEnvironmentReady() async throws {
+        guard let status = await helperClient.getXcodeEnvStatus() else {
+            xcodeEnvStatus = nil
+            throw HelperError.operationFailed("无法读取 Xcode 开发环境状态，请稍后重试。")
+        }
+        xcodeEnvStatus = status
+        xcodeFixMessage = nil
+        if !status.commandLineToolsInstalled {
+            throw HelperError.operationFailed("检测到缺少 Xcode Command Line Tools。请先在「开发环境修复」中点击“安装开发工具”，完成后再重试初始化。")
+        }
+        if !status.licenseAccepted {
+            throw HelperError.operationFailed("检测到 Xcode license 未接受。请先在「开发环境修复」中点击“同意 Xcode 许可”，完成后再重试初始化。")
+        }
+        if !status.clangAvailable {
+            let details = status.detail.trimmingCharacters(in: .whitespacesAndNewlines)
+            if details.isEmpty {
+                throw HelperError.operationFailed("检测到 Xcode 工具链未就绪。请先在「开发环境修复」中完成修复后再重试初始化。")
+            }
+            throw HelperError.operationFailed("检测到 Xcode 工具链未就绪：\(details)")
+        }
+    }
+
+    private func refreshXcodeEnvStatus() async {
+        xcodeEnvStatus = await helperClient.getXcodeEnvStatus()
+    }
+
+    private func installXcodeCommandLineToolsFromWizard() async {
+        isInstallingXcodeCLT = true
+        xcodeFixMessage = nil
+        do {
+            try await helperClient.installXcodeCommandLineTools()
+            xcodeFixMessage = "已触发系统安装窗口，请按提示完成安装。"
+        } catch {
+            xcodeFixMessage = error.localizedDescription
+        }
+        await refreshXcodeEnvStatus()
+        isInstallingXcodeCLT = false
+    }
+
+    private func acceptXcodeLicenseFromWizard() async {
+        isAcceptingXcodeLicense = true
+        xcodeFixMessage = nil
+        do {
+            try await helperClient.acceptXcodeLicense()
+            xcodeFixMessage = "已执行 license 接受，正在刷新状态。"
+        } catch {
+            xcodeFixMessage = error.localizedDescription
+        }
+        await refreshXcodeEnvStatus()
+        isAcceptingXcodeLicense = false
+    }
+
+    private func openSoftwareUpdate() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preferences.softwareupdate") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+        xcodeFixMessage = "已打开“软件更新”。若弹窗未出现，可在系统设置中手动安装 Command Line Tools。"
     }
 
     private func resumePendingStep() async {
@@ -1350,7 +1536,12 @@ struct UserInitWizardView: View {
             case .pending: state.steps[step.key] = "pending"
             case .running: state.steps[step.key] = "running"
             case .done:    state.steps[step.key] = "done"
-            case .failed:  state.steps[step.key] = "failed"
+            case .failed(let message):
+                state.steps[step.key] = "failed"
+                let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    state.stepErrors[step.key] = trimmed
+                }
             }
         }
         state.npmRegistry = selectedNpmRegistry.rawValue
@@ -1378,8 +1569,16 @@ struct UserInitWizardView: View {
 
     private func applySavedState(_ saved: InitWizardState) async {
         wizardMode = saved.mode
+        hydrateDraftSelectionsIfNeeded(from: saved)
+        await applyRuntimeStateFromPersistence(saved)
+    }
 
-        if let raw = saved.npmRegistry,
+    /// 仅在首次加载阶段回填“可编辑草稿字段”。
+    /// 轮询同步期间不覆盖用户正在界面上的实时选择。
+    private func hydrateDraftSelectionsIfNeeded(from saved: InitWizardState) {
+        // 仅在首次水合阶段回填 npm 源，避免轮询状态覆盖用户在界面上的实时选择。
+        if isHydratingState,
+           let raw = saved.npmRegistry,
            let option = NpmRegistryOption.fromRegistryURL(raw) {
             selectedNpmRegistry = option
         }
@@ -1389,24 +1588,40 @@ struct UserInitWizardView: View {
             selectedMinimaxModel = model
         }
 
-        selectedChannel = WizardChannelType(rawValue: saved.channelType) ?? .feishu
+        // 仅在首次水合阶段回填频道草稿，避免未来多频道场景下出现“选择被弹回”。
+        if isHydratingState {
+            selectedChannel = WizardChannelType(rawValue: saved.channelType) ?? .feishu
+        }
+    }
 
+    /// 从持久化状态同步“运行态字段”（步骤状态、当前步骤、会话活跃态）。
+    /// 该阶段允许在轮询期间持续更新。
+    private func applyRuntimeStateFromPersistence(_ saved: InitWizardState) async {
         var restored: [Int: StepStatus] = [:]
         for step in InitStep.allCases {
             let raw = saved.steps[step.key] ?? saved.steps[step.title]
             switch raw {
             case "running": restored[step.rawValue] = .running
             case "done":    restored[step.rawValue] = .done
-            case "failed":  restored[step.rawValue] = .failed("")
+            case "failed":
+                let message = saved.stepErrors[step.key]
+                    ?? saved.stepErrors[step.title]
+                    ?? ""
+                restored[step.rawValue] = .failed(message)
             default: break
             }
         }
 
         if let step = InitStep.from(key: saved.currentStep) {
-            if restored[step.rawValue] != .done {
+            if restored[step.rawValue] == nil {
                 restored[step.rawValue] = .running
             }
             currentStep = step
+        } else if let failed = InitStep.allCases.first(where: {
+            if case .failed = restored[$0.rawValue] { return true }
+            return false
+        }) {
+            currentStep = failed
         } else if let running = InitStep.allCases.first(where: { restored[$0.rawValue] == .running }) {
             currentStep = running
         } else if !saved.isCompleted {
@@ -1415,10 +1630,20 @@ struct UserInitWizardView: View {
             currentStep = nil
         }
         statuses = restored
+        if case .failed = restored[InitStep.basicEnvironment.rawValue] {
+            xcodeEnvStatus = await helperClient.getXcodeEnvStatus()
+        }
 
-        let hasAnyState = saved.active || saved.isCompleted
+        let hasRecoverableProgress = InitStep.allCases.contains { step in
+            switch restored[step.rawValue] ?? .pending {
+            case .pending: return false
+            default: return true
+            }
+        }
+        let effectiveActive = saved.active || (!saved.isCompleted && hasRecoverableProgress)
+        let hasAnyState = effectiveActive || saved.isCompleted
         initiated = hasAnyState
-        onSessionActiveChanged?(saved.active)
+        onSessionActiveChanged?(effectiveActive)
 
         guard hasAnyState else {
             user.initStep = nil
@@ -1433,7 +1658,7 @@ struct UserInitWizardView: View {
             return
         }
 
-        guard saved.active else {
+        guard effectiveActive else {
             user.initStep = nil
             currentStep = nil
             return
@@ -1453,9 +1678,14 @@ struct UserInitWizardView: View {
             changed = true
         }
         if changed {
-            currentStep = nil
-            user.initStep = nil
-            await persistState()
+            let failedStep = InitStep.allCases.first {
+                if case .failed = statuses[$0.rawValue] { return true }
+                return false
+            } ?? .basicEnvironment
+            currentStep = failedStep
+            user.initStep = failedStep.title
+            // 终止后保持向导会话活跃，确保稳定停留在失败面板，避免界面闪回 pre-start。
+            await persistState(activeOverride: true)
         }
     }
 

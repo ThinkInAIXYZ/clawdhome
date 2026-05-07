@@ -96,6 +96,28 @@ Equivalent direct command:
 sudo bash scripts/install-helper-dev.sh install
 ```
 
+### Troubleshooting npm install on macOS
+
+If OpenClaw installation fails during `npm install -g`, check Xcode CLI prerequisites first:
+
+```bash
+xcode-select -p
+```
+
+If the command fails, install Command Line Tools:
+
+```bash
+xcode-select --install
+```
+
+If you see a license-related error, accept it as admin:
+
+```bash
+sudo xcodebuild -license
+# or non-interactive:
+sudo xcodebuild -license accept
+```
+
 ## Key Capabilities
 
 - Multi-Shrimp OpenClaw gateway isolation on one Mac.

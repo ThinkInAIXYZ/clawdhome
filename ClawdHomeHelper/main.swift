@@ -654,6 +654,34 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         reply(NodeDownloader.isInstalled())
     }
 
+    func getXcodeEnvStatus(withReply reply: @escaping (String) -> Void) {
+        let status = InstallManager.xcodeEnvStatus()
+        let json = (try? JSONEncoder().encode(status)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        reply(json)
+    }
+
+    func installXcodeCommandLineTools(withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("触发 Xcode Command Line Tools 安装")
+        do {
+            try InstallManager.installXcodeCommandLineTools()
+            reply(true, "已触发系统安装窗口，请按提示完成安装。")
+        } catch {
+            helperLog("触发 Xcode CLT 安装失败: \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func acceptXcodeLicense(withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("接受 Xcode license")
+        do {
+            try InstallManager.acceptXcodeLicense()
+            reply(true, "已执行 license 接受。")
+        } catch {
+            helperLog("接受 Xcode license 失败: \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
     func setupNpmEnv(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
         let logURL = initLogURL(username: username)
         let npmGlobal = InstallManager.npmGlobalDir(for: username)

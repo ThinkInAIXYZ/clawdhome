@@ -16,7 +16,7 @@ struct ClawPoolView: View {
     @State private var showAddSheet = false
     @State private var createUserError: String?
     @State private var isCreatingUser = false
-    @AppStorage("clawPoolIsCardView") private var isCardView = false
+    @AppStorage("clawPoolIsCardView") private var isCardView = true
     @AppStorage("clawPoolShowCurrentAdmin") private var showCurrentAdmin = false
     @Environment(\.openWindow) private var openWindow
 
@@ -114,8 +114,8 @@ struct ClawPoolView: View {
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Picker("视图模式", selection: $isCardView) {
-                    Image(systemName: "list.bullet").tag(false)
-                    Image(systemName: "square.grid.2x2").tag(true)
+                    Label("卡片", systemImage: "square.grid.2x2").tag(true)
+                    Label("列表", systemImage: "list.bullet").tag(false)
                 }
                 .pickerStyle(.segmented)
                 .help(isCardView ? "切换到列表视图" : "切换到卡片视图")

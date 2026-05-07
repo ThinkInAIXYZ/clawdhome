@@ -94,6 +94,28 @@ make install-helper
 sudo bash scripts/install-helper-dev.sh install
 ```
 
+### macOS 下 npm 安装失败排查
+
+如果在 `npm install -g` 阶段失败，先检查 Xcode 命令行工具状态：
+
+```bash
+xcode-select -p
+```
+
+如果命令报错，先安装 Command Line Tools：
+
+```bash
+xcode-select --install
+```
+
+如果报 license 相关错误，请先接受许可：
+
+```bash
+sudo xcodebuild -license
+# 或非交互：
+sudo xcodebuild -license accept
+```
+
 ## 关键能力
 
 - 一台 Mac 上多虾 OpenClaw gateway 隔离运行。

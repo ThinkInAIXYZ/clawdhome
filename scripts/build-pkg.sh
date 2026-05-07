@@ -48,9 +48,11 @@ fail() { echo "❌ $*" >&2; exit 1; }
 
 if [ "$SKIP_BUILD" = false ]; then
   log "构建 $APP_NAME..."
-  # build/export 内文件可能因 sudo installer 等操作变为 root:wheel，普通 rm 失败
-  # 统一用 sudo rm 确保能清理（macOS 会弹密码或走 Touch ID）
-  sudo rm -rf "$ARCHIVE_PATH" "$EXPORT_DIR"
+  # 优先使用当前用户权限清理，避免 make pkg 触发 sudo 密码输入。
+  # 若历史残留 root:wheel 文件导致删除失败，则提示一次性修复命令。
+  if ! rm -rf "$ARCHIVE_PATH" "$EXPORT_DIR" 2>/dev/null; then
+    fail "无法清理构建目录（可能存在 root 权限残留）。请先执行：sudo chown -R \"$(id -un)\":staff \"$REPO_ROOT/build\""
+  fi
 
   # 清除 DerivedData 增量缓存，确保 Release 从干净状态编译
   # （避免 Debug 残留中间产物影响 Release archive）

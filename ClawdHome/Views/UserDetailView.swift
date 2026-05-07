@@ -11,6 +11,12 @@ private enum ClawTab: String, Hashable {
     case overview, files, logs, processes, cron, skills, persona, sessions, memory
 }
 
+private enum DetailXcodeHealthState {
+    case checking
+    case healthy
+    case unhealthy
+}
+
 struct UserDetailView: View {
     let user: ManagedUser
     var onDeleted: (() -> Void)? = nil
@@ -80,6 +86,10 @@ struct UserDetailView: View {
     @State private var npmRegistryError: String? = nil
     @State private var isUpdatingNpmRegistry = false
     @State private var isNodeInstalledReady = false
+    @State private var xcodeEnvStatus: XcodeEnvStatus? = nil
+    @State private var isInstallingXcodeCLT = false
+    @State private var isAcceptingXcodeLicense = false
+    @State private var xcodeFixMessage: String? = nil
     @State private var isReopeningInitWizard = false
     @State private var suppressNpmRegistryOnChange = false
     @State private var showHealthCheck = false
@@ -630,6 +640,11 @@ struct UserDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                if let status = xcodeEnvStatus, !status.isHealthy {
+                    Divider().padding(.top, 2)
+                    xcodeEnvironmentCard
+                }
+
                 Divider().padding(.top, 2)
                 DisclosureGroup("高级配置", isExpanded: $isAdvancedConfigExpanded) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -1083,12 +1098,14 @@ struct UserDetailView: View {
             versionChecked = true
             hasPendingInitWizard = false
             isNodeInstalledReady = false
+            xcodeEnvStatus = nil
             return
         }
         async let statusResult = helperClient.getGatewayStatus(username: user.username)
         async let versionResult = helperClient.getOpenclawVersion(username: user.username)
         async let wizardStateResult = loadWizardState()
         async let nodeInstalledResult = helperClient.isNodeInstalled()
+        async let xcodeStatusResult = helperClient.getXcodeEnvStatus()
 
         if let (running, pid) = try? await statusResult {
             if user.isFrozen {
@@ -1112,6 +1129,7 @@ struct UserDetailView: View {
         hasPendingInitWizard = ensuredPending
         versionChecked = true
         isNodeInstalledReady = await nodeInstalledResult
+        xcodeEnvStatus = await xcodeStatusResult
 
         // 并行加载 Gateway 地址和模型状态（snapshot 由 ShrimpPool 全局维护，无需单独拉取）
         async let urlResult = helperClient.getGatewayURL(username: user.username)
@@ -1182,14 +1200,49 @@ struct UserDetailView: View {
         return InitWizardState.from(json: json)
     }
 
-    /// 路由只看 active：active=true 才进入向导。
+    /// 会话路由优先使用 active；若历史状态存在可恢复进度（failed/running），也保持进入向导。
     /// 当首次安装且没有可恢复会话时，自动创建 onboarding 会话。
     private func ensureOnboardingWizardSessionIfNeeded(existingState: InitWizardState?) async -> Bool {
-        if let state = existingState, state.active {
-            if let step = InitStep.from(key: state.currentStep) {
-                user.initStep = step.title
+        if let state = existingState {
+            let inferredStep: InitStep? = {
+                if let step = InitStep.from(key: state.currentStep) {
+                    return step
+                }
+                for step in InitStep.allCases {
+                    let raw = state.steps[step.key] ?? state.steps[step.title] ?? "pending"
+                    if raw == "failed" || raw == "running" {
+                        return step
+                    }
+                }
+                return InitStep.allCases.first { step in
+                    let raw = state.steps[step.key] ?? state.steps[step.title] ?? "pending"
+                    return raw != "done"
+                }
+            }()
+
+            let hasRecoverableProgress: Bool = {
+                if state.isCompleted { return false }
+                return InitStep.allCases.contains { step in
+                    let raw = state.steps[step.key] ?? state.steps[step.title] ?? "pending"
+                    return raw != "pending"
+                }
+            }()
+
+            if state.active || hasRecoverableProgress {
+                if let step = inferredStep {
+                    user.initStep = step.title
+                }
+                if !state.active {
+                    var repaired = state
+                    repaired.active = true
+                    if repaired.currentStep == nil {
+                        repaired.currentStep = inferredStep?.key
+                    }
+                    repaired.updatedAt = Date()
+                    try? await helperClient.saveInitState(username: user.username, json: repaired.toJSON())
+                }
+                return true
             }
-            return true
         }
 
         // 已经完成过初始化，不自动重启向导。
@@ -1313,6 +1366,141 @@ struct UserDetailView: View {
         let effective = await helperClient.getNpmRegistry(username: user.username)
         applyLoadedNpmRegistry(effective)
         isUpdatingNpmRegistry = false
+    }
+
+    @ViewBuilder
+    private var xcodeEnvironmentCard: some View {
+        let status = xcodeEnvStatus
+        let healthState: DetailXcodeHealthState = {
+            guard let status else { return .checking }
+            return status.isHealthy ? .healthy : .unhealthy
+        }()
+        let healthy = healthState == .healthy
+        let iconName: String = {
+            switch healthState {
+            case .checking: return "clock"
+            case .healthy: return "checkmark.circle.fill"
+            case .unhealthy: return "exclamationmark.triangle.fill"
+            }
+        }()
+        let iconColor: Color = {
+            switch healthState {
+            case .checking: return .secondary
+            case .healthy: return .green
+            case .unhealthy: return .orange
+            }
+        }()
+        let backgroundColor: Color = {
+            switch healthState {
+            case .checking: return Color.secondary.opacity(0.07)
+            case .healthy: return Color.green.opacity(0.07)
+            case .unhealthy: return Color.orange.opacity(0.07)
+            }
+        }()
+        let statusColor: Color = {
+            if status == nil { return .secondary }
+            return healthy ? .secondary : .orange
+        }()
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: iconName)
+                    .foregroundStyle(iconColor)
+                    .font(.system(size: 12))
+                Text("开发环境")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if isInstallingXcodeCLT || isAcceptingXcodeLicense {
+                    ProgressView().scaleEffect(0.6)
+                }
+                Text(status == nil ? "检查中…" : (healthy ? "环境正常" : "需要修复"))
+                    .font(.caption2)
+                    .foregroundStyle(statusColor)
+            }
+
+            if let status, !status.isHealthy {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(status.commandLineToolsInstalled ? "CLT 已安装" : "CLT 未安装", systemImage: status.commandLineToolsInstalled ? "checkmark" : "xmark")
+                        .font(.caption2)
+                        .foregroundStyle(status.commandLineToolsInstalled ? Color.secondary : Color.orange)
+                    Label(status.licenseAccepted ? "Xcode license 已接受" : "Xcode license 未接受", systemImage: status.licenseAccepted ? "checkmark" : "xmark")
+                        .font(.caption2)
+                        .foregroundStyle(status.licenseAccepted ? Color.secondary : Color.orange)
+                    HStack(spacing: 8) {
+                        Button(isInstallingXcodeCLT ? "安装中…" : "安装开发工具") {
+                            Task { await installXcodeCommandLineTools() }
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+
+                        Button(isAcceptingXcodeLicense ? "处理中…" : "同意 Xcode 许可") {
+                            Task { await acceptXcodeLicense() }
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+
+                        Button("打开软件更新") {
+                            openSoftwareUpdate()
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+                    }
+                    if let message = xcodeFixMessage, !message.isEmpty {
+                        Text(message)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if !status.detail.isEmpty {
+                        Text(status.detail)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(2)
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(backgroundColor)
+        )
+    }
+
+    private func installXcodeCommandLineTools() async {
+        isInstallingXcodeCLT = true
+        xcodeFixMessage = nil
+        do {
+            try await helperClient.installXcodeCommandLineTools()
+            xcodeFixMessage = "已触发系统安装窗口，请按提示完成安装。"
+        } catch {
+            xcodeFixMessage = error.localizedDescription
+        }
+        xcodeEnvStatus = await helperClient.getXcodeEnvStatus()
+        isInstallingXcodeCLT = false
+    }
+
+    private func acceptXcodeLicense() async {
+        isAcceptingXcodeLicense = true
+        xcodeFixMessage = nil
+        do {
+            try await helperClient.acceptXcodeLicense()
+            xcodeFixMessage = "已执行 license 接受，正在刷新状态。"
+        } catch {
+            xcodeFixMessage = error.localizedDescription
+        }
+        xcodeEnvStatus = await helperClient.getXcodeEnvStatus()
+        isAcceptingXcodeLicense = false
+    }
+
+    private func openSoftwareUpdate() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preferences.softwareupdate") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+        xcodeFixMessage = "已打开“软件更新”。若未看到安装弹窗，可在系统设置中手动安装 Command Line Tools。"
     }
 
     // MARK: - 版本回退持久化
