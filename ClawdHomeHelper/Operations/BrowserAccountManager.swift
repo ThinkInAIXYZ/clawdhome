@@ -602,12 +602,6 @@ enum BrowserAccountManager {
           echo "which-opencli-real=\(realPath)"
         } >> "$LOG" 2>&1 || true
 
-        CLAWDHOME_BROWSER_HIDE=1 /usr/bin/env python3 "\(toolPath)" open "https://clawdhome.ai" >/dev/null 2>&1 || {
-          echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
-          echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
-        }
-        echo "opencli-prelaunch=done" >> "$LOG" 2>&1 || true
-
         port="${OPENCLI_DAEMON_PORT:-\(daemonPort)}"
         export OPENCLI_DAEMON_PORT="$port"
         if ! /usr/bin/nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
@@ -619,6 +613,12 @@ enum BrowserAccountManager {
             sleep 0.2
           done
         fi
+
+        /usr/bin/env python3 "\(toolPath)" open "https://clawdhome.ai" >/dev/null 2>&1 || {
+          echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
+          echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
+        }
+        echo "opencli-prelaunch=done" >> "$LOG" 2>&1 || true
 
         for _ in {1..40}; do
           status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"
@@ -1685,12 +1685,6 @@ mkdir -p "$HOME/.clawdhome/browser"
   echo "which-opencli-real=%s"
 } >> "$LOG" 2>&1 || true
 
-CLAWDHOME_BROWSER_HIDE=1 /usr/bin/env python3 "$HOME/.clawdhome/tools/clawdhome-browser/clawdhome-browser" open "https://clawdhome.ai" >/dev/null 2>&1 || {
-  echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
-  echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
-}
-echo "opencli-prelaunch=done" >> "$LOG" 2>&1 || true
-
 port="${OPENCLI_DAEMON_PORT:-%d}"
 export OPENCLI_DAEMON_PORT="$port"
 if ! /usr/bin/nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
@@ -1702,6 +1696,12 @@ if ! /usr/bin/nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
     sleep 0.2
   done
 fi
+
+/usr/bin/env python3 "$HOME/.clawdhome/tools/clawdhome-browser/clawdhome-browser" open "https://clawdhome.ai" >/dev/null 2>&1 || {
+  echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
+  echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
+}
+echo "opencli-prelaunch=done" >> "$LOG" 2>&1 || true
 
 for _ in {1..40}; do
   status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"
@@ -1865,12 +1865,14 @@ def main():
     os.close(in_r)
     os.close(out_w)
     try:
+        log(log_home, f"chrome started pid={proc.pid}")
         send(in_w, 1, "Browser.getVersion")
         recv(out_r, 1)
         send(in_w, 2, "Extensions.loadUnpacked", {"path": extension})
         loaded = recv(out_r, 2)
         log(log_home, f"extension loaded id={loaded.get('id')!r}")
         if hidden:
+            time.sleep(1)
             subprocess.run(
                 ["/usr/bin/osascript", "-e", 'tell application "Google Chrome" to hide'],
                 stdout=subprocess.DEVNULL,
