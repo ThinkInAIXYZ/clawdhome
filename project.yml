@@ -44,11 +44,11 @@ targets:
           mkdir -p "$DEST"
           cp "${BUILT_PRODUCTS_DIR}/ClawdHomeHelper" "$DEST/ClawdHomeHelper"
           chmod +x "$DEST/ClawdHomeHelper"
-          cp "${SRCROOT}/Resources/io.github.deepjerry.clawdhome.mac.helper.plist" "$DEST/"
+          cp "${SRCROOT}/Resources/ai.clawdhome.mac.helper.plist" "$DEST/"
         basedOnDependencyAnalysis: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.deepjerry.clawdhome.mac
+        PRODUCT_BUNDLE_IDENTIFIER: ai.clawdhome.mac
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         CODE_SIGN_ENTITLEMENTS: ClawdHome/ClawdHome.entitlements
@@ -94,7 +94,7 @@ targets:
         embed: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.deepjerry.clawdhome.mac.helper
+        PRODUCT_BUNDLE_IDENTIFIER: ai.clawdhome.mac.helper
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         CODE_SIGN_ENTITLEMENTS: ClawdHomeHelper/ClawdHomeHelper.entitlements

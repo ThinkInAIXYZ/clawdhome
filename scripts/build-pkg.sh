@@ -20,8 +20,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 APP_NAME="ClawdHome"
-BUNDLE_ID="io.github.deepjerry.clawdhome.mac"        # 当前 bundle ID，将来可改为 app.clawdhome
-HELPER_LABEL="io.github.deepjerry.clawdhome.mac.helper"
+BUNDLE_ID="ai.clawdhome.mac"        # 当前 bundle ID，将来可改为 app.clawdhome
+HELPER_LABEL="ai.clawdhome.mac.helper"
 SCHEME="ClawdHome"
 CONFIGURATION="Release"
 

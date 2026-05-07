@@ -40,11 +40,11 @@ final class AppLockStore {
 
     // MARK: - 持久化 Key
 
-    private static let service           = "io.github.deepjerry.clawdhome.mac.applock"
+    private static let service           = "ai.clawdhome.mac.applock"
     private static let hashAccount       = "password-hash"
     private static let bioAccount        = "biometric-enabled"
     /// UserDefaults key — 启动时判断 enabled，不触发 Keychain 弹窗
-    private static let enabledDefaultsKey = "io.github.deepjerry.clawdhome.mac.applock.enabled"
+    private static let enabledDefaultsKey = "ai.clawdhome.mac.applock.enabled"
 
     // MARK: - Init
 

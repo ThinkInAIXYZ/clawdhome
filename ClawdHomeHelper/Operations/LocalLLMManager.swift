@@ -5,9 +5,9 @@
 import Foundation
 
 struct LocalLLMManager {
-    static let label      = "io.github.deepjerry.clawdhome.omlx"
+    static let label      = "ai.clawdhome.omlx"
     static let port       = 18800
-    static let plistPath  = "/Library/LaunchDaemons/io.github.deepjerry.clawdhome.omlx.plist"
+    static let plistPath  = "/Library/LaunchDaemons/ai.clawdhome.omlx.plist"
     static let modelDir   = "/Users/Shared/ClawdHome/models/omlx"
 
     // MARK: - 安装 omlx

@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-LABEL="io.github.deepjerry.clawdhome.mac.helper"
+LABEL="ai.clawdhome.mac.helper"
 DEST_DIR="/Library/PrivilegedHelperTools"
 DEST_BINARY="$DEST_DIR/$LABEL"
 PLIST_PATH="/Library/LaunchDaemons/$LABEL.plist"

@@ -147,7 +147,7 @@ log-helper:
 	tail -f /tmp/clawdhome-helper.log
 
 log-app:
-	log stream --predicate 'subsystem == "io.github.deepjerry.clawdhome.mac"' --level debug
+	log stream --predicate 'subsystem == "ai.clawdhome.mac"' --level debug
 
 # ── 清理 ──────────────────────────────────────────────────────────────────────
 

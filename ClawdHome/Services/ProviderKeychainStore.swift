@@ -35,7 +35,7 @@ enum KnownProvider: String, CaseIterable {
 
 @Observable
 final class ProviderKeychainStore {
-    private let service = "io.github.deepjerry.clawdhome.mac"
+    private let service = "ai.clawdhome.mac"
     // Incrementing this counter inside save/delete causes @Observable to
     // invalidate any computed property (providerStatuses) that reads it.
     private var _keychainVersion: Int = 0

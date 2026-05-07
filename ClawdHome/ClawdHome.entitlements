@@ -9,7 +9,7 @@
     <!-- 允许连接到 LaunchDaemon 的 Mach service -->
     <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
     <array>
-        <string>io.github.deepjerry.clawdhome.mac.helper</string>
+        <string>ai.clawdhome.mac.helper</string>
     </array>
 </dict>
 </plist>

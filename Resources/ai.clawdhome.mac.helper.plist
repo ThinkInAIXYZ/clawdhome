@@ -4,14 +4,14 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>io.github.deepjerry.clawdhome.mac.helper</string>
+    <string>ai.clawdhome.mac.helper</string>
     <!-- BundleProgram 路径相对于 app bundle 根目录 -->
     <key>BundleProgram</key>
     <string>Contents/Library/LaunchDaemons/ClawdHomeHelper</string>
     <key>MachServices</key>
     <dict>
         <!-- Mach service 名称必须与 kHelperMachServiceName 一致 -->
-        <key>io.github.deepjerry.clawdhome.mac.helper</key>
+        <key>ai.clawdhome.mac.helper</key>
         <true/>
     </dict>
 </dict>

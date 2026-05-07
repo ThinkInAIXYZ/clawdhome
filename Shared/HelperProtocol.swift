@@ -96,6 +96,15 @@ import Foundation
     /// Node.js 是否已安装就绪（用于控制 npm 相关操作开关）
     func isNodeInstalled(withReply reply: @escaping (Bool) -> Void)
 
+    /// 获取 Xcode/CLT 环境状态（JSON 编码的 XcodeEnvStatus）
+    func getXcodeEnvStatus(withReply reply: @escaping (String) -> Void)
+
+    /// 触发安装 Xcode Command Line Tools（等价 xcode-select --install）
+    func installXcodeCommandLineTools(withReply reply: @escaping (Bool, String?) -> Void)
+
+    /// 接受 Xcode 许可（等价 xcodebuild -license accept）
+    func acceptXcodeLicense(withReply reply: @escaping (Bool, String?) -> Void)
+
     /// 为指定用户初始化 npm 全局目录（~/.npm-global）并配置 shell 环境
     func setupNpmEnv(
         username: String,
@@ -504,8 +513,19 @@ import Foundation
     func getHelperDebugLogging(withReply reply: @escaping (Bool) -> Void)
 }
 
+struct XcodeEnvStatus: Codable, Sendable {
+    var commandLineToolsInstalled: Bool
+    var clangAvailable: Bool
+    var licenseAccepted: Bool
+    var detail: String
+
+    var isHealthy: Bool {
+        commandLineToolsInstalled && clangAvailable && licenseAccepted
+    }
+}
+
 /// XPC Mach Service 名称（App 与 Helper 均引用此常量）
-let kHelperMachServiceName = "io.github.deepjerry.clawdhome.mac.helper"
+let kHelperMachServiceName = "ai.clawdhome.mac.helper"
 
 enum PairingOutputParser {
     private static let ansiPattern = "\u{001B}\\[[0-9;?]*[ -/]*[@-~]"

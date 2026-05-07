@@ -6,7 +6,7 @@ import Foundation
 import Security
 
 enum AccountKeychain {
-    private static let service = "io.github.deepjerry.clawdhome.mac.accounts"
+    private static let service = "ai.clawdhome.mac.accounts"
 
     static func save(_ value: String, for accountId: UUID) {
         guard let data = value.data(using: .utf8) else { return }

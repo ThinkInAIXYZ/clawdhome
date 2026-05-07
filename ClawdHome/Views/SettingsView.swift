@@ -69,7 +69,7 @@ private struct GeneralSettingsTab: View {
 
             Section("关于") {
                 LabeledContent("版本", value: "ClawdHome 1.0")
-                LabeledContent("Helper", value: "/Library/PrivilegedHelperTools/io.github.deepjerry.clawdhome.mac.helper")
+                LabeledContent("Helper", value: "/Library/PrivilegedHelperTools/ai.clawdhome.mac.helper")
             }
         }
         .formStyle(.grouped)

@@ -5,7 +5,7 @@
 import Foundation
 
 struct GatewayManager {
-    private static let gatewayLabel = "io.github.deepjerry.clawdhome.gateway"
+    private static let gatewayLabel = "ai.clawdhome.gateway"
 
     // MARK: - 启动
 

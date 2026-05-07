@@ -7,7 +7,7 @@ import Observation
 
 @Observable
 final class DaemonInstaller {
-    private static let plistName = "io.github.deepjerry.clawdhome.mac.helper.plist"
+    private static let plistName = "ai.clawdhome.mac.helper.plist"
     private let service = SMAppService.daemon(plistName: DaemonInstaller.plistName)
 
     /// daemon 当前注册状态

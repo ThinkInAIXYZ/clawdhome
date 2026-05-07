@@ -46,7 +46,7 @@ private let helperLogCheckEvery = 300
 private let helperLogMaxBytes = 2_000_000
 private let helperLogRotateKeep = 3
 private let helperLogPath = "/tmp/clawdhome-helper.log"
-private let helperLogQueue = DispatchQueue(label: "io.github.deepjerry.clawdhome.helper.log", qos: .utility)
+private let helperLogQueue = DispatchQueue(label: "ai.clawdhome.helper.log", qos: .utility)
 private var helperLogHandle: FileHandle? = {
     FileManager.default.createFile(atPath: helperLogPath, contents: nil)
     let fh = FileHandle(forWritingAtPath: helperLogPath)

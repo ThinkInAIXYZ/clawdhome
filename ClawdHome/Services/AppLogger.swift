@@ -4,7 +4,7 @@
 import Foundation
 import os
 
-private let osLogger = Logger(subsystem: "io.github.deepjerry.clawdhome.mac", category: "app")
+private let osLogger = Logger(subsystem: "ai.clawdhome.mac", category: "app")
 
 private enum LogRedactor {
     private static let compiledRules: [(NSRegularExpression, String)] = {

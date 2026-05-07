@@ -25,7 +25,7 @@ enum UserPasswordStoreError: LocalizedError {
 }
 
 enum UserPasswordStore {
-    private static let service = "io.github.deepjerry.clawdhome.mac.user-pw"
+    private static let service = "ai.clawdhome.mac.user-pw"
 
     struct TestHooks {
         var randomPassword: () -> String
