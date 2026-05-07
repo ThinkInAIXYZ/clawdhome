@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0] - 2026-04-02
+
+### Features
+- Added a setup wizard to guide first-time Shrimp initialization
+- App update checks now run in the background for improved reliability
+
+### Improvements & Fixes
+- Refined detail window layout and overview interaction experience
+- Improved upgrade notification messages
+- Hardened proxy configuration and permission checks
+- Improved stability of isolation environments and the initialization flow
+
+
 ## [1.4.0] - 2026-03-31
 
 ### Features
