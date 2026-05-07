@@ -114,7 +114,7 @@ struct HermesDetailView: View {
                 if mode == .browser {
                     hermesBrowserBody
                 } else if mode == .settings {
-                    ShrimpSettingsV2View(user: user)
+                    ShrimpSettingsV2View(user: user, initialTab: .model, includeAgentsTab: false)
                 } else if mode == .profiles && showMultiAgentEntrypoints {
                     profilesBody
                 } else if mode == .files {
