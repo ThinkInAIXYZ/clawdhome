@@ -1004,7 +1004,9 @@ private struct BetaBadge: View {
 
 private struct AboutTab: View {
     @Environment(HelperClient.self) private var helperClient
+    @Environment(UpdateChecker.self) private var updater
     @State private var helperVersion = "—"
+    @State private var updateCheckMessage: String? = nil
 
     private var appVersion: String {
         let info = Bundle.main.infoDictionary
@@ -1047,10 +1049,29 @@ private struct AboutTab: View {
                     if helperClient.isConnected {
                         LabeledContent(L10n.k("views.settings_view.helper_version", fallback: "Helper 版本"), value: helperVersion)
                         LabeledContent(L10n.k("views.settings_view.app_version", fallback: "App 版本"), value: appVersion)
+                        HStack(spacing: 10) {
+                            Button {
+                                Task { await checkForAppUpdate() }
+                            } label: {
+                                if updater.isCheckingAppUpdate {
+                                    Text(L10n.k("views.settings_view.checking_update", fallback: "检查中..."))
+                                } else {
+                                    Text(L10n.k("views.settings_view.check_update", fallback: "检查更新"))
+                                }
+                            }
+                            .disabled(updater.isCheckingAppUpdate)
+
+                            if let message = updateCheckMessage {
+                                Text(message)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
                 .padding(4)
             }
+
             Link(destination: URL(string: "https://clawdhome.app")!) {
                 HStack(spacing: 4) {
                     Image(systemName: "globe")
@@ -1079,6 +1100,28 @@ private struct AboutTab: View {
             if helperClient.isConnected {
                 helperVersion = (try? await helperClient.getVersion()) ?? L10n.k("common.unknown", fallback: "未知")
             }
+        }
+    }
+
+    @MainActor
+    private func checkForAppUpdate() async {
+        await updater.checkApp()
+        if let err = updater.appCheckError, !err.isEmpty {
+            updateCheckMessage = L10n.f(
+                "views.settings_view.update_check_failed_fmt",
+                fallback: "检查失败：%@",
+                err
+            )
+            return
+        }
+        if updater.appNeedsUpdate, let latest = updater.appLatestVersion {
+            updateCheckMessage = L10n.f(
+                "views.settings_view.new_version_available_fmt",
+                fallback: "发现新版本：v%@",
+                latest
+            )
+        } else {
+            updateCheckMessage = L10n.k("views.settings_view.up_to_date", fallback: "当前已是最新版本")
         }
     }
 }

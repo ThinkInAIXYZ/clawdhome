@@ -8,12 +8,17 @@ struct UpgradeConfirmSheet: View {
     let currentVersion: String?
     let targetVersion: String
     let releaseURL: URL?
+    let isInstalling: Bool
+    let installError: String?
     /// 确认回调：(version, shouldBackup)
     var onConfirm: (_ version: String, _ backup: Bool) -> Void
 
     @Environment(\.dismiss) private var dismiss
     /// 持久化备份偏好（默认开）
     @AppStorage("upgradeAutoBackup") private var autoBackup = true
+    @State private var upgradeRequested = false
+
+    private var canClose: Bool { !isInstalling }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -26,6 +31,7 @@ struct UpgradeConfirmSheet: View {
                 Button(L10n.k("auto.upgrade_confirm_sheet.cancel", fallback: "取消")) { dismiss() }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.escape, modifiers: [])
+                    .disabled(!canClose)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
@@ -88,6 +94,31 @@ struct UpgradeConfirmSheet: View {
             .padding(.top, 16)
             .padding(.bottom, 12)
 
+            if isInstalling || upgradeRequested {
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
+                    if isInstalling {
+                        Label(L10n.k("upgrade.confirm.status.installing", fallback: "升级中…"), systemImage: "arrow.triangle.2.circlepath")
+                            .font(.subheadline.weight(.medium))
+                    } else if let installError, !installError.isEmpty {
+                        Label(L10n.k("upgrade.confirm.status.failed", fallback: "升级失败"), systemImage: "xmark.circle.fill")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.red)
+                        Text(installError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .textSelection(.enabled)
+                    } else {
+                        Label(L10n.k("upgrade.confirm.status.done", fallback: "升级完成"), systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.green)
+                    }
+                    TerminalLogPanel(username: username)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+            }
+
             Divider()
 
             // 底部操作栏
@@ -100,19 +131,23 @@ struct UpgradeConfirmSheet: View {
                     .foregroundStyle(.tint)
                 }
                 Spacer()
-                Button(L10n.k("auto.upgrade_confirm_sheet.cancel", fallback: "取消")) { dismiss() }
+                Button(upgradeRequested ? L10n.k("auto.upgrade_confirm_sheet.done", fallback: "完成") : L10n.k("auto.upgrade_confirm_sheet.cancel", fallback: "取消")) { dismiss() }
                     .buttonStyle(.bordered)
-                Button(L10n.k("auto.upgrade_confirm_sheet.upgrade", fallback: "升级")) {
-                    let shouldBackup = autoBackup
-                    dismiss()
-                    onConfirm(targetVersion, shouldBackup)
+                    .disabled(!canClose)
+                if !upgradeRequested || (upgradeRequested && !isInstalling && (installError?.isEmpty == false)) {
+                    Button(isInstalling ? L10n.k("auto.upgrade_confirm_sheet.text_5fc65af5b3", fallback: "处理中…") : L10n.k("auto.upgrade_confirm_sheet.upgrade", fallback: "升级")) {
+                        let shouldBackup = autoBackup
+                        upgradeRequested = true
+                        onConfirm(targetVersion, shouldBackup)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.return, modifiers: [])
+                    .disabled(isInstalling)
                 }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.return, modifiers: [])
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .frame(width: 380)
+        .frame(width: 560)
     }
 }
