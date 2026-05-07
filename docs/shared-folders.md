@@ -36,10 +36,19 @@
 │   ├── TOOLS.md                     │   含共享文件夹使用指引
 │   ├── memory/                      │   记忆文件
 │   └── .git/                        │   版本控制
-└── clawdhome_shared/                 ← 独立的共享入口（符号链接）
-    ├── vault/  → /Users/Shared/ClawdHome/vaults/<username>/
-    └── public/ → /Users/Shared/ClawdHome/public/
+└── clawdhome_shared/                 ← 目录（内含两个符号链接）
+    ├── private/ → /Users/Shared/ClawdHome/vaults/<username>/  ← 自己的专属文件夹
+    └── public/  → /Users/Shared/ClawdHome/public/             ← 公共文件夹
 ```
+
+**跨平台兼容性**：skill 和 agent 统一通过 `~/clawdhome_shared/private/` 和 `~/clawdhome_shared/public/` 访问，底层存储路径是平台实现细节，通过符号链接抹平差异：
+
+| 平台 | 底层专属存储路径 | 底层公共存储路径 | 虾侧访问路径（统一） |
+|------|-----------------|-----------------|---------------------|
+| macOS | `/Users/Shared/ClawdHome/vaults/<username>/` | `/Users/Shared/ClawdHome/public/` | `~/clawdhome_shared/private/` / `~/clawdhome_shared/public/` |
+| Linux | （规划中） | （规划中） | `~/clawdhome_shared/private/` / `~/clawdhome_shared/public/` |
+
+虾无需知道自己的用户名，也看不到其他虾的目录。
 
 **为什么不放在 workspace 内？** workspace 目录已包含大量内容（persona 文件、git 仓库、memory、skills 等），再加入符号链接会干扰 git 仓库状态和目录结构。独立放在 home 根目录更清晰。
 
@@ -54,7 +63,7 @@
 | 老虾（补全） | 用户进入侧边栏"文件共享"页面时 |
 
 TOOLS.md 告知虾：
-- `~/clawdhome_shared/vault/` — 所有工作产出物优先存放在此
+- `~/clawdhome_shared/private/` — 所有工作产出物优先存放在此
 - `~/clawdhome_shared/public/` — 读取公共资源
 - 敏感数据不进公共文件夹
 
@@ -136,9 +145,9 @@ mkdir -p /Users/Shared/ClawdHome/public
 chown root:clawdhome-all /Users/Shared/ClawdHome/public
 chmod 2775 /Users/Shared/ClawdHome/public
 
-# 5. 在虾 home 下创建符号链接
+# 5. 在虾 home 下创建符号链接目录
 mkdir -p ~<username>/clawdhome_shared
-ln -s /Users/Shared/ClawdHome/vaults/<username> ~<username>/clawdhome_shared/vault
+ln -s /Users/Shared/ClawdHome/vaults/<username> ~<username>/clawdhome_shared/private
 ln -s /Users/Shared/ClawdHome/public ~<username>/clawdhome_shared/public
 ```
 
