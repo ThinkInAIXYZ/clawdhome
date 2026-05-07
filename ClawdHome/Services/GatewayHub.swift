@@ -493,7 +493,7 @@ final class GatewayHub {
         }
     }
 
-    /// 单用户探活（供 UserDetailView 等独立视图调用，不依赖 DashboardView）
+    /// 单用户探活（供 OpenClawDetailView 等独立视图调用，不依赖 DashboardView）
     func probeSingle(username: String, port: Int) async {
         let (alive, ready) = await GatewayClient.httpProbe(port: port)
         if ready {

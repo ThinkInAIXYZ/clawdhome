@@ -211,18 +211,18 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.25), value: helperClient.isConnected)
         .animation(.easeInOut(duration: 0.18), value: shouldShowChromeInstallHint)
         .alert(
-            "初始化浏览器 Session？",
+            L10n.k("content_view.browser.init_session_title", fallback: "初始化浏览器 Session？"),
             isPresented: Binding(
                 get: { browserSessionPromptUsername != nil },
                 set: { if !$0 { browserSessionPromptUsername = nil } }
             ),
             presenting: browserSessionPromptUsername
         ) { username in
-            Button("这次不初始化", role: .cancel) {
+            Button(L10n.k("content_view.browser.skip_init", fallback: "这次不初始化"), role: .cancel) {
                 browserSessionPromptSuppressed = true
                 browserSessionPromptUsername = nil
             }
-            Button("打开浏览器") {
+            Button(L10n.k("content_view.browser.open_browser", fallback: "打开浏览器")) {
                 browserSessionPromptSuppressed = true
                 browserSessionPromptUsername = nil
                 Task {
@@ -230,7 +230,7 @@ struct ContentView: View {
                 }
             }
         } message: { username in
-            Text("检测到 \(username) 的浏览器工具已安装，但还没有初始化 session。是否现在打开 Chrome 完成初始化？")
+            Text(L10n.f("content_view.browser.init_session_message", fallback: "检测到 %@ 的浏览器工具已安装，但还没有初始化 session。是否现在打开 Chrome 完成初始化？", username))
         }
         .overlay {
             if lockStore.isLocked {
@@ -340,9 +340,9 @@ private struct ChromeInstallHintCard: View {
                     .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("未检测到 Google Chrome")
+                    Text(L10n.k("content_view.chrome.not_found", fallback: "未检测到 Google Chrome"))
                         .font(.headline)
-                    Text("浏览器账号和网页登录能力需要 Chrome。安装完成后，这个提示会自动消失。")
+                    Text(L10n.k("content_view.chrome.required_message", fallback: "浏览器账号和网页登录能力需要 Chrome。安装完成后，这个提示会自动消失。"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -350,7 +350,7 @@ private struct ChromeInstallHintCard: View {
             }
 
             Link(destination: chromeDownloadURL) {
-                Label("前往 Chrome 官网安装", systemImage: "arrow.up.forward.square")
+                Label(L10n.k("content_view.chrome.install_link", fallback: "前往 Chrome 官网安装"), systemImage: "arrow.up.forward.square")
                     .font(.system(size: 13, weight: .semibold))
                     .frame(maxWidth: .infinity)
             }

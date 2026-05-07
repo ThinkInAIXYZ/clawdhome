@@ -188,7 +188,7 @@
 		C128E0FD980B6706D8E01A40 /* BrowserAccountModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D033FFF56C00EB989EF8FD /* BrowserAccountModels.swift */; };
 		C1D0DF6E8649DB1726E57E86 /* OpenclawConfigSerializerV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEA3246D788EC5F1AE06F4F /* OpenclawConfigSerializerV2.swift */; };
 		C1D80403CCA910757BC41012 /* FilePermissionHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44A9E4389475CA9623EA4CD0 /* FilePermissionHelper.swift */; };
-		C72DF5FEB4906D0AA459139E /* UserDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46E3226FB170F1C35BB73B5 /* UserDetailView.swift */; };
+		C72DF5FEB4906D0AA459139E /* OpenClawDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46E3226FB170F1C35BB73B5 /* OpenClawDetailView.swift */; };
 		C745EB73F505520BE75D6E88 /* GeneratedVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */; };
 		C77B4F6939884B36F73EB45C /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1879663548E380CB2414733A /* BackupManager.swift */; };
 		C87F24E951A075FE182FF745 /* ManagedUserDisplayName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58D6A0A3A03533CF7E7AC045 /* ManagedUserDisplayName.swift */; };
@@ -438,7 +438,7 @@
 		DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserListView.swift; sourceTree = "<group>"; };
 		DFD718E7777280D5BC94DE0D /* UserPasswordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPasswordStore.swift; sourceTree = "<group>"; };
 		DFEA3246D788EC5F1AE06F4F /* OpenclawConfigSerializerV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenclawConfigSerializerV2.swift; sourceTree = "<group>"; };
-		E46E3226FB170F1C35BB73B5 /* UserDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDetailView.swift; sourceTree = "<group>"; };
+		E46E3226FB170F1C35BB73B5 /* OpenClawDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenClawDetailView.swift; sourceTree = "<group>"; };
 		E8D30C318D8605B241FB8378 /* IMAccountListEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IMAccountListEditor.swift; sourceTree = "<group>"; };
 		E9D81E7B672B2A82591FEF1B /* GatewayCronStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayCronStore.swift; sourceTree = "<group>"; };
 		E9F9AD8700941AFBF1F34673 /* LogViewerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerSheet.swift; sourceTree = "<group>"; };
@@ -828,7 +828,7 @@
 				32ACC218308D2CE4322109FC /* TerminalLogView.swift */,
 				800B6FF59BBD8AF1F7721480 /* UpgradeConfirmSheet.swift */,
 				AEDDABB73D85CDE4CFFBDDC8 /* UserDetailHelpers.swift */,
-				E46E3226FB170F1C35BB73B5 /* UserDetailView.swift */,
+				E46E3226FB170F1C35BB73B5 /* OpenClawDetailView.swift */,
 				A623F9F0DFBC22F900B5ACED /* UserFilesView.swift */,
 				DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */,
 				B60647F2C674DA123E7DA59A /* UserPasswordSheet.swift */,
@@ -1165,7 +1165,7 @@
 				8E9250B96F709346BC0A1158 /* UserAdoptionFlow.swift in Sources */,
 				CF8C13CAF990140BBA9EBFFB /* UserDeleteService.swift in Sources */,
 				4EF840654A851CEF28774439 /* UserDetailHelpers.swift in Sources */,
-				C72DF5FEB4906D0AA459139E /* UserDetailView.swift in Sources */,
+				C72DF5FEB4906D0AA459139E /* OpenClawDetailView.swift in Sources */,
 				50C10BD17D9C9C63EDB034A1 /* UserDetailWindowLayout.swift in Sources */,
 				BC5CEE02450C97178238E88A /* UserDirectoryService.swift in Sources */,
 				A19DC0FB0FB2383088C47E80 /* UserFilesView.swift in Sources */,

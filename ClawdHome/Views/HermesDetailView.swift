@@ -133,20 +133,6 @@ struct HermesDetailView: View {
 
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 6) {
-                    Button {
-                        promptMemoryMenuToken += 1
-                    } label: {
-                        Image(systemName: "text.bubble.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .frame(width: 34, height: 34)
-                            .background(
-                                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .fill(Color(nsColor: .controlBackgroundColor))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .help("Prompt 和随手记")
-
                     if mode == .profiles && showMultiAgentEntrypoints {
                         Button {
                             showNewProfilePopover = true
@@ -213,7 +199,7 @@ struct HermesDetailView: View {
                             )
                     }
                     .buttonStyle(.plain)
-                    .help(isRightPanelExpanded ? "收起状态面板" : "展开状态面板")
+                    .help(isRightPanelExpanded ? L10n.k("hermes.sidebar.collapse_panel", fallback: "收起状态面板") : L10n.k("hermes.sidebar.expand_panel", fallback: "展开状态面板"))
                 }
 
                 if isRightPanelExpanded {
@@ -322,15 +308,15 @@ struct HermesDetailView: View {
         } message: {
             Text(L10n.k("hermes.browser.reset_message", fallback: "将备份并清空该用户的 ClawdHome Chrome profile。Hermes 的 OAuth 和网页登录态会被清空，其他用户与主浏览器不受影响。"))
         }
-        .alert("添加登录网站", isPresented: $showAddManualLoginSite) {
-            TextField("名称", text: $manualLoginSiteName)
+        .alert(L10n.k("browser.add_login_site.title", fallback: "添加登录网站"), isPresented: $showAddManualLoginSite) {
+            TextField(L10n.k("common.label.name", fallback: "名称"), text: $manualLoginSiteName)
             TextField("https://example.com", text: $manualLoginSiteURL)
-            Button("添加") {
+            Button(L10n.k("common.action.add", fallback: "添加")) {
                 addManualLoginSiteAndOpen()
             }
             Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {}
         } message: {
-            Text("添加后会立即在该用户的 ClawdHome Chrome 中打开。")
+            Text(L10n.k("browser.add_login_site.message", fallback: "添加后会立即在该用户的 ClawdHome Chrome 中打开。"))
         }
     }
 
@@ -440,8 +426,8 @@ struct HermesDetailView: View {
                 } label: {
                     Label(
                         isInstallingOpenCLI
-                            ? "安装 OpenCLI 中…"
-                            : (opencliVersion == nil ? "安装 OpenCLI" : "升级 OpenCLI"),
+                            ? L10n.k("hermes.opencli.installing", fallback: "安装 OpenCLI 中…")
+                            : (opencliVersion == nil ? L10n.k("hermes.opencli.install", fallback: "安装 OpenCLI") : L10n.k("hermes.opencli.upgrade", fallback: "升级 OpenCLI")),
                         systemImage: "shippingbox"
                     )
                 }
@@ -452,7 +438,7 @@ struct HermesDetailView: View {
                     Task { await runOpenCLIDoctor() }
                 } label: {
                     Label(
-                        isRunningOpenCLIDoctor ? "Doctor 检测中…" : "OpenCLI Doctor",
+                        isRunningOpenCLIDoctor ? L10n.k("hermes.opencli.doctor_running", fallback: "Doctor 检测中…") : "OpenCLI Doctor",
                         systemImage: "stethoscope"
                     )
                 }
@@ -502,10 +488,10 @@ struct HermesDetailView: View {
                 manualLoginSiteURL = ""
                 showAddManualLoginSite = true
             } label: {
-                Label("添加网站…", systemImage: "plus")
+                Label(L10n.k("browser.add_site_label", fallback: "添加网站…"), systemImage: "plus")
             }
         } label: {
-            Label("手动登录", systemImage: "person.crop.circle.badge.plus")
+            Label(L10n.k("browser.manual_login", fallback: "手动登录"), systemImage: "person.crop.circle.badge.plus")
         }
         .buttonStyle(.bordered)
         .disabled(!helperClient.isConnected || isOpeningBrowserAccount)
@@ -904,30 +890,30 @@ struct HermesDetailView: View {
 
     private var rightPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            GroupBox("状态与版本") {
+            GroupBox(L10n.k("hermes.status.panel.title", fallback: "状态与版本")) {
                 fixedSectionContent {
-                    row("状态", runtimeRunning ? "运行中" : "未运行")
-                    row("版本", runtimeVersion.map { "v\($0)" } ?? "—")
+                    row(L10n.k("hermes.status.panel.status_label", fallback: "状态"), runtimeRunning ? L10n.k("hermes.status.running", fallback: "运行中") : L10n.k("hermes.status.not_running", fallback: "未运行"))
+                    row(L10n.k("views.user_list_view.version", fallback: "版本"), runtimeVersion.map { "v\($0)" } ?? "—")
                     row("PID", runtimePID.map(String.init) ?? "—")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            GroupBox("资源占用") {
+            GroupBox(L10n.k("views.user_list_view.resource_usage", fallback: "资源占用")) {
                 fixedSectionContent {
                     let cpu = cpuPercent.map { String(format: "%.1f%%", $0) } ?? "—"
                     let mem = memRssMB.map { String(format: "%.0f MB", $0) } ?? "—"
                     let storage = homeDirBytes.map { FormatUtils.formatBytes($0) } ?? "—"
                     row("CPU", cpu)
-                    row("内存", mem)
-                    row("存储", storage)
+                    row(L10n.k("common.resource.memory", fallback: "内存"), mem)
+                    row(L10n.k("hermes.status.panel.storage", fallback: "存储"), storage)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            GroupBox("操作") {
+            GroupBox(L10n.k("hermes.actions.panel.title", fallback: "操作")) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Button(runtimeRunning ? "重启 Hermes" : "启动 Hermes", action: onStartOrRestart)
+                    Button(runtimeRunning ? L10n.k("hermes.action.restart_hermes", fallback: "重启 Hermes") : L10n.k("hermes.action.start_hermes", fallback: "启动 Hermes"), action: onStartOrRestart)
                         .buttonStyle(.borderedProminent)
                         .disabled(!isConnected || isLoading)
 
@@ -1040,7 +1026,6 @@ struct HermesDetailView: View {
         defer { isInstallingBrowserAccountTool = false }
         do {
             browserAccountStatus = try await helperClient.installBrowserAccountTool(username: user.username)
-            _ = try await helperClient.openBrowserAccount(username: user.username)
             await refreshBrowserAccountStatus()
             showInstallToolSuccess = true
         } catch {
@@ -1133,9 +1118,9 @@ final class HermesChatTabManager: ObservableObject {
     func addTab(for profile: AgentProfile?) {
         guard let username, let helperClient else { return }
         let profileID = profile?.id ?? "main"
-        let profileName = profile?.name ?? "默认角色"
+        let profileName = profile?.name ?? L10n.k("hermes.profile.default_name", fallback: "默认角色")
         let sessionIndex = tabs.filter { $0.profileID == profileID }.count + 1
-        let title = "\(profileName) · 会话 \(sessionIndex)"
+        let title = "\(profileName) · \(L10n.k("hermes.sidebar.chat", fallback: "会话")) \(sessionIndex)"
         let command: [String] = if profileID == "main" {
             ["hermes"]
         } else {
@@ -2232,7 +2217,7 @@ struct HermesDetailContainer: View {
                 let currentProfile = profiles.first(where: { $0.id == selectedProfileID })
                 HStack(spacing: 4) {
                     let emoji = currentProfile?.emoji.isEmpty == false ? currentProfile!.emoji : "🤖"
-                    Text("\(emoji) \(currentProfile?.name ?? "默认角色")")
+                    Text("\(emoji) \(currentProfile?.name ?? L10n.k("hermes.profile.default_name", fallback: "默认角色"))")
                         .lineLimit(1)
                 }
                 .font(.system(size: 13))
@@ -2262,12 +2247,12 @@ struct HermesDetailContainer: View {
                     .padding(.horizontal, 10)
                     .padding(.top, 2)
             }
-            hermesSidebarButton(.chat, label: "会话", icon: "bubble.left.and.text.bubble.right")
+            hermesSidebarButton(.chat, label: L10n.k("hermes.sidebar.chat", fallback: "会话"), icon: "bubble.left.and.text.bubble.right")
             if HermesFeaturePolicy.shouldShowMultiAgentEntrypoints {
-                hermesSidebarButton(.profiles, label: "角色", icon: "theatermasks")
+                hermesSidebarButton(.profiles, label: L10n.k("hermes.sidebar.role", fallback: "角色"), icon: "theatermasks")
             }
-            hermesSidebarButton(.config, label: "配置", icon: "gearshape")
-            hermesSidebarButton(.browser, label: "浏览器", icon: "globe")
+            hermesSidebarButton(.config, label: L10n.k("hermes.sidebar.config", fallback: "配置"), icon: "gearshape")
+            hermesSidebarButton(.browser, label: L10n.k("hermes.sidebar.browser", fallback: "浏览器"), icon: "globe")
 
             Divider()
                 .padding(.horizontal, detailSidebarShowsLabels ? 10 : 4)
@@ -2282,7 +2267,7 @@ struct HermesDetailContainer: View {
                     .padding(.top, 2)
             }
             hermesSidebarButton(.files, label: L10n.k("user.detail.auto.files", fallback: "文件"), icon: "folder")
-            hermesSidebarButton(.terminal, label: "终端", icon: "terminal")
+            hermesSidebarButton(.terminal, label: L10n.k("common.label.terminal", fallback: "终端"), icon: "terminal")
             hermesSidebarButton(.processes, label: L10n.k("user.detail.auto.processes", fallback: "进程"), icon: "square.3.layers.3d")
             hermesSidebarButton(.logs, label: L10n.k("user.detail.auto.logs", fallback: "日志"), icon: "doc.text.magnifyingglass")
             hermesSidebarButton(.settings, label: L10n.k("user.detail.sidebar.settings", fallback: "设置"), icon: "gearshape")
@@ -2662,7 +2647,7 @@ struct HermesDetailContainer: View {
         }
         // 确保 main profile 存在
         if !profiles.contains(where: { $0.id == "main" }) {
-            profiles.insert(AgentProfile(id: "main", name: "默认角色", emoji: "🤖", modelPrimary: nil, modelFallbacks: [], workspacePath: nil, isDefault: true), at: 0)
+            profiles.insert(AgentProfile(id: "main", name: L10n.k("hermes.profile.default_name", fallback: "默认角色"), emoji: "🤖", modelPrimary: nil, modelFallbacks: [], workspacePath: nil, isDefault: true), at: 0)
         }
         if selectedProfileID == nil || !profiles.contains(where: { $0.id == selectedProfileID }) {
             selectedProfileID = await helperClient.getHermesActiveProfile(username: user.username)

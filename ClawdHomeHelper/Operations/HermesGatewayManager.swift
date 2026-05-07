@@ -115,11 +115,27 @@ struct HermesGatewayManager {
     static func stopGateway(username: String, profileID: String, uid: Int) throws {
         let label = daemonLabel(username: username, profileID: profileID)
         helperLog("[HermesGateway] STOP: label=\(label) uid=\(uid) profile=\(profileID) @\(username)")
+        var bootoutError: Error?
         do {
             try run("/bin/launchctl", args: ["bootout", "system/\(label)"])
         } catch {
-            if !isIgnorableLaunchctlBootoutError(error) { throw error }
-            helperLog("[HermesGateway] STOP_SKIP: job 不存在，视为已停止 profile=\(profileID) @\(username)")
+            if !isIgnorableLaunchctlBootoutError(error) {
+                bootoutError = error
+            } else {
+                helperLog("[HermesGateway] STOP_SKIP: job 不存在，视为已停止 profile=\(profileID) @\(username)")
+            }
+        }
+
+        if !waitForGatewayStopped(username: username, profileID: profileID, timeout: 4) {
+            helperLog("[HermesGateway] STOP_STEP: 检测到残留非 launchd 进程，执行强制清理 profile=\(profileID) @\(username)", level: .warn)
+            forceStopGatewayProcesses(username: username, profileID: profileID)
+            if !waitForGatewayStopped(username: username, profileID: profileID, timeout: 4) {
+                throw GatewayError.stopVerificationFailed(reason: "Hermes gateway 残留进程未能停止")
+            }
+        }
+
+        if let bootoutError {
+            helperLog("[HermesGateway] STOP_WARN: bootout 返回异常但已停稳：\(bootoutError.localizedDescription) profile=\(profileID) @\(username)", level: .warn)
         }
         helperLog("[HermesGateway] STOP_OK profile=\(profileID) @\(username)")
     }
@@ -171,7 +187,7 @@ struct HermesGatewayManager {
         if output.contains("state = running") {
             // 兜底：launchctl print 短暂缺失 pid 字段时，按 username 维度扫进程
             // （多 profile 进程都会匹配 hermes + gateway，无法按 profileID 区分，属降级路径）
-            if let pid = hermesProcessPIDs(username: username).first {
+            if let pid = hermesProcessPIDs(username: username, profileID: profileID).first {
                 return (true, pid)
             }
             return (true, -1)
@@ -306,8 +322,90 @@ struct HermesGatewayManager {
         return String(text.prefix(max)) + "...(truncated)"
     }
 
+    private static func waitForGatewayStopped(username: String, profileID: String, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let st = status(username: username, profileID: profileID)
+            let runningPIDs = hermesProcessPIDs(username: username, profileID: profileID)
+            if !st.running && runningPIDs.isEmpty {
+                return true
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        return false
+    }
+
+    private static func forceStopGatewayProcesses(username: String, profileID: String) {
+        var targetPIDs = Set(hermesProcessPIDs(username: username, profileID: profileID))
+        for path in gatewayPIDFileCandidates(username: username, profileID: profileID) {
+            guard let pid = readGatewayPID(from: path),
+                  isHermesGatewayProcess(pid: pid, username: username, profileID: profileID)
+            else { continue }
+            targetPIDs.insert(pid)
+        }
+        guard !targetPIDs.isEmpty else { return }
+
+        let ordered = targetPIDs.sorted()
+        helperLog("[HermesGateway] STOP_STEP: 强制终止残留 pids=\(ordered) profile=\(profileID) @\(username)", level: .warn)
+        for pid in ordered {
+            _ = try? run("/bin/kill", args: ["-TERM", "\(pid)"])
+        }
+        Thread.sleep(forTimeInterval: 0.3)
+        let stillAlive = ordered.filter { isHermesGatewayProcess(pid: $0, username: username, profileID: profileID) }
+        for pid in stillAlive {
+            _ = try? run("/bin/kill", args: ["-KILL", "\(pid)"])
+        }
+    }
+
+    private static func gatewayPIDFileCandidates(username: String, profileID: String) -> [String] {
+        let profileHome = hermesHomeForProfile(username: username, profileID: profileID)
+        return [
+            "\(profileHome)/gateway.pid",
+            "\(profileHome)/run/gateway.pid",
+            "\(profileHome)/tmp/gateway.pid"
+        ]
+    }
+
+    private static func readGatewayPID(from path: String) -> Int32? {
+        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        if let data = raw.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let pid = obj["pid"] as? Int32, pid > 1 { return pid }
+            if let pid = obj["pid"] as? Int, pid > 1, pid <= Int(Int32.max) { return Int32(pid) }
+            if let pidStr = obj["pid"] as? String, let pid = Int32(pidStr), pid > 1 { return pid }
+        }
+        let token = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0 == "\n" || $0 == " " || $0 == "\t" })
+            .first
+        guard let token, let pid = Int32(token), pid > 1 else { return nil }
+        return pid
+    }
+
+    private static func isHermesGatewayProcess(pid: Int32, username: String, profileID: String) -> Bool {
+        guard let output = try? run("/bin/ps", args: ["-p", "\(pid)", "-o", "user=,command="]) else { return false }
+        let line = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty else { return false }
+        let fields = line.split(maxSplits: 1, whereSeparator: { $0 == " " || $0 == "\t" })
+        guard fields.count == 2 else { return false }
+        let userField = String(fields[0])
+        let commandField = String(fields[1])
+        guard userField == username else { return false }
+        return commandMatchesProfile(commandField, profileID: profileID)
+    }
+
+    private static func commandMatchesProfile(_ command: String, profileID: String) -> Bool {
+        guard command.contains("hermes"), command.contains(" gateway") else { return false }
+        if profileID == "main" {
+            return !command.contains("--profile ")
+                && !command.contains("--profile=")
+        }
+        return command.contains("--profile \(profileID)")
+            || command.contains("--profile=\(profileID)")
+    }
+
     /// 兜底扫描 Hermes gateway 进程，防止 launchctl print 短暂缺失 pid 字段导致状态抖动
-    private static func hermesProcessPIDs(username: String) -> [Int32] {
+    private static func hermesProcessPIDs(username: String, profileID: String) -> [Int32] {
         guard let output = try? run("/bin/ps", args: ["-axo", "pid=,user=,command="]) else {
             return []
         }
@@ -322,7 +420,7 @@ struct HermesGatewayManager {
                 let userField = String(fields[1])
                 let commandField = String(fields[2])
                 guard userField == username else { return nil }
-                guard commandField.contains("hermes"), commandField.contains(" gateway") else { return nil }
+                guard commandMatchesProfile(commandField, profileID: profileID) else { return nil }
                 return pid
             }
     }

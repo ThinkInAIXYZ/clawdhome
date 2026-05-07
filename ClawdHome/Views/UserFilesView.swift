@@ -99,7 +99,6 @@ private struct TextEditSheetView: View {
 
     private let byteFormatter: ByteCountFormatter = {
         let f = ByteCountFormatter()
-        f.allowedUnits = [.useKB, .useMB, .useGB]
         f.countStyle = .file
         return f
     }()
@@ -1116,7 +1115,6 @@ struct UserFilesView: View {
 
     private let byteFormatter: ByteCountFormatter = {
         let f = ByteCountFormatter()
-        f.allowedUnits = [.useKB, .useMB, .useGB]
         f.countStyle = .file
         return f
     }()

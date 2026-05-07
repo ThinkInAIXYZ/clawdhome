@@ -236,13 +236,17 @@ struct ShrimpSettingsV2View: View {
                 }
             }
 
-            Section("依赖工具") {
+            Section(L10n.k("shrimp.settings.dependencies", fallback: "依赖工具")) {
                 dependencyRow(
-                    title: "浏览器工具",
-                    subtitle: "用于 OAuth 登录、网页自动化与授权回调。",
-                    statusText: browserAccountStatus?.toolInstalled == true ? "已安装" : "未安装",
+                    title: L10n.k("shrimp.settings.dependency.browser.title", fallback: "浏览器工具"),
+                    subtitle: L10n.k("shrimp.settings.dependency.browser.subtitle", fallback: "用于 OAuth 登录、网页自动化与授权回调。"),
+                    statusText: browserAccountStatus?.toolInstalled == true
+                        ? L10n.k("shrimp.settings.dependency.status.installed", fallback: "已安装")
+                        : L10n.k("common.status.not_installed", fallback: "未安装"),
                     statusColor: browserAccountStatus?.toolInstalled == true ? .green : .secondary,
-                    actionTitle: isInstallingBrowserTool ? "安装中…" : "安装/重装"
+                    actionTitle: isInstallingBrowserTool
+                        ? L10n.k("hermes.browser.installing_tool", fallback: "安装中…")
+                        : L10n.k("shrimp.settings.dependency.browser.install_or_reinstall", fallback: "安装/重装")
                 ) {
                     installBrowserTool()
                 }
@@ -250,23 +254,29 @@ struct ShrimpSettingsV2View: View {
 
                 dependencyRow(
                     title: "OpenCLI",
-                    subtitle: "统一自动化 CLI，便于后续网站工具编排与执行。",
-                    statusText: opencliVersion.map { "已安装（\($0)）" } ?? "未安装",
+                    subtitle: L10n.k("shrimp.settings.dependency.opencli.subtitle", fallback: "统一自动化 CLI，便于后续网站工具编排与执行。"),
+                    statusText: opencliVersion.map {
+                        L10n.f("shrimp.settings.dependency.status.installed_with_version", fallback: "已安装（%@）", $0)
+                    } ?? L10n.k("common.status.not_installed", fallback: "未安装"),
                     statusColor: opencliVersion == nil ? .secondary : .green,
-                    actionTitle: isInstallingOpenCLI ? "安装中…" : "安装/升级"
+                    actionTitle: isInstallingOpenCLI
+                        ? L10n.k("hermes.browser.installing_tool", fallback: "安装中…")
+                        : L10n.k("shrimp.settings.dependency.opencli.install_or_upgrade", fallback: "安装/升级")
                 ) {
                     installOpenCLI()
                 }
                 .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
 
                 HStack(spacing: 10) {
-                    Button(isRunningOpenCLIDoctor ? "检测中…" : "运行 OpenCLI Doctor") {
+                    Button(isRunningOpenCLIDoctor
+                           ? L10n.k("shrimp.settings.dependency.opencli.doctor_running", fallback: "检测中…")
+                           : L10n.k("shrimp.settings.dependency.opencli.doctor_run", fallback: "运行 OpenCLI Doctor")) {
                         runOpenCLIDoctor()
                     }
                     .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor || opencliVersion == nil)
 
                     Spacer()
-                    Button("刷新状态") {
+                    Button(L10n.k("common.action.refresh", fallback: "刷新状态")) {
                         refreshDependencyToolsStatus()
                     }
                     .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
@@ -294,7 +304,7 @@ struct ShrimpSettingsV2View: View {
         actionTitle: String,
         action: @escaping () -> Void
     ) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.headline)
@@ -303,15 +313,17 @@ struct ShrimpSettingsV2View: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text(statusText)
-                .font(.caption)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(statusColor.opacity(0.12))
-                .foregroundStyle(statusColor)
-                .clipShape(Capsule())
-            Button(actionTitle, action: action)
-                .buttonStyle(.bordered)
+            VStack(alignment: .trailing, spacing: 8) {
+                Text(statusText)
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(statusColor.opacity(0.12))
+                    .foregroundStyle(statusColor)
+                    .clipShape(Capsule())
+                Button(actionTitle, action: action)
+                    .buttonStyle(.bordered)
+            }
         }
         .padding(.vertical, 2)
     }
@@ -483,11 +495,11 @@ struct ShrimpSettingsV2View: View {
             do {
                 _ = try await helperClient.installBrowserAccountTool(username: user.username)
                 await MainActor.run {
-                    dependencyMessage = "浏览器工具安装完成。"
+                    dependencyMessage = L10n.k("shrimp.settings.dependency.browser.install_success", fallback: "浏览器工具安装完成。")
                 }
             } catch {
                 await MainActor.run {
-                    dependencyMessage = "浏览器工具安装失败：\(error.localizedDescription)"
+                    dependencyMessage = L10n.f("shrimp.settings.dependency.browser.install_failed", fallback: "浏览器工具安装失败：%@", error.localizedDescription)
                 }
             }
             await MainActor.run {
@@ -504,11 +516,11 @@ struct ShrimpSettingsV2View: View {
             do {
                 try await helperClient.installOpenCLI(username: user.username)
                 await MainActor.run {
-                    dependencyMessage = "OpenCLI 安装完成。"
+                    dependencyMessage = L10n.k("shrimp.settings.dependency.opencli.install_success", fallback: "OpenCLI 安装完成。")
                 }
             } catch {
                 await MainActor.run {
-                    dependencyMessage = "OpenCLI 安装失败：\(error.localizedDescription)"
+                    dependencyMessage = L10n.f("shrimp.settings.dependency.opencli.install_failed", fallback: "OpenCLI 安装失败：%@", error.localizedDescription)
                 }
             }
             await MainActor.run {
@@ -524,7 +536,9 @@ struct ShrimpSettingsV2View: View {
         Task {
             let (ok, output) = await helperClient.runOpenCLIDoctor(username: user.username)
             await MainActor.run {
-                dependencyMessage = ok ? "Doctor 通过：\(output.trimmingCharacters(in: .whitespacesAndNewlines))" : "Doctor 失败：\(output)"
+                dependencyMessage = ok
+                    ? L10n.f("shrimp.settings.dependency.opencli.doctor_ok", fallback: "Doctor 通过：%@", output.trimmingCharacters(in: .whitespacesAndNewlines))
+                    : L10n.f("shrimp.settings.dependency.opencli.doctor_failed", fallback: "Doctor 失败：%@", output)
                 isRunningOpenCLIDoctor = false
             }
         }

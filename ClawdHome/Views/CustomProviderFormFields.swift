@@ -1,5 +1,5 @@
 // ClawdHome/Views/CustomProviderFormFields.swift
-// 自定义提供商表单字段 — 共享组件，供 ModelPrioritySheet / UserDetailView 复用
+// 自定义提供商表单字段 — 共享组件，供 ModelPrioritySheet / OpenClawDetailView 复用
 
 import SwiftUI
 
@@ -17,7 +17,7 @@ struct CustomProviderFormFields: View {
     /// 模型 ID 占位文字
     var modelIdPlaceholder: String = L10n.k("views.custom_provider.model_id_placeholder", fallback: "输入模型 ID（例如 gpt-4.1 / claude-3-7-sonnet）")
 
-    /// 是否显示兼容类型选择器（ModelPrioritySheet 需要，UserDetailView 已有独立的）
+    /// 是否显示兼容类型选择器（ModelPrioritySheet 需要，OpenClawDetailView 已有独立的）
     var showCompatibilityPicker: Bool = true
 
     // 内部状态

@@ -215,4 +215,64 @@ extension WKUserScript {
         injectionTime: .atDocumentStart,
         forMainFrameOnly: true
     )
+
+    static let hideRedundantHelperSessionEntry = WKUserScript(
+        source: """
+        (() => {
+          const keywords = ["helper session", "helper 会话", "helper会话"];
+          const selectors = [
+            '[data-testid*="helper-session"]',
+            '[data-testid*="helper_session"]',
+            '[aria-controls*="helper"]',
+            '[id*="helper-session"]',
+            '[id*="helper_session"]'
+          ];
+
+          const normalize = (value) => (value || "").toLowerCase().replace(/\\s+/g, " ").trim();
+          const matchesKeyword = (value) => {
+            const text = normalize(value);
+            return keywords.some((keyword) => text.includes(keyword));
+          };
+
+          const hideNode = (node) => {
+            if (!node || node.dataset?.clawdHiddenHelperEntry === "1") return;
+            node.dataset.clawdHiddenHelperEntry = "1";
+            node.style.setProperty("display", "none", "important");
+          };
+
+          const hideCandidate = (node) => {
+            if (!(node instanceof Element)) return;
+            if (selectors.some((selector) => {
+              try { return node.matches(selector); } catch (_) { return false; }
+            })) {
+              hideNode(node);
+              return;
+            }
+
+            const labelText = [
+              node.getAttribute("aria-label"),
+              node.getAttribute("title"),
+              node.textContent
+            ].join(" ");
+            if (matchesKeyword(labelText)) {
+              hideNode(node);
+            }
+          };
+
+          const sweep = () => {
+            selectors.forEach((selector) => {
+              document.querySelectorAll(selector).forEach(hideNode);
+            });
+            document.querySelectorAll('button, [role="button"], a[role="button"]').forEach(hideCandidate);
+          };
+
+          sweep();
+          const observer = new MutationObserver(() => sweep());
+          observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+          window.addEventListener("beforeunload", () => observer.disconnect(), { once: true });
+        })();
+        """,
+        injectionTime: .atDocumentEnd,
+        forMainFrameOnly: false
+    )
 }
