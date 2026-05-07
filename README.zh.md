@@ -7,9 +7,9 @@
 
 [English](README.md) | 中文
 
-> 面向 macOS 的原生控制平面，用一台 Mac 安全地运行、隔离并管理多个 OpenClaw gateway 实例。
+> macOS 上的多 Agent 安全管控台 —— 让一台 Mac 安全地养一支 AI Agent 团队。
 
-ClawdHome 适合那些希望在一台机器上托管多只 OpenClaw “虾”，但又不希望身份、数据、权限和运维风险混在一起的人。它把 SwiftUI 管理应用、特权 XPC helper daemon 和 macOS 多用户隔离机制组合成一个完整工作流，用于初始化、监控、克隆、维护和恢复。
+ClawdHome 让你在一台 Mac 上同时运行多个独立的 AI Agent 实例（支持 OpenClaw 和 Hermes Agent 双引擎），每个实例拥有独立的 macOS 用户账号、运行时、数据和权限边界。一个统一的 SwiftUI 控制面板配合特权 XPC helper daemon，覆盖 Agent 的初始化、监控、备份、模型配置和 IM 渠道接入，从启动到运维不需要手写脚本。
 
 官网：[clawdhome.app](https://clawdhome.app)  
 下载：[GitHub Releases](https://github.com/ThinkInAIXYZ/clawdhome/releases)  
@@ -47,41 +47,50 @@ ClawdHome 适合那些希望在一台机器上托管多只 OpenClaw “虾”，
 
 ## 为什么是 ClawdHome
 
-- 真隔离：每只虾对应独立的 macOS 用户、运行时、数据目录和权限边界。
-- 更安全的特权模型：系统级操作全部走显式 XPC helper，而不是在 UI 里临时拼 shell。
-- 更快的试错节奏：可以克隆已有虾做实验、演练和回归验证，再把可行方案沉淀下来。
-- 更适合 Mac 原生场景：相比虚拟机或容器，这类桌面自动化和系统交互工作流更适合直接利用 macOS 多用户能力。
-- 运维入口统一：初始化、网关生命周期、文件、日志、进程、配置和诊断集中在一个界面里处理。
+市场上多 Agent 管理方案要么太轻（Chrome 多 Profile 共享同一个系统账号，密钥和 Cookie 互相能读），要么太重（虚拟机 / Docker 跑不动 macOS 桌面应用）。ClawdHome 占据的是一个当前明显缺位的象限：**强隔离 + 低运维**。
+
+- **真隔离，不是应用层假装**：每只 Shrimp 是独立 macOS 用户，进程、文件、Keychain、网络走系统内核强制边界。一个 Agent 被攻陷，其他 Agent 的密钥和 Cookie 物理读不到。
+- **更安全的特权模型**：UI 永远不直接执行特权操作；所有系统级动作经过显式 XPC helper（LaunchDaemon），调用链可审计、可限权。
+- **双引擎并存**：同一台 Mac 可以同时运行 OpenClaw 和 Hermes Agent，每套引擎独立配置，共享 API Key 管理和备份系统。
+- **运维入口统一**：初始化向导、网关生命周期、文件管理、诊断、配置热加载、备份恢复和 Cron 任务都在一个面板里处理，不用写脚本，不用配 launchd。
+- **本地为先，合规友好**：所有核心功能离线可用，数据不强制出境，适合有数据主权要求的场景。
 
 ## 核心亮点
 
-- 在一台 Mac 上隔离运行多只 OpenClaw gateway，并保持清晰的实例边界。
-- 为新虾提供引导式初始化流程，支持微信等渠道的配对接入。
-- 可以从已有虾克隆出新的隔离账号，用于低风险测试和发布演练。
-- 提供网关生命周期管理、健康状态可视化，以及 watchdog 异常恢复能力。
-- 内置文件、会话、进程、日志和维护工具，减少手工运维动作。
-- 可直接在应用内配置模型与 provider，也支持通过 Role Market 采用预设方案。
-- 支持本地 AI 运维集成，可在已配置环境下接入本地模型服务。
-- 基于 `Stable.xcstrings` 提供中英文双语本地化。
+- **双引擎多 Agent**：同一面板管理 OpenClaw + Hermes Agent，单 Shrimp 内支持多 Agent，每个 Agent 独立身份、模型和 IM 绑定。
+- **角色市场 / Skills 商店**：一键从角色市场召唤预设 Agent 团队，通过 Skills 商店扩展能力，无需从零配置。
+- **13+ IM 渠道开箱即用**：微信、飞书、Telegram、Slack、企微、钉钉、WhatsApp、邮箱等，扫码或填表单即可配对，渠道目录统一维护。
+- **运维一体面板**：健康监控、watchdog 自动恢复、维护终端、集成诊断中心（环境/权限/配置/安全/Gateway/网络六大模块）。
+- **分层备份与恢复**：支持单 Shrimp 或全局备份，可恢复到任意时间点。
+- **模型与 Provider 集中管理**：集中存储 API Key（Keychain 隔离），一键应用模型方案，支持自定义 Provider 和本地模型服务。
+- **中英文双语本地化**：基于 `Stable.xcstrings`，界面语言随系统切换。
+
+## 适合谁
+
+**AI 工作室 / 独立创业者**：在一台 Mac 上同时服务多个客户，每个客户的 Agent 物理隔离，互不污染。watchdog 24×7 守护，备份有据可查，客户要演示直接打开面板。
+
+**企业 IT / 合规团队**：本地全闭环部署，数据不出境，Gateway 日志和配置变更可追溯，适合金融、医疗、法律等对数据主权和审计有要求的场景。
+
+**独立开发者 / 技术博主**：克隆现有 Shrimp 创建实验沙盒，测完直接删，不污染主环境。直播演示时用独立 Shrimp，不会暴露自己的 API Key。
 
 ## 架构概览
 
 ```text
 ClawdHome.app（SwiftUI 管理界面）
   -> XPC -> ClawdHomeHelper（特权 LaunchDaemon）
-      -> 按用户隔离的 OpenClaw gateway 实例
+      -> 按用户隔离的 OpenClaw / Hermes Agent 实例
 ```
 
 - `ClawdHome.app` 是面向操作者的控制平面，负责状态展示、初始化和日常运维。
 - `ClawdHomeHelper` 是特权边界，负责用户管理、进程控制、文件操作、安装和系统级自动化。
-- 每只虾都作为独立 macOS 用户运行，拥有各自的 OpenClaw 运行时与数据。
+- 每只 Shrimp 作为独立 macOS 用户运行，拥有独立的 Agent 运行时与数据目录。
 
 ## 安全模型
 
-- 特权操作集中在 helper 边界内。
+- 特权操作集中在 helper 边界内，UI 层不执行任何系统级命令。
 - 敏感动作通过显式 XPC 方法完成，而不是任意 shell 调用。
 - 关键生命周期流程内置归属和权限修复逻辑。
-- 运行时资源按虾隔离，降低相互污染和误操作的影响范围。
+- 运行时资源按 Shrimp 隔离，一个实例出问题不扩散到其他实例。
 
 ## 快速开始
 
@@ -188,7 +197,7 @@ release-notes/      发布说明草稿
 - [ ] 接入基于 exec 的外部密钥管理方案
 - [ ] 更细粒度的网络访问控制管理
 - [ ] 简化更多模型 provider 与 IM 渠道的配置流程
-- [ ] 强化本地小模型工作流与 OpenClaw 集成
+- [ ] 强化本地小模型工作流与 Agent 集成
 - [ ] 增强救援与诊断能力
 - [ ] 优化 gateway 探测与历史健康追踪
 - [ ] 完善更生产级的签名与公证分发流程
