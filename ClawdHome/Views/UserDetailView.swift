@@ -3259,7 +3259,7 @@ struct UserDetailView: View {
     private func openChannelOnboarding(_ flow: ChannelOnboardingFlow) {
         openWindow(
             id: "channel-onboarding",
-            value: "\(flow.rawValue):\(user.username)"
+            value: "\(flow.rawValue):\(user.username):\(ChannelOnboardingEntryMode.configuration.rawValue)"
         )
     }
 

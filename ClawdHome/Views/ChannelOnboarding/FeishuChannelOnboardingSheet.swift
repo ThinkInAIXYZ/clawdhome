@@ -1,6 +1,11 @@
 import SwiftUI
 import AppKit
 
+enum ChannelOnboardingEntryMode: String {
+    case initialBinding = "initial"
+    case configuration = "config"
+}
+
 enum ChannelOnboardingFlow: String, Identifiable, CaseIterable {
     case feishu
     case weixin
@@ -28,8 +33,8 @@ struct FeishuChannelOnboardingSheet: View {
     let flow: ChannelOnboardingFlow
     let displayName: String
     let username: String
+    let entryMode: ChannelOnboardingEntryMode
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(GatewayHub.self) private var gatewayHub
 
     @StateObject private var terminalControl = LocalTerminalControl()
@@ -57,7 +62,7 @@ struct FeishuChannelOnboardingSheet: View {
     @State private var showRebindConfirm = false
     @State private var outputBuffer = ""
     @State private var didDetectPairingDone = false
-    @State private var didScheduleAutoClose = false
+    @State private var pairingCompletedInCurrentSession = false
 
     private let commandExecutable = "npx"
     private let waitingThreshold: TimeInterval = 8
@@ -182,9 +187,8 @@ struct FeishuChannelOnboardingSheet: View {
     private var configPrefix: String { "channels.\(flow.rawValue)" }
 
     var body: some View {
-        let isBound = channelAccount?.isBound == true
         VStack(alignment: .leading, spacing: 14) {
-            if isBound, !showTerminal {
+            if shouldShowChannelConfigPanel {
                 // 已绑定：显示配置面板
                 channelBoundPanel
             } else {
@@ -303,7 +307,6 @@ struct FeishuChannelOnboardingSheet: View {
         now = Date()
         outputBuffer = ""
         didDetectPairingDone = false
-        didScheduleAutoClose = false
         showTerminal = true
         terminalRunID += 1
     }
@@ -336,12 +339,12 @@ struct FeishuChannelOnboardingSheet: View {
         let normalized = code ?? -999
         evaluatePairingCompletion(from: outputBuffer)
         if normalized == 0 {
-            if didDetectPairingDone {
-                statusText = L10n.k("channel.runtime.exit.success_autoclose", fallback: "检测到配对已完成，窗口将自动关闭。")
-                scheduleAutoCloseIfNeeded()
-            } else {
-                statusText = L10n.k("channel.runtime.exit.success", fallback: "命令执行完成。若已扫码完成配对，可直接关闭窗口。")
-            }
+            pairingCompletedInCurrentSession = true
+            showTerminal = false
+            statusText = didDetectPairingDone
+                ? L10n.k("channel.runtime.exit.success_detected", fallback: "已检测到配对成功，您可以继续配置下方选项。")
+                : L10n.k("channel.runtime.exit.success", fallback: "命令执行完成。若已扫码完成配对，可继续配置下方选项。")
+            Task { await reloadConfig() }
             appLog("[\(logPrefix)] ui interactive run success @\(username)")
         } else {
             statusText = L10n.f(
@@ -362,7 +365,8 @@ struct FeishuChannelOnboardingSheet: View {
         guard matched else { return }
 
         didDetectPairingDone = true
-        statusText = L10n.k("channel.runtime.pairing.detected_autoclose", fallback: "已检测到“配置成功/完成”提示，窗口将在 2 秒后自动关闭。")
+        pairingCompletedInCurrentSession = true
+        statusText = L10n.k("channel.runtime.pairing.detected_ready_config", fallback: "已检测到“配置成功/完成”提示，可继续配置下方选项。")
         NotificationCenter.default.post(
             name: .channelOnboardingAutoDetected,
             object: nil,
@@ -371,8 +375,7 @@ struct FeishuChannelOnboardingSheet: View {
                 "flow": flow.rawValue
             ]
         )
-        appLog("[\(logPrefix)] completion marker detected; schedule auto close @\(username)")
-        scheduleAutoCloseIfNeeded()
+        appLog("[\(logPrefix)] completion marker detected; ready for config @\(username)")
     }
 
     private func normalizedOutput(_ text: String) -> String {
@@ -698,11 +701,13 @@ struct FeishuChannelOnboardingSheet: View {
         }
     }
 
-    private func scheduleAutoCloseIfNeeded() {
-        guard !didScheduleAutoClose else { return }
-        didScheduleAutoClose = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            dismiss()
+    private var shouldShowChannelConfigPanel: Bool {
+        guard !showTerminal else { return false }
+        switch entryMode {
+        case .configuration:
+            return channelAccount?.isBound == true || pairingCompletedInCurrentSession
+        case .initialBinding:
+            return pairingCompletedInCurrentSession
         }
     }
 

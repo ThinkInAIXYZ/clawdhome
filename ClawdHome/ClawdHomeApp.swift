@@ -659,9 +659,19 @@ private struct ChannelOnboardingWindow: View {
             let displayName = pool.users.first(where: { $0.username == req.username })?.fullName ?? ""
             switch req.flow {
             case .feishu:
-                FeishuChannelOnboardingSheet(flow: .feishu, displayName: displayName, username: req.username)
+                FeishuChannelOnboardingSheet(
+                    flow: .feishu,
+                    displayName: displayName,
+                    username: req.username,
+                    entryMode: req.entryMode
+                )
             case .weixin:
-                FeishuChannelOnboardingSheet(flow: .weixin, displayName: displayName, username: req.username)
+                FeishuChannelOnboardingSheet(
+                    flow: .weixin,
+                    displayName: displayName,
+                    username: req.username,
+                    entryMode: req.entryMode
+                )
             }
         } else {
             ContentUnavailableView(
@@ -676,14 +686,18 @@ private struct ChannelOnboardingWindow: View {
 private struct ChannelOnboardingRequest {
     let flow: ChannelOnboardingFlow
     let username: String
+    let entryMode: ChannelOnboardingEntryMode
 
     init?(payload: String) {
-        let parts = payload.split(separator: ":", maxSplits: 1).map(String.init)
-        guard parts.count == 2,
+        let parts = payload.split(separator: ":", maxSplits: 2).map(String.init)
+        guard parts.count >= 2,
               let flow = ChannelOnboardingFlow(rawValue: parts[0]),
               !parts[1].isEmpty else { return nil }
         self.flow = flow
         self.username = parts[1]
+        self.entryMode = parts.count >= 3
+            ? (ChannelOnboardingEntryMode(rawValue: parts[2]) ?? .configuration)
+            : .configuration
     }
 }
 
