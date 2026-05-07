@@ -1730,37 +1730,42 @@ private struct ClawCard: View {
 
     @ViewBuilder
     private var agentSummarySection: some View {
-        let displayName: String = {
-            if agents.isEmpty {
-                return claw.fullName.isEmpty ? claw.username : claw.fullName
-            }
+        // 始终显示角色数量（含展开按钮）
+        let count = max(agents.count, 1)
+        let hasMultiple = agents.count > 1
+        let roleName: String = {
             if agents.count == 1, let first = agents.first {
                 return first.emoji.isEmpty ? first.name : "\(first.emoji) \(first.name)"
+            }
+            if agents.isEmpty {
+                return claw.fullName.isEmpty ? claw.username : claw.fullName
             }
             return ""
         }()
 
-        if agents.count > 1 {
-            // 多 agent：显示 "N个角色" + 展开按钮
-            Button {
-                onAgentExpand?()
-            } label: {
-                HStack(spacing: 4) {
-                    Text("\(agents.count)\(L10n.k("views.user_list_view.agent_count_suffix", fallback: "个角色"))")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: isAgentExpanded ? "chevron.left" : "chevron.right")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .buttonStyle(.plain)
-        } else {
-            // 单 agent 或无 agent：显示角色名
-            Text(displayName)
+        HStack(spacing: 4) {
+            Text("\(count)\(L10n.k("views.user_list_view.agent_count_suffix", fallback: "个角色"))")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+            if !roleName.isEmpty {
+                Text("·")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary.opacity(0.5))
+                Text(roleName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            if hasMultiple {
+                Button {
+                    onAgentExpand?()
+                } label: {
+                    Image(systemName: isAgentExpanded ? "chevron.left" : "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
