@@ -21,6 +21,7 @@ final class GatewayHub {
     private var clients: [String: GatewayClient] = [:]
     private var cronStores: [String: GatewayCronStore] = [:]
     private var skillsStores: [String: GatewaySkillsStore] = [:]
+    private var channelStores: [String: GatewayChannelStore] = [:]
 
     /// Gateway 就绪状态（HTTP 探活维护）
     private(set) var readinessMap: [String: GatewayReadiness] = [:]
@@ -56,9 +57,11 @@ final class GatewayHub {
             let connectedClient = clients[username]!
             let cron = cronStore(for: username)
             let skills = skillsStore(for: username)
+            let channels = channelStore(for: username)
             Task {
                 await cron.start(client: connectedClient)
                 await skills.start(client: connectedClient)
+                await channels.start(client: connectedClient)
             }
         } catch {
             appLog("GatewayHub connect(\(username)) failed: \(error.localizedDescription)", level: .error)
@@ -75,6 +78,7 @@ final class GatewayHub {
         connectedUsernames.remove(username)
         cronStores[username]?.stop()
         skillsStores[username]?.stop()
+        channelStores[username]?.stop()
     }
 
     /// 断开所有连接（应用退出时调用）
@@ -84,6 +88,7 @@ final class GatewayHub {
             connectedUsernames.remove(username)
             cronStores[username]?.stop()
             skillsStores[username]?.stop()
+            channelStores[username]?.stop()
         }
         clients.removeAll()
     }
@@ -101,6 +106,13 @@ final class GatewayHub {
         if let existing = skillsStores[username] { return existing }
         let store = GatewaySkillsStore()
         skillsStores[username] = store
+        return store
+    }
+
+    func channelStore(for username: String) -> GatewayChannelStore {
+        if let existing = channelStores[username] { return existing }
+        let store = GatewayChannelStore()
+        channelStores[username] = store
         return store
     }
 
@@ -122,6 +134,14 @@ final class GatewayHub {
         await skillsStore(for: username).startIfNeeded(client: client)
     }
 
+    /// View 出现或连接状态变化时调用，确保 ChannelStore 已与 client 关联
+    func ensureChannelsStarted(for username: String) async {
+        guard let client = clients[username] else { return }
+        let connected = await client.connected
+        guard connected else { return }
+        await channelStore(for: username).startIfNeeded(client: client)
+    }
+
     // MARK: - 配置读写
 
     /// 读取用户 openclaw 配置项（dot-path）
@@ -137,10 +157,69 @@ final class GatewayHub {
         }
     }
 
-    /// 写入用户 openclaw 配置项（dot-path）
+    /// 读取用户 openclaw 数组配置项（dot-path）
+    /// 成功返回字符串数组，失败或不存在返回 nil
+    func configGetArray(username: String, path: String) async -> [String]? {
+        guard let client = clients[username] else { return nil }
+        let value = try? await client.configGet(path: path)
+        if let arr = value as? [Any] {
+            return arr.compactMap { item in
+                if let s = item as? String { return s }
+                if let n = item as? NSNumber { return n.stringValue }
+                return nil
+            }
+        }
+        // 单值也当作单元素数组
+        if let s = value as? String, !s.isEmpty { return [s] }
+        return nil
+    }
+
+    /// 写入用户 openclaw 配置项（dot-path → JSON Merge Patch）
     func configSet(username: String, path: String, value: Any) async throws {
         guard let client = clients[username] else { throw GatewayClientError.notConnected }
-        try await client.configSet(path: path, value: value)
+        // 将 dot-path 构建为嵌套字典，通过 config.patch 写入
+        let (config, baseHash) = try await client.configGetFull()
+        _ = config // 仅需 baseHash
+        let patch = Self.buildNestedDict(path: path, value: value)
+        try await client.configPatch(patch: patch, baseHash: baseHash)
+    }
+
+    /// 批量写入多个配置项（一次 config.patch 调用）
+    func configSetBatch(username: String, entries: [(path: String, value: Any)]) async throws {
+        guard let client = clients[username] else { throw GatewayClientError.notConnected }
+        let (_, baseHash) = try await client.configGetFull()
+        var merged: [String: Any] = [:]
+        for entry in entries {
+            let nested = Self.buildNestedDict(path: entry.path, value: entry.value)
+            merged = Self.deepMerge(merged, nested)
+        }
+        try await client.configPatch(patch: merged, baseHash: baseHash)
+    }
+
+    /// 将 dot-path + value 构建为嵌套字典
+    /// 例: "channels.feishu.streaming", true → {"channels": {"feishu": {"streaming": true}}}
+    private static func buildNestedDict(path: String, value: Any) -> [String: Any] {
+        let parts = path.split(separator: ".").map(String.init)
+        guard let last = parts.last else { return [:] }
+        var current: [String: Any] = [last: value]
+        for key in parts.dropLast().reversed() {
+            current = [key: current]
+        }
+        return current
+    }
+
+    /// 深度合并两个字典
+    private static func deepMerge(_ base: [String: Any], _ overlay: [String: Any]) -> [String: Any] {
+        var result = base
+        for (key, value) in overlay {
+            if let baseDict = result[key] as? [String: Any],
+               let overlayDict = value as? [String: Any] {
+                result[key] = deepMerge(baseDict, overlayDict)
+            } else {
+                result[key] = value
+            }
+        }
+        return result
     }
 
     /// 获取指定用户 gateway 可用模型列表，按 provider 分组

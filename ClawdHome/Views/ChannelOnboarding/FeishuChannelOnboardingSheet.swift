@@ -30,6 +30,7 @@ struct FeishuChannelOnboardingSheet: View {
     let username: String
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(GatewayHub.self) private var gatewayHub
 
     @StateObject private var terminalControl = LocalTerminalControl()
     @State private var showTerminal = false
@@ -39,6 +40,21 @@ struct FeishuChannelOnboardingSheet: View {
     @State private var runStartedAt: Date? = nil
     @State private var lastOutputAt: Date? = nil
     @State private var now = Date()
+
+    // 频道配置开关状态
+    @State private var cfgStreaming: Bool?
+    @State private var cfgFooterElapsed: Bool?
+    @State private var cfgFooterStatus: Bool?
+    @State private var cfgThreadSession: Bool?
+    @State private var cfgLoading = false
+
+    // 可编辑的绑定信息
+    @State private var editAppId: String = ""
+    @State private var editAllowFrom: String = ""
+    @State private var editGroupAllowFrom: String = ""
+    @State private var isSaving = false
+    @State private var saveMessage: String?
+    @State private var showRebindConfirm = false
     @State private var outputBuffer = ""
     @State private var didDetectPairingDone = false
     @State private var didScheduleAutoClose = false
@@ -156,12 +172,28 @@ struct FeishuChannelOnboardingSheet: View {
         "\(shrimpIdentityTitle) · \(flow.title) 通道配置 · \(stageTitle)"
     }
 
+    /// 当前频道的账号快照（取第一个）
+    private var channelAccount: ChannelAccountSnapshot? {
+        let store = gatewayHub.channelStore(for: username)
+        return store.channelAccounts[flow.rawValue]?.first
+    }
+
+    /// 频道配置路径前缀
+    private var configPrefix: String { "channels.\(flow.rawValue)" }
+
     var body: some View {
+        let isBound = channelAccount?.isBound == true
         VStack(alignment: .leading, spacing: 14) {
-            Text(L10n.k("channel.pairing.hint", fallback: "请点击按钮生成二维码，扫码配对后给龙虾发消息测试，正常即可关闭窗口。"))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            actionRow
+            if isBound, !showTerminal {
+                // 已绑定：显示配置面板
+                channelBoundPanel
+            } else {
+                // 未绑定 或 正在重新绑定：显示配对流程
+                Text(L10n.k("channel.pairing.hint", fallback: "请点击按钮生成二维码，扫码配对后给龙虾发消息测试，正常即可关闭窗口。"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                actionRow
+            }
             if let statusText {
                 Text(statusText)
                     .font(.caption)
@@ -187,6 +219,7 @@ struct FeishuChannelOnboardingSheet: View {
         .onReceive(uiTimer) { tick in
             now = tick
         }
+        .task { await loadAllConfig() }
         .onDisappear {
             terminalControl.terminate()
             appLog("[\(logPrefix)] ui onboarding window disappeared; terminate active terminal session @\(username)")
@@ -349,6 +382,322 @@ struct FeishuChannelOnboardingSheet: View {
         return stripped.lowercased()
     }
 
+    // MARK: - 已绑定配置面板
+
+    @ViewBuilder
+    private var channelBoundPanel: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // 绑定信息（可编辑）
+                channelBindingSection
+                // 开关配置
+                channelConfigToggles
+            }
+        }
+    }
+
+    // MARK: 绑定信息编辑区
+
+    @ViewBuilder
+    private var channelBindingSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // 标题行：已配置 + 操作按钮
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color.accentColor)
+                    .font(.subheadline)
+                Text("已配置")
+                    .font(.headline)
+                if let account = channelAccount, let name = account.name, !name.isEmpty {
+                    Text("·")
+                        .foregroundStyle(.tertiary)
+                    Text(name)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+
+                Button {
+                    Task { await reloadConfig() }
+                } label: {
+                    Label("重新加载", systemImage: "arrow.clockwise")
+                }
+                .disabled(cfgLoading)
+
+                Button {
+                    showRebindConfirm = true
+                } label: {
+                    Label("重新绑定", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .alert("确认重新绑定？", isPresented: $showRebindConfirm) {
+                    Button("重新绑定", role: .destructive) { startInteractiveRun() }
+                    Button("取消", role: .cancel) { }
+                } message: {
+                    Text("将重新执行配对流程，生成新的二维码进行扫码绑定。")
+                }
+            }
+
+            if cfgLoading {
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text("加载中…").font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                // App ID
+                channelEditableField(label: "App ID", text: $editAppId, placeholder: "cli_xxxxxxxx")
+                // Allow From
+                channelEditableField(label: "Allow From", text: $editAllowFrom, placeholder: "每行一个用户 ID，如 ou_xxxx")
+                // Group Allow From
+                channelEditableField(label: "Group Allow From", text: $editGroupAllowFrom, placeholder: "每行一个群组 ID")
+            }
+
+            // 保存按钮 + 状态
+            HStack(spacing: 8) {
+                Button {
+                    Task { await saveBindingConfig() }
+                } label: {
+                    Label(isSaving ? "保存中…" : "保存", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(cfgLoading || isSaving)
+
+                if let msg = saveMessage {
+                    Text(msg)
+                        .font(.caption)
+                        .foregroundStyle(msg.contains("失败") ? Color.red : Color.secondary)
+                }
+                Spacer()
+            }
+
+            if let account = channelAccount, let err = account.lastError, !err.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.accentColor.opacity(0.04))
+                .strokeBorder(Color.accentColor.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func channelEditableField(label: String, text: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if text.wrappedValue.contains("\n") || label.contains("Allow") {
+                // 多行编辑
+                TextEditor(text: text)
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(minHeight: 40, maxHeight: 80)
+                    .scrollContentBackground(.hidden)
+                    .padding(4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.secondary.opacity(0.06))
+                    )
+            } else {
+                TextField(placeholder, text: text)
+                    .font(.system(.caption, design: .monospaced))
+                    .textFieldStyle(.roundedBorder)
+            }
+        }
+    }
+
+    // MARK: 开关配置区
+
+    private struct ChannelConfigItem {
+        let key: String
+        let label: String
+        let detail: String
+    }
+
+    private static let feishuConfigItems: [ChannelConfigItem] = [
+        .init(key: "streaming", label: "流式输出", detail: "消息以流式卡片实时更新，而非等待完成后一次性发送"),
+        .init(key: "footer.elapsed", label: "卡片显示耗时", detail: "在流式输出卡片底部显示回复耗时"),
+        .init(key: "footer.status", label: "卡片显示状态", detail: "在流式输出卡片底部显示处理状态"),
+        .init(key: "threadSession", label: "话题独立上下文", detail: "话题群/消息群中每个话题拥有独立上下文，支持多任务并行"),
+    ]
+
+    private static let weixinConfigItems: [ChannelConfigItem] = []
+
+    private var configItems: [ChannelConfigItem] {
+        switch flow {
+        case .feishu: return Self.feishuConfigItems
+        case .weixin: return Self.weixinConfigItems
+        }
+    }
+
+    @ViewBuilder
+    private var channelConfigToggles: some View {
+        let items = configItems
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.element.key) { index, item in
+                    if index > 0 { Divider().padding(.leading, 8) }
+                    channelConfigToggleRow(item: item)
+                }
+            }
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.secondary.opacity(0.04))
+                    .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func channelConfigToggleRow(item: ChannelConfigItem) -> some View {
+        let binding = configBinding(for: item.key)
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.label)
+                    .font(.callout)
+                Text(item.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            if cfgLoading {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Toggle("", isOn: binding)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+    }
+
+    /// 开关仅修改本地状态，统一通过保存按钮提交
+    private func configBinding(for key: String) -> Binding<Bool> {
+        Binding<Bool>(
+            get: { configValue(for: key) ?? false },
+            set: { newValue in
+                setConfigValue(for: key, value: newValue)
+            }
+        )
+    }
+
+    private func configValue(for key: String) -> Bool? {
+        switch key {
+        case "streaming": return cfgStreaming
+        case "footer.elapsed": return cfgFooterElapsed
+        case "footer.status": return cfgFooterStatus
+        case "threadSession": return cfgThreadSession
+        default: return nil
+        }
+    }
+
+    private func setConfigValue(for key: String, value: Bool) {
+        switch key {
+        case "streaming": cfgStreaming = value
+        case "footer.elapsed": cfgFooterElapsed = value
+        case "footer.status": cfgFooterStatus = value
+        case "threadSession": cfgThreadSession = value
+        default: break
+        }
+    }
+
+    // MARK: - 配置加载/保存
+
+    /// 加载所有配置（开关 + 可编辑字段）
+    private func loadAllConfig() async {
+        guard channelAccount?.isBound == true else { return }
+        cfgLoading = true
+        defer { cfgLoading = false }
+
+        // 加载开关配置
+        for item in configItems {
+            let path = "\(configPrefix).\(item.key)"
+            let val = await gatewayHub.configGet(username: username, path: path)
+            let boolVal = val.flatMap { ["true", "1"].contains($0.lowercased()) ? true : ["false", "0"].contains($0.lowercased()) ? false : nil }
+            setConfigValue(for: item.key, value: boolVal ?? false)
+        }
+
+        // 加载可编辑字段
+        // appId 优先从 snapshot 取，fallback 到 config
+        if let appId = channelAccount?.appId, !appId.isEmpty {
+            editAppId = appId
+        } else {
+            editAppId = await gatewayHub.configGet(username: username, path: "\(configPrefix).appId") ?? ""
+        }
+
+        // allowFrom：优先从 snapshot 取，fallback 到 config（数组类型）
+        if let allowFrom = channelAccount?.allowFrom, !allowFrom.isEmpty {
+            editAllowFrom = allowFrom.joined(separator: "\n")
+        } else if let arr = await gatewayHub.configGetArray(username: username, path: "\(configPrefix).allowFrom") {
+            editAllowFrom = arr.joined(separator: "\n")
+        }
+
+        // groupAllowFrom（仅在 config 中，snapshot 不含）
+        if let arr = await gatewayHub.configGetArray(username: username, path: "\(configPrefix).groupAllowFrom") {
+            editGroupAllowFrom = arr.joined(separator: "\n")
+        }
+    }
+
+    /// 重新加载配置
+    private func reloadConfig() async {
+        saveMessage = nil
+        await loadAllConfig()
+        // 同时刷新 channel store
+        await gatewayHub.channelStore(for: username).refresh()
+    }
+
+    /// 保存所有配置（绑定信息 + 开关，一次 config.patch）
+    private func saveBindingConfig() async {
+        isSaving = true
+        saveMessage = nil
+        defer { isSaving = false }
+
+        let appId = editAppId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let allowFrom = editAllowFrom
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let groupAllowFrom = editGroupAllowFrom
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        var entries: [(path: String, value: Any)] = []
+        if !appId.isEmpty {
+            entries.append(("\(configPrefix).appId", appId))
+        }
+        entries.append(("\(configPrefix).allowFrom", allowFrom))
+        entries.append(("\(configPrefix).groupAllowFrom", groupAllowFrom))
+
+        // 开关配置
+        for item in configItems {
+            if let val = configValue(for: item.key) {
+                entries.append(("\(configPrefix).\(item.key)", val))
+            }
+        }
+
+        do {
+            try await gatewayHub.configSetBatch(username: username, entries: entries)
+            saveMessage = "已保存"
+            await gatewayHub.channelStore(for: username).refresh()
+        } catch {
+            saveMessage = "保存失败：\(error.localizedDescription)"
+        }
+    }
+
     private func scheduleAutoCloseIfNeeded() {
         guard !didScheduleAutoClose else { return }
         didScheduleAutoClose = true
@@ -356,6 +705,7 @@ struct FeishuChannelOnboardingSheet: View {
             dismiss()
         }
     }
+
 }
 
 private struct ChannelOnboardingWindowTitleBinder: NSViewRepresentable {

@@ -203,10 +203,11 @@ actor GatewayClient {
 
     /// 读取配置项，支持 dot-path（如 "models.providers.anthropic.apiKey"）
     func configGet(path: String) async throws -> Any? {
-        // 拉取完整 config 再导航（避免猜测 config.get 的参数格式）
+        // config.get 返回 ConfigFileSnapshot: { config: {...}, hash: "..." }
         guard let payload = try await request(method: "config.get") else { return nil }
+        let config = payload["config"] as? [String: Any] ?? payload
         let parts = path.split(separator: ".").map(String.init)
-        var current: Any = payload
+        var current: Any = config
         for part in parts {
             guard let dict = current as? [String: Any], let next = dict[part] else { return nil }
             current = next
@@ -470,6 +471,17 @@ actor GatewayClient {
         }
         let data = try JSONSerialization.data(withJSONObject: payload)
         return try JSONDecoder().decode(GatewaySkillUpdateResult.self, from: data)
+    }
+
+    // MARK: - Channels API
+
+    /// 查询频道绑定状态
+    func channelsStatus() async throws -> ChannelsStatusResult {
+        guard let payload = try await request(method: "channels.status") else {
+            throw GatewayClientError.requestFailed(code: nil, message: "channels.status returned nil")
+        }
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        return try JSONDecoder().decode(ChannelsStatusResult.self, from: data)
     }
 
     // MARK: - HTTP 探活（无需 WebSocket 连接）
