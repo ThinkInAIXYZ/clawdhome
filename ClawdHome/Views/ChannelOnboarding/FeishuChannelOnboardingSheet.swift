@@ -12,6 +12,26 @@ enum ChannelOnboardingFlow: String, Identifiable, CaseIterable {
 
     var id: String { rawValue }
 
+    /// 配置文件中的真实 channelId（微信插件使用 openclaw-weixin）
+    var channelId: String {
+        switch self {
+        case .feishu: return "feishu"
+        case .weixin: return "openclaw-weixin"
+        }
+    }
+
+    /// 兼容历史别名（旧配置可能仍使用 weixin）
+    var legacyChannelIds: [String] {
+        switch self {
+        case .feishu: return []
+        case .weixin: return ["weixin"]
+        }
+    }
+
+    var candidateChannelIds: [String] {
+        [channelId] + legacyChannelIds
+    }
+
     var title: String {
         switch self {
         case .feishu: return L10n.k("channel.flow.feishu.title", fallback: "飞书")
@@ -48,9 +68,7 @@ struct FeishuChannelOnboardingSheet: View {
 
     // 频道配置开关状态
     @State private var cfgStreaming: Bool?
-    @State private var cfgFooterElapsed: Bool?
-    @State private var cfgFooterStatus: Bool?
-    @State private var cfgThreadSession: Bool?
+    @State private var cfgTopicSessionMode: Bool?
     @State private var cfgLoading = false
 
     // 可编辑的绑定信息
@@ -180,11 +198,24 @@ struct FeishuChannelOnboardingSheet: View {
     /// 当前频道的账号快照（取第一个）
     private var channelAccount: ChannelAccountSnapshot? {
         let store = gatewayHub.channelStore(for: username)
-        return store.channelAccounts[flow.rawValue]?.first
+        for channelId in flow.candidateChannelIds {
+            if let account = store.channelAccounts[channelId]?.first {
+                return account
+            }
+        }
+        return nil
     }
 
     /// 频道配置路径前缀
-    private var configPrefix: String { "channels.\(flow.rawValue)" }
+    private var configPrefix: String { "channels.\(resolvedChannelId)" }
+
+    private var resolvedChannelId: String {
+        let store = gatewayHub.channelStore(for: username)
+        for channelId in flow.candidateChannelIds where store.channelAccounts[channelId] != nil {
+            return channelId
+        }
+        return flow.channelId
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -394,7 +425,9 @@ struct FeishuChannelOnboardingSheet: View {
                 // 绑定信息（可编辑）
                 channelBindingSection
                 // 开关配置
-                channelConfigToggles
+                if !configItems.isEmpty {
+                    channelConfigToggles
+                }
             }
         }
     }
@@ -446,30 +479,39 @@ struct FeishuChannelOnboardingSheet: View {
                     Text("加载中…").font(.caption).foregroundStyle(.secondary)
                 }
             } else {
-                // App ID
-                channelEditableField(label: "App ID", text: $editAppId, placeholder: "cli_xxxxxxxx")
-                // Allow From
-                channelEditableField(label: "Allow From", text: $editAllowFrom, placeholder: "每行一个用户 ID，如 ou_xxxx")
-                // Group Allow From
-                channelEditableField(label: "Group Allow From", text: $editGroupAllowFrom, placeholder: "每行一个群组 ID")
+                if flow == .feishu {
+                    // App ID
+                    channelEditableField(label: "App ID", text: $editAppId, placeholder: "cli_xxxxxxxx")
+                    // Allow From
+                    channelEditableField(label: "Allow From", text: $editAllowFrom, placeholder: "每行一个用户 ID，如 ou_xxxx")
+                    // Group Allow From
+                    channelEditableField(label: "Group Allow From", text: $editGroupAllowFrom, placeholder: "每行一个群组 ID")
+                } else {
+                    Text("微信通道无需填写 App ID 或 Allowlist，扫码绑定成功后即可使用。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 2)
+                }
             }
 
             // 保存按钮 + 状态
-            HStack(spacing: 8) {
-                Button {
-                    Task { await saveBindingConfig() }
-                } label: {
-                    Label(isSaving ? "保存中…" : "保存", systemImage: "square.and.arrow.down")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(cfgLoading || isSaving)
+            if flow == .feishu {
+                HStack(spacing: 8) {
+                    Button {
+                        Task { await saveBindingConfig() }
+                    } label: {
+                        Label(isSaving ? "保存中…" : "保存", systemImage: "square.and.arrow.down")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(cfgLoading || isSaving)
 
-                if let msg = saveMessage {
-                    Text(msg)
-                        .font(.caption)
-                        .foregroundStyle(msg.contains("失败") ? Color.red : Color.secondary)
+                    if let msg = saveMessage {
+                        Text(msg)
+                            .font(.caption)
+                            .foregroundStyle(msg.contains("失败") ? Color.red : Color.secondary)
+                    }
+                    Spacer()
                 }
-                Spacer()
             }
 
             if let account = channelAccount, let err = account.lastError, !err.isEmpty {
@@ -527,9 +569,7 @@ struct FeishuChannelOnboardingSheet: View {
 
     private static let feishuConfigItems: [ChannelConfigItem] = [
         .init(key: "streaming", label: "流式输出", detail: "消息以流式卡片实时更新，而非等待完成后一次性发送"),
-        .init(key: "footer.elapsed", label: "卡片显示耗时", detail: "在流式输出卡片底部显示回复耗时"),
-        .init(key: "footer.status", label: "卡片显示状态", detail: "在流式输出卡片底部显示处理状态"),
-        .init(key: "threadSession", label: "话题独立上下文", detail: "话题群/消息群中每个话题拥有独立上下文，支持多任务并行"),
+        .init(key: "topicSessionMode", label: "话题独立上下文", detail: "开启后话题群中的每个话题拥有独立上下文，支持多任务并行"),
     ]
 
     private static let weixinConfigItems: [ChannelConfigItem] = []
@@ -600,9 +640,7 @@ struct FeishuChannelOnboardingSheet: View {
     private func configValue(for key: String) -> Bool? {
         switch key {
         case "streaming": return cfgStreaming
-        case "footer.elapsed": return cfgFooterElapsed
-        case "footer.status": return cfgFooterStatus
-        case "threadSession": return cfgThreadSession
+        case "topicSessionMode": return cfgTopicSessionMode
         default: return nil
         }
     }
@@ -610,10 +648,21 @@ struct FeishuChannelOnboardingSheet: View {
     private func setConfigValue(for key: String, value: Bool) {
         switch key {
         case "streaming": cfgStreaming = value
-        case "footer.elapsed": cfgFooterElapsed = value
-        case "footer.status": cfgFooterStatus = value
-        case "threadSession": cfgThreadSession = value
+        case "topicSessionMode": cfgTopicSessionMode = value
         default: break
+        }
+    }
+
+    /// 统一解析布尔/开关枚举：兼容 true|false 与 enabled|disabled
+    private func parseToggleBool(_ raw: String?) -> Bool? {
+        guard let raw else { return nil }
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "on", "yes", "enabled":
+            return true
+        case "0", "false", "off", "no", "disabled":
+            return false
+        default:
+            return nil
         }
     }
 
@@ -629,11 +678,18 @@ struct FeishuChannelOnboardingSheet: View {
         for item in configItems {
             let path = "\(configPrefix).\(item.key)"
             let val = await gatewayHub.configGet(username: username, path: path)
-            let boolVal = val.flatMap { ["true", "1"].contains($0.lowercased()) ? true : ["false", "0"].contains($0.lowercased()) ? false : nil }
+            let boolVal = parseToggleBool(val)
             setConfigValue(for: item.key, value: boolVal ?? false)
         }
 
         // 加载可编辑字段
+        if flow != .feishu {
+            editAppId = ""
+            editAllowFrom = ""
+            editGroupAllowFrom = ""
+            return
+        }
+
         // appId 优先从 snapshot 取，fallback 到 config
         if let appId = channelAccount?.appId, !appId.isEmpty {
             editAppId = appId
@@ -664,6 +720,7 @@ struct FeishuChannelOnboardingSheet: View {
 
     /// 保存所有配置（绑定信息 + 开关，一次 config.patch）
     private func saveBindingConfig() async {
+        guard flow == .feishu else { return }
         isSaving = true
         saveMessage = nil
         defer { isSaving = false }
@@ -688,7 +745,12 @@ struct FeishuChannelOnboardingSheet: View {
         // 开关配置
         for item in configItems {
             if let val = configValue(for: item.key) {
-                entries.append(("\(configPrefix).\(item.key)", val))
+                switch item.key {
+                case "topicSessionMode":
+                    entries.append(("\(configPrefix).\(item.key)", val ? "enabled" : "disabled"))
+                default:
+                    entries.append(("\(configPrefix).\(item.key)", val))
+                }
             }
         }
 

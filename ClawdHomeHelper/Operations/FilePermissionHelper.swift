@@ -84,4 +84,25 @@ enum FilePermissionHelper {
     static func clearACL(_ path: String) throws -> String {
         try run("/bin/chmod", args: ["-N", path])
     }
+
+    /// 为指定用户授予目录读写执行 ACL（幂等）
+    /// 目的：避免“刚加入权限组但当前登录会话未刷新附加组”导致管理员暂时无写权限。
+    @discardableResult
+    static func grantDirectoryWriteACL(_ path: String, username: String) throws -> String {
+        let normalizedUser = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedUser.isEmpty else { return "" }
+        if hasAllowACL(path, username: normalizedUser) {
+            return ""
+        }
+        let acl = "user:\(normalizedUser) allow read,write,execute,delete,add_file,add_subdirectory,file_inherit,directory_inherit"
+        return try run("/bin/chmod", args: ["+a", acl, path])
+    }
+
+    private static func hasAllowACL(_ path: String, username: String) -> Bool {
+        guard let out = try? run("/bin/ls", args: ["-lde", path]).lowercased() else {
+            return false
+        }
+        let user = username.lowercased()
+        return out.contains("user:\(user) allow") || out.contains("\(user) allow")
+    }
 }

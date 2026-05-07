@@ -19,13 +19,16 @@ SIGN_PKG ?= false
 NOTARIZE ?= true
 BUILD_ARCHS ?= arm64
 
-.PHONY: help bump-build build build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-dry-run release-notes-draft changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean
+.PHONY: help bump-build build build-cli build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-dry-run release-notes-draft changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli
 
 WEBSITE_DIR ?= ../clawdhome_website
 
 help:
 	@echo "可用目标："
 	@echo "  build            Debug 构建（构建时自动递增本地 Build 号）"
+	@echo "  build-cli        Debug 构建 CLI（仅 CLI，不含 App/Helper）"
+	@echo "  run-cli          构建并运行 CLI（传参: make run-cli ARGS='shrimp list'）"
+	@echo "  test-cli         构建并运行 CLI 集成测试"
 	@echo "  build-helper     Debug 构建 Helper"
 	@echo "  build-release    Release 归档构建（构建时自动递增本地 Build 号）"
 	@echo "  bump-build       预览下一次构建将使用的 Build 号"
@@ -116,6 +119,27 @@ build: bump-build
 		-destination "platform=macOS" \
 		-configuration Debug \
 		build 2>&1 | grep -E "error:|BUILD (SUCCEEDED|FAILED)"
+
+build-cli:
+	xcodebuild \
+		-project $(PROJECT) \
+		-scheme ClawdHomeCLI \
+		-destination "platform=macOS" \
+		-configuration Debug \
+		build 2>&1 | grep -E "error:|BUILD (SUCCEEDED|FAILED)"
+
+# 构建后直接运行 CLI，支持传参：make run-cli ARGS="shrimp list --json"
+run-cli: build-cli
+	@CLI=$$(find ~/Library/Developer/Xcode/DerivedData/ClawdHome-*/Build/Products/Debug/ClawdHomeCLI -maxdepth 0 2>/dev/null | head -1); \
+	[ -n "$$CLI" ] || (echo "❌ 未找到 CLI 二进制"; exit 1); \
+	echo "→ $$CLI $(ARGS)"; \
+	"$$CLI" $(ARGS)
+
+# 构建后运行集成测试
+test-cli: build-cli
+	@CLI=$$(find ~/Library/Developer/Xcode/DerivedData/ClawdHome-*/Build/Products/Debug/ClawdHomeCLI -maxdepth 0 2>/dev/null | head -1); \
+	[ -n "$$CLI" ] || (echo "❌ 未找到 CLI 二进制"; exit 1); \
+	bash scripts/test-cli.sh "$$CLI"
 
 build-helper: bump-build
 	xcodebuild \
