@@ -35,6 +35,8 @@ struct ClawPoolView: View {
     @State private var contextDeleteStep: DeleteStep?
     @State private var contextIsDeleting = false
     @State private var pendingFlashFreezeClawID: ManagedUser.ID?
+    @State private var quickTransferAlertMessage: String?
+    @State private var quickTransferClipboardText = ""
     private var currentUsername: String { NSUserName() }
     /// 默认仅展示标准用户；可在设置中显式开启当前管理员展示。
     private var displayedUsers: [ManagedUser] {
@@ -176,6 +178,22 @@ struct ClawPoolView: View {
             }
         } message: {
             Text("将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。")
+        }
+        .alert(
+            "文件快传结果",
+            isPresented: Binding(
+                get: { quickTransferAlertMessage != nil },
+                set: { show in if !show { quickTransferAlertMessage = nil } }
+            )
+        ) {
+            Button("复制路径") {
+                QuickFileTransferService.copyToPasteboard(quickTransferClipboardText)
+            }
+            Button("知道了", role: .cancel) {
+                quickTransferAlertMessage = nil
+            }
+        } message: {
+            Text(quickTransferAlertMessage ?? "")
         }
     }
 
@@ -472,6 +490,8 @@ struct ClawPoolView: View {
                         Task { await openWebUI(for: claw) }
                     } onTerminal: {
                         openTerminal(for: claw)
+                    } onDropFiles: { droppedURLs in
+                        handleQuickTransferDrop(for: claw, droppedURLs: droppedURLs)
                     }
                     .contextMenu { clawContextMenu(for: claw) }
                 }
@@ -479,6 +499,19 @@ struct ClawPoolView: View {
                 AddClawCard { showAddSheet = true }
             }
             .padding(16)
+        }
+    }
+
+    private func handleQuickTransferDrop(for claw: ManagedUser, droppedURLs: [URL]) {
+        Task {
+            let result = await QuickFileTransferService.uploadDroppedItems(
+                droppedURLs,
+                username: claw.username,
+                helperClient: helperClient
+            )
+            quickTransferClipboardText = result.clipboardText
+            QuickFileTransferService.copyToPasteboard(result.clipboardText)
+            quickTransferAlertMessage = result.summaryMessage
         }
     }
 
@@ -931,8 +964,10 @@ private struct ClawCard: View {
     var onDoubleClick: (() -> Void)? = nil
     let onOpenWebUI: () -> Void
     let onTerminal: () -> Void
+    let onDropFiles: ([URL]) -> Void
 
     @Environment(UpdateChecker.self) private var updater
+    @State private var isDropTargeted = false
 
     var body: some View {
         Button(action: onTap) {
@@ -1058,11 +1093,39 @@ private struct ClawCard: View {
                         lineWidth: isSelected ? 1.5 : 1
                     )
             )
+            .overlay {
+                if isDropTargeted {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.accentColor.opacity(0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.accentColor.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                        )
+                        .overlay(
+                            Label("松手快传", systemImage: "arrow.down.doc.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(.regularMaterial, in: Capsule())
+                        )
+                        .allowsHitTesting(false)
+                }
+            }
         }
         .buttonStyle(.plain)
         .simultaneousGesture(TapGesture(count: 2).onEnded {
             onDoubleClick?()
         })
+        .dropDestination(for: URL.self) { droppedURLs, _ in
+            let fileURLs = droppedURLs.filter(\.isFileURL)
+            guard !fileURLs.isEmpty else { return false }
+            onDropFiles(fileURLs)
+            return true
+        } isTargeted: { targeted in
+            isDropTargeted = targeted
+        }
+        .help("可将文件或文件夹拖入该虾卡片，快传到 ~/.openclaw/clawdhome_upload")
     }
 
     @Environment(GatewayHub.self) private var gatewayHub

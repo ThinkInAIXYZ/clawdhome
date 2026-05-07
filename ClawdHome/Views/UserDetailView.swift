@@ -5,6 +5,174 @@ import Carbon.HIToolbox
 import Darwin
 import SwiftUI
 
+struct QuickFileTransferOutcome {
+    let destinationRootPath: String
+    let uploadedTopLevelPaths: [String]
+    let failures: [String]
+
+    var clipboardText: String {
+        if uploadedTopLevelPaths.isEmpty { return destinationRootPath }
+        return uploadedTopLevelPaths.joined(separator: "\n")
+    }
+
+    var summaryMessage: String {
+        var blocks: [String] = []
+        if uploadedTopLevelPaths.isEmpty {
+            blocks.append("未检测到可上传项目。")
+        } else {
+            let shownPaths = uploadedTopLevelPaths.prefix(2).map(Self.displayPath)
+            var uploadedBlock = "已上传 \(uploadedTopLevelPaths.count) 项。"
+            if let first = shownPaths.first {
+                uploadedBlock += "\n\n路径：\n\(first)"
+                if shownPaths.count > 1 {
+                    uploadedBlock += "\n\(shownPaths[1])"
+                }
+            }
+            if uploadedTopLevelPaths.count > 2 {
+                uploadedBlock += "\n…以及另外 \(uploadedTopLevelPaths.count - 2) 项"
+            }
+            blocks.append(uploadedBlock)
+        }
+        if !failures.isEmpty {
+            let shownFailures = failures.prefix(2).joined(separator: "\n")
+            var failedBlock = "失败 \(failures.count) 项：\n\(shownFailures)"
+            if failures.count > 2 {
+                failedBlock += "\n…以及另外 \(failures.count - 2) 项"
+            }
+            blocks.append(failedBlock)
+        }
+        blocks.append("Tips：已复制到剪贴板，可以贴给你的虾，来处理文件。")
+        return blocks.joined(separator: "\n\n")
+    }
+
+    private static func displayPath(_ absolutePath: String) -> String {
+        let tail = absolutePath
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .dropFirst(2)
+            .joined(separator: "/")
+        if absolutePath.hasPrefix("/Users/"), !tail.isEmpty {
+            return "~/" + tail
+        }
+        return absolutePath
+    }
+}
+
+enum QuickFileTransferService {
+    static let destinationRelativePath = ".openclaw/clawdhome_upload"
+
+    static func destinationAbsolutePath(username: String) -> String {
+        "/Users/\(username)/\(destinationRelativePath)"
+    }
+
+    static func copyToPasteboard(_ text: String) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        _ = pb.setString(text, forType: .string)
+    }
+
+    static func uploadDroppedItems(
+        _ droppedURLs: [URL],
+        username: String,
+        helperClient: HelperClient
+    ) async -> QuickFileTransferOutcome {
+        let destinationRoot = destinationAbsolutePath(username: username)
+        let fileURLs = uniqueFileURLs(from: droppedURLs)
+        guard !fileURLs.isEmpty else {
+            return QuickFileTransferOutcome(
+                destinationRootPath: destinationRoot,
+                uploadedTopLevelPaths: [],
+                failures: []
+            )
+        }
+
+        var uploaded: [String] = []
+        var failures: [String] = []
+
+        do {
+            try await helperClient.createDirectory(username: username, relativePath: destinationRelativePath)
+        } catch {
+            return QuickFileTransferOutcome(
+                destinationRootPath: destinationRoot,
+                uploadedTopLevelPaths: [],
+                failures: ["创建目录失败：\(error.localizedDescription)"]
+            )
+        }
+
+        for srcURL in fileURLs {
+            let scoped = srcURL.startAccessingSecurityScopedResource()
+            defer {
+                if scoped { srcURL.stopAccessingSecurityScopedResource() }
+            }
+
+            let topName = srcURL.lastPathComponent
+            let destTopRel = "\(destinationRelativePath)/\(topName)"
+            let destTopAbs = "\(destinationRoot)/\(topName)"
+            let isDir = (try? srcURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+
+            do {
+                if isDir {
+                    try await uploadDirectory(srcURL, username: username, baseRelativePath: destTopRel, helperClient: helperClient)
+                } else {
+                    let data = try Data(contentsOf: srcURL)
+                    try await helperClient.writeFile(username: username, relativePath: destTopRel, data: data)
+                }
+                uploaded.append(destTopAbs)
+            } catch {
+                failures.append("\(topName)：\(error.localizedDescription)")
+            }
+        }
+
+        return QuickFileTransferOutcome(
+            destinationRootPath: destinationRoot,
+            uploadedTopLevelPaths: uploaded,
+            failures: failures
+        )
+    }
+
+    private static func uniqueFileURLs(from urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return urls
+            .filter(\.isFileURL)
+            .filter { seen.insert($0.path).inserted }
+    }
+
+    private static func uploadDirectory(
+        _ srcURL: URL,
+        username: String,
+        baseRelativePath: String,
+        helperClient: HelperClient
+    ) async throws {
+        try await helperClient.createDirectory(username: username, relativePath: baseRelativePath)
+
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: srcURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: []
+        ) else {
+            throw NSError(
+                domain: "QuickFileTransferService",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "无法读取文件夹内容"]
+            )
+        }
+
+        let items = enumerator.allObjects.compactMap { $0 as? URL }
+        for itemURL in items {
+            let relativeSuffix = String(itemURL.path.dropFirst(srcURL.path.count + 1))
+            guard !relativeSuffix.isEmpty else { continue }
+            let destRel = "\(baseRelativePath)/\(relativeSuffix)"
+            let isDir = (try? itemURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+            if isDir {
+                try await helperClient.createDirectory(username: username, relativePath: destRel)
+            } else {
+                let data = try Data(contentsOf: itemURL)
+                try await helperClient.writeFile(username: username, relativePath: destRel, data: data)
+            }
+        }
+    }
+}
+
 // MARK: - 详情窗口 Tab
 
 private enum ClawTab: String, Hashable {
@@ -108,6 +276,10 @@ struct UserDetailView: View {
     // 密码
     @State private var showPassword = false
     @State private var logSearchText = ""
+    @State private var isQuickTransferDropTargeted = false
+    @State private var quickTransferAlertMessage: String?
+    @State private var quickTransferClipboardText = ""
+    @State private var quickTransferLastPaths: [String] = []
     // Tab
     @State private var selectedTab: ClawTab = .overview
 
@@ -286,6 +458,22 @@ struct UserDetailView: View {
         } message: {
             Text("将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。")
         }
+        .alert(
+            "文件快传结果",
+            isPresented: Binding(
+                get: { quickTransferAlertMessage != nil },
+                set: { show in if !show { quickTransferAlertMessage = nil } }
+            )
+        ) {
+            Button("复制路径") {
+                QuickFileTransferService.copyToPasteboard(quickTransferClipboardText)
+            }
+            Button("知道了", role: .cancel) {
+                quickTransferAlertMessage = nil
+            }
+        } message: {
+            Text(quickTransferAlertMessage ?? "")
+        }
         .modifier(MainContentAlertsModifier(user: user,
             showRollbackConfirm: $showRollbackConfirm,
             showLogoutConfirm: $showLogoutConfirm,
@@ -327,6 +515,7 @@ struct UserDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     statusSection
+                    quickTransferSection
                     configSection
                     actionsSection
                     dangerZoneSection
@@ -592,6 +781,103 @@ struct UserDetailView: View {
         }
     }
 
+    // MARK: - 文件快传
+
+    @ViewBuilder
+    private var quickTransferSection: some View {
+        GroupBox("文件快传") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "tray.and.arrow.down")
+                        .foregroundStyle(.secondary)
+                    Text("支持拖入文件/文件夹，或点击下方区域选择后上传")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+
+                HStack(spacing: 8) {
+                    Text(QuickFileTransferService.destinationAbsolutePath(username: user.username))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                    Button {
+                        let path = QuickFileTransferService.destinationAbsolutePath(username: user.username)
+                        QuickFileTransferService.copyToPasteboard(path)
+                    } label: {
+                        Label("复制路径", systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                }
+
+                Button {
+                    Task { await quickTransferPickAndUpload() }
+                } label: {
+                    VStack(spacing: 8) {
+                        Image(systemName: "square.and.arrow.down.on.square")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                        Text("拖入文件到这里，或点击选择文件")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text("Select a File…")
+                            .font(.title3.weight(.medium))
+                            .foregroundStyle(Color.accentColor.opacity(0.9))
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .background(Color.secondary.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                Color.secondary.opacity(0.35),
+                                style: StrokeStyle(lineWidth: 1.3, dash: [9, 7])
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+                .dropDestination(for: URL.self) { droppedURLs, _ in
+                    let fileURLs = droppedURLs.filter(\.isFileURL)
+                    guard !fileURLs.isEmpty else { return false }
+                    Task { await quickTransferUpload(fileURLs) }
+                    return true
+                } isTargeted: { targeted in
+                    isQuickTransferDropTargeted = targeted
+                }
+                .overlay {
+                    if isQuickTransferDropTargeted {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.accentColor.opacity(0.08))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(
+                                        Color.accentColor.opacity(0.45),
+                                        style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
+                                    )
+                            )
+                            .allowsHitTesting(false)
+                    }
+                }
+
+                if let last = quickTransferLastPaths.first {
+                    HStack(spacing: 8) {
+                        Text("最近上传：")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(last)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - 配置区
 
     @ViewBuilder
@@ -623,7 +909,7 @@ struct UserDetailView: View {
                 Divider()
                 HStack {
                     Text("频道").foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
-                    Text("Feishu")
+                    Text("Feishu / Weixin")
                         .font(.caption).foregroundStyle(.tertiary)
                     Spacer()
                     Button("飞书配对") {
@@ -635,8 +921,20 @@ struct UserDetailView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
                         .disabled(!helperClient.isConnected)
+                    Text("·")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                    Button("微信配对") {
+                        openWindow(
+                            id: "channel-onboarding",
+                            value: "\(ChannelOnboardingFlow.weixin.rawValue):\(user.username)"
+                        )
+                    }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        .disabled(!helperClient.isConnected)
                 }
-                Text("飞书通过独立流程扫码绑定，支持首次配置和重新绑定。")
+                Text("飞书/微信均通过独立流程扫码绑定，支持首次配置和重新绑定。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -931,6 +1229,27 @@ struct UserDetailView: View {
             await refreshStatus()
             isLoading = false
         }
+    }
+
+    private func quickTransferPickAndUpload() async {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        guard await panel.begin() == .OK else { return }
+        await quickTransferUpload(panel.urls)
+    }
+
+    private func quickTransferUpload(_ droppedURLs: [URL]) async {
+        let result = await QuickFileTransferService.uploadDroppedItems(
+            droppedURLs,
+            username: user.username,
+            helperClient: helperClient
+        )
+        quickTransferLastPaths = result.uploadedTopLevelPaths
+        quickTransferClipboardText = result.clipboardText
+        QuickFileTransferService.copyToPasteboard(result.clipboardText)
+        quickTransferAlertMessage = result.summaryMessage
     }
 
     private func saveDescription() {

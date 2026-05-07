@@ -62,7 +62,7 @@ struct ClawdHomeApp: App {
         }
 
         // 龙虾详情独立窗口：每个 username 唯一，重复触发时置前
-        // 默认尺寸与主窗口一致，避免首次打开时布局跳变
+        // 默认宽度略窄于主窗口，避免详情首开过宽
         WindowGroup(id: "claw-detail", for: String.self) { $username in
             if let name = username {
                 ClawDetailWindow(username: name)
@@ -78,7 +78,7 @@ struct ClawdHomeApp: App {
         }
         .windowStyle(.titleBar)
         .windowResizability(.automatic)
-        .defaultSize(width: 1040, height: 660)
+        .defaultSize(width: 920, height: 660)
 
         WindowGroup(id: "channel-onboarding", for: String.self) { $payload in
             ChannelOnboardingWindow(payload: payload)
@@ -454,7 +454,9 @@ private struct ChannelOnboardingWindow: View {
         if let payload, let req = ChannelOnboardingRequest(payload: payload) {
             switch req.flow {
             case .feishu:
-                FeishuChannelOnboardingSheet(username: req.username)
+                FeishuChannelOnboardingSheet(flow: .feishu, username: req.username)
+            case .weixin:
+                FeishuChannelOnboardingSheet(flow: .weixin, username: req.username)
             }
         } else {
             ContentUnavailableView(
