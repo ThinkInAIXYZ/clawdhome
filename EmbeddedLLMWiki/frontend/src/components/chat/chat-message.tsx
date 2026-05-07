@@ -16,6 +16,7 @@ import type { FileNode } from "@/types/wiki"
 
 import { convertLatexToUnicode } from "@/lib/latex-to-unicode"
 import { enrichWithWikilinks } from "@/lib/enrich-wikilinks"
+import { autoIngest } from "@/lib/ingest"
 import { normalizePath, getFileName } from "@/lib/path-utils"
 
 // Module-level cache of source file names
@@ -229,7 +230,6 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
       // Full auto-ingest: extract entities, concepts, cross-references from saved content
       const llmConfig = useWikiStore.getState().llmConfig
       if (llmConfig.apiKey || llmConfig.provider === "ollama") {
-        const { autoIngest } = await import("@/lib/ingest")
         autoIngest(pp, filePath, llmConfig).catch((err) =>
           console.error("Failed to auto-ingest saved query:", err)
         )

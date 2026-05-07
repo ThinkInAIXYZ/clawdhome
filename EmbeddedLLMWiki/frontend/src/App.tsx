@@ -9,6 +9,7 @@ import { loadReviewItems, loadChatHistory } from "@/lib/persist"
 import { setupAutoSave } from "@/lib/auto-save"
 import { startClipWatcher } from "@/lib/clip-watcher"
 import { startSourceIngestWatcher, stopSourceIngestWatcher } from "@/lib/source-ingest-watcher"
+import { restoreQueue } from "@/lib/ingest-queue"
 import { AppLayout } from "@/components/layout/app-layout"
 import type { WikiProject } from "@/types/wiki"
 import { Button } from "@/components/ui/button"
@@ -100,11 +101,9 @@ function App() {
     console.log("[WikiApp] last project saved", proj.path)
 
     // Restore ingest queue (resume interrupted tasks)
-    import("@/lib/ingest-queue").then(({ restoreQueue }) => {
-      restoreQueue(proj.path).catch((err) =>
-        console.error("Failed to restore ingest queue:", err)
-      )
-    })
+    restoreQueue(proj.path).catch((err) =>
+      console.error("Failed to restore ingest queue:", err)
+    )
     // Notify local clip server of the current project + all recent projects
     fetch("http://127.0.0.1:19827/project", {
       method: "POST",

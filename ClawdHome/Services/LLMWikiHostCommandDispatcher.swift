@@ -380,15 +380,35 @@ private enum GlobalLLMConfigBridge {
     }
 }
 
-private enum LocalWikiHostFS {
+enum LocalWikiHostFS {
     private static let fileManager = FileManager.default
+    private static let authorizationLock = NSLock()
+    private static var authorizedExternalRoots: Set<String> = []
     private static let autoIngestExtensions: Set<String> = [
         "md", "mdx", "txt", "rtf", "pdf", "html", "htm", "xml", "docx", "xlsx", "xls", "pptx",
         "odt", "ods", "odp", "json", "jsonl", "csv", "tsv", "yaml", "yml", "ndjson", "py", "js",
         "ts", "jsx", "tsx", "rs", "go", "java", "c", "cpp", "h", "rb", "php", "swift", "sql", "sh",
     ]
 
+    static func authorizeExternalPaths(_ paths: [String]) {
+        var normalizedPaths: [String] = []
+        for path in paths {
+            if let normalized = try? normalizedPath(path, requireExisting: true) {
+                normalizedPaths.append(normalized)
+            }
+        }
+        guard !normalizedPaths.isEmpty else { return }
+        authorizationLock.lock()
+        defer { authorizationLock.unlock() }
+        authorizedExternalRoots.formUnion(normalizedPaths)
+    }
+
+    static func validateReadableFilePath(_ path: String) throws {
+        try validateReadablePath(path)
+    }
+
     static func readFile(path: String) throws -> String {
+        try validateReadablePath(path)
         let url = URL(fileURLWithPath: path)
         do {
             return try String(contentsOf: url, encoding: .utf8)
@@ -403,12 +423,14 @@ private enum LocalWikiHostFS {
     }
 
     static func writeFile(path: String, contents: String) throws {
+        try validateProjectPath(path, requireExisting: false)
         let url = URL(fileURLWithPath: path)
         try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try contents.write(to: url, atomically: true, encoding: .utf8)
     }
 
     static func listDirectory(path: String) throws -> [[String: Any]] {
+        try validateReadablePath(path)
         let url = URL(fileURLWithPath: path)
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory) else {
@@ -421,6 +443,8 @@ private enum LocalWikiHostFS {
     }
 
     static func copyFile(source: String, destination: String) throws {
+        try validateReadablePath(source)
+        try validateProjectPath(destination, requireExisting: false)
         let sourceURL = URL(fileURLWithPath: source)
         let destinationURL = URL(fileURLWithPath: destination)
         try fileManager.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -431,6 +455,8 @@ private enum LocalWikiHostFS {
     }
 
     static func copyDirectory(source: String, destination: String) throws -> [String] {
+        try validateReadablePath(source)
+        try validateProjectPath(destination, requireExisting: false)
         let sourceURL = URL(fileURLWithPath: source)
         let destinationURL = URL(fileURLWithPath: destination)
         var copied: [String] = []
@@ -439,10 +465,12 @@ private enum LocalWikiHostFS {
     }
 
     static func preprocessFile(path: String) throws -> String {
-        try readFile(path: path)
+        try validateReadablePath(path)
+        return try readFile(path: path)
     }
 
     static func deleteFile(path: String) throws {
+        try validateProjectPath(path, requireExisting: false)
         let url = URL(fileURLWithPath: path)
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return }
@@ -454,6 +482,7 @@ private enum LocalWikiHostFS {
     }
 
     static func findRelatedWikiPages(projectPath: String, sourceName: String) throws -> [String] {
+        try validateProjectPath(projectPath, requireExisting: true)
         let wikiURL = URL(fileURLWithPath: projectPath).appendingPathComponent("wiki", isDirectory: true)
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: wikiURL.path, isDirectory: &isDirectory), isDirectory.boolValue else {
@@ -468,10 +497,12 @@ private enum LocalWikiHostFS {
     }
 
     static func createDirectory(path: String) throws {
+        try validateProjectPath(path, requireExisting: false)
         try fileManager.createDirectory(at: URL(fileURLWithPath: path), withIntermediateDirectories: true)
     }
 
     static func listSourceDocuments(projectPath: String) throws -> [[String: Any]] {
+        try validateProjectPath(projectPath, requireExisting: true)
         let projectURL = URL(fileURLWithPath: projectPath)
         let sourceRoot = projectURL.appendingPathComponent("raw/sources", isDirectory: true)
         var isDirectory: ObjCBool = false
@@ -485,6 +516,7 @@ private enum LocalWikiHostFS {
     }
 
     static func createProject(name: String, path: String) throws -> [String: Any] {
+        try validateProjectPath(path, requireExisting: false)
         let root = URL(fileURLWithPath: path)
         try fileManager.createDirectory(at: root.appendingPathComponent("wiki"), withIntermediateDirectories: true)
         try fileManager.createDirectory(at: root.appendingPathComponent("raw/sources"), withIntermediateDirectories: true)
@@ -496,6 +528,7 @@ private enum LocalWikiHostFS {
     }
 
     static func openProject(path: String) throws -> [String: Any] {
+        try validateProjectPath(path, requireExisting: true)
         let root = URL(fileURLWithPath: path)
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: root.path, isDirectory: &isDirectory) else {
@@ -513,6 +546,108 @@ private enum LocalWikiHostFS {
             throw NSError(domain: "LocalWikiHostFS", code: 7, userInfo: [NSLocalizedDescriptionKey: "Not a valid wiki project (missing wiki/ directory): '\(path)'"])
         }
         return ["name": root.lastPathComponent.isEmpty ? "Unknown" : root.lastPathComponent, "path": root.path]
+    }
+
+    private static func validateReadablePath(_ path: String) throws {
+        let normalized = try normalizedPath(path, requireExisting: true)
+        if isWithin(normalized, roots: try allowedProjectRoots())
+            || authorizedExternalRootsSnapshot().contains(where: { isWithin(normalized, root: $0) }) {
+            return
+        }
+        throw pathDenied(path)
+    }
+
+    private static func validateProjectPath(_ path: String, requireExisting: Bool) throws {
+        let normalized = try normalizedPath(path, requireExisting: requireExisting)
+        guard isWithin(normalized, roots: try allowedProjectRoots()) else {
+            throw pathDenied(path)
+        }
+    }
+
+    private static func allowedProjectRoots() throws -> [String] {
+        var roots = [try normalizedKnownRoot(LLMWikiPaths.projectRoot)]
+        roots.append(contentsOf: managedShrimpNoteRoots())
+        return roots
+    }
+
+    private static func authorizedExternalRootsSnapshot() -> Set<String> {
+        authorizationLock.lock()
+        defer { authorizationLock.unlock() }
+        let roots = authorizedExternalRoots
+        return roots
+    }
+
+    private static func normalizedKnownRoot(_ path: String) throws -> String {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        if fileManager.fileExists(atPath: url.path) {
+            return url.resolvingSymlinksInPath().standardizedFileURL.path
+        }
+        return url.path
+    }
+
+    private static func managedShrimpNoteRoots() -> [String] {
+        guard let entries = try? fileManager.contentsOfDirectory(atPath: LLMWikiPaths.shrimpsSourcesRoot) else {
+            return []
+        }
+        return entries.compactMap { entry in
+            let linkPath = "\(LLMWikiPaths.shrimpsSourcesRoot)/\(entry)"
+            guard let destination = try? fileManager.destinationOfSymbolicLink(atPath: linkPath),
+                  destination.hasPrefix("\(LLMWikiPaths.sharedRoot)/vaults/"),
+                  destination.hasSuffix("/\(LLMWikiPaths.notesDirectoryName)") else {
+                return nil
+            }
+            return URL(fileURLWithPath: destination).resolvingSymlinksInPath().standardizedFileURL.path
+        }
+    }
+
+    private static func normalizedPath(_ path: String, requireExisting: Bool) throws -> String {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        let pathToResolve: URL
+        if fileManager.fileExists(atPath: url.path) {
+            pathToResolve = url
+        } else {
+            if requireExisting {
+                throw NSError(domain: "LocalWikiHostFS", code: 8, userInfo: [NSLocalizedDescriptionKey: "Path does not exist: '\(path)'"])
+            }
+            pathToResolve = nearestExistingAncestor(for: url)
+        }
+
+        let resolvedBase = pathToResolve.resolvingSymlinksInPath().standardizedFileURL.path
+        if pathToResolve.path == url.path {
+            return resolvedBase
+        }
+
+        let suffix = url.path
+            .dropFirst(pathToResolve.standardizedFileURL.path.count)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !suffix.isEmpty else { return resolvedBase }
+        return URL(fileURLWithPath: resolvedBase).appendingPathComponent(suffix).standardizedFileURL.path
+    }
+
+    private static func nearestExistingAncestor(for url: URL) -> URL {
+        var current = url.deletingLastPathComponent()
+        while !fileManager.fileExists(atPath: current.path) {
+            let parent = current.deletingLastPathComponent()
+            if parent.path == current.path { break }
+            current = parent
+        }
+        return current
+    }
+
+    private static func isWithin(_ path: String, root: String) -> Bool {
+        path == root || path.hasPrefix(root.hasSuffix("/") ? root : "\(root)/")
+    }
+
+    private static func isWithin(_ path: String, roots: [String]) -> Bool {
+        roots.contains { isWithin(path, root: $0) }
+    }
+
+    private static func pathDenied(_ path: String) -> NSError {
+        NSError(
+            domain: "LocalWikiHostFS",
+            code: 9,
+            userInfo: [NSLocalizedDescriptionKey: "Path is outside the allowed Wiki scope: '\(path)'"]
+        )
     }
 
     private static func buildTree(directory: URL, depth: Int, maxDepth: Int) throws -> [[String: Any]] {

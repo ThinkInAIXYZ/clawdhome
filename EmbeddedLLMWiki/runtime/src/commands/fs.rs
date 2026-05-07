@@ -228,10 +228,10 @@ fn extract_docx_with_library(path: &str) -> Result<String, String> {
             docx_rs::DocumentChild::Table(table) => {
                 let mut rows: Vec<Vec<String>> = Vec::new();
                 for row in &table.rows {
-                    if let docx_rs::TableChild::TableRow(tr) = row {
+                    let docx_rs::TableChild::TableRow(tr) = row;
                         let mut cells: Vec<String> = Vec::new();
                         for cell in &tr.cells {
-                            if let docx_rs::TableRowChild::TableCell(tc) = cell {
+                            let docx_rs::TableRowChild::TableCell(tc) = cell;
                                 let mut cell_text = String::new();
                                 for child in &tc.children {
                                     if let docx_rs::TableCellContent::Paragraph(para) = child {
@@ -247,10 +247,8 @@ fn extract_docx_with_library(path: &str) -> Result<String, String> {
                                     }
                                 }
                                 cells.push(cell_text.trim().replace('|', "\\|"));
-                            }
                         }
                         rows.push(cells);
-                    }
                 }
                 if !rows.is_empty() {
                     let max_cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
@@ -312,8 +310,6 @@ fn extract_docx_markdown(archive: &mut zip::ZipArchive<fs::File>) -> Result<Stri
     let chars: Vec<char> = xml.chars().collect();
     let len = chars.len();
 
-    // Track current paragraph state
-    let mut in_paragraph = false;
     let mut paragraph_text = String::new();
     let mut is_heading = false;
     let mut heading_level: u8 = 1;
@@ -329,7 +325,6 @@ fn extract_docx_markdown(archive: &mut zip::ZipArchive<fs::File>) -> Result<Stri
     while i < len {
         if chars[i] == '<' {
             // Read tag name
-            let tag_start = i;
             i += 1;
             let is_closing = i < len && chars[i] == '/';
             if is_closing {
@@ -355,7 +350,6 @@ fn extract_docx_markdown(archive: &mut zip::ZipArchive<fs::File>) -> Result<Stri
             match tag_name.as_str() {
                 // Paragraph start
                 "w:p" if !is_closing => {
-                    in_paragraph = true;
                     paragraph_text.clear();
                     is_heading = false;
                     in_list_item = false;
@@ -376,7 +370,6 @@ fn extract_docx_markdown(archive: &mut zip::ZipArchive<fs::File>) -> Result<Stri
                             result.push_str("\n\n");
                         }
                     }
-                    in_paragraph = false;
                     paragraph_text.clear();
                 }
                 // Heading style detection
@@ -561,12 +554,6 @@ fn extract_pptx_markdown(archive: &mut zip::ZipArchive<fs::File>) -> Result<Stri
     } else {
         Ok(result)
     }
-}
-
-/// Extract XLSX/XLS/ODS to Markdown tables using calamine.
-fn extract_xlsx_markdown(_archive: &mut zip::ZipArchive<fs::File>) -> Result<String, String> {
-    // calamine needs the file path, not the archive
-    Err("Use extract_spreadsheet instead".to_string())
 }
 
 /// Extract spreadsheet to Markdown using calamine (supports xlsx, xls, ods).

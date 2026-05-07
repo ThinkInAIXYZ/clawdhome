@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "@/commands/fs"
+import { deleteFile, readFile, writeFile } from "@/commands/fs"
 import { autoIngest } from "./ingest"
 import { useWikiStore } from "@/stores/wiki-store"
 import { normalizePath } from "@/lib/path-utils"
@@ -178,7 +178,6 @@ export async function cancelTask(projectPath: string, taskId: string): Promise<v
 
     // Clean up any files written by the interrupted ingest
     if (lastWrittenFiles.length > 0) {
-      const { deleteFile } = await import("@/commands/fs")
       for (const filePath of lastWrittenFiles) {
         try {
           const fullPath = filePath.startsWith("/") ? filePath : `${normalizePath(projectPath)}/${filePath}`

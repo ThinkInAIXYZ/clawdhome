@@ -19,7 +19,7 @@ export default defineConfig(async () => ({
     },
   },
 
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
+  // Vite options tailored for the embedded ClawdHome webview.
   //
   // 1. prevent vite from obscuring rust errors
   clearScreen: false,
@@ -36,12 +36,15 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. avoid watching Rust build outputs from the embedded runtime
+      ignored: ["../runtime/target/**", "**/runtime/target/**"],
     },
   },
 
   test: {
     environment: "node",
+  },
+  build: {
+    chunkSizeWarningLimit: 1600,
   },
 }))
