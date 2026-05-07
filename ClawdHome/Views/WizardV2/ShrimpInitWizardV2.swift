@@ -1,12 +1,12 @@
 // ClawdHome/Views/WizardV2/ShrimpInitWizardV2.swift
-// Shrimp 初始化向导 v2（6 步，支持跳过 IM/模型配置）
+// Shrimp 初始化向导 v2（6 步，支持双引擎）
 //
 // 步骤：
-// 1. selectTemplate  —— 选择模式：Solo Agent / 团队模板
-// 2. basicEnv        —— 安装 Node.js + OpenClaw（与 v1 复用）
-// 3. configModel     —— 模型选择（可跳过，沿用全局配置）
-// 4. configAgents    —— Agent 列表配置（名称/ID/角色）
-// 5. configIM        —— 为每个 agent 绑定 IM Bot（可跳过）
+// 1. selectEngine    —— 选择引擎：OpenClaw / Hermes
+// 2. basicEnv        —— 安装引擎基础环境
+// 3. configModel     —— 模型选择（OpenClaw）
+// 4. configAgents    —— Agent 列表配置（OpenClaw）
+// 5. configIM        —— 为每个 agent 绑定 IM Bot（OpenClaw，可跳过）
 // 6. done            —— 完成摘要
 //
 // 入口替换：直接从 UserListView / AdoptTeamSheet 跳入本 Wizard
@@ -21,11 +21,31 @@ private struct AddBotTarget: Identifiable {
     let agentId: String
 }
 
+private enum WizardEngine: String, CaseIterable {
+    case openclaw
+    case hermes
+
+    var title: String {
+        switch self {
+        case .openclaw: return "OpenClaw"
+        case .hermes: return "Hermes"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .openclaw: return "多 Agent 协作，角色模板与 IM 绑定"
+        case .hermes: return "多平台消息代理，独立 Python 运行时"
+        }
+    }
+}
+
 // MARK: - Step Enum
 
 enum WizardV2Step: Int, CaseIterable {
-    case selectTemplate
+    case selectEngine
     case basicEnv
+    case hermesSetup
     case configModel
     case configAgents
     case configIM
@@ -33,8 +53,9 @@ enum WizardV2Step: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .selectTemplate: return L10n.k("wizard_v2.step.select_template", fallback: "选择模式")
+        case .selectEngine:   return "选择引擎"
         case .basicEnv:       return L10n.k("wizard_v2.step.basic_env", fallback: "基础环境")
+        case .hermesSetup:    return "Hermes 配置"
         case .configModel:    return L10n.k("wizard_v2.step.model", fallback: "模型配置")
         case .configAgents:   return L10n.k("wizard_v2.step.agents", fallback: "Agent 配置")
         case .configIM:       return L10n.k("wizard_v2.step.im", fallback: "IM 绑定")
@@ -44,8 +65,9 @@ enum WizardV2Step: Int, CaseIterable {
 
     var icon: String {
         switch self {
-        case .selectTemplate: return "rectangle.3.group"
+        case .selectEngine:   return "square.stack.3d.up"
         case .basicEnv:       return "wrench.and.screwdriver"
+        case .hermesSetup:    return "wand.and.stars"
         case .configModel:    return "cpu"
         case .configAgents:   return "person.2"
         case .configIM:       return "qrcode.viewfinder"
@@ -84,11 +106,73 @@ private enum WizardV2BasicEnvPhase: Int, CaseIterable {
     }
 }
 
+private enum WizardV2HermesEnvPhase: Int, CaseIterable {
+    case repairHomebrew = 1
+    case installHermes
+    case verifyInstall
+
+    var title: String {
+        switch self {
+        case .repairHomebrew:
+            return "修复 Homebrew 权限"
+        case .installHermes:
+            return "安装 Hermes"
+        case .verifyInstall:
+            return "验证安装"
+        }
+    }
+}
+
+private enum WizardV2SavePhase: Int, CaseIterable {
+    case serializeConfig = 1
+    case writeConfig
+    case writeAgentSnapshot
+    case restartGateway
+    case finalize
+
+    var title: String {
+        switch self {
+        case .serializeConfig: return "序列化配置"
+        case .writeConfig: return "写入 openclaw.json"
+        case .writeAgentSnapshot: return "写入 Agent 角色快照"
+        case .restartGateway: return "重启 Gateway"
+        case .finalize: return "收尾与状态落盘"
+        }
+    }
+
+    var hint: String {
+        switch self {
+        case .serializeConfig:
+            return "正在整理 Agent、IM 与绑定矩阵。"
+        case .writeConfig:
+            return "通过 Helper 原子写入配置文件。"
+        case .writeAgentSnapshot:
+            return "写入 pending_v2_agents.json，供网关就绪后补写角色文件。"
+        case .restartGateway:
+            return "会执行 bootout + start，通常最慢（约 5-30 秒）。"
+        case .finalize:
+            return "保存完成标记并清理临时向导文件。"
+        }
+    }
+}
+
+struct WizardV2InitialRoles {
+    var teamDNA: TeamDNA?
+    var agents: [AgentDef]
+
+    static var solo: WizardV2InitialRoles {
+        WizardV2InitialRoles(
+            teamDNA: nil,
+            agents: [AgentDef(id: "main", displayName: "主 Agent", isDefault: true)]
+        )
+    }
+}
+
 // MARK: - Main Wizard
 
 struct ShrimpInitWizardV2: View {
     let user: ManagedUser
-    var initialTeamDNA: TeamDNA? = nil
+    var initialRoles: WizardV2InitialRoles = .solo
     var onDismiss: (() -> Void)? = nil
 
     @Environment(HelperClient.self) private var helperClient
@@ -97,22 +181,32 @@ struct ShrimpInitWizardV2: View {
     @Environment(\.dismiss) private var dismiss
 
     // Navigation
-    @State private var currentStep: WizardV2Step = .selectTemplate
-    @State private var visitedSteps: Set<WizardV2Step> = [.selectTemplate]
+    @State private var currentStep: WizardV2Step = .selectEngine
+    @State private var visitedSteps: Set<WizardV2Step> = [.selectEngine]
+    @State private var selectedEngine: WizardEngine? = nil
 
-    // Step 1: 从 roles.html 选团队（或单人）
-    // 选完团队后 teamDNA 非 nil，agents 和 agentDNAs 已填充
+    // 角色输入：统一由向导入口传入（独立 agent / 团队多 agent）
     @State private var selectedTeamDNA: TeamDNA? = nil      // nil = 未选团队（solo 也是 nil，agents 手动设置）
-    @State private var templateReady = false                 // 至少选了一种模式才能下一步
-    @State private var didAutoAdvanceFromInitialTemplate = false
 
     // Step 2: basicEnv (delegates to existing init flow)
     @State private var envReady = false
     @State private var envError: String?
     @State private var isInstallingEnv = false
     @State private var envInstallingPhase: WizardV2BasicEnvPhase?
+    @State private var hermesEnvInstallingPhase: WizardV2HermesEnvPhase?
     @State private var didClearInitialEnvLog = false
+    @State private var hermesInstallTerminalRunToken = UUID()
+    @State private var hermesInstallTerminalControl = LocalTerminalControl()
+    @State private var hermesInstallExitCode: Int32?
+    @State private var openclawLogTerminalRunToken = UUID()
+    @State private var openclawLogTerminalControl = LocalTerminalControl()
     @AppStorage("nodeDistURL") private var nodeDistURL = NodeDistOption.defaultForInitialization.rawValue
+
+    // Step 3 (Hermes): hermes setup 交互式向导
+    @State private var hermesSetupTerminalRunToken = UUID()
+    @State private var hermesSetupTerminalControl = LocalTerminalControl()
+    @State private var hermesSetupExitCode: Int32?
+    @State private var hermesSetupDone = false
 
     // Step 4: agents
     @State private var agents: [AgentDef] = []
@@ -128,14 +222,17 @@ struct ShrimpInitWizardV2: View {
     @State private var isSaving = false
     @State private var saveError: String?
     @State private var saveSuccess = false
+    @State private var savePhase: WizardV2SavePhase? = nil
+    @State private var saveStartedAt: Date? = nil
 
     // 取消确认
     @State private var showCancelConfirm = false
+    @State private var isCancellingWizard = false
 
-    /// 有未保存的配置数据（团队选择、agent 定义、IM 绑定）
+    /// 有未保存的配置数据（引擎选择、团队选择、agent 定义、IM 绑定）
     private var hasDirtyState: Bool {
         guard !saveSuccess else { return false }
-        return selectedTeamDNA != nil || !agents.isEmpty || !imAccounts.isEmpty || !bindings.isEmpty
+        return selectedEngine != nil || selectedTeamDNA != nil || !agents.isEmpty || !imAccounts.isEmpty || !bindings.isEmpty
     }
 
     var body: some View {
@@ -153,10 +250,10 @@ struct ShrimpInitWizardV2: View {
                         if hasDirtyState {
                             showCancelConfirm = true
                         } else {
-                            onDismiss?()
-                            dismiss()
+                            Task { await cancelAndDismissWizard() }
                         }
                     }
+                    .disabled(isCancellingWizard)
                 }
             }
             .confirmationDialog(
@@ -165,8 +262,7 @@ struct ShrimpInitWizardV2: View {
                 titleVisibility: .visible
             ) {
                 Button(L10n.k("wizard_v2.cancel_confirm.discard", fallback: "放弃"), role: .destructive) {
-                    onDismiss?()
-                    dismiss()
+                    Task { await cancelAndDismissWizard() }
                 }
                 Button(L10n.k("common.cancel", fallback: "取消"), role: .cancel) {}
             } message: {
@@ -175,21 +271,29 @@ struct ShrimpInitWizardV2: View {
         }
         .frame(minWidth: 680, minHeight: 520)
         .onAppear {
-            hydrateInitialTemplateIfNeeded()
+            hydrateInitialRolesIfNeeded()
         }
         .task {
             await autoResumeIfNeeded()
         }
-        .onChange(of: initialTeamDNA?.id ?? "") { _, _ in
-            hydrateInitialTemplateIfNeeded()
+        .onChange(of: initialRoles.teamDNA?.id ?? "") { _, _ in
+            hydrateInitialRolesIfNeeded()
         }
     }
 
     // MARK: - Sidebar
 
+    private var activeSteps: [WizardV2Step] {
+        if selectedEngine == .hermes {
+            return [.selectEngine, .basicEnv, .hermesSetup, .done]
+        }
+        // OpenClaw 或尚未选择引擎时，不显示 hermesSetup
+        return [.selectEngine, .basicEnv, .configModel, .configAgents, .configIM, .done]
+    }
+
     private var stepSidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(WizardV2Step.allCases, id: \.rawValue) { step in
+            ForEach(activeSteps, id: \.rawValue) { step in
                 sidebarRow(step: step)
             }
             Spacer()
@@ -221,8 +325,9 @@ struct ShrimpInitWizardV2: View {
     @ViewBuilder
     private var stepContent: some View {
         switch currentStep {
-        case .selectTemplate: selectTemplateView
+        case .selectEngine:   selectEngineView
         case .basicEnv:       basicEnvView
+        case .hermesSetup:    hermesSetupView
         case .configModel:    configModelView
         case .configAgents:   configAgentsView
         case .configIM:       configIMView
@@ -230,61 +335,68 @@ struct ShrimpInitWizardV2: View {
         }
     }
 
-    // MARK: - Step 1: select template（从 roles.html 团队选择）
+    // MARK: - Step 1: select engine
 
-    private var selectTemplateView: some View {
-        VStack(spacing: 0) {
-            // 已选团队摘要（选完后显示）
-            if let team = selectedTeamDNA {
-                HStack(spacing: 10) {
-                    Text(team.teamEmoji).font(.title2)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(team.teamName).fontWeight(.semibold)
-                        Text(L10n.k("wizard_v2.select_template.selected_hint",
-                                    fallback: "\(team.members.count) 个 Agent 已就绪，可点下一步继续"))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button(L10n.k("wizard_v2.select_template.reselect", fallback: "重新选择")) {
-                        selectedTeamDNA = nil
-                        templateReady = false
-                        agents = []
-                        agentDNAs = [:]
+    private var selectEngineView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("选择引擎")
+                    .font(.title2).fontWeight(.semibold)
+                Text("先确定该虾的运行引擎，再进入后续初始化步骤。")
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 12) {
+                ForEach(WizardEngine.allCases, id: \.rawValue) { engine in
+                    Button {
+                        selectedEngine = engine
+                        if engine == .openclaw {
+                            ensureOpenclawRolesSeeded()
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            engineLogo(for: engine)
+                                .frame(width: 60, height: 60)
+                            Text(engine.title)
+                                .font(.title3.weight(.semibold))
+                            Text(engine.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, minHeight: 130, alignment: .topLeading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color(nsColor: .controlBackgroundColor))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(
+                                    selectedEngine == engine ? Color.accentColor : Color.secondary.opacity(0.2),
+                                    lineWidth: selectedEngine == engine ? 2 : 1
+                                )
+                        )
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
-                    .font(.caption)
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(Color.accentColor.opacity(0.06))
-                Divider()
             }
 
-            // roles.html WebView（显示团队 Tab）
-            TemplateMarketWebView(
-                showTeamsOnly: selectedTeamDNA == nil,
-                onPickTeam: { teamDNA in
-                    applyTeamTemplate(teamDNA)
-                },
-                onPickSolo: {
-                    selectedTeamDNA = nil
-                    templateReady = true
-                    agents = [AgentDef(id: "main", displayName: "主 Agent", isDefault: true)]
-                    agentDNAs = [:]
-                }
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Divider()
-            HStack {
-                Spacer()
-                Button(L10n.k("common.next", fallback: "下一步")) { advance() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!templateReady)
+            Spacer()
+            navigationButtons(canGoNext: selectedEngine != nil) {
+                advance()
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+        }
+        .padding(24)
+    }
+
+    @ViewBuilder
+    private func engineLogo(for engine: WizardEngine) -> some View {
+        switch engine {
+        case .openclaw:
+            OpenClawLogoMark()
+        case .hermes:
+            HermesLogoMark()
         }
     }
 
@@ -379,7 +491,13 @@ struct ShrimpInitWizardV2: View {
             if !ordered.contains(trimmed) { ordered.append(trimmed) }
         }
 
-        // gateway 已配置的完整模型列表（来自 RPC，唯一源）
+        // 上一步刚写入的 agents.defaults.model.{primary,fallbacks} —— helper 直读配置，最可靠
+        if let status = await helperClient.getModelsStatus(username: user.username) {
+            appendUnique(status.resolvedDefault ?? status.defaultModel)
+            status.fallbacks.forEach { appendUnique($0) }
+        }
+
+        // gateway 已加载的完整模型目录（若已 reload 则覆盖补齐）
         if let groups = await gatewayHub.modelsList(username: user.username) {
             for group in groups {
                 for model in group.models {
@@ -412,58 +530,168 @@ struct ShrimpInitWizardV2: View {
         return builtIn ?? modelID
     }
 
+    @ViewBuilder
     private var basicEnvView: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // 标题
-            Text(L10n.k("wizard_v2.basic_env.heading", fallback: "安装基础运行环境"))
-                .font(.title2).fontWeight(.semibold)
-                .padding(.bottom, 12)
+        if selectedEngine == .hermes {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("安装 Hermes 运行环境")
+                    .font(.title2).fontWeight(.semibold)
+                    .padding(.bottom, 12)
 
-            // 操作按钮 + 阶段进度条
-            HStack(spacing: 12) {
-                if let err = envError {
-                    Button(L10n.k("common.retry", fallback: "重试")) { runEnvInstall() }
-                        .buttonStyle(.bordered)
-                    Text(err)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
-                } else if envReady {
-                    Label(L10n.k("wizard_v2.basic_env.ready", fallback: "环境就绪"), systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .font(.system(size: 13, weight: .medium))
-                    envPhaseStepperView
-                } else if isInstallingEnv {
-                    envPhaseStepperView
-                } else {
-                    Button(L10n.k("wizard_v2.basic_env.start", fallback: "开始安装")) { runEnvInstall() }
-                        .buttonStyle(.borderedProminent)
-                    envPhaseStepperView
+                HStack(spacing: 12) {
+                    if let err = envError {
+                        Button(L10n.k("common.retry", fallback: "重试")) { runEnvInstall() }
+                            .buttonStyle(.bordered)
+                        Text(err)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .lineLimit(2)
+                    } else if envReady {
+                        Label("Hermes 环境就绪", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .font(.system(size: 13, weight: .medium))
+                        hermesEnvPhaseStepperView
+                    } else if isInstallingEnv {
+                        hermesEnvPhaseStepperView
+                    } else {
+                        Button("安装 Hermes") { runEnvInstall() }
+                            .buttonStyle(.borderedProminent)
+                        hermesEnvPhaseStepperView
+                    }
+                    Spacer()
                 }
-                Spacer()
-            }
-            .padding(.bottom, 16)
+                .padding(.bottom, 16)
 
-            // 安装日志（自适应填满剩余空间）
-            VStack(alignment: .leading, spacing: 8) {
-                Text(L10n.k("wizard_v2.basic_env.logs", fallback: "安装日志"))
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
-                TerminalLogPanel(username: user.username, logHeight: nil)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("安装终端（可交互）")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
+                        Label("支持键盘输入，可在异常时人工介入", systemImage: "keyboard")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Ctrl+C") {
+                            hermesInstallTerminalControl.sendInterrupt()
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(!isInstallingEnv)
+                        if let code = hermesInstallExitCode {
+                            Text("最近退出码: \(code)")
+                                .font(.caption2)
+                                .foregroundStyle(code == 0 ? Color.secondary : Color.orange)
+                        }
+                    }
+                    .padding(.horizontal, 4)
 
-            // 底部导航（固定）
-            navigationButtons(canGoNext: envReady, nextLabel: L10n.k("common.next", fallback: "下一步")) {
-                advance()
+                    if (isInstallingEnv && hermesEnvInstallingPhase == .installHermes) || hermesInstallExitCode != nil {
+                        HelperMaintenanceTerminalPanel(
+                            username: user.username,
+                            command: hermesInstallTerminalCommand(),
+                            minHeight: 260,
+                            onOutput: nil,
+                            control: hermesInstallTerminalControl
+                        ) { code in
+                            Task { await handleHermesInstallTerminalExit(code) }
+                        }
+                        .id(hermesInstallTerminalRunToken)
+                    } else {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                            .frame(minHeight: 160)
+                            .overlay {
+                                Text("点击“安装 Hermes”后将启动可交互终端。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+                navigationButtons(canGoNext: envReady, nextLabel: L10n.k("common.next", fallback: "下一步")) {
+                    advance()
+                }
+                .padding(.top, 12)
             }
-            .padding(.top, 12)
-        }
-        .padding(24)
-        .onAppear {
-            clearInitialEnvLogIfNeeded()
-            checkEnvReady()
+            .padding(24)
+            .onAppear {
+                clearInitialEnvLogIfNeeded()
+                checkEnvReady()
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(L10n.k("wizard_v2.basic_env.heading", fallback: "安装基础运行环境"))
+                    .font(.title2).fontWeight(.semibold)
+                    .padding(.bottom, 12)
+
+                HStack(spacing: 12) {
+                    if let err = envError {
+                        Button(L10n.k("common.retry", fallback: "重试")) { runEnvInstall() }
+                            .buttonStyle(.bordered)
+                        Text(err)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .lineLimit(2)
+                    } else if envReady {
+                        Label(L10n.k("wizard_v2.basic_env.ready", fallback: "环境就绪"), systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .font(.system(size: 13, weight: .medium))
+                        envPhaseStepperView
+                    } else if isInstallingEnv {
+                        envPhaseStepperView
+                    } else {
+                        Button(L10n.k("wizard_v2.basic_env.start", fallback: "开始安装")) { runEnvInstall() }
+                            .buttonStyle(.borderedProminent)
+                        envPhaseStepperView
+                    }
+                    Spacer()
+                }
+                .padding(.bottom, 16)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("安装终端（日志跟踪）")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
+                        Label("统一 SwiftTerm 显示（日志 tail 模式）", systemImage: "terminal")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Ctrl+C") {
+                            openclawLogTerminalControl.sendInterrupt()
+                        }
+                        .buttonStyle(.borderless)
+                        Button("重连日志") {
+                            openclawLogTerminalRunToken = UUID()
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    .padding(.horizontal, 4)
+
+                    HelperMaintenanceTerminalPanel(
+                        username: user.username,
+                        command: openclawLogTailCommand(),
+                        minHeight: 260,
+                        onOutput: nil,
+                        control: openclawLogTerminalControl,
+                        onExit: nil
+                    )
+                    .id(openclawLogTerminalRunToken)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+                navigationButtons(canGoNext: envReady, nextLabel: L10n.k("common.next", fallback: "下一步")) {
+                    advance()
+                }
+                .padding(.top, 12)
+            }
+            .padding(24)
+            .onAppear {
+                clearInitialEnvLogIfNeeded()
+                checkEnvReady()
+            }
         }
     }
 
@@ -518,6 +746,136 @@ struct ShrimpInitWizardV2: View {
         return .pending
     }
 
+    @ViewBuilder
+    private var hermesEnvPhaseStepperView: some View {
+        HStack(spacing: 2) {
+            ForEach(WizardV2HermesEnvPhase.allCases, id: \.rawValue) { phase in
+                let state = hermesEnvPhaseState(phase)
+                HStack(spacing: 3) {
+                    switch state {
+                    case .done:
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .font(.system(size: 10))
+                    case .active:
+                        Image(systemName: "hammer.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.orange)
+                            .symbolEffect(.bounce, options: .repeating)
+                    case .pending:
+                        Text("\(phase.rawValue)")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 14, height: 14)
+                            .background(Circle().fill(Color.secondary.opacity(0.12)))
+                    }
+                    Text(phase.title)
+                        .font(.system(size: 11))
+                        .foregroundStyle(state == .active ? .primary : state == .done ? .secondary : .tertiary)
+                        .lineLimit(1)
+                }
+                if phase != WizardV2HermesEnvPhase.allCases.last {
+                    Text("›")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.quaternary)
+                        .padding(.horizontal, 1)
+                }
+            }
+        }
+    }
+
+    private func hermesEnvPhaseState(_ phase: WizardV2HermesEnvPhase) -> EnvPhaseState {
+        guard let current = hermesEnvInstallingPhase else {
+            return envReady ? .done : .pending
+        }
+        if phase.rawValue < current.rawValue { return .done }
+        if phase == current { return .active }
+        return .pending
+    }
+
+    // MARK: - Step: hermesSetup（hermes setup 交互式向导）
+
+    private var hermesSetupView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Hermes 配置")
+                .font(.title2).fontWeight(.semibold)
+                .padding(.bottom, 4)
+            Text("通过 hermes setup 交互式向导完成模型、密钥等配置。")
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 12)
+
+            HStack(spacing: 12) {
+                if hermesSetupDone {
+                    Label("配置向导已完成", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.system(size: 13, weight: .medium))
+                } else if let code = hermesSetupExitCode, code != 0 {
+                    Label("向导异常退出（code \(code)），可重新运行。", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Button("重新运行") {
+                        hermesSetupExitCode = nil
+                        hermesSetupDone = false
+                        hermesSetupTerminalRunToken = UUID()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Spacer()
+                Button("Ctrl+C") {
+                    hermesSetupTerminalControl.sendInterrupt()
+                }
+                .buttonStyle(.borderless)
+                .disabled(hermesSetupDone)
+            }
+            .padding(.bottom, 8)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Label("支持键盘输入，按向导提示完成配置", systemImage: "keyboard")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if let code = hermesSetupExitCode {
+                        Text("退出码: \(code)")
+                            .font(.caption2)
+                            .foregroundStyle(code == 0 ? Color.secondary : Color.orange)
+                    }
+                }
+                .padding(.horizontal, 4)
+
+                HelperMaintenanceTerminalPanel(
+                    username: user.username,
+                    command: hermesSetupTerminalCommand(),
+                    minHeight: 300,
+                    onOutput: nil,
+                    control: hermesSetupTerminalControl
+                ) { code in
+                    Task { await handleHermesSetupTerminalExit(code) }
+                }
+                .id(hermesSetupTerminalRunToken)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            navigationButtons(canGoNext: true, nextLabel: L10n.k("common.next", fallback: "下一步")) {
+                advance()
+            }
+            .padding(.top, 12)
+        }
+        .padding(24)
+    }
+
+    private func hermesSetupTerminalCommand() -> [String] {
+        ["hermes", "setup"]
+    }
+
+    @MainActor
+    private func handleHermesSetupTerminalExit(_ code: Int32?) async {
+        hermesSetupExitCode = code
+        if code == 0 {
+            hermesSetupDone = true
+        }
+    }
+
     // MARK: - Step 3: configModel
 
     private var configModelView: some View {
@@ -558,6 +916,7 @@ struct ShrimpInitWizardV2: View {
             }
         }
         .padding(24)
+        .task { await loadExistingChannelBindings() }
         .sheet(item: $addBotTarget) { target in
             AddBotSheet(username: user.username, agentId: target.agentId) { newAccount in
                 if !imAccounts.contains(where: { $0.id == newAccount.id && $0.platform == newAccount.platform }) {
@@ -636,8 +995,20 @@ struct ShrimpInitWizardV2: View {
             if isSaving {
                 ProgressView()
                     .scaleEffect(1.4)
-                Text(L10n.k("wizard_v2.done.saving", fallback: "正在写入配置…"))
-                    .foregroundStyle(.secondary)
+                Text(savePhaseProgressText)
+                    .font(.headline)
+                if let phase = savePhase {
+                    Text(phase.hint)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                }
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text("已耗时 \(saveElapsedText(now: context.date))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else if let err = saveError {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 48))
@@ -667,11 +1038,73 @@ struct ShrimpInitWizardV2: View {
         .onAppear { runSave() }
     }
 
+    private var savePhaseProgressText: String {
+        guard let phase = savePhase else {
+            return L10n.k("wizard_v2.done.saving", fallback: "正在写入配置…")
+        }
+        return "(\(phase.rawValue)/\(WizardV2SavePhase.allCases.count)) \(phase.title)…"
+    }
+
+    private func saveElapsedText(now: Date) -> String {
+        guard let start = saveStartedAt else { return "00:00" }
+        let elapsed = max(0, Int(now.timeIntervalSince(start)))
+        let min = elapsed / 60
+        let sec = elapsed % 60
+        return String(format: "%02d:%02d", min, sec)
+    }
+
     private var summaryText: String {
+        if selectedEngine == .hermes {
+            return "Hermes 引擎初始化完成"
+        }
         let agentCount = agents.count
         let botCount = imAccounts.count
         return L10n.k("wizard_v2.done.summary",
                       fallback: "\(agentCount) 个 Agent，\(botCount) 个 IM Bot 绑定")
+    }
+
+    @MainActor
+    private func cancelAndDismissWizard() async {
+        guard !isCancellingWizard else { return }
+        isCancellingWizard = true
+        defer { isCancellingWizard = false }
+
+        // 显式标记当前向导会话已结束，避免外层按“未完成初始化”立即重开窗口。
+        var cancelledState = InitWizardState()
+        cancelledState.schemaVersion = 2
+        cancelledState.mode = .onboarding
+        cancelledState.active = false
+        cancelledState.currentStep = "v2:cancelled"
+        cancelledState.updatedAt = Date()
+        cancelledState.completedAt = Date()
+
+        do {
+            try await helperClient.saveInitState(username: user.username, json: cancelledState.toJSON())
+        } catch {
+            appLog("[WizardV2] 取消初始化时落盘状态失败 @\(user.username): \(error.localizedDescription)", level: .warn)
+        }
+
+        // 放弃时清理向导草稿，避免后续再次进入时恢复到已放弃的数据。
+        let emptyObject = Data("{}".utf8)
+        let emptyArray = Data("[]".utf8)
+        try? await helperClient.writeFile(
+            username: user.username,
+            relativePath: ".openclaw/workspace/pending_v2_team.json",
+            data: emptyObject
+        )
+        try? await helperClient.writeFile(
+            username: user.username,
+            relativePath: ".openclaw/workspace/pending_v2_agent_defs.json",
+            data: emptyArray
+        )
+        try? await helperClient.writeFile(
+            username: user.username,
+            relativePath: ".openclaw/workspace/pending_v2_agents.json",
+            data: emptyArray
+        )
+
+        onDismiss?()
+        dismiss()
     }
 
     // MARK: - Navigation helpers
@@ -682,9 +1115,9 @@ struct ShrimpInitWizardV2: View {
         nextAction: @escaping () -> Void
     ) -> some View {
         HStack {
-            if currentStep.rawValue > 0 {
+            if previousStep(of: currentStep) != nil {
                 Button(L10n.k("common.back", fallback: "上一步")) {
-                    if let prev = WizardV2Step(rawValue: currentStep.rawValue - 1) {
+                    if let prev = previousStep(of: currentStep) {
                         currentStep = prev
                     }
                 }
@@ -697,9 +1130,18 @@ struct ShrimpInitWizardV2: View {
         }
     }
 
+    private func previousStep(of step: WizardV2Step) -> WizardV2Step? {
+        guard let idx = activeSteps.firstIndex(of: step), idx > 0 else { return nil }
+        return activeSteps[idx - 1]
+    }
+
+    private func nextStep(of step: WizardV2Step) -> WizardV2Step? {
+        guard let idx = activeSteps.firstIndex(of: step), idx + 1 < activeSteps.count else { return nil }
+        return activeSteps[idx + 1]
+    }
+
     private func advance() {
-        let nextRaw = currentStep.rawValue + 1
-        guard let next = WizardV2Step(rawValue: nextRaw) else { return }
+        guard let next = nextStep(of: currentStep) else { return }
         visitedSteps.insert(next)
         withAnimation(.easeInOut(duration: 0.2)) {
             currentStep = next
@@ -709,10 +1151,9 @@ struct ShrimpInitWizardV2: View {
 
     private func applyTeamTemplate(_ teamDNA: TeamDNA) {
         selectedTeamDNA = teamDNA
-        templateReady = true
         persistTeamDNA(teamDNA)
         guard !teamDNA.members.isEmpty else {
-            agents = [AgentDef(id: "main", displayName: "主 Agent", isDefault: true)]
+            agents = initialRoles.agents.isEmpty ? WizardV2InitialRoles.solo.agents : initialRoles.agents
             agentDNAs = [:]
             return
         }
@@ -754,24 +1195,48 @@ struct ShrimpInitWizardV2: View {
         agentDNAs = resultDNAs
     }
 
-    private func hydrateInitialTemplateIfNeeded() {
-        guard let initialTeamDNA else { return }
+    private func ensureOpenclawRolesSeeded() {
+        guard agents.isEmpty else { return }
+        if let teamDNA = selectedTeamDNA ?? initialRoles.teamDNA {
+            applyTeamTemplate(teamDNA)
+            return
+        }
+        agents = initialRoles.agents.isEmpty ? WizardV2InitialRoles.solo.agents : initialRoles.agents
+        agentDNAs = [:]
+    }
+
+    private func hydrateInitialRolesIfNeeded() {
         guard selectedTeamDNA == nil, agents.isEmpty else { return }
-        applyTeamTemplate(initialTeamDNA)
-        guard !didAutoAdvanceFromInitialTemplate else { return }
-        didAutoAdvanceFromInitialTemplate = true
-        visitedSteps.insert(.basicEnv)
-        currentStep = .basicEnv
+
+        if let teamDNA = initialRoles.teamDNA {
+            // 团队语义只能映射到 OpenClaw，预选引擎并预填 Agent 模板；
+            // 但保留在 .selectEngine 步骤让用户显式确认，避免"领养团队直接跳过引擎选择"。
+            selectedEngine = .openclaw
+            applyTeamTemplate(teamDNA)
+            return
+        }
+
+        ensureOpenclawRolesSeeded()
     }
 
     // MARK: - Business logic
 
     private func checkEnvReady() {
         Task {
-            let version = await helperClient.getOpenclawVersion(username: user.username)
-            let gatewayStatus = try? await helperClient.getGatewayStatus(username: user.username)
+            let engine = selectedEngine ?? .openclaw
+            let version: String?
+            if engine == .hermes {
+                version = await helperClient.getHermesVersion(username: user.username)
+            } else {
+                version = await helperClient.getOpenclawVersion(username: user.username)
+                let gatewayStatus = try? await helperClient.getGatewayStatus(username: user.username)
+                await MainActor.run {
+                    envReady = version != nil && (gatewayStatus?.running == true)
+                }
+                return
+            }
             await MainActor.run {
-                envReady = version != nil && (gatewayStatus?.running == true)
+                envReady = version != nil
             }
         }
     }
@@ -779,7 +1244,7 @@ struct ShrimpInitWizardV2: View {
     private func clearInitialEnvLogIfNeeded() {
         guard !didClearInitialEnvLog else { return }
         guard !isInstallingEnv else { return }
-        let logPath = "/tmp/clawdhome-init-\(user.username).log"
+        let logPath = envLogPath(for: selectedEngine ?? .openclaw)
         FileManager.default.createFile(atPath: logPath, contents: nil, attributes: nil)
         didClearInitialEnvLog = true
     }
@@ -788,10 +1253,28 @@ struct ShrimpInitWizardV2: View {
         guard !isInstallingEnv else { return }
         isInstallingEnv = true
         envError = nil
-        envInstallingPhase = .repairHomebrew
+        hermesInstallExitCode = nil
+        let engine = selectedEngine ?? .openclaw
+        if engine == .hermes {
+            hermesEnvInstallingPhase = .repairHomebrew
+            envInstallingPhase = nil
+        } else {
+            envInstallingPhase = .repairHomebrew
+            hermesEnvInstallingPhase = nil
+        }
         // 截断上次遗留的日志文件，让终端面板从空白开始
-        let logPath = "/tmp/clawdhome-init-\(user.username).log"
+        let logPath = envLogPath(for: engine)
         FileManager.default.createFile(atPath: logPath, contents: nil, attributes: nil)
+        if engine == .hermes {
+            Task { @MainActor in
+                // best-effort：失败不阻断
+                try? await helperClient.repairHomebrewPermission(username: user.username)
+                hermesEnvInstallingPhase = .installHermes
+                hermesInstallTerminalRunToken = UUID()
+            }
+            return
+        }
+        openclawLogTerminalRunToken = UUID()
         Task { @MainActor in
             do {
                 // best-effort：失败不阻断
@@ -830,14 +1313,73 @@ struct ShrimpInitWizardV2: View {
 
                 isInstallingEnv = false
                 envInstallingPhase = nil
+                hermesEnvInstallingPhase = nil
                 envReady = true
             } catch {
-                let phaseTitle = envInstallingPhase?.title
+                let phaseTitle = (engine == .hermes ? hermesEnvInstallingPhase?.title : envInstallingPhase?.title)
                     ?? L10n.k("wizard_v2.basic_env.heading", fallback: "安装基础运行环境")
                 isInstallingEnv = false
                 envInstallingPhase = nil
+                hermesEnvInstallingPhase = nil
                 envError = "\(phaseTitle)失败：\(error.localizedDescription)"
             }
+        }
+    }
+
+    private func hermesInstallTerminalCommand() -> [String] {
+        let hermesHome = "/Users/\(user.username)/.hermes"
+        let script = """
+            set -euo pipefail
+            export HERMES_HOME="\(hermesHome)"
+            mkdir -p "$HERMES_HOME"
+            curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | /bin/bash -s -- --skip-setup --hermes-home "$HERMES_HOME"
+            """
+        return ["bash", "-lc", script]
+    }
+
+    private func openclawLogTailCommand() -> [String] {
+        let logPath = envLogPath(for: .openclaw)
+        let script = """
+            touch "\(logPath)"
+            exec /usr/bin/tail -n +1 -f "\(logPath)"
+            """
+        return ["bash", "-lc", script]
+    }
+
+    @MainActor
+    private func handleHermesInstallTerminalExit(_ code: Int32?) async {
+        guard isInstallingEnv else { return }
+        hermesInstallExitCode = code
+        guard code == 0 else {
+            isInstallingEnv = false
+            envInstallingPhase = nil
+            hermesEnvInstallingPhase = nil
+            envError = "Hermes 安装失败：终端退出码 \(code ?? -1)。可在终端中修复后重试。"
+            return
+        }
+
+        hermesEnvInstallingPhase = .verifyInstall
+        let version = await helperClient.getHermesVersion(username: user.username)
+        if version == nil {
+            isInstallingEnv = false
+            envInstallingPhase = nil
+            hermesEnvInstallingPhase = nil
+            envError = "Hermes 安装校验失败：未读取到版本号。"
+            return
+        }
+
+        isInstallingEnv = false
+        envInstallingPhase = nil
+        hermesEnvInstallingPhase = nil
+        envReady = true
+    }
+
+    private func envLogPath(for engine: WizardEngine) -> String {
+        switch engine {
+        case .openclaw:
+            return "/tmp/clawdhome-init-\(user.username).log"
+        case .hermes:
+            return "/tmp/clawdhome-hermes-\(user.username).log"
         }
     }
 
@@ -845,6 +1387,61 @@ struct ShrimpInitWizardV2: View {
         guard !isSaving else { return }
         isSaving = true
         saveError = nil
+        saveStartedAt = Date()
+        savePhase = .serializeConfig
+        let engine = selectedEngine ?? .openclaw
+
+        if engine == .hermes {
+            let username = user.username
+            let dnasSnapshot = agentDNAs
+            let rolesSnapshot: [AgentDef] = agents.isEmpty
+                ? [AgentDef(id: "main", displayName: "主 Agent", isDefault: true)]
+                : agents
+            Task {
+                await MainActor.run { savePhase = .writeAgentSnapshot }
+                do {
+                    for role in rolesSnapshot {
+                        let emoji = dnasSnapshot[role.id]?.emoji ?? (role.id == "main" ? "🎭" : "🤖")
+                        let profile = AgentProfile(
+                            id: role.id,
+                            name: role.displayName,
+                            emoji: emoji,
+                            modelPrimary: role.modelPrimary,
+                            modelFallbacks: role.modelFallbacks,
+                            workspacePath: nil,
+                            isDefault: role.isDefault
+                        )
+                        try await helperClient.createHermesProfile(username: username, config: profile)
+                    }
+                    let defaultProfileID = rolesSnapshot.first(where: \.isDefault)?.id
+                        ?? rolesSnapshot.first?.id
+                        ?? "main"
+                    try await helperClient.setHermesActiveProfile(username: username, profileID: defaultProfileID)
+                } catch {
+                    await MainActor.run {
+                        isSaving = false
+                        saveError = "[\(WizardV2SavePhase.writeAgentSnapshot.title)] Hermes profile 初始化失败：\(error.localizedDescription)"
+                    }
+                    return
+                }
+
+                await MainActor.run { savePhase = .restartGateway }
+                try? await helperClient.startHermesGateway(username: username)
+
+                await MainActor.run { savePhase = .finalize }
+                var doneState = InitWizardState()
+                doneState.active = false
+                doneState.completedAt = Date()
+                doneState.updatedAt = Date()
+                doneState.currentStep = "v2:done"
+                try? await helperClient.saveInitState(username: username, json: doneState.toJSON())
+                await MainActor.run {
+                    isSaving = false
+                    saveSuccess = true
+                }
+            }
+            return
+        }
 
         let config = ShrimpConfigV2(
             agents: agents,
@@ -857,6 +1454,7 @@ struct ShrimpInitWizardV2: View {
 
         Task {
             // 1. 序列化 ShrimpConfigV2
+            await MainActor.run { savePhase = .serializeConfig }
             let configJSON: String
             do {
                 let data = try JSONEncoder().encode(config)
@@ -864,17 +1462,18 @@ struct ShrimpInitWizardV2: View {
             } catch {
                 await MainActor.run {
                     isSaving = false
-                    saveError = "配置序列化失败：\(error.localizedDescription)"
+                    saveError = "[\(WizardV2SavePhase.serializeConfig.title)] 配置序列化失败：\(error.localizedDescription)"
                 }
                 return
             }
 
             // 2. 通过 XPC 写入 openclaw.json（applyV2Config 在 Helper 侧调用 OpenclawConfigSerializerV2）
+            await MainActor.run { savePhase = .writeConfig }
             let (ok, err) = await helperClient.applyV2Config(username: username, configJSON: configJSON)
             guard ok else {
                 await MainActor.run {
                     isSaving = false
-                    saveError = err ?? "写入配置失败"
+                    saveError = "[\(WizardV2SavePhase.writeConfig.title)] " + (err ?? "写入配置失败")
                 }
                 return
             }
@@ -882,6 +1481,7 @@ struct ShrimpInitWizardV2: View {
             // 3. 把 agentId → DNA 映射写入 pending_v2_agents.json，供 gateway ready 后消费
             //    格式：[{"agentDefId": "main", "dna": {...}}]
             //    gateway 启动后 UserDetailView.consumePendingV2Agents() 会找到对应 profile 写 persona 文件
+            await MainActor.run { savePhase = .writeAgentSnapshot }
             if !dnasSnapshot.isEmpty {
                 let entries: [[String: Any]] = dnasSnapshot.compactMap { (agentDefId, dna) in
                     guard let dnaData = try? JSONEncoder().encode(dna),
@@ -901,7 +1501,7 @@ struct ShrimpInitWizardV2: View {
                 } catch {
                     await MainActor.run {
                         isSaving = false
-                        saveError = "Agent 角色写入失败：\(error.localizedDescription)"
+                        saveError = "[\(WizardV2SavePhase.writeAgentSnapshot.title)] Agent 角色写入失败：\(error.localizedDescription)"
                     }
                     return
                 }
@@ -909,9 +1509,11 @@ struct ShrimpInitWizardV2: View {
 
             // 4. 重启 gateway，使新写入的 openclaw.json 生效，并触发 UserDetailView
             //    的 consumePendingV2Agents()（由 readinessMap == .ready 的 onChange 触发）
+            await MainActor.run { savePhase = .restartGateway }
             try? await helperClient.restartGateway(username: username)
 
             // 5. 标记向导已完成，清理临时文件
+            await MainActor.run { savePhase = .finalize }
             var doneState = InitWizardState()
             doneState.active = false
             doneState.completedAt = Date()
@@ -931,6 +1533,48 @@ struct ShrimpInitWizardV2: View {
         }
     }
 
+    /// 从 gateway channel store 检测已有的 IM 绑定，填充 imAccounts + bindings
+    private func loadExistingChannelBindings() async {
+        // 已有数据则跳过，避免重复加载
+        guard imAccounts.isEmpty else { return }
+
+        let store = gatewayHub.channelStore(for: user.username)
+        await store.refresh()
+
+        let defaultAgentId = agents.first(where: \.isDefault)?.id ?? agents.first?.id ?? ""
+        guard !defaultAgentId.isEmpty else { return }
+
+        // 遍历所有支持扫码绑定的通道
+        for flow in ChannelOnboardingFlow.allCases {
+            for channelId in flow.candidateChannelIds {
+                for snapshot in store.boundAccounts(channelId) {
+                    let platform: IMPlatform = flow == .feishu ? .feishu : .wechat
+
+                    // 去重
+                    guard !imAccounts.contains(where: { $0.id == snapshot.accountId && $0.platform == platform }) else { continue }
+
+                    let account = IMAccount(
+                        id: snapshot.accountId,
+                        platform: platform,
+                        displayName: snapshot.name ?? flow.title,
+                        appId: snapshot.appId,
+                        allowFrom: snapshot.allowFrom ?? [],
+                        domain: snapshot.domain,
+                        createdAt: Date()
+                    )
+                    imAccounts.append(account)
+
+                    let binding = IMBinding(
+                        agentId: defaultAgentId,
+                        channel: platform.openclawChannelId,
+                        accountId: snapshot.accountId
+                    )
+                    bindings.append(binding)
+                }
+            }
+        }
+    }
+
     // MARK: - 进度持久化与恢复
 
     /// 将当前向导步骤持久化到磁盘，保证 app 重启后能路由回向导并恢复进度
@@ -946,11 +1590,15 @@ struct ShrimpInitWizardV2: View {
             }
             state.steps["v2_\(currentStep)"] = "running"
             try? await helperClient.saveInitState(username: user.username, json: state.toJSON())
+
+            // 同步持久化 agent 定义（含模型选择），避免二次进入时丢失
+            persistAgentDefs()
         }
     }
 
-    /// 将团队 DNA 写入用户 workspace，供重启后恢复
+    /// 将团队 DNA 写入用户 workspace，供重启后恢复（仅 OpenClaw 引擎）
     private func persistTeamDNA(_ teamDNA: TeamDNA) {
+        guard selectedEngine != .hermes else { return }
         Task {
             guard let data = try? JSONEncoder().encode(teamDNA) else { return }
             try? await helperClient.createDirectory(username: user.username, relativePath: ".openclaw/workspace")
@@ -960,6 +1608,29 @@ struct ShrimpInitWizardV2: View {
                 data: data
             )
         }
+    }
+
+    /// 将 agent 定义（含模型选择）写入用户 workspace，供重启后恢复（仅 OpenClaw 引擎）
+    private func persistAgentDefs() {
+        guard selectedEngine != .hermes, !agents.isEmpty else { return }
+        Task {
+            guard let data = try? JSONEncoder().encode(agents) else { return }
+            try? await helperClient.createDirectory(username: user.username, relativePath: ".openclaw/workspace")
+            try? await helperClient.writeFile(
+                username: user.username,
+                relativePath: ".openclaw/workspace/pending_v2_agent_defs.json",
+                data: data
+            )
+        }
+    }
+
+    /// 从磁盘加载持久化的 agent 定义
+    private func loadPersistedAgentDefs() async -> [AgentDef]? {
+        guard let data = try? await helperClient.readFile(
+            username: user.username,
+            relativePath: ".openclaw/workspace/pending_v2_agent_defs.json"
+        ) else { return nil }
+        return try? JSONDecoder().decode([AgentDef].self, from: data)
     }
 
     /// 从磁盘加载持久化的团队 DNA
@@ -973,85 +1644,92 @@ struct ShrimpInitWizardV2: View {
 
     /// app 重启后自动检测系统状态，跳过已完成的步骤
     private func autoResumeIfNeeded() async {
-        // 有 initialTeamDNA 说明是首次领养流程，由 hydrateInitialTemplateIfNeeded 处理
-        guard initialTeamDNA == nil else { return }
-        guard selectedTeamDNA == nil, agents.isEmpty else { return }
+        // 有 initialRoles.teamDNA 说明是首次领养流程，由 hydrateInitialRolesIfNeeded 处理
+        guard initialRoles.teamDNA == nil else { return }
+        // 注意：不检查 agents.isEmpty——onAppear 的同步 solo 预填会先于此 task 执行，
+        // 导致 agents 非空，从而误跳过磁盘恢复（二次进入时丢失多 Agent 的 bug）。
+        // 只要用户未在本次会话中明确选定团队，就继续尝试从磁盘恢复。
+        guard selectedTeamDNA == nil else { return }
+
+        let openclawVersion = await helperClient.getOpenclawVersion(username: user.username)
+        let hermesVersion = await helperClient.getHermesVersion(username: user.username)
+        if selectedEngine == nil {
+            if openclawVersion != nil {
+                selectedEngine = .openclaw
+            } else if hermesVersion != nil {
+                selectedEngine = .hermes
+            }
+        }
+
+        if selectedEngine == .openclaw {
+            ensureOpenclawRolesSeeded()
+        }
 
         // 尝试从磁盘恢复团队 DNA
-        if let teamDNA = await loadPersistedTeamDNA() {
+        let restoredTeamDNA = await loadPersistedTeamDNA()
+        if let teamDNA = restoredTeamDNA {
+            selectedEngine = .openclaw
             applyTeamTemplate(teamDNA)
         }
 
-        // 检测基础环境状态
-        let version = await helperClient.getOpenclawVersion(username: user.username)
-        let gatewayStatus = try? await helperClient.getGatewayStatus(username: user.username)
-        let isEnvReady = version != nil && (gatewayStatus?.running == true)
+        // 恢复持久化的 agent 定义（含模型选择）
+        if let savedAgents = await loadPersistedAgentDefs(), !savedAgents.isEmpty {
+            if restoredTeamDNA != nil {
+                // 有团队 DNA：applyTeamTemplate 已建好结构，仅覆盖模型选择
+                for saved in savedAgents {
+                    if let idx = agents.firstIndex(where: { $0.id == saved.id }) {
+                        agents[idx].modelPrimary = saved.modelPrimary
+                        agents[idx].modelFallbacks = saved.modelFallbacks
+                    }
+                }
+            } else {
+                // 无团队 DNA（可能是手动添加的多 Agent）：直接整体恢复
+                agents = savedAgents
+            }
+        }
 
-        if isEnvReady {
+        // 检测基础环境状态
+        let engine = selectedEngine ?? .openclaw
+        let isEnvReady: Bool
+        if engine == .hermes {
+            isEnvReady = hermesVersion != nil
+        } else {
+            let gatewayStatus = try? await helperClient.getGatewayStatus(username: user.username)
+            isEnvReady = openclawVersion != nil && (gatewayStatus?.running == true)
+        }
+
+        if isEnvReady, engine == .openclaw {
             envReady = true
             // 建立 GatewayHub WebSocket 连接（需要包含 token）
             let url = await helperClient.getGatewayURL(username: user.username)
             if !url.isEmpty, url.contains("#token=") {
                 await gatewayHub.connect(username: user.username, gatewayURL: url)
             }
+        } else {
+            envReady = isEnvReady
         }
 
         // 跳到第一个未完成的步骤
-        if isEnvReady && templateReady {
-            visitedSteps = Set(WizardV2Step.allCases.filter { $0.rawValue <= WizardV2Step.configModel.rawValue })
+        if engine == .hermes {
+            if isEnvReady {
+                visitedSteps = [.selectEngine, .basicEnv, .done]
+                currentStep = .done
+            } else {
+                visitedSteps = [.selectEngine, .basicEnv]
+                currentStep = .basicEnv
+            }
+        } else if isEnvReady && !agents.isEmpty {
+            visitedSteps = [.selectEngine, .basicEnv, .configModel]
             currentStep = .configModel
-        } else if templateReady {
-            visitedSteps = [.selectTemplate, .basicEnv]
+        } else if !agents.isEmpty {
+            visitedSteps = [.selectEngine, .basicEnv]
             currentStep = .basicEnv
         } else if isEnvReady {
             // 环境已就绪但没有团队 DNA（可能是手动创建的用户）
-            visitedSteps = [.selectTemplate, .basicEnv]
+            visitedSteps = [.selectEngine, .basicEnv]
             currentStep = .basicEnv
         }
     }
-}
-
-// MARK: - Template market WebView（Step 1 嵌入，展示 roles.html 团队+单人选项）
-
-private struct TemplateMarketWebView: NSViewRepresentable {
-    var showTeamsOnly: Bool
-    var onPickTeam: (TeamDNA) -> Void
-    var onPickSolo: () -> Void
-
-    func makeCoordinator() -> RoleMarketCoordinator {
-        let c = RoleMarketCoordinator()
-        c.onAdoptTeam = { teamDNA in
-            DispatchQueue.main.async { self.onPickTeam(teamDNA) }
-        }
-        c.onAdoptAgent = { dna in
-            // 单角色领养：用单 agent 填充 solo 模式
-            let soloTeam = TeamDNA(
-                id: dna.id,
-                teamName: dna.name,
-                teamEmoji: dna.emoji,
-                suggestedInstanceID: dna.suggestedAgentID ?? "main",
-                members: [dna]
-            )
-            DispatchQueue.main.async { self.onPickTeam(soloTeam) }
-        }
-        return c
-    }
-
-    func makeNSView(context: Context) -> WKWebView {
-        let config = makeRoleMarketConfiguration(
-            coordinator: context.coordinator,
-            localeIdentifier: Locale.current.identifier
-        )
-        let wv = WKWebView(frame: .zero, configuration: config)
-        wv.navigationDelegate = context.coordinator
-        wv.setValue(false, forKey: "drawsBackground")
-        if let url = Bundle.main.url(forResource: "roles", withExtension: "html") {
-            wv.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
-        }
-        return wv
-    }
-
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
 }
 
 // MARK: - Role picker sheet (wizard-internal)

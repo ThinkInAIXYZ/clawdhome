@@ -343,9 +343,9 @@ struct UserDetailView: View {
             .padding(.horizontal, detailSidebarShowsLabels ? 2 : 4)
             .frame(maxWidth: .infinity)
 
-            // Shrimp 图标
-            Text("\u{1F99E}")
-                .font(.system(size: detailSidebarShowsLabels ? 32 : 24))
+            // OpenClaw logo
+            OpenClawLogoMark()
+                .frame(width: detailSidebarShowsLabels ? 48 : 32, height: detailSidebarShowsLabels ? 48 : 32)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 4)
 
@@ -468,7 +468,8 @@ struct UserDetailView: View {
         }
     }
 
-    private var tabbedContent: some View {
+    // 拆分：基础布局 + 事件响应，减轻编译器类型推断压力
+    private var tabbedContentBase: some View {
         HStack(spacing: 0) {
             detailSidebar
             Divider()
@@ -579,6 +580,10 @@ struct UserDetailView: View {
                 refreshGatewayURLUntilTokenReady()
             }
         }
+    }
+
+    private var tabbedContentSheets1: some View {
+        tabbedContentBase
         .sheet(isPresented: $showPassword) {
             UserPasswordSheet(username: user.username)
         }
@@ -623,10 +628,14 @@ struct UserDetailView: View {
             .environment(gatewayHub)
         }
         .sheet(isPresented: $showHealthCheck) {
-            DiagnosticsSheet(user: user) { diagResult in
+            DiagnosticsSheet(user: user, engineHint: defaultModel) { diagResult in
                 lastHealthCheck = diagResult
             }
         }
+    }
+
+    private var tabbedContent: some View {
+        tabbedContentSheets1
         .onReceive(NotificationCenter.default.publisher(for: .openUpgradeSheet)) { notification in
             guard let username = notification.userInfo?["username"] as? String,
                   username == user.username,
@@ -3218,8 +3227,12 @@ struct UserDetailView: View {
 
         let targetUsername = user.username   // 在 main actor 上捕获，避免跨 actor 访问 warning
         do {
-            // 直接执行 sysadminctl 删除（使用管理员凭据）
+            // 删除前预清理：停止/卸载 gateway、移除群组、归档 vault
+            try? await helperClient.prepareDeleteUser(username: targetUsername)
+            // 执行 sysadminctl 删除（使用管理员凭据）
             try await UserDeleteService.deleteUserViaSysadminctl(username: targetUsername, keepHome: keepHome, adminPassword: adminPassword)
+            // 删除后清理：移除状态文件
+            try? await helperClient.cleanupDeletedUser(username: targetUsername)
 
             isDeleting = false
             showDeleteConfirm = false

@@ -37,7 +37,7 @@ struct ContentView: View {
                     Section(L10n.k("auto.content_view.daily", fallback: "日常")) {
                         Label(L10n.k("auto.content_view.dashboard", fallback: "仪表盘"), systemImage: "gauge.with.dots.needle.33percent")
                             .tag(NavDestination.dashboard)
-                        Label { Text(L10n.k("auto.content_view.claw_pool", fallback: "虾塘")) } icon: { Text("🦞") }
+                        Label { Text(L10n.k("auto.content_view.claw_pool", fallback: "虾塘")) } icon: { OpenClawLogoMark().frame(width: 16, height: 16) }
                             .tag(NavDestination.clawPool)
                         Label(L10n.k("auto.content_view.vault_files", fallback: "文件共享"), systemImage: "folder.badge.person.crop")
                             .tag(NavDestination.vaultFiles)

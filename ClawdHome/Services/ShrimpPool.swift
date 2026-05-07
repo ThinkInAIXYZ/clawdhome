@@ -345,7 +345,22 @@ final class ShrimpPool {
         await withTaskGroup(of: Void.self) { group in
             for user in targets {
                 group.addTask {
-                    if let (running, pid) = try? await self.helperClient.getGatewayStatus(username: user.username) {
+                    async let openclawVersionResult = self.helperClient.getOpenclawVersion(username: user.username)
+                    async let hermesVersionResult = self.helperClient.getHermesVersion(username: user.username)
+
+                    let openclawVersion = await openclawVersionResult
+                    let hermesVersion = await hermesVersionResult
+                    user.openclawVersion = openclawVersion
+                    user.hermesVersion = hermesVersion
+
+                    let status: (Bool, Int32)?
+                    if hermesVersion != nil {
+                        status = await self.helperClient.getHermesGatewayStatus(username: user.username)
+                    } else {
+                        status = try? await self.helperClient.getGatewayStatus(username: user.username)
+                    }
+
+                    if let (running, pid) = status {
                         if user.isFrozen {
                             user.freezeWarning = await self.evaluateFreezeWarning(user: user, gatewayRunning: running)
                             user.isRunning = false
@@ -358,7 +373,6 @@ final class ShrimpPool {
                             user.startedAt = (running && pid > 0) ? GatewayHub.processStartTime(pid: pid) : nil
                         }
                     }
-                    user.openclawVersion = await self.helperClient.getOpenclawVersion(username: user.username)
                     user.versionChecked = true
                 }
             }
@@ -368,12 +382,13 @@ final class ShrimpPool {
     private func evaluateFreezeWarning(user: ManagedUser, gatewayRunning: Bool) async -> String? {
         guard user.isFrozen, let mode = user.freezeMode else { return nil }
 
+        let runtime: ProcessEmergencyFreezeResolver.Runtime = (user.hermesVersion != nil) ? .hermes : .openclaw
         let processes = await helperClient.getProcessList(username: user.username)
-        let openclawProcesses = processes.filter(ProcessEmergencyFreezeResolver.isOpenclawRelated)
+        let runtimeProcesses = processes.filter { ProcessEmergencyFreezeResolver.isRuntimeRelated($0, runtime: runtime) }
 
         switch mode {
         case .pause:
-            if let resumed = openclawProcesses.first(where: { !$0.state.uppercased().hasPrefix("T") }) {
+            if let resumed = runtimeProcesses.first(where: { !$0.state.uppercased().hasPrefix("T") }) {
                 return String(format: L10n.k("services.shrimp_pool.paused_process_resumed_pid", fallback: "检测到暂停进程恢复运行（PID %d）"), resumed.pid)
             }
             return nil
@@ -381,7 +396,7 @@ final class ShrimpPool {
             if gatewayRunning {
                 return L10n.k("services.shrimp_pool.gateway_start", fallback: "检测到 Gateway 异常启动")
             }
-            if let restarted = openclawProcesses.first {
+            if let restarted = runtimeProcesses.first {
                 return String(format: L10n.k("services.shrimp_pool.openclaw_abnormal_start_pid", fallback: "检测到 openclaw 相关进程异常启动（PID %d）"), restarted.pid)
             }
             return nil
