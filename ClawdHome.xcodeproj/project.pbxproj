@@ -101,6 +101,7 @@
 		7F1931508A7DA6D48319500F /* ShellRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6C76557D6C46315D058A794 /* ShellRunner.swift */; };
 		7F83623861E786A9D271CECA /* HelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 467287AC8BE705E07CE3C366 /* HelperProtocol.swift */; };
 		844ED367CC5266A513A5FADE /* UserInitPresentationRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */; };
+		84C8DA8A847353DF24E6FECC /* AgentProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BADB9554D643220091AA3A3E /* AgentProfile.swift */; };
 		84EE8ABA47536FEBAD8C7E53 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13F07CE9D25F72DDB11AB739 /* ContentView.swift */; };
 		864844DC8AC7F16874F7E23F /* WizardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B0925580BD2EF371BC98D4 /* WizardModels.swift */; };
 		8782D0C95C1470BAA40F3CB3 /* AppLockScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DFA0D3288E6276A9630CE4B /* AppLockScreen.swift */; };
@@ -127,6 +128,7 @@
 		A8BE1B4D2DCDE54C8F63CBF2 /* ClawdHomeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AF76BC505A9925D08297CB1 /* ClawdHomeApp.swift */; };
 		A98586898710F4A55154C94A /* roles.html in Resources */ = {isa = PBXBuildFile; fileRef = 3F177240AE99ADC3F3D2AD8F /* roles.html */; };
 		A9B78E60A9F1EBB090E30958 /* ModelsStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 502BBF84DE690AD43299985F /* ModelsStatus.swift */; };
+		ABC6F684C91886DAD8409030 /* HelperImpl+Agent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32760673784B8C2FA774E74 /* HelperImpl+Agent.swift */; };
 		ACE028DB32C34188A8C47EA4 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6482AE0816A0181D42B69AB4 /* DeviceIdentity.swift */; };
 		B08AD6863D465C16D9D2D0FC /* HelperImpl+Backup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8B8FD7981A5C81058060CC /* HelperImpl+Backup.swift */; };
 		B33BF87630AE1CBD7D47F438 /* FileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71156CAD7673A87034AF0D8 /* FileModels.swift */; };
@@ -170,6 +172,7 @@
 		E0ED6F92E9AE39B2FEDD39E7 /* TTSManagerTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C3E609AB9C9441B29AE88E3 /* TTSManagerTab.swift */; };
 		E2AF48EFF2D8470BF06BF3CA /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D52045A2822C8DE4579737 /* AppLanguage.swift */; };
 		E31BC807CD66ED973B4DDB0B /* HelperImpl+Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE60C673397402540C236C95 /* HelperImpl+Diagnostics.swift */; };
+		E6FF122DB4FEB06A401BFC96 /* AgentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F115A85A4379CCBE8899FDB8 /* AgentManager.swift */; };
 		E7E82F61DD2D204B321B1710 /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62AE0CAFA22F67436019A51 /* BackupModels.swift */; };
 		ED40DBD9596B50649987B59A /* FallbackManagerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D5AE60DA0449BC16B42DAA /* FallbackManagerSheet.swift */; };
 		EF130B9EF81C9F5788618250 /* AppUpdateState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F2D77C8262C551CBD26BA2 /* AppUpdateState.swift */; };
@@ -308,6 +311,7 @@
 		B82A9FF38295968F2C08B29B /* HelperLogging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperLogging.swift; sourceTree = "<group>"; };
 		B9DBC78DA4D1FFD0EB50D466 /* LocalLLMManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMManager.swift; sourceTree = "<group>"; };
 		BA77A80C488C3D16C1BD4243 /* GatewayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayClient.swift; sourceTree = "<group>"; };
+		BADB9554D643220091AA3A3E /* AgentProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProfile.swift; sourceTree = "<group>"; };
 		BC6AA535876BDE2A4F506473 /* GatewayCronModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayCronModels.swift; sourceTree = "<group>"; };
 		BC953D5E3DFF20B87A053D04 /* CLIConfigStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIConfigStep.swift; sourceTree = "<group>"; };
 		BD7D77647990268437A60AA1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -337,8 +341,10 @@
 		EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAIModels.swift; sourceTree = "<group>"; };
 		EFC4D03808505276353A3AD2 /* FileInputAcceptFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileInputAcceptFilter.swift; sourceTree = "<group>"; };
 		F00BA42C0EC4C8B25A8BFCE7 /* HelperImpl+Files.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Files.swift"; sourceTree = "<group>"; };
+		F115A85A4379CCBE8899FDB8 /* AgentManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentManager.swift; sourceTree = "<group>"; };
 		F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneClawModels.swift; sourceTree = "<group>"; };
 		F15483BD5BB3DE26EC5C82BB /* Stable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Stable.xcstrings; sourceTree = "<group>"; };
+		F32760673784B8C2FA774E74 /* HelperImpl+Agent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Agent.swift"; sourceTree = "<group>"; };
 		F3D52045A2822C8DE4579737 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
 		F6BBA412ABBAFB1986020ADA /* AppAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearance.swift; sourceTree = "<group>"; };
 		F71156CAD7673A87034AF0D8 /* FileModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileModels.swift; sourceTree = "<group>"; };
@@ -487,6 +493,7 @@
 				2F837F1CD97FBADD4A87A567 /* ClawdHomeHelper.entitlements */,
 				822EF3CEFF50ACB37FF8DEEA /* GatewayWatchdog.swift */,
 				CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */,
+				F32760673784B8C2FA774E74 /* HelperImpl+Agent.swift */,
 				1C8B8FD7981A5C81058060CC /* HelperImpl+Backup.swift */,
 				642F3F921C3D218DB8393578 /* HelperImpl+Config.swift */,
 				AE60C673397402540C236C95 /* HelperImpl+Diagnostics.swift */,
@@ -505,6 +512,7 @@
 			isa = PBXGroup;
 			children = (
 				A2AF7BE5DA61BB38781D130C /* AccountKeychain.swift */,
+				BADB9554D643220091AA3A3E /* AgentProfile.swift */,
 				F6BBA412ABBAFB1986020ADA /* AppAppearance.swift */,
 				45C19EA10CE619103184757E /* GatewayChannelModels.swift */,
 				BC6AA535876BDE2A4F506473 /* GatewayCronModels.swift */,
@@ -574,6 +582,7 @@
 		E6DAC031A0E99F89509FBE99 /* Operations */ = {
 			isa = PBXGroup;
 			children = (
+				F115A85A4379CCBE8899FDB8 /* AgentManager.swift */,
 				335F70B73CF355F93B436AFA /* AppUpdateHeartbeatService.swift */,
 				1879663548E380CB2414733A /* BackupManager.swift */,
 				C1EAFFDC5338D0ACC3A06CDD /* CloneClawManager.swift */,
@@ -856,6 +865,7 @@
 				11E36D7F3E8604EC77253D31 /* AccountKeychain.swift in Sources */,
 				BD0432723571AEC02E2938BF /* AddProviderModelSheet.swift in Sources */,
 				4FCD2C3BFF60D4569A0E7DD0 /* AddUserSheet.swift in Sources */,
+				84C8DA8A847353DF24E6FECC /* AgentProfile.swift in Sources */,
 				A2C1B14359C6417A10EADA1F /* AppAppearance.swift in Sources */,
 				E2AF48EFF2D8470BF06BF3CA /* AppLanguage.swift in Sources */,
 				8782D0C95C1470BAA40F3CB3 /* AppLockScreen.swift in Sources */,
@@ -988,6 +998,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E6FF122DB4FEB06A401BFC96 /* AgentManager.swift in Sources */,
 				5AE2A7E5C2BDF08FCAC2DBE4 /* AppUpdateHeartbeatService.swift in Sources */,
 				8ABC91BB2196F6C05E6647C9 /* AppUpdateState.swift in Sources */,
 				C77B4F6939884B36F73EB45C /* BackupManager.swift in Sources */,
@@ -1005,6 +1016,7 @@
 				0373437553BE2695E5525662 /* GatewayWatchdog.swift in Sources */,
 				C745EB73F505520BE75D6E88 /* GeneratedVersion.swift in Sources */,
 				A74D7C244C8DC0ECFAE9A55B /* HealthCheck.swift in Sources */,
+				ABC6F684C91886DAD8409030 /* HelperImpl+Agent.swift in Sources */,
 				B08AD6863D465C16D9D2D0FC /* HelperImpl+Backup.swift in Sources */,
 				4EEAE5D4A875735967902F6C /* HelperImpl+Config.swift in Sources */,
 				E31BC807CD66ED973B4DDB0B /* HelperImpl+Diagnostics.swift in Sources */,
