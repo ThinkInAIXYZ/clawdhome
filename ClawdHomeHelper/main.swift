@@ -321,6 +321,14 @@ private final class GatewayWatchdog {
             lock.unlock()
             if let nextRetry, nextRetry > now { continue }
 
+            // 新用户初始化期间 openclaw 可能尚未安装。
+            // 此时自动重启一定失败，应直接跳过并延长重试间隔，避免误报与抖动。
+            guard hasOpenclawBinary(username: user.username) else {
+                helperLog("[watchdog] skip @\(user.username): openclaw not installed yet", level: .debug)
+                setRetry(username: user.username, date: now.addingTimeInterval(120))
+                continue
+            }
+
             let status = GatewayManager.status(username: user.username, uid: user.uid)
             guard !status.running else {
                 clearRetry(username: user.username)
@@ -333,11 +341,28 @@ private final class GatewayWatchdog {
                 try GatewayManager.startGateway(username: user.username, uid: user.uid)
                 clearRetry(username: user.username)
             } catch {
-                helperLog("[watchdog] restart failed @\(user.username): \(error.localizedDescription)", level: .error)
+                let retryInterval = retryIntervalForRestartFailure(error)
+                let level: LogLevel = retryInterval >= 120 ? .warn : .error
+                helperLog("[watchdog] restart failed @\(user.username): \(error.localizedDescription)", level: level)
                 GatewayLog.log("WATCHDOG_RESTART_FAIL", username: user.username, detail: error.localizedDescription)
-                setRetry(username: user.username, date: now.addingTimeInterval(30))
+                setRetry(username: user.username, date: now.addingTimeInterval(retryInterval))
             }
         }
+    }
+
+    private func hasOpenclawBinary(username: String) -> Bool {
+        (try? ConfigWriter.findOpenclawBinary(for: username)) != nil
+    }
+
+    private func retryIntervalForRestartFailure(_ error: Error) -> TimeInterval {
+        if case GatewayError.openclawNotFound = error {
+            return 300
+        }
+        let msg = error.localizedDescription
+        if msg.contains("循环重启") || msg.contains("启动后校验失败") {
+            return 120
+        }
+        return 30
     }
 
     private func clearRetry(username: String) {
