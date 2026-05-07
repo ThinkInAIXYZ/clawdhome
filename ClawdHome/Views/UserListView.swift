@@ -178,6 +178,7 @@ struct ClawPoolView: View {
                         username: normalized.username,
                         relativePath: ".openclaw/workspace"
                     )
+                    try? await helperClient.applySavedProxySettingsIfAny(username: normalized.username)
 
                     pool.loadUsers()
                     let trimmedDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
