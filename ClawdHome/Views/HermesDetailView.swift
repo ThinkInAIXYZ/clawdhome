@@ -73,6 +73,8 @@ struct HermesDetailView: View {
     @State private var browserAccountStatus: BrowserAccountStatus?
     @State private var isOpeningBrowserAccount = false
     @State private var isInstallingBrowserAccountTool = false
+    @State private var showInstallToolSuccess = false
+    @State private var installToolError: String?
     @State private var isResettingBrowserAccount = false
     @State private var showResetBrowserAccountConfirm = false
     @State private var showAddManualLoginSite = false
@@ -257,6 +259,22 @@ struct HermesDetailView: View {
             Text(L10n.k("hermes.profile.delete_message", fallback: "删除后该 profile 的会话和配置不可恢复。"))
         }
         .alert(
+            L10n.k("hermes.browser.install_tool_success_title", fallback: "浏览器工具安装成功"),
+            isPresented: $showInstallToolSuccess
+        ) {
+            Button(L10n.k("common.action.confirm", fallback: "确定"), role: .cancel) {}
+        } message: {
+            Text(L10n.k("hermes.browser.install_tool_success_message", fallback: "浏览器工具已就绪，Hermes 现在可以操控浏览器。"))
+        }
+        .alert(
+            L10n.k("common.error.action_failed", fallback: "操作失败"),
+            isPresented: Binding(get: { installToolError != nil }, set: { if !$0 { installToolError = nil } })
+        ) {
+            Button(L10n.k("common.action.confirm", fallback: "确定"), role: .cancel) { installToolError = nil }
+        } message: {
+            Text(installToolError ?? "")
+        }
+        .alert(
             L10n.k("hermes.browser.reset_title", fallback: "重置 Hermes 浏览器？"),
             isPresented: $showResetBrowserAccountConfirm
         ) {
@@ -355,9 +373,11 @@ struct HermesDetailView: View {
                     Task { await installBrowserAccountTool() }
                 } label: {
                     Label(
-                        browserAccountStatus?.toolInstalled == true
-                            ? L10n.k("hermes.browser.tool_installed", fallback: "工具已安装")
-                            : L10n.k("hermes.browser.install_tool", fallback: "安装浏览器工具"),
+                        isInstallingBrowserAccountTool
+                            ? L10n.k("hermes.browser.installing_tool", fallback: "安装中…")
+                            : browserAccountStatus?.toolInstalled == true
+                                ? L10n.k("hermes.browser.tool_installed", fallback: "工具已安装")
+                                : L10n.k("hermes.browser.install_tool", fallback: "安装浏览器工具"),
                         systemImage: "wrench.and.screwdriver"
                     )
                 }
@@ -906,8 +926,10 @@ struct HermesDetailView: View {
             browserAccountStatus = try await helperClient.installBrowserAccountTool(username: user.username)
             _ = try await helperClient.openBrowserAccount(username: user.username)
             await refreshBrowserAccountStatus()
+            showInstallToolSuccess = true
         } catch {
             await refreshBrowserAccountStatus()
+            installToolError = error.localizedDescription
         }
     }
 
