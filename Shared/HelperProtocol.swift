@@ -388,7 +388,7 @@ enum ManagedUserFilter {
 
     /// 对指定用户执行体检（环境隔离检查 + 应用安全审计）
     /// fix=true 时自动修复可修复项（目前为文件权限类问题）
-    /// 返回 (success, json) — json 为 JSON 编码的 HealthCheckResult
+    /// 返回 (success, json) — json 为 JSON 编码的 DiagnosticsResult
     func runHealthCheck(
         username: String,
         fix: Bool,

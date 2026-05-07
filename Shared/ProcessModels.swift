@@ -2,20 +2,15 @@
 
 import Foundation
 
-struct ProcessEntry: Codable, Identifiable {
-    let pid: Int32
-    let ppid: Int32
-    let name: String        // 短名（comm）
-    let cmdline: String     // 完整命令行
-    let cpuPercent: Double
-    let memRssMB: Double    // RSS，单位 MB
-    let state: String       // R/S/I/Z/T…
-    let threads: Int32
-    let elapsedSeconds: Int // 运行时长（秒）
-    var listeningPorts: [String] = [] // ["tcp:8080", "tcp:443"]
+// MARK: - 进程格式化协议（消除 ProcessEntry / ProcessDetail 重复计算属性）
 
-    var id: Int32 { pid }
+protocol ProcessFormattable {
+    var state: String { get }
+    var elapsedSeconds: Int { get }
+    var memRssMB: Double { get }
+}
 
+extension ProcessFormattable {
     var stateLabel: String {
         switch state.prefix(1) {
         case "R": return String(localized: "process.state.running", defaultValue: "运行")
@@ -43,6 +38,21 @@ struct ProcessEntry: Codable, Identifiable {
             ? String(format: "%.0fM", memRssMB)
             : String(format: "%.1fG", memRssMB / 1024)
     }
+}
+
+struct ProcessEntry: Codable, Identifiable, ProcessFormattable {
+    let pid: Int32
+    let ppid: Int32
+    let name: String        // 短名（comm）
+    let cmdline: String     // 完整命令行
+    let cpuPercent: Double
+    let memRssMB: Double    // RSS，单位 MB
+    let state: String       // R/S/I/Z/T…
+    let threads: Int32
+    let elapsedSeconds: Int // 运行时长（秒）
+    var listeningPorts: [String] = [] // ["tcp:8080", "tcp:443"]
+
+    var id: Int32 { pid }
 
     var portsLabel: String {
         listeningPorts.joined(separator: ",")
@@ -71,7 +81,7 @@ enum ClawPoolVisibilityPolicy {
     }
 }
 
-struct ProcessDetail: Codable {
+struct ProcessDetail: Codable, ProcessFormattable {
     let pid: Int32
     let ppid: Int32
     let name: String
@@ -95,36 +105,6 @@ struct ProcessDetail: Codable {
     let executablePermissions: String?
 
     let listeningPorts: [String]
-}
-
-extension ProcessDetail {
-    var stateLabel: String {
-        switch state.prefix(1) {
-        case "R": return String(localized: "process.state.running", defaultValue: "运行")
-        case "S": return String(localized: "process.state.sleeping", defaultValue: "等待")
-        case "I": return String(localized: "process.state.idle", defaultValue: "空闲")
-        case "Z": return String(localized: "process.state.zombie", defaultValue: "僵尸")
-        case "T": return String(localized: "process.state.stopped", defaultValue: "暂停")
-        default:  return String(state.prefix(1))
-        }
-    }
-
-    var uptimeLabel: String {
-        let secs = elapsedSeconds
-        guard secs >= 0 else { return "—" }
-        if secs < 60    { return "\(secs)s" }
-        if secs < 3600  { return "\(secs / 60)m" }
-        let h = secs / 3600; let m = (secs % 3600) / 60
-        if h < 24       { return "\(h)h\(m)m" }
-        let d = h / 24; let rh = h % 24
-        return "\(d)d\(rh)h"
-    }
-
-    var memLabel: String {
-        memRssMB < 1024
-            ? String(format: "%.0fM", memRssMB)
-            : String(format: "%.1fG", memRssMB / 1024)
-    }
 }
 
 private enum ProcessPurposeCatalog {
