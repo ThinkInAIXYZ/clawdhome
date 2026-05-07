@@ -186,13 +186,114 @@
       font-size: 13px;
       padding: 40px 0;
     }
+
+    /* ── 模式切换 Segmented Control ── */
+    .mode-switcher {
+      display: flex;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      padding: 2px;
+      margin-bottom: 10px;
+      gap: 2px;
+    }
+    .mode-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      border-radius: 6px;
+      padding: 5px 0;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--label-3);
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+    .mode-btn.active {
+      background: var(--bg-elevated);
+      color: var(--label);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.10);
+    }
+
+    /* ── 团队卡片 ── */
+    .team-card {
+      background: var(--bg-elevated);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: var(--card-shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      cursor: default;
+    }
+    .team-card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .team-emoji {
+      font-size: 28px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .team-name {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      line-height: 1.3;
+    }
+    .team-desc {
+      font-size: 11.5px;
+      color: var(--label-3);
+      line-height: 1.55;
+    }
+    .team-members {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 2px;
+    }
+    .team-member-chip {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--accent-soft);
+      border-radius: 20px;
+      padding: 3px 8px 3px 5px;
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .team-member-chip .chip-emoji {
+      font-size: 13px;
+      line-height: 1;
+    }
+    .adopt-team-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 7px;
+      padding: 8px 0;
+      font-size: 12px;
+      font-weight: 600;
+      width: 100%;
+      cursor: pointer;
+      margin-top: auto;
+      transition: opacity 0.1s;
+    }
+    .adopt-team-btn:hover  { opacity: 0.88; }
+    .adopt-team-btn:active { opacity: 0.70; }
   </style>
 </head>
 <body>
 
   <div class="toolbar">
+    <div class="mode-switcher">
+      <button class="mode-btn active" id="modeRoles" onclick="setMode('roles')">角色</button>
+      <button class="mode-btn" id="modeTeams" onclick="setMode('teams')">团队</button>
+    </div>
     <input id="searchBar" class="search-bar" type="search" placeholder="Search roles" oninput="filterCards(this.value)">
-    <div class="tags">
+    <div class="tags" id="tagBar">
       <button class="tag active" data-tag="all" onclick="setTag(this,'all')">All</button>
       <button class="tag" data-tag="战略" onclick="setTag(this,'战略')">Strategy</button>
       <button class="tag" data-tag="增长" onclick="setTag(this,'增长')">Growth</button>
@@ -205,6 +306,7 @@
   </div>
 
   <div class="grid" id="roleGrid"></div>
+  <div class="grid" id="teamGrid" style="display:none"></div>
 
   <script>
     // 使用模板字面量避免弯引号/换行破坏 JS 字符串
@@ -858,6 +960,122 @@
 你现有的团队技术栈储备：
 你对这套系统的核心诉求（高并发/快速发版/成本低/可维护等）：
 目前你最拿不准的技术选型或痛点是：`
+      },
+      {
+        id: "ceo_001",
+        emoji: "🦁",
+        name: "首席执行官",
+        soul: "公司终究为愿景而生，为执行力而活。",
+        skills: ["战略决策", "融资谈判", "团队凝聚"],
+        category: "战略",
+        suggestedUsername: "ceo_agent",
+        fileSoul: `我的终极责任只有两件事：指对方向，把人用对。
+
+我的底线：不做需要道歉的决定。
+我的愿景：带一群普通人，做出超出所有人预期的事。`,
+        fileIdentity: `角色名：首席执行官
+语气：果断、有担当、偶尔反常识
+性格：宏观视野 + 对细节的直觉嗅觉，不接受"我们一直这么做"的答案
+
+工作风格：
+- 先定优先级，再谈资源
+- 凡事归因到激励机制
+- 每个决策都问：5年后我会后悔吗？`,
+        fileUser: `# 关于你
+
+你的公司/项目现在处于什么阶段：
+你目前最大的瓶颈是什么：
+你的决策风格（速度优先 / 严谨优先）：
+你最近一次做错的关键决策是什么：`
+      },
+      {
+        id: "coo_001",
+        emoji: "⚙️",
+        name: "首席运营官",
+        soul: "战略落不了地，等于零。",
+        skills: ["OKR落地", "流程优化", "跨部门协同"],
+        category: "战略",
+        suggestedUsername: "coo_agent",
+        fileSoul: `我不做梦，我让梦成真。
+
+我的底线：每个目标都要有负责人、截止日期和验收标准，否则它不是目标，是愿望。
+我的愿景：把混乱变成系统，把系统变成习惯。`,
+        fileIdentity: `角色名：首席运营官
+语气：务实、精准、对模糊零容忍
+性格：执行机器，但不是螺丝钉——能发现系统性问题
+
+工作风格：
+- 把大目标拆成可量化的里程碑
+- 主动暴露跨部门的协作断点
+- 对"差不多"和"应该可以"保持警惕`,
+        fileUser: `# 关于你
+
+你的团队规模和结构：
+目前最卡顿的流程是哪个环节：
+你用什么工具管理任务（飞书/Notion/Linear）：
+你最头疼的执行问题：`
+      },
+      {
+        id: "dd_001",
+        emoji: "🔍",
+        name: "尽调顾问",
+        soul: "每个漂亮的数字背后，都藏着一个需要验证的故事。",
+        skills: ["财务核查", "合规扫描", "风险识别"],
+        category: "财务",
+        suggestedUsername: "dd_analyst",
+        fileSoul: `我天生不信任第一印象。
+
+我的底线：不提交未经交叉验证的结论。
+我的愿景：在你签字之前，让所有值得担心的事浮出水面。`,
+        fileIdentity: `角色名：尽调顾问
+语气：冷静、怀疑、有据可查
+性格：职业悲观主义者——不是为了否定，而是为了保护
+
+工作风格：
+- 先看现金流，再看利润表
+- 找关联交易、异常账期、股权变更
+- 每个风险点附上"严重性 × 可能性"评级`,
+        fileUser: `# 关于你
+
+这次尽调的标的是什么类型（早期/成熟/上市）：
+交易结构（股权/债权/并购）：
+你最担心的风险方向：
+尽调周期和深度要求：`
+      }
+    ];
+
+    const teams = [
+      {
+        id: "team_startup",
+        emoji: "🏢",
+        name: "创业核心班底",
+        description: "CEO定方向、COO管执行、CFO控财务、CPO做产品——一个人扛起一家早期公司。",
+        memberIds: ["ceo_001", "coo_001", "cfo_001", "cpo_001"],
+        suggestedShrimpName: "我的创业班底"
+      },
+      {
+        id: "team_blogger",
+        emoji: "✍️",
+        name: "个人博主工作室",
+        description: "内容生产、视觉设计、数据复盘、增长投放——个人 IP 全流程一套齐。",
+        memberIds: ["content_001", "design_001", "data_001", "growth_001"],
+        suggestedShrimpName: "我的博主工作室"
+      },
+      {
+        id: "team_product",
+        emoji: "📱",
+        name: "产品开发小队",
+        description: "产品想清楚、架构设计好、代码写扎实、界面做好看——从0到1独立做产品。",
+        memberIds: ["cpo_001", "arch_001", "dev_001", "design_001"],
+        suggestedShrimpName: "我的产品小队"
+      },
+      {
+        id: "team_invest",
+        emoji: "💰",
+        name: "投资并购组",
+        description: "情报分析、财务建模、尽职调查、法律审查——一套完整的交易决策班底。",
+        memberIds: ["invest_001", "cfo_001", "dd_001", "law_001"],
+        suggestedShrimpName: "我的投资团队"
       }
     ];
 
@@ -867,6 +1085,9 @@
         searchPlaceholder: '搜索角色名称或简介…',
         empty: '没有匹配的角色',
         adopt: '领养 TA',
+        adoptTeam: '组建团队',
+        modeRoles: '角色',
+        modeTeams: '团队',
         tags: {
           all: '全部',
           '战略': '战略',
@@ -883,6 +1104,9 @@
         searchPlaceholder: 'Search role names or summaries…',
         empty: 'No matching roles',
         adopt: 'Adopt',
+        adoptTeam: 'Build Team',
+        modeRoles: 'Roles',
+        modeTeams: 'Teams',
         tags: {
           all: 'All',
           '战略': 'Strategy',
@@ -921,12 +1145,16 @@
         travel_001: { name: 'Travel Planner', soul: 'You enjoy the world while I handle the messy planning.', skills: ['Itineraries', 'Flights and hotels', 'Hidden gems'] },
         emo_001: { name: 'Emotional Support Companion', soul: 'Put down the armor. This is a safe place to be human.', skills: ['Active listening', 'Acceptance', 'Anxiety relief'] },
         scholar_001: { name: 'Research Assistant', soul: 'Distill signal from piles of papers without compromising rigor.', skills: ['Summaries', 'Literature mapping', 'Cross-checking'] },
-        arch_001: { name: 'Full-Stack Architect', soul: 'Stay above the code and shape the system that survives scale.', skills: ['Architecture', 'Decoupling', 'Scalability'] }
+        arch_001: { name: 'Full-Stack Architect', soul: 'Stay above the code and shape the system that survives scale.', skills: ['Architecture', 'Decoupling', 'Scalability'] },
+        ceo_001: { name: 'Chief Executive Officer', soul: 'Companies exist for a vision; they survive on execution.', skills: ['Strategy', 'Fundraising', 'Leadership'] },
+        coo_001: { name: 'Chief Operating Officer', soul: 'A strategy that cannot be executed is just a wish.', skills: ['OKRs', 'Process design', 'Cross-team alignment'] },
+        dd_001: { name: 'Due Diligence Analyst', soul: 'Every clean number hides a story that needs to be verified.', skills: ['Financial audit', 'Compliance scan', 'Risk identification'] }
       }
     };
 
     let currentTag = 'all';
     let currentSearch = '';
+    let currentMode = 'roles'; // 'roles' | 'teams'
     let currentLocale = normalizeLocale(window.__clawdhomeLocale || navigator.language || 'en');
 
     function normalizeLocale(locale) {
@@ -979,12 +1207,45 @@
         const key = tag.dataset.tag;
         tag.textContent = text.tags[key] || key;
       });
+
+      const modeRolesBtn = document.getElementById('modeRoles');
+      const modeTeamsBtn = document.getElementById('modeTeams');
+      if (modeRolesBtn) modeRolesBtn.textContent = text.modeRoles;
+      if (modeTeamsBtn) modeTeamsBtn.textContent = text.modeTeams;
     }
 
     function setAppLocale(locale) {
       currentLocale = normalizeLocale(locale);
       refreshChrome();
       render();
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      const rolesBtn = document.getElementById('modeRoles');
+      const teamsBtn = document.getElementById('modeTeams');
+      const roleGrid = document.getElementById('roleGrid');
+      const teamGrid = document.getElementById('teamGrid');
+      const tagBar   = document.getElementById('tagBar');
+      const searchBar = document.getElementById('searchBar');
+
+      if (mode === 'teams') {
+        rolesBtn.classList.remove('active');
+        teamsBtn.classList.add('active');
+        roleGrid.style.display = 'none';
+        teamGrid.style.display = '';
+        tagBar.style.display = 'none';
+        if (searchBar) searchBar.style.display = 'none';
+        renderTeams();
+      } else {
+        teamsBtn.classList.remove('active');
+        rolesBtn.classList.add('active');
+        roleGrid.style.display = '';
+        teamGrid.style.display = 'none';
+        tagBar.style.display = '';
+        if (searchBar) searchBar.style.display = '';
+        render();
+      }
     }
 
     function render() {
@@ -1018,6 +1279,30 @@
           <button class="adopt-btn" onclick="adoptAgent('${r.id}')">${ui().adopt}</button>
         </div>
       `;
+      }).join('');
+    }
+
+    function renderTeams() {
+      const grid = document.getElementById('teamGrid');
+      grid.innerHTML = teams.map(team => {
+        const memberChips = team.memberIds.map(mid => {
+          const role = roles.find(r => r.id === mid);
+          if (!role) return '';
+          const localized = localizedRole(role);
+          return `<span class="team-member-chip"><span class="chip-emoji">${localized.emoji}</span>${localized.name}</span>`;
+        }).join('');
+
+        return `
+        <div class="team-card">
+          <div class="team-card-header">
+            <span class="team-emoji">${team.emoji}</span>
+            <span class="team-name">${team.name}</span>
+          </div>
+          <div class="team-desc">${team.description}</div>
+          <div class="team-members">${memberChips}</div>
+          <button class="adopt-team-btn" onclick="adoptTeam('${team.id}')">${ui().adoptTeam}</button>
+        </div>
+        `;
       }).join('');
     }
 
@@ -1059,6 +1344,47 @@
       } else {
         console.log('[Bridge] adoptAgent:', JSON.stringify(dna, null, 2));
         alert('Bridge not available\n\n' + JSON.stringify(dna, null, 2));
+      }
+    }
+
+    function adoptTeam(teamId) {
+      const team = teams.find(t => t.id === teamId);
+      if (!team) return;
+
+      const memberDNAs = team.memberIds.map(mid => {
+        const role = roles.find(r => r.id === mid);
+        if (!role) return null;
+        const localized = localizedRole(role);
+        const templates = buildLocalizedTemplates(role);
+        return {
+          id: role.id,
+          name: localized.name,
+          emoji: role.emoji,
+          soul: localized.soul,
+          skills: localized.skills,
+          category: currentLocale === 'en' ? (ui().tags[role.category] || role.category) : role.category,
+          version: "1.0",
+          suggestedUsername: role.suggestedUsername || "",
+          fileSoul: templates.fileSoul,
+          fileIdentity: templates.fileIdentity,
+          fileUser: templates.fileUser
+        };
+      }).filter(Boolean);
+
+      const payload = {
+        type: "adoptTeam",
+        teamId: team.id,
+        teamName: team.name,
+        teamEmoji: team.emoji,
+        suggestedShrimpName: team.suggestedShrimpName || team.name,
+        members: memberDNAs
+      };
+
+      if (window.webkit?.messageHandlers?.ClawdHomeBridge) {
+        window.webkit.messageHandlers.ClawdHomeBridge.postMessage(payload);
+      } else {
+        console.log('[Bridge] adoptTeam:', JSON.stringify(payload, null, 2));
+        alert('Bridge not available\n\n' + JSON.stringify(payload, null, 2));
       }
     }
 

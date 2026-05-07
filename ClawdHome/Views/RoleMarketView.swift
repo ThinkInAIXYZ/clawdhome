@@ -22,6 +22,15 @@ struct AgentDNA: Codable, Identifiable {
     let suggestedUsername: String?
 }
 
+/// 团队 DNA：由 roles.html 通过 adoptTeam bridge 消息发送过来
+struct TeamDNA: Identifiable {
+    let id: String
+    let teamName: String
+    let teamEmoji: String
+    let suggestedShrimpName: String
+    let members: [AgentDNA]
+}
+
 // MARK: - Shimmer 骨架屏动画修饰器
 
 struct ShimmerModifier: ViewModifier {
@@ -130,6 +139,7 @@ private struct RoleMarketSkeletonView: View {
 
 final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var onAdoptAgent: ((AgentDNA) -> Void)?
+    var onAdoptTeam: ((TeamDNA) -> Void)?
     var onPageLoaded: (() -> Void)?
 
     // MARK: JS Bridge
@@ -138,19 +148,49 @@ final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigatio
         didReceive message: WKScriptMessage
     ) {
         guard message.name == "ClawdHomeBridge" else { return }
+        guard let body = message.body as? [String: Any] else {
+            appLog("[Bridge] Failed to parse message: \(message.body)", level: .warn)
+            return
+        }
 
-        guard let body = message.body as? [String: Any],
-              let data = try? JSONSerialization.data(withJSONObject: body),
+        // 区分团队领养 vs 单角色领养
+        if let msgType = body["type"] as? String, msgType == "adoptTeam" {
+            guard let teamId = body["teamId"] as? String,
+                  let teamName = body["teamName"] as? String,
+                  let teamEmoji = body["teamEmoji"] as? String,
+                  let membersRaw = body["members"] as? [[String: Any]]
+            else {
+                appLog("[Bridge] Failed to parse TeamDNA: \(body)", level: .warn)
+                return
+            }
+            let shrimpName = body["suggestedShrimpName"] as? String ?? teamName
+            let members: [AgentDNA] = membersRaw.compactMap { dict in
+                guard let data = try? JSONSerialization.data(withJSONObject: dict),
+                      let dna = try? JSONDecoder().decode(AgentDNA.self, from: data)
+                else { return nil }
+                return dna
+            }
+            let teamDNA = TeamDNA(
+                id: teamId,
+                teamName: teamName,
+                teamEmoji: teamEmoji,
+                suggestedShrimpName: shrimpName,
+                members: members
+            )
+            appLog("[Bridge] Received TeamDNA: \(teamName) (\(members.count) members)")
+            DispatchQueue.main.async { self.onAdoptTeam?(teamDNA) }
+            return
+        }
+
+        // 普通单角色 DNA
+        guard let data = try? JSONSerialization.data(withJSONObject: body),
               let dna = try? JSONDecoder().decode(AgentDNA.self, from: data)
         else {
             appLog("[Bridge] Failed to parse DNA: \(message.body)", level: .warn)
             return
         }
-
         appLog("[Bridge] Received DNA: \(dna.name) (\(dna.id))")
-        DispatchQueue.main.async {
-            self.onAdoptAgent?(dna)
-        }
+        DispatchQueue.main.async { self.onAdoptAgent?(dna) }
     }
 
     // MARK: WKNavigationDelegate — 加载完成通知
@@ -293,6 +333,7 @@ struct RoleMarketWebView: NSViewRepresentable {
 
 struct RoleMarketView: View {
     @State private var adoptedDNA: AgentDNA? = nil
+    @State private var adoptedTeam: TeamDNA? = nil
     @State private var awakeningError: String? = nil
     /// 缓存已加载完毕时直接为 true，第二次进入跳过骨架屏，无闪烁
     @State private var isPageLoaded: Bool = {
@@ -337,6 +378,9 @@ struct RoleMarketView: View {
         .onAppear {
             coordinator.onAdoptAgent = { dna in
                 self.adoptedDNA = dna
+            }
+            coordinator.onAdoptTeam = { teamDNA in
+                self.adoptedTeam = teamDNA
             }
             coordinator.onPageLoaded = {
                 withAnimation {
@@ -405,6 +449,13 @@ struct RoleMarketView: View {
                 }
             )
             .frame(minWidth: 460, minHeight: 560)
+        }
+        .sheet(item: $adoptedTeam) { teamDNA in
+            AdoptTeamSheet(
+                teamDNA: teamDNA,
+                existingUsers: pool.users.map { AwakeningExistingUser(username: $0.username, fullName: $0.fullName) }
+            ) { adoptedTeam = nil }
+            .frame(minWidth: 460, minHeight: 420)
         }
         .overlay(alignment: .bottom) {
             if let err = awakeningError {
