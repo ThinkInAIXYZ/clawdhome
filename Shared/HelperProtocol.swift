@@ -189,6 +189,24 @@ import Foundation
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
+    /// 获取共享 Homebrew 缓存统计（JSON 编码的 HomebrewCacheStats）
+    func getHomebrewSharedCacheStats(withReply reply: @escaping (String) -> Void)
+
+    /// 更新共享 Homebrew 缓存（串行执行，可能较慢）
+    func refreshHomebrewSharedCache(withReply reply: @escaping (Bool, String?) -> Void)
+
+    /// 清空共享 Homebrew 缓存（串行执行）
+    func clearHomebrewSharedCache(withReply reply: @escaping (Bool, String?) -> Void)
+
+    /// 获取共享缓存总览（JSON 编码的 SharedCacheOverview）
+    func getSharedCacheOverview(withReply reply: @escaping (String) -> Void)
+
+    /// 更新指定共享缓存（当前仅 homebrew 支持，cacheID 可为 homebrew/all）
+    func refreshSharedCache(cacheID: String, withReply reply: @escaping (Bool, String?) -> Void)
+
+    /// 清空指定共享缓存（cacheID: homebrew/npm/pip/uv/all）
+    func clearSharedCache(cacheID: String, withReply reply: @escaping (Bool, String?) -> Void)
+
     /// 设置指定用户 npm 安装源（写入用户级 ~/.npmrc）
     func setNpmRegistry(
         username: String,

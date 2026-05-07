@@ -140,7 +140,9 @@ struct HermesTeamWizard: View {
             Spacer()
 
             if wizardState.currentStep != .summary {
-                Button(wizardState.currentStep == .gateway ? "完成配置" : "下一步") {
+                Button(wizardState.currentStep == .gateway
+                       ? L10n.k("hermes.team_wizard.complete_setup", fallback: "Complete Setup")
+                       : L10n.k("common.next", fallback: "Next")) {
                     goNext()
                 }
                 .buttonStyle(.borderedProminent)
@@ -208,14 +210,14 @@ private struct Step1InstallView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            sectionHeader("安装 Hermes Agent", icon: "arrow.down.circle")
+            sectionHeader(L10n.k("hermes.team_wizard.section.install_agent", fallback: "Install Hermes Agent"), icon: "arrow.down.circle")
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
                         Image(systemName: wizardState.hermesInstalled ? "checkmark.circle.fill" : "circle.dashed")
                             .foregroundStyle(wizardState.hermesInstalled ? .green : .secondary)
-                        if let v = version ?? (wizardState.hermesInstalled ? "已安装" : nil) {
+                        if let v = version ?? (wizardState.hermesInstalled ? L10n.k("hermes.team_wizard.installed_short", fallback: "Installed") : nil) {
                             Text("Hermes v\(v)")
                         } else {
                             Text(L10n.k("hermes.team_wizard.not_installed", fallback: "Hermes 未安装"))
@@ -227,9 +229,9 @@ private struct Step1InstallView: View {
                     if let err = installError {
                         G1ErrorView(
                             error: err,
-                            retryLabel: "重试",
-                            skipLabel: "取消向导",
-                            editLabel: "查看日志（TODO）",
+                            retryLabel: L10n.k("common.retry", fallback: "Retry"),
+                            skipLabel: L10n.k("hermes.team_wizard.cancel_wizard", fallback: "Cancel Wizard"),
+                            editLabel: L10n.k("hermes.team_wizard.view_logs_todo", fallback: "View Logs (TODO)"),
                             onRetry: { Task { await performInstall() } },
                             onSkip: { /* 取消由外部 dismiss 处理 */ },
                             onEdit: { /* TODO：PR-5 接入日志查看器 */ }
@@ -318,7 +320,7 @@ private struct Step2MembersView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            sectionHeader("团队成员清单", icon: "person.2")
+            sectionHeader(L10n.k("hermes.team_wizard.section.members", fallback: "Team Members"), icon: "person.2")
 
             Text(L10n.k("hermes.team_wizard.members_hint", fallback: "为每个 Hermes Agent 设置唯一 ID、显示名和 Emoji。main（默认角色）始终保留。"))
                 .font(.callout)
@@ -347,9 +349,9 @@ private struct Step2MembersView: View {
             if let err = createError {
                 G1ErrorView(
                     error: err,
-                    retryLabel: "重试",
-                    skipLabel: "删除该成员",
-                    editLabel: "编辑",
+                    retryLabel: L10n.k("common.retry", fallback: "Retry"),
+                    skipLabel: L10n.k("hermes.team_wizard.delete_member", fallback: "Delete Member"),
+                    editLabel: L10n.k("common.edit", fallback: "Edit"),
                     onRetry: {
                         Task { await createPendingProfiles() }
                     },
@@ -511,7 +513,7 @@ private struct Step2MembersView: View {
                     await wizardState.persistMember(m)
                 }
             } catch {
-                createError = "创建 profile '\(member.id)' 失败：\(error.localizedDescription)"
+                createError = L10n.f("hermes.team_wizard.create_profile_failed", fallback: "Failed to create profile '%@': %@", member.id, error.localizedDescription)
                 createErrorMemberID = member.id
                 break
             }
@@ -532,7 +534,7 @@ private struct Step3LLMView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            sectionHeader("共享 LLM 配置", icon: "cpu")
+            sectionHeader(L10n.k("hermes.team_wizard.section.shared_llm", fallback: "Shared LLM Setup"), icon: "cpu")
 
             Text(L10n.k("hermes.team_wizard.llm_hint", fallback: "以下配置将写入所有团队成员的 config.yaml 与 .env。"))
                 .font(.callout)
@@ -612,9 +614,9 @@ private struct Step3LLMView: View {
             if let err = applyError {
                 G1ErrorView(
                     error: err,
-                    retryLabel: "重试此 profile",
-                    skipLabel: "跳过此 profile",
-                    editLabel: "编辑配置",
+                    retryLabel: L10n.k("hermes.team_wizard.retry_profile", fallback: "Retry This Profile"),
+                    skipLabel: L10n.k("hermes.team_wizard.skip_profile_action", fallback: "Skip This Profile"),
+                    editLabel: L10n.k("hermes.team_wizard.edit_config", fallback: "Edit Config"),
                     onRetry: { Task { await applyToAllMembers() } },
                     onSkip: {
                         if let id = applyFailedMemberID {
@@ -667,7 +669,7 @@ private struct Step3LLMView: View {
                     await wizardState.persistMember(m)
                 }
             } else {
-                applyError = "写入 '\(member.id)' 配置失败：\(err ?? "未知错误")"
+                applyError = L10n.f("hermes.team_wizard.apply_config_failed", fallback: "Failed to apply config to '%@': %@", member.id, err ?? L10n.k("common.unknown_error", fallback: "Unknown error"))
                 applyFailedMemberID = member.id
                 isApplying = false
                 return
@@ -715,7 +717,7 @@ private struct Step4IMBindingView: View {
                 // 右侧：当前成员的 IM 绑定操作区
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        sectionHeader("IM 绑定 · \(member.emoji) \(member.displayName)", icon: "qrcode.viewfinder")
+                        sectionHeader(L10n.f("hermes.team_wizard.section.im_binding_member", fallback: "IM Binding · %@ %@", member.emoji, member.displayName), icon: "qrcode.viewfinder")
 
                         platformChecklist(member: member)
 
@@ -921,7 +923,10 @@ private struct Step4IMBindingView: View {
                 Button {
                     showOptionals.toggle()
                 } label: {
-                    Label(showOptionals ? "收起可选字段" : "展开可选字段", systemImage: showOptionals ? "chevron.up" : "chevron.down")
+                    Label(showOptionals
+                          ? L10n.k("hermes.team_wizard.optional_fields.collapse", fallback: "Collapse Optional Fields")
+                          : L10n.k("hermes.team_wizard.optional_fields.expand", fallback: "Expand Optional Fields"),
+                          systemImage: showOptionals ? "chevron.up" : "chevron.down")
                         .font(.caption)
                 }
                 .buttonStyle(.plain)
@@ -937,9 +942,9 @@ private struct Step4IMBindingView: View {
             if let err = applyError {
                 G1ErrorView(
                     error: err,
-                    retryLabel: "重试",
-                    skipLabel: "跳过此平台",
-                    editLabel: "编辑表单",
+                    retryLabel: L10n.k("common.retry", fallback: "Retry"),
+                    skipLabel: L10n.k("hermes.team_wizard.skip_platform_short", fallback: "Skip Platform"),
+                    editLabel: L10n.k("hermes.team_wizard.edit_form", fallback: "Edit Form"),
                     onRetry: { Task { await applyBinding(platform: platform, memberID: member.id) } },
                     onSkip: {
                         setBinding(for: member.id, platform: platform.key, status: .skipped)
@@ -1029,9 +1034,9 @@ private struct Step4IMBindingView: View {
                 if let err = doctorError {
                     G1ErrorView(
                         error: err,
-                        retryLabel: "重试 Doctor",
-                        skipLabel: "跳过此 profile 的验收",
-                        editLabel: "回到平台表单",
+                        retryLabel: L10n.k("hermes.team_wizard.retry_doctor", fallback: "Retry Doctor"),
+                        skipLabel: L10n.k("hermes.team_wizard.skip_profile_doctor", fallback: "Skip Profile Doctor"),
+                        editLabel: L10n.k("hermes.team_wizard.back_to_platform_form", fallback: "Back to Platform Form"),
                         onRetry: { Task { await runDoctor(member: member) } },
                         onSkip: {
                             wizardState.updateProgress(for: member.id) { p in p.doctorPassed = true }
@@ -1077,7 +1082,7 @@ private struct Step4IMBindingView: View {
     private func doctorResultView(result: DoctorResult, member: TeamMember) -> some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 6) {
-                Label(result.ok ? "全部平台就绪" : "部分平台未就绪", systemImage: result.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                Label(result.ok ? L10n.k("hermes.team_wizard.doctor_all_ready", fallback: "All platforms ready") : L10n.k("hermes.team_wizard.doctor_partial_not_ready", fallback: "Some platforms not ready"), systemImage: result.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                     .font(.callout.weight(.medium))
                     .foregroundStyle(result.ok ? .green : .orange)
 
@@ -1144,7 +1149,7 @@ private struct Step4IMBindingView: View {
         guard JSONSerialization.isValidJSONObject(bindingPayload),
               let data = try? JSONSerialization.data(withJSONObject: bindingPayload),
               let payloadJSON = String(data: data, encoding: .utf8) else {
-            applyError = "序列化 IM 绑定 payload 失败"
+            applyError = L10n.k("hermes.team_wizard.im_payload_serialize_failed", fallback: "Failed to serialize IM binding payload")
             isApplying = false
             return
         }
@@ -1164,7 +1169,7 @@ private struct Step4IMBindingView: View {
                 await wizardState.persistMember(m)
             }
         } else {
-            applyError = err ?? "绑定失败"
+            applyError = err ?? L10n.k("hermes.team_wizard.binding_failed", fallback: "Binding failed")
             wizardState.updateProgress(for: memberID) { p in
                 p.imBindings[platform.key] = IMBindingState(status: .failed, doneAt: nil, error: err)
             }
@@ -1184,7 +1189,7 @@ private struct Step4IMBindingView: View {
 
         guard let data = jsonStr.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            doctorError = "Doctor 返回结果解析失败：\(jsonStr)"
+            doctorError = L10n.f("hermes.team_wizard.doctor_parse_failed", fallback: "Failed to parse Doctor output: %@", jsonStr)
             isRunningDoctor = false
             return
         }
@@ -1208,7 +1213,7 @@ private struct Step4IMBindingView: View {
             advanceToNextMember()
         } else {
             let failList = failedPlatforms.map { "\($0.key): \($0.value)" }.joined(separator: "；")
-            doctorError = "以下平台未就绪：\(failList)"
+            doctorError = L10n.f("hermes.team_wizard.doctor_platforms_not_ready", fallback: "Platforms not ready: %@", failList)
         }
         isRunningDoctor = false
     }
@@ -1237,7 +1242,7 @@ private struct Step5GatewayView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            sectionHeader("Gateway 启动", icon: "play.circle")
+            sectionHeader(L10n.k("hermes.team_wizard.section.gateway", fallback: "Gateway Startup"), icon: "play.circle")
 
             Text(L10n.k("hermes.team_wizard.gateway_hint", fallback: "为每个成员注册并启动 Hermes Gateway，默认加入开机自启白名单。"))
                 .font(.callout)
@@ -1258,9 +1263,9 @@ private struct Step5GatewayView: View {
             if let err = gatewayError {
                 G1ErrorView(
                     error: err,
-                    retryLabel: "重试",
-                    skipLabel: "跳过此 profile Gateway",
-                    editLabel: "查看日志（TODO）",
+                    retryLabel: L10n.k("common.retry", fallback: "Retry"),
+                    skipLabel: L10n.k("hermes.team_wizard.skip_profile_gateway", fallback: "Skip This Profile Gateway"),
+                    editLabel: L10n.k("hermes.team_wizard.view_logs_todo", fallback: "View Logs (TODO)"),
                     onRetry: { Task { await startAllPendingGateways() } },
                     onSkip: {
                         if let id = gatewayFailedMemberID {
@@ -1363,14 +1368,14 @@ private struct Step5GatewayView: View {
                         await wizardState.persistMember(m)
                     }
                 } else {
-                    gatewayError = "gateway '\(member.id)' 启动后未检测到运行状态"
+                    gatewayError = L10n.f("hermes.team_wizard.gateway_not_running_after_start", fallback: "Gateway '%@' is not running after start", member.id)
                     gatewayFailedMemberID = member.id
                     isProcessing = false
                     currentProcessingID = nil
                     return
                 }
             } catch {
-                gatewayError = "启动 gateway '\(member.id)' 失败：\(error.localizedDescription)"
+                gatewayError = L10n.f("hermes.team_wizard.gateway_start_failed", fallback: "Failed to start gateway '%@': %@", member.id, error.localizedDescription)
                 gatewayFailedMemberID = member.id
                 isProcessing = false
                 currentProcessingID = nil
@@ -1401,7 +1406,7 @@ private struct Step6SummaryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            sectionHeader("团队初始化完成", icon: "checkmark.seal.fill")
+            sectionHeader(L10n.k("hermes.team_wizard.section.summary", fallback: "Team Initialization Complete"), icon: "checkmark.seal.fill")
 
             Text(L10n.f("hermes.team_wizard.summary_congrats", fallback: "恭喜！%d/%d 个 agent 已就绪。", readyCount, wizardState.members.count))
                 .font(.title3.weight(.semibold))
@@ -1422,7 +1427,7 @@ private struct Step6SummaryView: View {
                 Button {
                     copyStatusJSON()
                 } label: {
-                    Label(copied ? "已复制" : "复制状态摘要", systemImage: copied ? "checkmark" : "doc.on.doc")
+                    Label(copied ? L10n.k("common.copied", fallback: "Copied") : L10n.k("hermes.team_wizard.copy_status_summary", fallback: "Copy Status Summary"), systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
                 .buttonStyle(.bordered)
 

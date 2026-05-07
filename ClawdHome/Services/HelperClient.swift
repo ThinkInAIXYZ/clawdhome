@@ -1227,6 +1227,80 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
+    /// 获取共享 Homebrew 缓存统计
+    func getHomebrewSharedCacheStats() async -> HomebrewCacheStats? {
+        guard let proxy = metadataProxy else { return nil }
+        do {
+            let json: String = try await xpcCall { done in
+                proxy.getHomebrewSharedCacheStats { done($0) }
+            }
+            guard let data = json.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(HomebrewCacheStats.self, from: data)
+        } catch {
+            return nil
+        }
+    }
+
+    /// 更新共享 Homebrew 缓存
+    func refreshHomebrewSharedCache() async throws -> String? {
+        guard let proxy = installProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.refreshHomebrewSharedCache { ok, msg in
+                done((ok, msg))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "更新 Homebrew 缓存失败") }
+        return msg
+    }
+
+    /// 清空共享 Homebrew 缓存
+    func clearHomebrewSharedCache() async throws {
+        guard let proxy = installProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.clearHomebrewSharedCache { ok, msg in
+                done((ok, msg))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "清空 Homebrew 缓存失败") }
+    }
+
+    /// 获取共享缓存总览
+    func getSharedCacheOverview() async -> SharedCacheOverview? {
+        guard let proxy = metadataProxy else { return nil }
+        do {
+            let json: String = try await xpcCall { done in
+                proxy.getSharedCacheOverview { done($0) }
+            }
+            guard let data = json.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(SharedCacheOverview.self, from: data)
+        } catch {
+            return nil
+        }
+    }
+
+    /// 更新指定共享缓存
+    func refreshSharedCache(cacheID: String) async throws -> String? {
+        guard let proxy = installProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.refreshSharedCache(cacheID: cacheID) { ok, msg in
+                done((ok, msg))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "更新缓存失败") }
+        return msg
+    }
+
+    /// 清空指定共享缓存
+    func clearSharedCache(cacheID: String) async throws {
+        guard let proxy = installProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.clearSharedCache(cacheID: cacheID) { ok, msg in
+                done((ok, msg))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "清空缓存失败") }
+    }
+
     /// 设置 npm 安装源（写入用户级 ~/.npmrc）
     func setNpmRegistry(username: String, registry: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }

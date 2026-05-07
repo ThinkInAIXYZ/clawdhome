@@ -13,9 +13,9 @@
 import Foundation
 
 struct HermesInstaller {
-    private static let sharedCacheRoot = "/var/lib/clawdhome/cache"
-    private static let sharedPipCacheDir = "/var/lib/clawdhome/cache/pip"
-    private static let sharedUVCacheDir = "/var/lib/clawdhome/cache/uv"
+    private static let sharedCacheRoot = UserEnvContract.sharedCacheRootDir
+    private static let sharedPipCacheDir = UserEnvContract.pipSharedCacheDir()
+    private static let sharedUVCacheDir = UserEnvContract.uvSharedCacheDir()
 
     // MARK: - 路径契约
 
@@ -168,7 +168,7 @@ struct HermesInstaller {
             ("HOMEBREW_PREFIX", brew),
             ("HOMEBREW_CELLAR", "\(brew)/Cellar"),
             ("HOMEBREW_REPOSITORY", brew),
-            ("HOMEBREW_CACHE", UserEnvContract.homebrewSharedCacheDir()),
+            ("HOMEBREW_CACHE", UserEnvContract.homebrewCacheDir(username: username)),
             ("PIP_CACHE_DIR", sharedPipCacheDir),
             ("UV_CACHE_DIR", sharedUVCacheDir),
         ]
@@ -195,56 +195,58 @@ struct HermesInstaller {
     ///   - version: nil 表示最新版，否则安装指定版本（如 "0.1.0"）
     @discardableResult
     static func install(username: String, version: String?, logURL: URL? = nil) throws -> String {
-        // 与 openclaw 安装流程对齐：先做用户级 Homebrew 修复（best-effort）。
-        // 该步骤失败不阻断后续 Hermes 官方安装流程。
-        do {
-            try HomebrewRepairManager.repair(username: username, logURL: logURL)
-        } catch {
-            helperLog("Hermes 前置 Homebrew 修复失败（忽略继续） @\(username): \(error.localizedDescription)", level: .warn)
-        }
+        try HomebrewRepairManager.withSharedCacheInstallLock(username: username, logURL: logURL) {
+            // 与 openclaw 安装流程对齐：先做用户级 Homebrew 修复（best-effort）。
+            // 该步骤失败不阻断后续 Hermes 官方安装流程。
+            do {
+                try HomebrewRepairManager.repair(username: username, logURL: logURL)
+            } catch {
+                helperLog("Hermes 前置 Homebrew 修复失败（忽略继续） @\(username): \(error.localizedDescription)", level: .warn)
+            }
 
-        // 0. 前置检查：目标用户可用的 Python 3.11+
-        _ = try findPython(for: username)
-        try ensureSharedPythonCacheReady()
-        defer { repairSharedPythonCachePermissions() }
+            // 0. 前置检查：目标用户可用的 Python 3.11+
+            _ = try findPython(for: username)
+            try ensureSharedPythonCacheReady()
+            defer { repairSharedPythonCachePermissions() }
 
-        let home = hermesHome(for: username)
+            let home = hermesHome(for: username)
 
-        // 1. 确保 HERMES_HOME 存在且归属用户
-        if !FileManager.default.fileExists(atPath: home) {
-            try FileManager.default.createDirectory(
-                atPath: home, withIntermediateDirectories: true, attributes: nil
+            // 1. 确保 HERMES_HOME 存在且归属用户
+            if !FileManager.default.fileExists(atPath: home) {
+                try FileManager.default.createDirectory(
+                    atPath: home, withIntermediateDirectories: true, attributes: nil
+                )
+            }
+            _ = try? FilePermissionHelper.chown(home, owner: username)
+
+            // 2. 使用官方 install.sh（非交互），并保持目标用户环境隔离
+            helperLog("[HermesInstaller] 使用官方脚本安装 @\(username)")
+            let installScriptURL = "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh"
+            var scriptCmd = "curl -fsSL \(installScriptURL) | /bin/bash -s -- --skip-setup --hermes-home \"$HERMES_HOME\""
+            if let branch = sanitizeBranch(version) {
+                scriptCmd += " --branch \(branch)"
+            }
+
+            let args = ["-u", username, "-H", "env", "-i"]
+                + sudoRuntimeArgs(for: username)
+                + ["/bin/bash", "-c", scriptCmd]
+            let output = try runInstallStep("/usr/bin/sudo", args: args, logURL: logURL)
+
+            // 3. 修正所有权（脚本内若触发 sudo/install 产生 root-owned 文件，做一次兜底）
+            let venv = venvDir(for: username)
+            _ = try? FilePermissionHelper.chownRecursive(installDir(for: username), owner: username)
+            _ = try? FilePermissionHelper.chownRecursive(home, owner: username)
+            _ = try? FilePermissionHelper.chownRecursive(venv, owner: username)
+
+            helperLog("[HermesInstaller] INSTALL_OK @\(username)")
+            // 写入运行时声明，固定识别引擎（防止 hermes --version 并发失败导致实例识别抖动）
+            writeRuntimeConfig(runtime: "hermes", username: username)
+            HermesConfigWriter.syncBrowserCDPEndpoint(
+                username: username,
+                endpoint: BrowserAccountManager.reachableCDPEndpoint(username: username)
             )
+            return output
         }
-        _ = try? FilePermissionHelper.chown(home, owner: username)
-
-        // 2. 使用官方 install.sh（非交互），并保持目标用户环境隔离
-        helperLog("[HermesInstaller] 使用官方脚本安装 @\(username)")
-        let installScriptURL = "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh"
-        var scriptCmd = "curl -fsSL \(installScriptURL) | /bin/bash -s -- --skip-setup --hermes-home \"$HERMES_HOME\""
-        if let branch = sanitizeBranch(version) {
-            scriptCmd += " --branch \(branch)"
-        }
-
-        let args = ["-u", username, "-H", "env", "-i"]
-            + sudoRuntimeArgs(for: username)
-            + ["/bin/bash", "-c", scriptCmd]
-        let output = try runInstallStep("/usr/bin/sudo", args: args, logURL: logURL)
-
-        // 3. 修正所有权（脚本内若触发 sudo/install 产生 root-owned 文件，做一次兜底）
-        let venv = venvDir(for: username)
-        _ = try? FilePermissionHelper.chownRecursive(installDir(for: username), owner: username)
-        _ = try? FilePermissionHelper.chownRecursive(home, owner: username)
-        _ = try? FilePermissionHelper.chownRecursive(venv, owner: username)
-
-        helperLog("[HermesInstaller] INSTALL_OK @\(username)")
-        // 写入运行时声明，固定识别引擎（防止 hermes --version 并发失败导致实例识别抖动）
-        writeRuntimeConfig(runtime: "hermes", username: username)
-        HermesConfigWriter.syncBrowserCDPEndpoint(
-            username: username,
-            endpoint: BrowserAccountManager.reachableCDPEndpoint(username: username)
-        )
-        return output
     }
 
     private static func ensureSharedPythonCacheReady() throws {
