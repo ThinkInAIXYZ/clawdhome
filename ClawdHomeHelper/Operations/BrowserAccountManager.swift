@@ -36,11 +36,12 @@ enum BrowserAccountManager {
 
     static func prepareForRuntimeInstall(username: String, logURL: URL? = nil) throws {
         appendInstallLog("→ 安装 ClawdHome 用户级浏览器工具\n", logURL: logURL)
-        _ = try installTool(username: username)
+        _ = try installTool(username: username, logURL: logURL)
         appendInstallLog("✓ ClawdHome 用户级浏览器工具已安装\n", logURL: logURL)
 
-        if installWarmupCompleted(username: username) {
-            appendInstallLog("✓ 浏览器安装预热已完成，本次跳过重复打开\n", logURL: logURL)
+        if installWarmupCompleted(username: username),
+           readOpenCLIProfile(username: username) != nil {
+            appendInstallLog("✓ 浏览器安装预热与 OpenCLI profile 初始化已完成，本次跳过重复打开\n", logURL: logURL)
             return
         }
 
@@ -58,6 +59,12 @@ enum BrowserAccountManager {
             let session = try open(username: username)
             openedProfilePath = session.profilePath
             Thread.sleep(forTimeInterval: 0.8)
+            let profile = try captureAndPersistOpenCLIProfile(
+                username: username,
+                profilePath: openedProfilePath,
+                logURL: logURL
+            )
+            appendInstallLog("✓ OpenCLI profile 已记录：\(profile)\n", logURL: logURL)
             try closeWarmupBrowser(profilePath: openedProfilePath, logURL: logURL)
         } catch {
             appendInstallLog("⚠ 浏览器预热失败，先关闭已打开的 Chrome profile\n", logURL: logURL)
@@ -153,6 +160,7 @@ enum BrowserAccountManager {
                 sessionExists: false,
                 browserReachable: false,
                 httpEndpoint: nil,
+                openCLIProfile: readOpenCLIProfile(username: username),
                 message: "用户不存在或用户名无效"
             )
         }
@@ -178,6 +186,7 @@ enum BrowserAccountManager {
             sessionExists: sessionFileExists(username: username),
             browserReachable: reachable,
             httpEndpoint: session?.httpEndpoint,
+            openCLIProfile: readOpenCLIProfile(username: username),
             message: message
         )
     }
@@ -199,11 +208,19 @@ enum BrowserAccountManager {
         for session in sessionPaths(username: username) where fm.fileExists(atPath: session) {
             try fm.removeItem(atPath: session)
         }
+        let openCLIProfile = openCLIProfilePath(username: username)
+        if fm.fileExists(atPath: openCLIProfile) {
+            try fm.removeItem(atPath: openCLIProfile)
+        }
         HermesConfigWriter.syncBrowserCDPEndpoint(username: username, endpoint: nil)
         let marker = installWarmupMarkerPath(username: username)
         if fm.fileExists(atPath: marker) {
             try fm.removeItem(atPath: marker)
         }
+        try ensureBrowserShellEnvironment(
+            username: username,
+            toolPath: "/Users/\(username)/\(BrowserAccountPaths.toolExecutableRelativePath)"
+        )
         return status(username: username)
     }
 
@@ -215,7 +232,7 @@ enum BrowserAccountManager {
         }
     }
 
-    static func installTool(username: String) throws -> BrowserAccountStatus {
+    static func installTool(username: String, logURL: URL? = nil) throws -> BrowserAccountStatus {
         guard BrowserAccountPaths.isValidUsername(username) else {
             throw BrowserAccountError.invalidUsername
         }
@@ -233,6 +250,7 @@ enum BrowserAccountManager {
             let context = try resolveContext(username: username)
             _ = try ensureOpenCLIBrowserBridgeExtensionInstalled(context: context, logURL: nil)
         }
+        try ensureDefaultOpenCLIInstalled(username: username, logURL: logURL)
 
         for binDir in binDirs {
             try FileManager.default.createDirectory(atPath: binDir, withIntermediateDirectories: true)
@@ -328,13 +346,241 @@ enum BrowserAccountManager {
         "/Users/\(username)/\(BrowserAccountPaths.npmGlobalBinRelativePath)"
     }
 
+    private static func npmGlobalDirectory(username: String) -> String {
+        "/Users/\(username)/.npm-global"
+    }
+
+    private static func openCLIProfilePath(username: String) -> String {
+        "/Users/\(username)/\(BrowserAccountPaths.openCLIProfileRelativePath)"
+    }
+
+    static func readOpenCLIProfile(username: String) -> String? {
+        let path = openCLIProfilePath(username: username)
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let profile = object["profile"] as? String else {
+            return nil
+        }
+        let trimmed = profile.trimmingCharacters(in: .whitespacesAndNewlines)
+        return isValidOpenCLIProfile(trimmed) ? trimmed : nil
+    }
+
+    private static func writeOpenCLIProfile(
+        _ profile: String,
+        username: String,
+        source: String = "opencli profile list"
+    ) throws {
+        guard isValidOpenCLIProfile(profile) else {
+            throw BrowserAccountError.commandFailed("OpenCLI profile id 无效：\(profile)")
+        }
+        let path = openCLIProfilePath(username: username)
+        let payload: [String: Any] = [
+            "profile": profile,
+            "capturedAt": Date().timeIntervalSince1970,
+            "source": source,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
+        let dir = (path as NSString).deletingLastPathComponent
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+        try FilePermissionHelper.chown(path, owner: username)
+        try FilePermissionHelper.chmod(path, mode: "600")
+        try ensureBrowserShellEnvironment(
+            username: username,
+            toolPath: "/Users/\(username)/\(BrowserAccountPaths.toolExecutableRelativePath)"
+        )
+    }
+
+    @discardableResult
+    private static func captureAndPersistOpenCLIProfile(
+        username: String,
+        profilePath: String,
+        logURL: URL?
+    ) throws -> String {
+        let preferredOpenCLI = "/Users/\(username)/\(BrowserAccountPaths.userLocalBinRelativePath)/opencli"
+        let fallbackOpenCLI = "\(npmGlobalBinDirectory(username: username))/opencli"
+        let openCLIPath = FileManager.default.isExecutableFile(atPath: preferredOpenCLI)
+            ? preferredOpenCLI
+            : fallbackOpenCLI
+        guard FileManager.default.isExecutableFile(atPath: openCLIPath) else {
+            throw BrowserAccountError.commandFailed("OpenCLI 未安装，无法获取 Browser Bridge profile")
+        }
+
+        appendInstallLog("→ 获取 OpenCLI Browser Bridge profile\n", logURL: logURL)
+        let nodePath = ConfigWriter.buildNodePath(username: username)
+        let envArgs = UserEnvContract
+            .orderedRuntimeEnvironment(username: username, nodePath: nodePath)
+            .filter { $0.0 != "OPENCLI_PROFILE" }
+            .map { "\($0.0)=\($0.1)" }
+        let args = ["-n", "-u", username, "-H", "/usr/bin/env"]
+            + envArgs
+            + [openCLIPath, "profile", "list"]
+        do {
+            let output: String
+            if let logURL {
+                output = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
+            } else {
+                output = try run("/usr/bin/sudo", args: args)
+            }
+            if let profile = parseOpenCLIProfileList(output) {
+                try writeOpenCLIProfile(profile, username: username)
+                return profile
+            }
+            appendInstallLog("⚠ opencli profile list 未解析到 connected profile，尝试读取插件本地存储\n", logURL: logURL)
+        } catch {
+            appendInstallLog("⚠ opencli profile list 执行失败，尝试读取插件本地存储：\(error.localizedDescription)\n", logURL: logURL)
+        }
+
+        guard let profile = readOpenCLIProfileFromExtensionStorage(profilePath: profilePath) else {
+            throw BrowserAccountError.commandFailed("未能获取 OpenCLI Browser Bridge profile")
+        }
+        try writeOpenCLIProfile(profile, username: username, source: "chrome extension storage")
+        return profile
+    }
+
+    private static func readOpenCLIProfileFromExtensionStorage(profilePath: String) -> String? {
+        let storageRoot = URL(fileURLWithPath: profilePath)
+            .appendingPathComponent("Default", isDirectory: true)
+            .appendingPathComponent("Local Extension Settings", isDirectory: true)
+        let fm = FileManager.default
+        guard let extensionDirs = try? fm.contentsOfDirectory(
+            at: storageRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+
+        for dir in extensionDirs {
+            guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
+                  let files = try? fm.contentsOfDirectory(
+                    at: dir,
+                    includingPropertiesForKeys: [.isRegularFileKey],
+                    options: [.skipsHiddenFiles]
+                  ) else {
+                continue
+            }
+            for file in files {
+                guard (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+                      let data = try? Data(contentsOf: file),
+                      let profile = parseOpenCLIProfileFromStorageData(data) else {
+                    continue
+                }
+                return profile
+            }
+        }
+        return nil
+    }
+
+    private static func parseOpenCLIProfileFromStorageData(_ data: Data) -> String? {
+        let text = String(decoding: data, as: UTF8.self)
+        let patterns = [
+            #""contextId"\s*:\s*"([A-Za-z0-9_-]{4,64})""#,
+            #"opencli_context_id_v1[\s\S]{0,128}"([A-Za-z0-9_-]{4,64})""#,
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            guard let match = regex.firstMatch(in: text, range: range),
+                  match.numberOfRanges >= 2,
+                  let valueRange = Range(match.range(at: 1), in: text) else {
+                continue
+            }
+            let value = String(text[valueRange])
+            if isValidOpenCLIProfile(value) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func parseOpenCLIProfileList(_ output: String) -> String? {
+        for rawLine in output.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard line.lowercased().contains("connected") else { continue }
+            guard !line.lowercased().hasPrefix("connected browser bridge profiles") else { continue }
+            guard line.contains("—") || line.contains(" - ") || line.contains(" -- ") else { continue }
+            let firstToken = line.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
+            if isValidOpenCLIProfile(firstToken) {
+                return firstToken
+            }
+        }
+        return nil
+    }
+
+    private static func isValidOpenCLIProfile(_ value: String) -> Bool {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
+        guard value.lowercased() != "connected" else { return false }
+        return value.count >= 4
+            && value.count <= 64
+            && value.rangeOfCharacter(from: allowed.inverted) == nil
+    }
+
+    private static func ensureDefaultOpenCLIInstalled(username: String, logURL: URL?) throws {
+        let prefix = npmGlobalDirectory(username: username)
+        let binDir = npmGlobalBinDirectory(username: username)
+        let daemonPath = "\(prefix)/lib/node_modules/@jackwener/opencli/dist/src/daemon.js"
+        let realPath = "\(binDir)/\(BrowserAccountPaths.openCLIRealExecutableName)"
+        let wrappedPath = "\(binDir)/opencli"
+        let fm = FileManager.default
+
+        if fm.fileExists(atPath: daemonPath),
+           fm.fileExists(atPath: realPath) || fm.fileExists(atPath: wrappedPath) {
+            appendInstallLog("✓ OpenCLI 已安装，跳过 npm 安装\n", logURL: logURL)
+            return
+        }
+
+        let npmPath: String
+        do {
+            npmPath = try InstallManager.findNpmBinary(for: username)
+        } catch {
+            appendInstallLog("⚠ 未找到 npm，已跳过 OpenCLI 默认安装；Node 初始化后会再次修复\n", logURL: logURL)
+            return
+        }
+
+        appendInstallLog("→ 默认安装 OpenCLI：@jackwener/opencli\n", logURL: logURL)
+        try InstallManager.ensureNpmBuildToolchainReady()
+        try FileManager.default.createDirectory(atPath: binDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: UserEnvContract.npmSharedCacheDir(), withIntermediateDirectories: true)
+        try FilePermissionHelper.chownRecursive(prefix, owner: username)
+        try? FilePermissionHelper.chmod("/var/lib/clawdhome/cache", mode: "1777")
+        try? FilePermissionHelper.chmod(UserEnvContract.npmSharedCacheDir(), mode: "1777")
+
+        let nodePath = ConfigWriter.buildNodePath(username: username)
+        let envArgs = UserEnvContract
+            .orderedRuntimeEnvironment(username: username, nodePath: nodePath)
+            .filter { $0.0 != "OPENCLI_PROFILE" }
+            .map { "\($0.0)=\($0.1)" }
+        let args = ["-u", username, "-H", "env"]
+            + envArgs
+            + [
+                npmPath, "install", "-g", "--prefix", prefix,
+                "--cache", UserEnvContract.npmSharedCacheDir(),
+                "--loglevel", "warn",
+                "@jackwener/opencli",
+            ]
+        if let logURL {
+            _ = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
+        } else {
+            _ = try run("/usr/bin/sudo", args: args)
+        }
+        try FilePermissionHelper.chownRecursive(prefix, owner: username)
+        appendInstallLog("✓ OpenCLI 默认安装完成\n", logURL: logURL)
+    }
+
     private static func ensureBrowserShellEnvironment(username: String, toolPath: String) throws {
         let browserCommand = "\(toolPath) open %s"
+        let profileExport: String
+        if let profile = readOpenCLIProfile(username: username) {
+            profileExport = "\nexport OPENCLI_PROFILE=\"\(profile)\""
+        } else {
+            profileExport = ""
+        }
         let block = """
 
         # ClawdHome browser account
         export PATH="$HOME/.local/bin:$PATH"
-        export BROWSER="\(browserCommand)"
+        export BROWSER="\(browserCommand)"\(profileExport)
         # End ClawdHome browser account
         """
         for path in ["/Users/\(username)/.zprofile", "/Users/\(username)/.zshrc"] {
@@ -660,6 +906,13 @@ enum BrowserAccountManager {
 
         port="${OPENCLI_DAEMON_PORT:-\(daemonPort)}"
         export OPENCLI_DAEMON_PORT="$port"
+        profile_file="$HOME/\(BrowserAccountPaths.openCLIProfileRelativePath)"
+        if [ -z "${OPENCLI_PROFILE:-}" ] && [ -f "$profile_file" ]; then
+          profile_from_file="$(/usr/bin/python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("profile") or "").strip())' "$profile_file" 2>/dev/null || true)"
+          if [ -n "$profile_from_file" ]; then
+            export OPENCLI_PROFILE="$profile_from_file"
+          fi
+        fi
         if ! /usr/bin/nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
           echo "opencli-daemon=start port=$port" >> "$LOG" 2>&1 || true
           mkdir -p "$HOME/.opencli"
@@ -681,6 +934,24 @@ enum BrowserAccountManager {
           echo "$status_json" | /usr/bin/grep -q '"extensionConnected":true' && break
           sleep 0.5
         done
+
+        if [ -z "${OPENCLI_PROFILE:-}" ] && [ -n "${status_json:-}" ]; then
+          profile_from_status="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[p for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; print(profiles[0]["contextId"] if len(profiles)==1 else "")' 2>/dev/null || true)"
+          if [ -n "$profile_from_status" ]; then
+            mkdir -p "$(dirname "$profile_file")"
+            /usr/bin/python3 -c 'import json,sys,time; json.dump({"profile": sys.argv[1], "capturedAt": time.time(), "source": "opencli daemon status"}, open(sys.argv[2], "w"), ensure_ascii=False, indent=2)' "$profile_from_status" "$profile_file" 2>/dev/null || true
+            chmod 600 "$profile_file" 2>/dev/null || true
+            export OPENCLI_PROFILE="$profile_from_status"
+            echo "opencli-profile=$profile_from_status" >> "$LOG" 2>&1 || true
+          fi
+        fi
+
+        if [ "${1:-}" = "profile" ] && [ "${2:-}" = "list" ] && [ -n "${OPENCLI_PROFILE:-}" ]; then
+          extension_version="$(printf '%s' "${status_json:-}" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("extensionVersion") or "")' 2>/dev/null || true)"
+          [ -n "$extension_version" ] || extension_version="unknown"
+          printf 'Connected Browser Bridge profiles\\n\\n  %s — connected v%s\\n' "$OPENCLI_PROFILE" "$extension_version"
+          exit 0
+        fi
 
         echo "opencli-wrapper=exec-real" >> "$LOG" 2>&1 || true
         exec "\(realPath)" "$@"
@@ -1743,6 +2014,13 @@ mkdir -p "$HOME/.clawdhome/browser"
 
 port="${OPENCLI_DAEMON_PORT:-%d}"
 export OPENCLI_DAEMON_PORT="$port"
+profile_file="$HOME/.clawdhome/browser/opencli-profile.json"
+if [ -z "${OPENCLI_PROFILE:-}" ] && [ -f "$profile_file" ]; then
+  profile_from_file="$(/usr/bin/python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("profile") or "").strip())' "$profile_file" 2>/dev/null || true)"
+  if [ -n "$profile_from_file" ]; then
+    export OPENCLI_PROFILE="$profile_from_file"
+  fi
+fi
 if ! /usr/bin/nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
   echo "opencli-daemon=start port=$port" >> "$LOG" 2>&1 || true
   mkdir -p "$HOME/.opencli"
@@ -1764,6 +2042,24 @@ for _ in {1..40}; do
   echo "$status_json" | /usr/bin/grep -q '"extensionConnected":true' && break
   sleep 0.5
 done
+
+if [ -z "${OPENCLI_PROFILE:-}" ] && [ -n "${status_json:-}" ]; then
+  profile_from_status="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[p for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; print(profiles[0]["contextId"] if len(profiles)==1 else "")' 2>/dev/null || true)"
+  if [ -n "$profile_from_status" ]; then
+    mkdir -p "$(dirname "$profile_file")"
+    /usr/bin/python3 -c 'import json,sys,time; json.dump({"profile": sys.argv[1], "capturedAt": time.time(), "source": "opencli daemon status"}, open(sys.argv[2], "w"), ensure_ascii=False, indent=2)' "$profile_from_status" "$profile_file" 2>/dev/null || true
+    chmod 600 "$profile_file" 2>/dev/null || true
+    export OPENCLI_PROFILE="$profile_from_status"
+    echo "opencli-profile=$profile_from_status" >> "$LOG" 2>&1 || true
+  fi
+fi
+
+if [ "${1:-}" = "profile" ] && [ "${2:-}" = "list" ] && [ -n "${OPENCLI_PROFILE:-}" ]; then
+  extension_version="$(printf '%%s' "${status_json:-}" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("extensionVersion") or "")' 2>/dev/null || true)"
+  [ -n "$extension_version" ] || extension_version="unknown"
+  printf 'Connected Browser Bridge profiles\\n\\n  %%s — connected v%%s\\n' "$OPENCLI_PROFILE" "$extension_version"
+  exit 0
+fi
 
 echo "opencli-wrapper=exec-real" >> "$LOG" 2>&1 || true
 exec %s "$@"

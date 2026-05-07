@@ -200,6 +200,12 @@ struct HermesGatewayManager {
                 <string>\($0)</string>
             """
         } ?? ""
+        let openCLIProfileEnvironmentXML = BrowserAccountManager.readOpenCLIProfile(username: username).map {
+            """
+                <key>OPENCLI_PROFILE</key>
+                <string>\($0)</string>
+            """
+        } ?? ""
 
         // named profile 需要在 ProgramArguments 中追加 --profile <id>
         let programArgumentsXML: String
@@ -244,6 +250,7 @@ struct HermesGatewayManager {
                 <key>BROWSER</key>
                 <string>\(browserCommand)</string>
         \(cdpEnvironmentXML)
+        \(openCLIProfileEnvironmentXML)
                 <key>HERMES_HOME</key>
                 <string>\(profileHome)</string>
             </dict>

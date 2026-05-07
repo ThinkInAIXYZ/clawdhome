@@ -14,6 +14,7 @@ struct BrowserAccountPaths: Codable, Equatable {
     static let legacyToolBrowserProfileRelativePath = ".openclaw/browser-profile"
     static let debugLogRelativePath = ".clawdhome/browser/debug.log"
     static let installWarmupMarkerRelativePath = ".clawdhome/browser/install-warmup.json"
+    static let openCLIProfileRelativePath = ".clawdhome/browser/opencli-profile.json"
     static let openCLIBrowserBridgeExtensionDirectoryName = "opencli-browser-bridge"
     static let profileExtensionsDirectoryName = "ClawdHomeExtensions"
     static let userLocalBinRelativePath = ".local/bin"
@@ -105,6 +106,7 @@ struct BrowserAccountStatus: Codable, Equatable {
     let sessionExists: Bool
     let browserReachable: Bool
     let httpEndpoint: String?
+    var openCLIProfile: String? = nil
     let message: String
 }
 

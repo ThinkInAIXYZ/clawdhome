@@ -886,7 +886,7 @@ struct HermesDetailView: View {
             configTabManager.selectedTab?.session.insertPromptText(text, mode: mode)
         case .terminal:
             shellTabManager.selectedTab?.session.insertPromptText(text, mode: mode)
-        case .profiles, .browser, .files, .processes, .logs:
+        case .profiles, .browser, .settings, .files, .processes, .logs:
             if let session = chatTabManager.selectedTab?.session {
                 session.insertPromptText(text, mode: mode)
             } else if let session = configTabManager.selectedTab?.session {
@@ -1250,7 +1250,7 @@ private struct HermesChatTerminalNSView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> TerminalView {
-        let tv = TerminalView(frame: .zero)
+        let tv = UndoSafeTerminalView(frame: .zero)
         tv.terminalDelegate = context.coordinator
         tv.allowMouseReporting = false
         tv.nativeForegroundColor = theme.terminalForeground

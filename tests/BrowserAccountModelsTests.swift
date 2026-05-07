@@ -45,6 +45,10 @@ struct BrowserAccountModelsTests {
             "OpenCLI Browser Bridge should live under the Chrome profile extension directory"
         )
         expect(
+            BrowserAccountPaths.openCLIProfileRelativePath == ".clawdhome/browser/opencli-profile.json",
+            "OpenCLI profile hash should be persisted under the user clawdhome browser directory"
+        )
+        expect(
             paths.openCLIBrowserBridgeExtensionDirectory.path == "/Users/admin/Library/Application Support/ClawdHome/BrowserProfiles/agent.one/ClawdHomeExtensions/opencli-browser-bridge",
             "OpenCLI Browser Bridge extension should be installed inside the managed Chrome profile"
         )
