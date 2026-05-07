@@ -213,6 +213,16 @@ struct InstallManager {
         if FileManager.default.fileExists(atPath: npmGlobal) {
             try FilePermissionHelper.chownRecursive(npmGlobal, owner: username)
         }
+
+        // .brew 目录也需修正：NodeDownloader 以 root 解压 tarball 后虽然会
+        // chown -R，但在 setNpmRegistry / install 时若 chown 曾静默失败，
+        // 或后续 root 操作污染了归属，此处补偿修正以确保 sudo -u 能正常执行 npm。
+        let brewRoot = "\(home)/.brew"
+        if FileManager.default.fileExists(atPath: brewRoot) {
+            try? FilePermissionHelper.chownRecursive(brewRoot, owner: username)
+            // 确保 owner 对目录有 traverse 权限、对可执行文件有执行权限
+            try? FilePermissionHelper.chmodSymbolicRecursive(brewRoot, expr: "u+rwX")
+        }
     }
 
     private static func isNpmPermissionError(_ error: Error) -> Bool {
