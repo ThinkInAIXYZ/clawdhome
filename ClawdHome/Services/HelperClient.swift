@@ -594,25 +594,16 @@ final class HelperClient {
     }
 
     private func shouldSuggestNodeRepair(username: String, startupErrorMessage: String) async -> Bool {
-        if Self.isLikelyMissingIsolatedNodeToolchain(message: startupErrorMessage) {
-            return true
-        }
-        return !(await isNodeInstalled(username: username))
+        let nodeInstalledProbe = await nodeInstalledIfControlReachable(username: username)
+        return GatewayStartFailureClassifier.shouldSuggestNodeRepair(
+            startupErrorMessage: startupErrorMessage,
+            nodeInstalledProbe: nodeInstalledProbe
+        )
     }
 
-    static func isLikelyMissingIsolatedNodeToolchain(message: String) -> Bool {
-        let lowered = message.lowercased()
-        if lowered.contains("env: node: no such file or directory") { return true }
-        if lowered.contains("未找到 npm，请先完成 node.js 安装步骤") { return true }
-        if lowered.contains("node.js 未安装就绪") { return true }
-        if lowered.contains("未找到隔离用户环境 npx") { return true }
-        if lowered.contains("npx is restricted to the isolated user environment") { return true }
-        if lowered.contains("exit 127")
-            && lowered.contains("openclaw")
-            && lowered.contains("gateway.port") {
-            return true
-        }
-        return false
+    private func nodeInstalledIfControlReachable(username: String) async -> Bool? {
+        guard controlProxy != nil else { return nil }
+        return await isNodeInstalled(username: username)
     }
 
     /// 安装 Node.js（输出实时写入 /tmp/clawdhome-init-<username>.log）
