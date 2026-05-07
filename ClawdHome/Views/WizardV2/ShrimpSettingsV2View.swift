@@ -1,13 +1,12 @@
 // ClawdHome/Views/WizardV2/ShrimpSettingsV2View.swift
-// Shrimp 二次配置设置页面（v2）—— 6 Tab
+// Shrimp 二次配置设置页面（v2）—— 4 Tab
 //
 // Tab:
-// 1. agents    —— Agent 列表：增删改、每个 agent 的基础配置
-// 2. im        —— IM 账号列表：添加/删除 Bot 账号（飞书/微信/...）
-// 3. bindings  —— 绑定矩阵：agent ↔ IM 账号 / peer
-// 4. model     —— 模型提供商配置（沿用现有模型管理 UI）
-// 5. advanced  —— 高级：dmScope / session 隔离配置
-// 6. plugins   —— OpenClaw 插件管理
+// 1. agents    —— Agent 卡片：增删改 + 每个 agent 的模型 picker + IM 绑定列表
+//                 （由 AgentBotListEditor 共用组件渲染；原 IM 账号 / 绑定矩阵 tab 合并进此处）
+// 2. model     —— Shrimp 模型池（共享 ModelConfigWizard）
+// 3. advanced  —— 高级：dmScope / session 隔离配置
+// 4. plugins   —— OpenClaw 插件管理
 
 import SwiftUI
 
@@ -27,11 +26,6 @@ struct ShrimpSettingsV2View: View {
     @State private var saveError: String?
     @State private var isDirty = false
 
-    // Sheets
-    @State private var showAddBot = false
-    @State private var showBindingForm = false
-    @State private var editingBinding: IMBinding? = nil
-
     // Plugins
     @State private var installedPlugins: [String] = []
     @State private var isLoadingPlugins = false
@@ -39,13 +33,11 @@ struct ShrimpSettingsV2View: View {
     @State private var pluginError: String?
 
     enum SettingsTab: String, CaseIterable {
-        case agents, im, bindings, model, advanced, plugins
+        case agents, model, advanced, plugins
 
         var title: String {
             switch self {
             case .agents:   return L10n.k("settings_v2.tab.agents", fallback: "Agents")
-            case .im:       return L10n.k("settings_v2.tab.im", fallback: "IM 账号")
-            case .bindings: return L10n.k("settings_v2.tab.bindings", fallback: "绑定矩阵")
             case .model:    return L10n.k("settings_v2.tab.model", fallback: "模型")
             case .advanced: return L10n.k("settings_v2.tab.advanced", fallback: "高级")
             case .plugins:  return L10n.k("settings_v2.tab.plugins", fallback: "插件")
@@ -55,8 +47,6 @@ struct ShrimpSettingsV2View: View {
         var icon: String {
             switch self {
             case .agents:   return "person.2"
-            case .im:       return "ellipsis.message"
-            case .bindings: return "link"
             case .model:    return "cpu"
             case .advanced: return "slider.horizontal.3"
             case .plugins:  return "puzzlepiece.extension"
@@ -101,8 +91,6 @@ struct ShrimpSettingsV2View: View {
             Group {
                 switch selectedTab {
                 case .agents:   agentsTab
-                case .im:       imTab
-                case .bindings: bindingsTab
                 case .model:    modelTab
                 case .advanced: advancedTab
                 case .plugins:  pluginsTab
@@ -134,28 +122,6 @@ struct ShrimpSettingsV2View: View {
                 .background(Color(nsColor: .windowBackgroundColor))
             }
         }
-        .sheet(isPresented: $showAddBot) {
-            AddBotSheet(username: user.username, agentId: "") { newAccount in
-                if !config.imAccounts.contains(where: { $0.id == newAccount.id && $0.platform == newAccount.platform }) {
-                    config.imAccounts.append(newAccount)
-                    isDirty = true
-                }
-            }
-        }
-        .sheet(isPresented: $showBindingForm) {
-            BindingFormSheet(
-                agents: config.agents,
-                imAccounts: config.imAccounts,
-                existingBinding: editingBinding
-            ) { saved in
-                if let idx = config.bindings.firstIndex(where: { $0.id == saved.id }) {
-                    config.bindings[idx] = saved
-                } else {
-                    config.bindings.append(saved)
-                }
-                isDirty = true
-            }
-        }
     }
 
     private func tabBarItem(_ tab: SettingsTab) -> some View {
@@ -174,110 +140,31 @@ struct ShrimpSettingsV2View: View {
         .background(selected ? Color.accentColor.opacity(0.08) : Color.clear)
     }
 
-    // MARK: - Tab 1: Agents
+    // MARK: - Tab 1: Agents（agent 卡片 + 模型 picker + IM 绑定 一站式管理）
 
     private var agentsTab: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(L10n.k("settings_v2.agents.hint", fallback: "管理 Shrimp 下的 Agent 列表"))
+                Text(L10n.k("settings_v2.agents.hint",
+                            fallback: "管理 Agent + 每个 agent 的模型与 IM 绑定。一个 IM 入口对应一个 Agent；解绑同时移除账号。"))
                     .foregroundStyle(.secondary)
                     .font(.caption)
 
-                AgentListEditor(agents: $config.agents) {
-                    isDirty = true
-                }
-            }
-            .padding(20)
-        }
-    }
-
-    // MARK: - Tab 2: IM Accounts
-
-    private var imTab: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(L10n.k("settings_v2.im.hint", fallback: "管理 IM Bot 账号，每个 Bot 对应一个飞书/微信应用"))
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-
-                IMAccountListEditor(
-                    accounts: $config.imAccounts,
+                AgentBotListEditor(
+                    agents: $config.agents,
+                    imAccounts: $config.imAccounts,
+                    bindings: $config.bindings,
                     username: user.username,
-                    onAdd: { isDirty = true }
+                    showModelPicker: true,
+                    allowAddAgent: true,
+                    onChange: { isDirty = true }
                 )
             }
             .padding(20)
         }
     }
 
-    // MARK: - Tab 3: Bindings
-
-    private var bindingsTab: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(L10n.k("settings_v2.bindings.hint", fallback: "配置 Agent ↔ IM 账号的路由绑定"))
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-                Spacer()
-                Button(action: {
-                    editingBinding = nil
-                    showBindingForm = true
-                }) {
-                    Label(L10n.k("settings_v2.bindings.add", fallback: "添加绑定"), systemImage: "plus")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-
-            Divider()
-
-            if config.bindings.isEmpty {
-                Text(L10n.k("settings_v2.bindings.empty", fallback: "暂无绑定"))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List {
-                    ForEach(config.bindings) { binding in
-                        bindingRow(binding)
-                    }
-                    .onDelete { idx in
-                        config.bindings.remove(atOffsets: idx)
-                        isDirty = true
-                    }
-                }
-                .listStyle(.plain)
-            }
-        }
-    }
-
-    private func bindingRow(_ binding: IMBinding) -> some View {
-        let agent = config.agents.first { $0.id == binding.agentId }
-        let account = config.imAccounts.first { $0.id == binding.accountId }
-        return HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(agent?.displayName ?? binding.agentId)
-                    .fontWeight(.medium)
-                Text("→ \(account?.platform.displayName ?? binding.channel) · \(account?.displayName ?? binding.accountId ?? "通配")"
-                     + (binding.peer.map { " · \($0.kind.rawValue):\($0.id)" } ?? ""))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button(action: {
-                editingBinding = binding
-                showBindingForm = true
-            }) {
-                Image(systemName: "pencil")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 4)
-    }
-
-    // MARK: - Tab 4: Model
+    // MARK: - Tab 2: Model
 
     /// 模型池管理 — 复用 ModelConfigWizard，让向导 / 详情页 / 设置三处共享同一套交互。
     private var modelTab: some View {
