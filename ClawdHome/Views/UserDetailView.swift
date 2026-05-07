@@ -299,6 +299,10 @@ struct UserDetailView: View {
     @State private var quickTransferLastPaths: [String] = []
     // Tab
     @State private var selectedTab: ClawTab = .overview
+    // Agent
+    @State private var agents: [AgentProfile] = []
+    @State private var selectedAgentId: String? = nil
+    @State private var showCreateAgent = false
     @State private var isDetailSidebarCollapsed = false
     @State private var isOverviewSidebarCollapsed = false
     @State private var hasOpenedStandaloneInitWindow = false
@@ -378,6 +382,8 @@ struct UserDetailView: View {
     // MARK: - Tab 容器
 
     private let allTabs: [ClawTab] = [.overview, .characterDef, .files, .processes, .logs, .cron, .skills, .sessions, .memory]
+    private let agentTabs: [ClawTab] = [.overview, .characterDef, .cron, .skills, .sessions, .memory]
+    private let gatewayTabs: [ClawTab] = [.files, .processes, .logs]
 
     private var shouldEmbedOverviewConsole: Bool {
         shouldEmbedOverviewGatewayConsole(
@@ -399,6 +405,14 @@ struct UserDetailView: View {
 
     private var detailSidebarShowsLabels: Bool {
         shouldShowDetailSidebarLabels(isCollapsed: isDetailSidebarCollapsed)
+    }
+
+    private var selectedAgent: AgentProfile? {
+        agents.first(where: { $0.id == selectedAgentId })
+    }
+
+    private var selectedAgentLabel: String {
+        selectedAgent?.displayLabel ?? "默认角色"
     }
 
     private var shouldRenderOverviewSidebar: Bool {
@@ -465,6 +479,7 @@ struct UserDetailView: View {
 
     private var detailSidebar: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // 折叠/展开按钮
             HStack {
                 if detailSidebarShowsLabels {
                     Text(L10n.k("user.detail.auto.overview", fallback: "概览"))
@@ -490,7 +505,109 @@ struct UserDetailView: View {
             .padding(.horizontal, detailSidebarShowsLabels ? 2 : 4)
             .frame(maxWidth: .infinity)
 
-            ForEach(allTabs, id: \.self) { sidebarButton($0) }
+            // Shrimp 信息区域
+            if detailSidebarShowsLabels {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(user.fullName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+                    Text("@\(user.username)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+            } else {
+                // 折叠时显示用户首字母缩略
+                Text(String(user.fullName.prefix(1)))
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: detailSidebarButtonSize, height: detailSidebarButtonSize)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+
+            // Agent 选择器
+            if detailSidebarShowsLabels {
+                HStack(spacing: 6) {
+                    Menu {
+                        ForEach(agents) { agent in
+                            Button {
+                                selectedAgentId = agent.id
+                            } label: {
+                                HStack {
+                                    Text(agent.displayLabel)
+                                    if agent.id == selectedAgentId {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(selectedAgentLabel)
+                                .font(.system(size: 13, weight: .medium))
+                                .lineLimit(1)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 10))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.primary.opacity(0.05))
+                        )
+                    }
+                    .menuStyle(.borderlessButton)
+
+                    Button {
+                        showCreateAgent = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(Color.accentColor))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 10)
+            } else {
+                // 折叠时只显示当前 agent 的 emoji 缩略
+                Text(selectedAgent?.emoji.isEmpty == false ? selectedAgent!.emoji : "🦐")
+                    .font(.system(size: 16))
+                    .frame(width: detailSidebarButtonSize, height: detailSidebarButtonSize)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+
+            Divider()
+                .padding(.horizontal, detailSidebarShowsLabels ? 10 : 4)
+                .padding(.vertical, 2)
+
+            // 分组：当前角色
+            if detailSidebarShowsLabels {
+                Text(L10n.k("user.detail.sidebar.agent_section", fallback: "当前角色"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 2)
+            }
+            ForEach(agentTabs, id: \.self) { sidebarButton($0) }
+
+            Divider()
+                .padding(.horizontal, detailSidebarShowsLabels ? 10 : 4)
+                .padding(.vertical, 2)
+
+            // 分组：实例
+            if detailSidebarShowsLabels {
+                Text(L10n.k("user.detail.sidebar.instance_section", fallback: "实例"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 2)
+            }
+            ForEach(gatewayTabs, id: \.self) { sidebarButton($0) }
+
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
@@ -579,6 +696,9 @@ struct UserDetailView: View {
                     showHealthCheck = true
                 }
             }
+        }
+        .onChange(of: selectedAgentId) { _, newId in
+            // 后续 Task 5-6 会实现：右侧面板刷新、WebView 切换、角色 Tab 切换
         }
         .onChange(of: gatewayHub.readinessMap[user.username]) { _, newReadiness in
             if newReadiness == .ready {
@@ -2575,7 +2695,26 @@ struct UserDetailView: View {
         if user.isRunning, let gatewayURLValue = gatewayURL {
             await gatewayHub.connect(username: user.username, gatewayURL: gatewayURLValue)
         }
+        await loadAgents()
 
+    }
+
+    /// 加载当前 Shrimp 的 Agent 列表
+    private func loadAgents() async {
+        // 优先用 GatewayHub RPC（gateway 运行时）
+        if isEffectivelyRunning, let rpcAgents = await gatewayHub.agentsList(username: user.username) {
+            agents = rpcAgents
+        } else {
+            // fallback: 通过 HelperClient 读文件
+            agents = (try? await helperClient.listAgents(username: user.username)) ?? []
+        }
+        // 如果 selectedAgentId 不在列表中，选第一个
+        if agents.isEmpty {
+            agents = [AgentProfile(id: "main", name: "默认角色", emoji: "", modelPrimary: nil, workspacePath: nil, isDefault: true)]
+        }
+        if selectedAgentId == nil || !agents.contains(where: { $0.id == selectedAgentId }) {
+            selectedAgentId = agents.first(where: { $0.isDefault })?.id ?? agents.first?.id
+        }
     }
 
     private func refreshGatewayURLUntilTokenReady(
