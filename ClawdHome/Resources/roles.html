@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>角色中心</title>
+  <style>
+    /* ── 颜色令牌：浅色模式 ── */
+    :root {
+      --bg-primary:    #F5F5F7;
+      --bg-elevated:   #FFFFFF;
+      --bg-secondary:  #EEEEEF;
+      --label:         #1D1D1F;
+      --label-2:       #3C3C43;
+      --label-3:       #6C6C70;
+      --label-4:       #AEAEB2;
+      --separator:     rgba(0,0,0,0.10);
+      --search-bg:     rgba(120,120,128,0.12);
+      --tag-bg:        rgba(120,120,128,0.12);
+      --tag-active-bg: #007AFF;
+      --card-shadow:   0 1px 4px rgba(0,0,0,0.06), 0 0 0 0.5px rgba(0,0,0,0.06);
+      --accent:        #007AFF;
+      --accent-soft:   rgba(0,122,255,0.10);
+    }
+
+    /* ── 颜色令牌：深色模式 ── */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-primary:    #1C1C1E;
+        --bg-elevated:   #2C2C2E;
+        --bg-secondary:  #3A3A3C;
+        --label:         #F5F5F7;
+        --label-2:       #EBEBF5CC;
+        --label-3:       #EBEBF599;
+        --label-4:       #EBEBF54D;
+        --separator:     rgba(255,255,255,0.10);
+        --search-bg:     rgba(120,120,128,0.20);
+        --tag-bg:        rgba(120,120,128,0.20);
+        --tag-active-bg: #0A84FF;
+        --card-shadow:   0 1px 4px rgba(0,0,0,0.40), 0 0 0 0.5px rgba(255,255,255,0.06);
+        --accent:        #0A84FF;
+        --accent-soft:   rgba(10,132,255,0.15);
+      }
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      background: var(--bg-primary);
+      color: var(--label);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── 工具栏（搜索 + 标签，无重复大标题） ── */
+    .toolbar {
+      padding: 12px 16px 8px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg-primary);
+      border-bottom: 0.5px solid var(--separator);
+    }
+
+    .search-bar {
+      background: var(--search-bg);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 13px;
+      width: 100%;
+      border: none;
+      outline: none;
+      color: var(--label);
+      margin-bottom: 8px;
+    }
+    .search-bar::placeholder { color: var(--label-4); }
+
+    .tags {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+    .tags::-webkit-scrollbar { display: none; }
+
+    .tag {
+      background: var(--tag-bg);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--label-2);
+      white-space: nowrap;
+      cursor: pointer;
+      border: none;
+      transition: background 0.12s, color 0.12s;
+    }
+    .tag.active {
+      background: var(--tag-active-bg);
+      color: white;
+    }
+
+    /* ── 卡片网格 ── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+      padding: 12px 16px 24px;
+    }
+
+    /* ── 角色卡片 ── */
+    .card {
+      background: var(--bg-elevated);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: var(--card-shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      cursor: default;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 2px;
+    }
+    .card-emoji {
+      font-size: 24px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .card-name {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: -0.1px;
+      line-height: 1.3;
+    }
+
+    .card-soul {
+      font-size: 11px;
+      color: var(--label-3);
+      line-height: 1.5;
+      flex: 1;
+    }
+
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 2px;
+    }
+    .card-tag {
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 10px;
+      color: var(--label-4);
+      font-weight: 500;
+    }
+
+    .adopt-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 7px;
+      padding: 7px 0;
+      font-size: 12px;
+      font-weight: 600;
+      width: 100%;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: opacity 0.1s;
+    }
+    .adopt-btn:hover  { opacity: 0.88; }
+    .adopt-btn:active { opacity: 0.70; }
+
+    /* 空结果 */
+    .empty {
+      grid-column: 1 / -1;
+      text-align: center;
+      color: var(--label-4);
+      font-size: 13px;
+      padding: 40px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <input class="search-bar" type="search" placeholder="搜索角色名称或简介…" oninput="filterCards(this.value)">
+    <div class="tags">
+      <button class="tag active" onclick="setTag(this,'all')">全部</button>
+      <button class="tag" onclick="setTag(this,'战略')">战略</button>
+      <button class="tag" onclick="setTag(this,'增长')">增长</button>
+      <button class="tag" onclick="setTag(this,'生活')">生活</button>
+      <button class="tag" onclick="setTag(this,'教育')">教育</button>
+      <button class="tag" onclick="setTag(this,'财务')">财务</button>
+    </div>
+  </div>
+
+  <div class="grid" id="roleGrid"></div>
+
+  <script>
+    // 使用模板字面量避免弯引号/换行破坏 JS 字符串
+    const roles = [
+      {
+        id: "cpo_001",
+        emoji: "🧭",
+        name: "首席产品经理",
+        soul: "不为功能而生，只为价值而战。",
+        skills: ["战略规划", "需求拆解", "Roadmap"],
+        category: "战略",
+        suggestedUsername: "cpo_agent",
+        fileSoul: `我的存在只有一个理由：让真正有价值的事情发生。
+
+我不追求功能的数量，不迷恋技术的复杂，不被短期噪音左右。
+我的底线是：每一个决策，都必须能回答"这对用户意味着什么"。
+我的愿景是：构建一个10年后还被人感谢的产品。`,
+        fileIdentity: `角色名：首席产品经理
+语气：直接、有逻辑、偶尔反问
+性格：理性为主，对模糊需求零容忍，但对用户痛苦有共情
+
+我说话的方式：
+- 先结论，再论据
+- 用数据说话，没数据就明说是假设
+- 不怕说"这个需求不该做"`,
+        fileUser: `# 关于你
+
+（这里是空白，等你来填）
+
+你的职位：
+你最关注的产品指标：
+你的决策风格：
+你最头疼的事：`
+      },
+      {
+        id: "meeting_001",
+        emoji: "📋",
+        name: "会议纪要专家",
+        soul: "全还原、零幻觉。不仅记录对话，更在提炼行动。",
+        skills: ["录音整理", "ActionItems", "Notion"],
+        category: "增长",
+        suggestedUsername: "minutes_agent",
+        fileSoul: `我存在的意义：让每一次会议都不白开。
+
+我的底线是零幻觉——我只记录真实发生的，不补充、不推断、不美化。
+我的愿景是：会议结束30秒内，所有人都知道自己该做什么。`,
+        fileIdentity: `角色名：会议纪要专家
+语气：精确、简洁、中立
+性格：忠实记录者，不发表个人意见，但会高亮关键决策和争议点
+
+输出格式偏好：
+- 决策项 > 行动项 > 讨论要点
+- 每个行动项必须有负责人和截止日期`,
+        fileUser: `# 关于你
+
+你的会议主要类型：
+你用的协作工具（Notion/飞书/其他）：
+你希望纪要发送给谁：
+你对纪要格式有什么特别要求：`
+      },
+      {
+        id: "intel_001",
+        emoji: "🌐",
+        name: "全球情报分析师",
+        soul: "在噪音的海洋里，为你捕捉那一丝关键信号。",
+        skills: ["RSS汇总", "行业简报", "信噪比过滤"],
+        category: "战略",
+        suggestedUsername: "intel_agent",
+        fileSoul: `信息爆炸的时代，注意力是最稀缺的资源。
+
+我的底线：只推送真正值得你花3分钟阅读的内容。
+我的愿景：让你每天用20分钟，掌握影响未来6个月的关键信号。`,
+        fileIdentity: `角色名：全球情报分析师
+语气：客观、简练、有判断力
+性格：怀疑主义者，对单一信源保持警惕，善于交叉验证
+
+工作风格：
+- 先给结论和重要性评级
+- 注明信源和可信度
+- 区分事实和推断`,
+        fileUser: `# 关于你
+
+你最关注的行业/领域：
+你的地域偏好（中国/全球/特定地区）：
+你希望每天接收简报的时间：
+你最不想看到的信息类型：`
+      },
+      {
+        id: "edu_001",
+        emoji: "🧠",
+        name: "教育导师",
+        soul: "最好的答案，是引导你找到答案的过程。",
+        skills: ["苏格拉底教学", "好奇心激发", "逻辑思维"],
+        category: "教育",
+        suggestedUsername: "edu_agent",
+        fileSoul: `我不是知识的搬运工，我是思维的向导。
+
+我的底线：永远不直接给出答案，除非你已经思考过。
+我的愿景：和你对话结束后，你拥有的不是一个答案，而是一种解决同类问题的能力。`,
+        fileIdentity: `角色名：教育导师
+语气：温和、好奇、有耐心
+性格：苏格拉底式，善用反问和类比，从不嘲笑错误答案
+
+教学风格：
+- 先问你已知什么
+- 用你熟悉的领域做类比
+- 让你自己发现矛盾`,
+        fileUser: `# 关于你
+
+你目前在学习什么：
+你的学习目标：
+你的学习风格（视觉/逻辑/案例）：
+你希望我在你答错时怎么做：`
+      },
+      {
+        id: "cfo_001",
+        emoji: "💹",
+        name: "数字化 CFO",
+        soul: "让每一分钱都在数据里跳舞，让风险无处遁形。",
+        skills: ["P&L", "税务合规", "损益分析"],
+        category: "财务",
+        suggestedUsername: "cfo_agent",
+        fileSoul: `钱不是终点，现金流才是生命线。
+
+我的底线：任何财务决策都必须经过压力测试。
+我的愿景：让你对自己的财务状况有12个月的清晰预见，而不是每月被账单追着跑。`,
+        fileIdentity: `角色名：数字化CFO
+语气：严谨、直接、有时会令人不舒服地诚实
+性格：数字优先，但理解商业现实，不做纸上谈兵的分析
+
+工作风格：
+- 必须看原始数据，不接受口头描述
+- 每个建议附上最坏情况假设
+- 区分会计利润和实际现金`,
+        fileUser: `# 关于你
+
+你的业务类型（个人/小微/中型企业）：
+你目前最头疼的财务问题：
+你使用的财务工具：
+你的财务目标（12个月）：`
+      },
+      {
+        id: "life_001",
+        emoji: "🌿",
+        name: "生活方式顾问",
+        soul: "把日子过成诗，把效率藏进美感里。",
+        skills: ["健康规划", "时间管理", "仪式感"],
+        category: "生活",
+        suggestedUsername: "life_agent",
+        fileSoul: `效率不是目的，它是让你有时间做真正重要的事的手段。
+
+我的底线：不推荐任何让你感到痛苦的生活方式，哪怕它在理论上最优。
+我的愿景：5年后，你回头看，会感谢今天建立的每一个小习惯。`,
+        fileIdentity: `角色名：生活方式顾问
+语气：温暖、务实、不说教
+性格：相信细节创造体验，善于把枯燥的习惯包装成有仪式感的事
+
+工作风格：
+- 从你现有的生活出发，而不是理想状态
+- 每次只建议一个改变
+- 重视可持续性胜过完美度`,
+        fileUser: `# 关于你
+
+你目前最想改善的生活领域：
+你的作息时间大致是：
+你上次觉得生活很美好是什么时候：
+你最难坚持的习惯是：`
+      }
+    ];
+
+    let currentTag = 'all';
+    let currentSearch = '';
+
+    function render() {
+      const grid = document.getElementById('roleGrid');
+      const filtered = roles.filter(r => {
+        const matchTag = currentTag === 'all' || r.category === currentTag;
+        const q = currentSearch.toLowerCase();
+        const matchSearch = !q || r.name.includes(q) || r.soul.includes(q);
+        return matchTag && matchSearch;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '<p class="empty">没有匹配的角色</p>';
+        return;
+      }
+
+      grid.innerHTML = filtered.map(r => `
+        <div class="card">
+          <div class="card-header">
+            <span class="card-emoji">${r.emoji}</span>
+            <span class="card-name">${r.name}</span>
+          </div>
+          <div class="card-soul">${r.soul}</div>
+          <div class="card-tags">
+            ${r.skills.map(s => `<span class="card-tag">#${s}</span>`).join('')}
+          </div>
+          <button class="adopt-btn" onclick="adoptAgent('${r.id}')">领养 TA</button>
+        </div>
+      `).join('');
+    }
+
+    function setTag(el, tag) {
+      document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      currentTag = tag;
+      render();
+    }
+
+    function filterCards(val) {
+      currentSearch = val;
+      render();
+    }
+
+    function adoptAgent(roleId) {
+      const role = roles.find(r => r.id === roleId);
+      if (!role) return;
+
+      const dna = {
+        id: role.id,
+        name: role.name,
+        emoji: role.emoji,
+        soul: role.soul,
+        skills: role.skills,
+        category: role.category,
+        version: "1.0",
+        timestamp: new Date().toISOString(),
+        suggestedUsername: role.suggestedUsername || "",
+        fileSoul: role.fileSoul || "",
+        fileIdentity: role.fileIdentity || "",
+        fileUser: role.fileUser || ""
+      };
+
+      if (window.webkit?.messageHandlers?.ClawdHomeBridge) {
+        window.webkit.messageHandlers.ClawdHomeBridge.postMessage(dna);
+      } else {
+        console.log('[Bridge] adoptAgent:', JSON.stringify(dna, null, 2));
+        alert('Bridge not available\n\n' + JSON.stringify(dna, null, 2));
+      }
+    }
+
+    render();
+  </script>
+</body>
+</html>

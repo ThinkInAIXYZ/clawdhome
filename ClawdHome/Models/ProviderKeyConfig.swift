@@ -86,6 +86,16 @@ let supportedProviderKeys: [ProviderKeyConfig] = [
             ("models.providers.minimax.baseUrl", .string("https://api.minimaxi.com/anthropic")),
             ("models.providers.minimax.authHeader", .bool(true)),
         ]),
+    ProviderKeyConfig(
+        id: "zai",
+        displayName: "智谱 Z.AI",
+        configPath: "models.providers.zai.apiKey",
+        placeholder: "sk-...",
+        isUrlConfig: false, supportsOAuth: false,
+        sideConfigs: [
+            ("models.providers.zai.api", .string("openai-completions")),
+            ("models.providers.zai.baseUrl", .string("https://open.bigmodel.cn/api/paas/v4")),
+        ]),
     // ── 网关 / 聚合 ────────────────────────────────────────
     ProviderKeyConfig(
         id: "openrouter",

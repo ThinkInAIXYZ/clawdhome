@@ -6,6 +6,7 @@ import SwiftUI
 
 struct ClawPoolView: View {
     var onLoadUsers: () -> Void = {}
+    var onGoToRoleMarket: () -> Void = {}
 
     @Environment(HelperClient.self) private var helperClient
     @Environment(ShrimpPool.self)   private var pool
@@ -128,7 +129,12 @@ struct ClawPoolView: View {
             }
         }
         .sheet(isPresented: $showAddSheet) {
-            AddClawSheet { username, fullName, description in
+            AddClawSheet(
+                onGoToRoleMarket: {
+                    showAddSheet = false
+                    onGoToRoleMarket()
+                },
+                onCreateMacosUser: { username, fullName, description in
                 Task {
                     isCreatingUser = true
                     createUserError = nil
@@ -144,7 +150,7 @@ struct ClawPoolView: View {
                     } catch { createUserError = error.localizedDescription }
                     isCreatingUser = false
                 }
-            }
+            })
         }
         .overlay(alignment: .bottom) {
             if let err = createUserError ?? quickActionError {
@@ -332,8 +338,12 @@ struct ClawPoolView: View {
     private var tableContent: some View {
         Table(displayedUsers, selection: $selectedClaw) {
             TableColumn("") { claw in
-                Image(systemName: claw.clawType.icon)
-                    .foregroundStyle(.secondary)
+                if claw.clawType == .macosUser {
+                    Text("🦞")
+                } else {
+                    Image(systemName: claw.clawType.icon)
+                        .foregroundStyle(.secondary)
+                }
             }
             .width(24)
 
@@ -725,6 +735,23 @@ struct ClawPoolView: View {
         }
     }
 
+    private final class ThreadSafeDataBuffer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var data = Data()
+
+        func append(_ chunk: Data) {
+            lock.lock()
+            data.append(chunk)
+            lock.unlock()
+        }
+
+        func snapshot() -> Data {
+            lock.lock()
+            defer { lock.unlock() }
+            return data
+        }
+    }
+
     private nonisolated func runProcessWithTimeout(
         executable: String,
         arguments: [String],
@@ -741,15 +768,12 @@ struct ClawPoolView: View {
         let inputPipe = Pipe()
         proc.standardInput = inputPipe
 
-        let lock = NSLock()
-        var collected = Data()
+        let buffer = ThreadSafeDataBuffer()
         let reader = pipe.fileHandleForReading
         reader.readabilityHandler = { handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else { return }
-            lock.lock()
-            collected.append(chunk)
-            lock.unlock()
+            buffer.append(chunk)
         }
 
         let sem = DispatchSemaphore(value: 0)
@@ -770,10 +794,8 @@ struct ClawPoolView: View {
 
         reader.readabilityHandler = nil
         let tail = reader.readDataToEndOfFile()
-        lock.lock()
-        collected.append(tail)
-        let data = collected
-        lock.unlock()
+        buffer.append(tail)
+        let data = buffer.snapshot()
         let output = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return (proc.terminationStatus, output)
@@ -975,10 +997,16 @@ private struct ClawCard: View {
                 Spacer(minLength: 0)
                 // 图标 + 状态角标
                 ZStack(alignment: .bottomTrailing) {
-                    Image(systemName: claw.clawType.icon)
-                        .font(.system(size: 32))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 44, height: 44)
+                    if claw.clawType == .macosUser {
+                        Text("🦞")
+                            .font(.system(size: 32))
+                            .frame(width: 44, height: 44)
+                    } else {
+                        Image(systemName: claw.clawType.icon)
+                            .font(.system(size: 32))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                    }
                     statusDot
                 }
 
@@ -1220,69 +1248,113 @@ private struct AddClawCard: View {
 
 // MARK: - 添加 Claw 流程
 
-/// 顶层 sheet：NavigationStack 内先选类型，再进入具体表单
+/// 顶层 sheet：两个大按钮选择领养路径
 private struct AddClawSheet: View {
+    /// 用户点击"去角色中心领养"
+    let onGoToRoleMarket: () -> Void
     /// macOS 用户创建回调 (username, fullName, description)
     let onCreateMacosUser: (String, String, String) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var path: [ClawType] = []
+    @State private var showDirectCreate = false
 
     var body: some View {
-        NavigationStack(path: $path) {
-            List(ClawType.allCases, id: \.self) { type in
-                Button {
-                    path.append(type)
-                } label: {
-                    Label(type.displayName, systemImage: type.icon)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+        VStack(spacing: 0) {
+            // 标题区
+            VStack(spacing: 6) {
+                Text("🦞")
+                    .font(.system(size: 40))
+                Text("领养虾苗")
+                    .font(.system(size: 20, weight: .bold))
+                Text("从角色中心挑选一个数字生命，或直接创建空白账号")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top, 32)
+            .padding(.bottom, 28)
+            .padding(.horizontal, 24)
+
+            // 两个大按钮
+            VStack(spacing: 12) {
+                // 主按钮：去角色中心
+                Button(action: onGoToRoleMarket) {
+                    HStack(spacing: 14) {
+                        Text("🎭")
+                            .font(.system(size: 28))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("去角色中心领养")
+                                .font(.system(size: 15, weight: .semibold))
+                            Text("浏览并挑选预设角色，个性化定制后唤醒")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.white.opacity(0.8))
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.accentColor)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .buttonStyle(.plain)
-                .padding(.vertical, 4)
-            }
-            .navigationTitle(L10n.k("user.add.type_select.title", fallback: "选择类型"))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.k("common.action.cancel", fallback: "取消")) { dismiss() }
-                }
-            }
-            .navigationDestination(for: ClawType.self) { clawType in
-                switch clawType {
-                case .macosUser:
-                    AddMacosUserForm { username, fullName, description in
-                        onCreateMacosUser(username, fullName, description)
-                        dismiss()
-                    }
-                default:
-                    VStack {
-                        Spacer()
-                        Image(systemName: clawType.icon)
-                            .font(.system(size: 40))
-                            .foregroundStyle(.tertiary)
-                        Text(L10n.f("user.add.type_coming_soon.title", fallback: "%@ 即将支持", clawType.displayName))
-                            .font(.title2).fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 8)
-                        Text(L10n.k("common.coming_soon", fallback: "敬请期待"))
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
-                        Spacer()
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .navigationTitle(L10n.f("user.add.type_window.title", fallback: "添加 %@", clawType.displayName))
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button(L10n.k("common.action.cancel", fallback: "取消")) { dismiss() }
+
+                // 次级按钮：直接创建
+                Button(action: { showDirectCreate = true }) {
+                    HStack(spacing: 14) {
+                        Image(systemName: "person.badge.plus")
+                            .font(.system(size: 24))
+                            .foregroundStyle(.primary)
+                            .frame(width: 32)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("直接创建")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.primary)
+                            Text("创建一个空白 macOS 账号，自行配置")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
                         }
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button(L10n.k("common.action.add", fallback: "添加")) { }.disabled(true)
-                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.tertiary)
                     }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity)
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                    )
                 }
+                .buttonStyle(.plain)
             }
+            .padding(.horizontal, 24)
+
+            Spacer()
+
+            // 取消
+            Button(L10n.k("common.action.cancel", fallback: "取消")) { dismiss() }
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 20)
         }
-        .frame(width: 440, height: 500)
+        .frame(width: 400)
+        .frame(minHeight: 400)
+        .sheet(isPresented: $showDirectCreate) {
+            NavigationStack {
+                AddMacosUserForm { username, fullName, description in
+                    onCreateMacosUser(username, fullName, description)
+                    dismiss()
+                }
+            }
+            .frame(width: 440, height: 420)
+        }
     }
 }
 

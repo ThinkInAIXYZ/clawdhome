@@ -15,6 +15,7 @@ private struct ModelConfigTerminalCloseState: Identifiable {
 
 enum InitStep: Int, CaseIterable {
     case basicEnvironment
+    case injectRole
     case configureModel
     case configureChannel
     case finish
@@ -22,6 +23,7 @@ enum InitStep: Int, CaseIterable {
     var key: String {
         switch self {
         case .basicEnvironment: return "basicEnvironment"
+        case .injectRole:       return "injectRole"
         case .configureModel:   return "configureModel"
         case .configureChannel: return "configureChannel"
         case .finish:           return "finish"
@@ -31,6 +33,7 @@ enum InitStep: Int, CaseIterable {
     var title: String {
         switch self {
         case .basicEnvironment: return L10n.k("wizard.step.basic_environment", fallback: "基础环境")
+        case .injectRole:       return L10n.k("wizard.step.inject_role", fallback: "注入角色")
         case .configureModel:   return L10n.k("wizard.step.configure_model", fallback: "模型配置")
         case .configureChannel: return L10n.k("wizard.step.configure_channel", fallback: "频道配置")
         case .finish:           return L10n.k("wizard.step.finish", fallback: "完成")
@@ -40,6 +43,7 @@ enum InitStep: Int, CaseIterable {
     var icon: String {
         switch self {
         case .basicEnvironment: return "wrench.and.screwdriver"
+        case .injectRole:       return "person.text.rectangle"
         case .configureModel:   return "cpu"
         case .configureChannel: return "qrcode.viewfinder"
         case .finish:           return "checkmark.seal"
@@ -58,6 +62,8 @@ enum StepStatus: Equatable {
 }
 
 private enum MinimaxModel: String, CaseIterable {
+    case m27 = "minimax/MiniMax-M2.7"
+    case m27Highspeed = "minimax/MiniMax-M2.7-highspeed"
     case m25 = "minimax/MiniMax-M2.5"
     case m25Highspeed = "minimax/MiniMax-M2.5-highspeed"
     case vl01 = "minimax/MiniMax-VL-01"
@@ -70,6 +76,8 @@ private enum MinimaxModel: String, CaseIterable {
 
     var providerName: String {
         switch self {
+        case .m27: return "MiniMax M2.7"
+        case .m27Highspeed: return "MiniMax M2.7 Highspeed"
         case .m25: return "MiniMax M2.5"
         case .m25Highspeed: return "MiniMax M2.5 Highspeed"
         case .vl01: return "MiniMax VL 01"
@@ -110,6 +118,79 @@ private enum MinimaxModel: String, CaseIterable {
     }
 }
 
+private enum QiniuModel: String, CaseIterable {
+    case deepseekV32 = "qiniu/deepseek-v3.2-251201"
+    case glm5 = "qiniu/z-ai/glm-5"
+    case kimiK25 = "qiniu/moonshotai/kimi-k2.5"
+    case minimaxM25 = "qiniu/minimax/minimax-m2.5"
+
+    var alias: String {
+        switch self {
+        case .deepseekV32: return "DeepSeek V3.2"
+        case .glm5: return "GLM 5"
+        case .kimiK25: return "Kimi K2.5"
+        case .minimaxM25: return "Minimax M2.5"
+        }
+    }
+
+    var providerModelID: String {
+        rawValue.replacingOccurrences(of: "qiniu/", with: "")
+    }
+
+    var providerModelConfig: [String: Any] {
+        [
+            "id": providerModelID,
+            "name": alias,
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": contextWindow,
+            "maxTokens": 8192,
+            "compat": [
+                "supportsStore": false,
+                "supportsDeveloperRole": false,
+                "supportsReasoningEffort": false,
+            ],
+        ]
+    }
+
+    private var contextWindow: Int {
+        switch self {
+        case .kimiK25: return 256000
+        default: return 128000
+        }
+    }
+}
+
+private enum ZAIModel: String, CaseIterable {
+    case glm5 = "zai/glm-5"
+    case glm4_7 = "zai/glm-4.7"
+    case glm5_1 = "zai/glm-5.1"
+
+    var alias: String {
+        switch self {
+        case .glm5: return "GLM-5"
+        case .glm4_7: return "GLM-4.7"
+        case .glm5_1: return "GLM-5.1"
+        }
+    }
+
+    var providerModelID: String {
+        rawValue.replacingOccurrences(of: "zai/", with: "")
+    }
+
+    var providerModelConfig: [String: Any] {
+        [
+            "id": providerModelID,
+            "name": alias,
+            "reasoning": true,
+            "input": ["text"],
+            "cost": ["input": 0.0, "output": 0.0, "cacheRead": 0.0, "cacheWrite": 0.0],
+            "contextWindow": 204800,
+            "maxTokens": 131072,
+        ]
+    }
+}
+
 private enum WizardChannelType: String {
     case feishu
     case weixin
@@ -129,6 +210,8 @@ private enum WizardXcodeHealthState {
 private enum WizardProvider: String, CaseIterable, Identifiable {
     case kimiCoding = "kimi-coding"
     case minimax = "minimax"
+    case qiniu = "qiniu"
+    case zai = "zai"
 
     var id: String { rawValue }
 
@@ -136,6 +219,8 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return "Kimi Code"
         case .minimax:    return "MiniMax"
+        case .qiniu:      return "Qiniu AI"
+        case .zai:        return "智谱 Z.AI"
         }
     }
 
@@ -143,6 +228,8 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return "Kimi for Coding"
         case .minimax:    return L10n.k("wizard.provider.minimax.subtitle", fallback: "MiniMax M2.5 系列")
+        case .qiniu:      return "DeepSeek / GLM / Kimi / Minimax"
+        case .zai:        return "GLM系列模型"
         }
     }
 
@@ -150,6 +237,8 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return "k.circle"
         case .minimax:    return "m.circle"
+        case .qiniu:      return "q.circle"
+        case .zai:        return "sparkles"
         }
     }
 
@@ -157,6 +246,8 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return "Kimi Code API Key"
         case .minimax:    return "MiniMax API Key"
+        case .qiniu:      return "Qiniu API Key"
+        case .zai:        return "智谱 API Key"
         }
     }
 
@@ -164,6 +255,8 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return "sk-..."
         case .minimax:    return L10n.k("wizard.provider.minimax.api_key.placeholder", fallback: "粘贴 MiniMax API Key")
+        case .qiniu:      return "sk-..."
+        case .zai:        return "sk-..."
         }
     }
 
@@ -171,6 +264,8 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return "https://www.kimi.com/code/console"
         case .minimax:    return "https://platform.minimaxi.com/user-center/basic-information/interface-key"
+        case .qiniu:      return "https://portal.qiniu.com/ai-inference/api-key?ref=clawdhome.app"
+        case .zai:        return "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys"
         }
     }
 
@@ -178,6 +273,34 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return L10n.k("wizard.provider.kimi.console", fallback: "Kimi Code 控制台")
         case .minimax:    return L10n.k("wizard.provider.minimax.console", fallback: "MiniMax 控制台")
+        case .qiniu:      return "七牛 API Key"
+        case .zai:        return "获取 API Key"
+        }
+    }
+
+    var promotionURL: String? {
+        switch self {
+        case .minimax:
+            return "https://platform.minimaxi.com/subscribe/token-plan?code=BvYUzElSu4&source=link"
+        case .qiniu:
+            return "https://www.qiniu.com/ai/promotion/invited?cps_key=1hdl63udiuyqa"
+        case .zai:
+            return "https://www.bigmodel.cn/glm-coding?ic=BXQV5BQ8BB"
+        default:
+            return nil
+        }
+    }
+
+    var promotionTitle: String? {
+        switch self {
+        case .minimax:
+            return "🎁 领取 9 折专属优惠"
+        case .qiniu:
+            return "免费领取 1000 万 Token"
+        case .zai:
+            return "95折优惠订阅"
+        default:
+            return nil
         }
     }
 }
@@ -295,23 +418,31 @@ struct UserInitWizardView: View {
     @State private var wizardConn: WizardConnection? = nil
     @AppStorage("nodeDistURL") private var nodeDistURL = NodeDistOption.defaultForInitialization.rawValue
 
-    // Step 2: 模型配置
+    // Step 2: 注入角色
+    @State private var roleSoul = ""
+    @State private var roleIdentity = ""
+    @State private var roleUser = ""
+    @State private var isSavingRole = false
+
+    // Step 3: 模型配置
     @State private var selectedWizardProvider: WizardProvider = .kimiCoding
     @State private var wizardApiKey = ""
     @State private var isShowingApiKey = false
     @State private var minimaxApiKey = ""  // 保留用于持久化反序列化兼容
-    @State private var selectedMinimaxModel: MinimaxModel = .m25
+    @State private var selectedMinimaxModel: MinimaxModel = .m27
+    @State private var selectedQiniuModel: QiniuModel = .deepseekV32
+    @State private var selectedZAIModel: ZAIModel = .glm5
     @State private var isApplyingModel = false
     @State private var modelConfigError = ""
     @State private var activeModelConfigTerminalToken: String? = nil
     @State private var isModelConfigTerminalOpen = false
     @State private var pendingModelConfigTerminalClose: ModelConfigTerminalCloseState? = nil
 
-    // Step 3: 频道配置
+    // Step 4: 频道配置
     @State private var selectedChannel: WizardChannelType = .feishu
     @State private var hoveredChannelBinding: WizardChannelType? = nil
 
-    // Step 4: 完成
+    // Step 5: 完成
     @State private var isStartingOpenclaw = false
     @State private var finishProgressMessages: [String] = []
     @State private var xcodeEnvStatus: XcodeEnvStatus? = nil
@@ -370,6 +501,8 @@ struct UserInitWizardView: View {
                                 failurePanel
                             } else if currentStep == .basicEnvironment {
                                 runningPanel
+                            } else if currentStep == .injectRole {
+                                injectRolePanel
                             } else if currentStep == .configureModel {
                                 modelConfigPanel
                             } else if currentStep == .configureChannel {
@@ -591,6 +724,71 @@ struct UserInitWizardView: View {
         }
     }
 
+    private var injectRolePanel: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.k("wizard.inject_role.title", fallback: "注入角色"))
+                    .font(.title3).fontWeight(.semibold)
+                Text(L10n.k("wizard.inject_role.subtitle", fallback: "定义角色的核心价值观、身份设定和画像。留空则保留默认设定。"))
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 8) {
+                DNAFileEditor(
+                    icon: "heart.text.square.fill",
+                    iconColor: .pink,
+                    title: "核心价值观",
+                    subtitle: "SOUL",
+                    text: $roleSoul
+                )
+                DNAFileEditor(
+                    icon: "person.text.rectangle.fill",
+                    iconColor: .purple,
+                    title: "身份设定",
+                    subtitle: "IDENTITY",
+                    text: $roleIdentity
+                )
+                DNAFileEditor(
+                    icon: "person.crop.circle.fill",
+                    iconColor: .orange,
+                    title: "我的画像",
+                    subtitle: "USER",
+                    text: $roleUser
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 12) {
+                Button(isSavingRole ? "保存中…" : "保存并继续") {
+                    Task { await saveRoleAndContinue() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isSavingRole)
+            }
+        }
+        .task {
+            if roleSoul.isEmpty && roleIdentity.isEmpty && roleUser.isEmpty {
+                await loadRoleFilesIfExist()
+            }
+        }
+    }
+
+    private func loadRoleFilesIfExist() async {
+        let workspaceDir = ".openclaw/workspace"
+        if let data = try? await helperClient.readFile(username: user.username, relativePath: "\(workspaceDir)/SOUL.md"),
+           let text = String(data: data, encoding: .utf8) {
+            roleSoul = text
+        }
+        if let data = try? await helperClient.readFile(username: user.username, relativePath: "\(workspaceDir)/IDENTITY.md"),
+           let text = String(data: data, encoding: .utf8) {
+            roleIdentity = text
+        }
+        if let data = try? await helperClient.readFile(username: user.username, relativePath: "\(workspaceDir)/USER.md"),
+           let text = String(data: data, encoding: .utf8) {
+            roleUser = text
+        }
+    }
+
     private var modelConfigPanel: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
@@ -600,7 +798,32 @@ struct UserInitWizardView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
 
-            GroupBox(L10n.k("wizard.model_config.command.group", fallback: "其他方式")) {
+            VStack(spacing: 6) {
+                ForEach(WizardProvider.allCases) { provider in
+                    providerSelectRow(provider)
+                }
+            }
+
+            Divider()
+
+            providerDetailForm
+
+            if !modelConfigError.isEmpty {
+                Label(modelConfigError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.red)
+            }
+
+            HStack(spacing: 12) {
+                Button(isApplyingModel ? L10n.k("views.user_init_wizard_view.save", fallback: "保存中…") : L10n.k("views.user_init_wizard_view.savecontinue", fallback: "保存并继续")) {
+                    Task { await applyModelConfig() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isApplyingModel || wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
+            Divider()
+
+            GroupBox(L10n.k("wizard.model_config.command.group", fallback: "高阶方式")) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(
                         isModelConfigTerminalOpen
@@ -628,29 +851,6 @@ struct UserInitWizardView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            VStack(spacing: 6) {
-                ForEach(WizardProvider.allCases) { provider in
-                    providerSelectRow(provider)
-                }
-            }
-
-            Divider()
-
-            providerDetailForm
-
-            if !modelConfigError.isEmpty {
-                Label(modelConfigError, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(.red)
-            }
-
-            HStack(spacing: 12) {
-                Button(isApplyingModel ? L10n.k("views.user_init_wizard_view.save", fallback: "保存中…") : L10n.k("views.user_init_wizard_view.savecontinue", fallback: "保存并继续")) {
-                    Task { await applyModelConfig() }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isApplyingModel || wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }
@@ -703,6 +903,18 @@ struct UserInitWizardView: View {
                     Text(provider.apiKeyLabel)
                         .font(.subheadline).fontWeight(.medium)
                     Spacer()
+                    if let promotionTitle = provider.promotionTitle,
+                       let promotionURL = provider.promotionURL {
+                        Button {
+                            if let url = URL(string: promotionURL) { NSWorkspace.shared.open(url) }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "gift").font(.caption)
+                                Text(promotionTitle).font(.caption)
+                            }
+                        }
+                        .buttonStyle(.borderless).foregroundStyle(Color.accentColor)
+                    }
                     Button {
                         if let url = URL(string: provider.consoleURL) { NSWorkspace.shared.open(url) }
                     } label: {
@@ -737,41 +949,72 @@ struct UserInitWizardView: View {
             if provider == .minimax {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型")).font(.subheadline).fontWeight(.medium)
-                    VStack(spacing: 0) {
-                        ForEach(MinimaxModel.allCases, id: \.self) { model in
-                            minimaxModelRow(model)
-                            if model != MinimaxModel.allCases.last {
-                                Divider().padding(.leading, 36)
+                    HStack(spacing: 12) {
+                        Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedMinimaxModel) {
+                            ForEach(MinimaxModel.allCases, id: \.self) { model in
+                                Text(model.providerName).tag(model)
                             }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(minWidth: 160)
+
+                        Text(selectedMinimaxModel.rawValue)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
                     }
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            } else if provider == .qiniu {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型")).font(.subheadline).fontWeight(.medium)
+                    HStack(spacing: 12) {
+                        Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedQiniuModel) {
+                            ForEach(QiniuModel.allCases, id: \.self) { model in
+                                Text(model.alias).tag(model)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(minWidth: 160)
+
+                        Text(selectedQiniuModel.rawValue)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else if provider == .zai {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型")).font(.subheadline).fontWeight(.medium)
+                    HStack(spacing: 12) {
+                        Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedZAIModel) {
+                            ForEach(ZAIModel.allCases, id: \.self) { model in
+                                Text(model.alias).tag(model)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(minWidth: 160)
+                        
+                        Text(selectedZAIModel.rawValue)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
     }
 
-    @ViewBuilder
-    private func minimaxModelRow(_ model: MinimaxModel) -> some View {
-        let selected = selectedMinimaxModel == model
-        Button { selectedMinimaxModel = model } label: {
-            HStack(spacing: 10) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Color.accentColor : .secondary)
-                    .font(.callout)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(model.providerName).font(.callout).foregroundStyle(.primary)
-                    Text(model.rawValue)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                }
-                Spacer()
-            }
-            .contentShape(Rectangle())
-            .padding(.horizontal, 12).padding(.vertical, 8)
+    private var currentWizardModelName: String {
+        switch selectedWizardProvider {
+        case .kimiCoding:
+            return "kimi-coding/k2p5"
+        case .minimax:
+            return selectedMinimaxModel.rawValue
+        case .qiniu:
+            return selectedQiniuModel.rawValue
+        case .zai:
+            return selectedZAIModel.rawValue
         }
-        .buttonStyle(.plain)
     }
 
     private var channelConfigPanel: some View {
@@ -1098,8 +1341,6 @@ struct UserInitWizardView: View {
                             }
                         }
                         .pickerStyle(.segmented).labelsHidden()
-                        Text(L10n.k("views.user_init_wizard_view.settings_user_username_npm_userconfiguration", fallback: "该设置会写入 @\(user.username) 的 npm 用户配置。"))
-                            .font(.caption).foregroundStyle(.secondary)
                     }
 
                     Divider()
@@ -1166,7 +1407,12 @@ struct UserInitWizardView: View {
         isShowingApiKey = false
         minimaxApiKey = ""
         selectedWizardProvider = .kimiCoding
-        selectedMinimaxModel = .m25
+        selectedMinimaxModel = .m27
+        selectedQiniuModel = .deepseekV32
+        selectedZAIModel = .glm5
+        roleSoul = ""
+        roleIdentity = ""
+        roleUser = ""
         modelConfigError = ""
         activeModelConfigTerminalToken = nil
         isModelConfigTerminalOpen = false
@@ -1275,10 +1521,43 @@ struct UserInitWizardView: View {
         }
 
         statuses[InitStep.basicEnvironment.rawValue] = .done
-        currentStep = .configureModel
-        statuses[InitStep.configureModel.rawValue] = .running
-        user.initStep = InitStep.configureModel.title
+        currentStep = .injectRole
+        statuses[InitStep.injectRole.rawValue] = .running
+        user.initStep = InitStep.injectRole.title
         await persistState()
+    }
+
+    private func saveRoleAndContinue() async {
+        isSavingRole = true
+        defer { isSavingRole = false }
+        
+        do {
+            let workspaceDir = ".openclaw/workspace"
+            try await helperClient.createDirectory(username: user.username, relativePath: workspaceDir)
+            if !roleSoul.isEmpty {
+                try await helperClient.writeFile(username: user.username, relativePath: "\(workspaceDir)/SOUL.md", data: roleSoul.data(using: .utf8) ?? Data())
+            }
+            if !roleIdentity.isEmpty {
+                try await helperClient.writeFile(username: user.username, relativePath: "\(workspaceDir)/IDENTITY.md", data: roleIdentity.data(using: .utf8) ?? Data())
+            }
+            if !roleUser.isEmpty {
+                try await helperClient.writeFile(username: user.username, relativePath: "\(workspaceDir)/USER.md", data: roleUser.data(using: .utf8) ?? Data())
+            }
+            
+            // Try init git repo silently, won't block if fails
+            try? await helperClient.initPersonaGitRepo(username: user.username)
+            if !roleSoul.isEmpty { try? await helperClient.commitPersonaFile(username: user.username, filename: "SOUL.md", message: "Initial commit") }
+            if !roleIdentity.isEmpty { try? await helperClient.commitPersonaFile(username: user.username, filename: "IDENTITY.md", message: "Initial commit") }
+            if !roleUser.isEmpty { try? await helperClient.commitPersonaFile(username: user.username, filename: "USER.md", message: "Initial commit") }
+
+            statuses[InitStep.injectRole.rawValue] = .done
+            currentStep = .configureModel
+            statuses[InitStep.configureModel.rawValue] = .running
+            user.initStep = InitStep.configureModel.title
+            await persistState()
+        } catch {
+            appendLog("❌ [injectRole] 写入角色文件失败：\(error.localizedDescription)\n")
+        }
     }
 
     private func ensureXcodeEnvironmentReady() async throws {
@@ -1359,6 +1638,13 @@ struct UserInitWizardView: View {
             await runInitSteps()
             return
         }
+        if (statuses[InitStep.injectRole.rawValue] ?? .pending) != .done {
+            currentStep = .injectRole
+            statuses[InitStep.injectRole.rawValue] = .running
+            user.initStep = InitStep.injectRole.title
+            await persistState()
+            return
+        }
         if (statuses[InitStep.configureModel.rawValue] ?? .pending) != .done {
             currentStep = .configureModel
             statuses[InitStep.configureModel.rawValue] = .running
@@ -1385,6 +1671,13 @@ struct UserInitWizardView: View {
         if case .failed = statuses[InitStep.basicEnvironment.rawValue] {
             statuses[InitStep.basicEnvironment.rawValue] = .pending
             await runInitSteps()
+            return
+        }
+        if case .failed = statuses[InitStep.injectRole.rawValue] {
+            statuses[InitStep.injectRole.rawValue] = .running
+            currentStep = .injectRole
+            user.initStep = InitStep.injectRole.title
+            await persistState()
             return
         }
         if case .failed = statuses[InitStep.configureModel.rawValue] {
@@ -1425,6 +1718,10 @@ struct UserInitWizardView: View {
                 try await applyKimiCodingConfig(apiKey: key)
             case .minimax:
                 try await applyMinimaxConfig(apiKey: key)
+            case .qiniu:
+                try await applyQiniuConfig(apiKey: key)
+            case .zai:
+                try await applyZAIConfig(apiKey: key)
             }
 
             await markModelStepDone()
@@ -1522,6 +1819,45 @@ struct UserInitWizardView: View {
         try await syncAgentModelFiles(apiKey: apiKey, providerModels: providerModels)
     }
 
+    private func applyQiniuConfig(apiKey: String) async throws {
+        let config = await helperClient.getConfigJSON(username: user.username)
+        let providerModels = QiniuModel.allCases.map(\.providerModelConfig)
+        var modelAliasMap = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:]
+        for model in QiniuModel.allCases {
+            var aliasConfig = (modelAliasMap[model.rawValue] as? [String: Any]) ?? [:]
+            aliasConfig["alias"] = model.alias
+            modelAliasMap[model.rawValue] = aliasConfig
+        }
+        let existingModel = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:]
+        var normalizedModelConfig: [String: Any] = ["primary": selectedQiniuModel.rawValue]
+        if let arr = existingModel["fallback"] as? [String], !arr.isEmpty {
+            normalizedModelConfig["fallback"] = arr
+        } else if let single = existingModel["fallback"] as? String, !single.isEmpty {
+            normalizedModelConfig["fallback"] = [single]
+        }
+
+        try await helperClient.setConfigDirect(username: user.username, path: "env.QINIU_API_KEY", value: apiKey)
+        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "models.providers.qiniu",
+            value: [
+                "baseUrl": "https://api.qnaigc.com/v1",
+                "apiKey": "${QINIU_API_KEY}",
+                "api": "openai-completions",
+                "models": providerModels,
+            ]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "auth.profiles.qiniu:default",
+            value: ["provider": "qiniu", "mode": "api_key"]
+        )
+        try await helperClient.setConfigDirect(username: user.username, path: "agents.defaults.model", value: normalizedModelConfig)
+        try await helperClient.setConfigDirect(username: user.username, path: "agents.defaults.models", value: modelAliasMap)
+        try await syncQiniuAgentFiles(apiKey: apiKey, providerModels: providerModels)
+    }
+
     /// 同步写入新结构下的 agent 配置文件：
     /// - ~/.openclaw/agents/main/agent/auth-profiles.json（API key）
     /// - ~/.openclaw/agents/main/agent/models.json（provider + 模型清单）
@@ -1548,6 +1884,96 @@ struct UserInitWizardView: View {
             "baseUrl": "https://api.minimaxi.com/anthropic",
             "api": "anthropic-messages",
             "authHeader": true,
+            "models": providerModels,
+        ]
+        modelsRoot["providers"] = providers
+        try await writeUserJSON(modelsRoot, relativePath: "\(agentDir)/models.json")
+    }
+
+    private func syncQiniuAgentFiles(apiKey: String, providerModels: [[String: Any]]) async throws {
+        let agentDir = ".openclaw/agents/main/agent"
+        try await helperClient.createDirectory(username: user.username, relativePath: agentDir)
+
+        var authProfilesRoot = await readUserJSON(relativePath: "\(agentDir)/auth-profiles.json")
+        var profiles = (authProfilesRoot["profiles"] as? [String: Any]) ?? [:]
+        profiles["qiniu:default"] = [
+            "type": "api_key",
+            "provider": "qiniu",
+            "key": apiKey,
+        ]
+        authProfilesRoot["version"] = (authProfilesRoot["version"] as? Int) ?? 1
+        authProfilesRoot["profiles"] = profiles
+        try await writeUserJSON(authProfilesRoot, relativePath: "\(agentDir)/auth-profiles.json")
+
+        var modelsRoot = await readUserJSON(relativePath: "\(agentDir)/models.json")
+        var providers = (modelsRoot["providers"] as? [String: Any]) ?? [:]
+        providers["qiniu"] = [
+            "baseUrl": "https://api.qnaigc.com/v1",
+            "api": "openai-completions",
+            "models": providerModels,
+        ]
+        modelsRoot["providers"] = providers
+        try await writeUserJSON(modelsRoot, relativePath: "\(agentDir)/models.json")
+    }
+
+    private func applyZAIConfig(apiKey: String) async throws {
+        let config = await helperClient.getConfigJSON(username: user.username)
+        let providerModels = ZAIModel.allCases.map(\.providerModelConfig)
+        var modelAliasMap = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:]
+        for model in ZAIModel.allCases {
+            var aliasConfig = (modelAliasMap[model.rawValue] as? [String: Any]) ?? [:]
+            aliasConfig["alias"] = model.alias
+            modelAliasMap[model.rawValue] = aliasConfig
+        }
+        let existingModel = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:]
+        var normalizedModelConfig: [String: Any] = ["primary": selectedZAIModel.rawValue]
+        if let arr = existingModel["fallback"] as? [String], !arr.isEmpty {
+            normalizedModelConfig["fallback"] = arr
+        } else if let single = existingModel["fallback"] as? String, !single.isEmpty {
+            normalizedModelConfig["fallback"] = [single]
+        }
+
+        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "models.providers.zai",
+            value: [
+                "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+                "apiKey": apiKey,
+                "api": "openai-completions",
+                "models": providerModels,
+            ]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "auth.profiles.zai:default",
+            value: ["provider": "zai", "mode": "api_key"]
+        )
+        try await helperClient.setConfigDirect(username: user.username, path: "agents.defaults.model", value: normalizedModelConfig)
+        try await helperClient.setConfigDirect(username: user.username, path: "agents.defaults.models", value: modelAliasMap)
+        try await syncZAIAgentFiles(apiKey: apiKey, providerModels: providerModels)
+    }
+
+    private func syncZAIAgentFiles(apiKey: String, providerModels: [[String: Any]]) async throws {
+        let agentDir = ".openclaw/agents/main/agent"
+        try await helperClient.createDirectory(username: user.username, relativePath: agentDir)
+
+        var authProfilesRoot = await readUserJSON(relativePath: "\(agentDir)/auth-profiles.json")
+        var profiles = (authProfilesRoot["profiles"] as? [String: Any]) ?? [:]
+        profiles["zai:default"] = [
+            "type": "api_key",
+            "provider": "zai",
+            "key": apiKey,
+        ]
+        authProfilesRoot["version"] = (authProfilesRoot["version"] as? Int) ?? 1
+        authProfilesRoot["profiles"] = profiles
+        try await writeUserJSON(authProfilesRoot, relativePath: "\(agentDir)/auth-profiles.json")
+
+        var modelsRoot = await readUserJSON(relativePath: "\(agentDir)/models.json")
+        var providers = (modelsRoot["providers"] as? [String: Any]) ?? [:]
+        providers["zai"] = [
+            "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+            "api": "openai-completions",
             "models": providerModels,
         ]
         modelsRoot["providers"] = providers
@@ -1637,19 +2063,42 @@ struct UserInitWizardView: View {
         do {
             try await helperClient.startGateway(username: user.username)
             user.isRunning = true
+            user.pid = nil
+            user.startedAt = nil
             appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_started_successfully", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动成功。\n"))
+            await syncGatewayStateAfterStart()
         } catch {
             // 启动失败不阻断完成状态，用户可在列表页再次启动
+            user.isRunning = false
+            user.pid = nil
+            user.startedAt = nil
+            gatewayHub.markPendingStopped(username: user.username)
             appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_start_failed", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动失败：\(error.localizedDescription)\n"))
         }
+    }
 
-        let tokenReadyURL = await waitForGatewayURLWithToken(emitProgress: false)
-        if let tokenReadyURL,
-           let url = URL(string: tokenReadyURL),
-           !tokenReadyURL.isEmpty {
-            NSWorkspace.shared.open(url)
-            appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_web_ui_opened", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Web UI 已打开。\n"))
+    private func syncGatewayStateAfterStart(
+        maxAttempts: Int = 12,
+        retryDelayNanoseconds: UInt64 = 500_000_000
+    ) async {
+        for attempt in 1...maxAttempts {
+            if let (running, pid) = try? await helperClient.getGatewayStatus(username: user.username),
+               running {
+                user.isRunning = true
+                user.pid = pid > 0 ? pid : nil
+                user.startedAt = pid > 0 ? GatewayHub.processStartTime(pid: pid) : nil
+                appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_running_confirmed", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 运行状态已确认。\n"))
+                _ = await helperClient.getGatewayURL(username: user.username)
+                return
+            }
+
+            if attempt < maxAttempts {
+                appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_waiting_gateway_running_state", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 等待 Gateway 进入运行态（\(attempt)/\(maxAttempts)）…\n"))
+                try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
+            }
         }
+
+        appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_status_sync_timeout", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 状态同步超时，概览页会在后续轮询中继续刷新。\n"))
     }
 
     private func waitForGatewayURLWithToken(
@@ -1741,7 +2190,7 @@ struct UserInitWizardView: View {
         }
         state.npmRegistry = selectedNpmRegistry.rawValue
         state.openclawVersion = openclawVersionLabelForUI
-        state.modelName = selectedMinimaxModel.rawValue
+        state.modelName = currentWizardModelName
         state.channelType = selectedChannel.rawValue
         state.updatedAt = Date()
         let done = (statuses[InitStep.finish.rawValue] ?? .pending) == .done
@@ -1795,8 +2244,19 @@ struct UserInitWizardView: View {
         }
 
         // 仅在首次水合阶段回填模型草稿，避免轮询状态覆盖用户在界面上的实时选择。
-        if isHydratingState, let model = MinimaxModel(rawValue: saved.modelName) {
-            selectedMinimaxModel = model
+        if isHydratingState {
+            if let model = MinimaxModel(rawValue: saved.modelName) {
+                selectedWizardProvider = .minimax
+                selectedMinimaxModel = model
+            } else if let model = QiniuModel(rawValue: saved.modelName) {
+                selectedWizardProvider = .qiniu
+                selectedQiniuModel = model
+            } else if let model = ZAIModel(rawValue: saved.modelName) {
+                selectedWizardProvider = .zai
+                selectedZAIModel = model
+            } else if saved.modelName.hasPrefix("kimi-coding/") {
+                selectedWizardProvider = .kimiCoding
+            }
         }
 
         // 仅在首次水合阶段回填频道草稿，避免未来多频道场景下出现“选择被弹回”。

@@ -9,6 +9,7 @@ enum NavDestination: Hashable {
     case network
     case aiLab
     case models
+    case roleMarket
     case audit
     case backup
     case settings
@@ -44,6 +45,8 @@ struct ContentView: View {
                             .tag(NavDestination.clawPool)
                     }
                     Section(L10n.k("auto.content_view.services", fallback: "服务")) {
+                        Label { Text(L10n.k("auto.content_view.role_market", fallback: "角色中心")) } icon: { Text("🎭") }
+                            .tag(NavDestination.roleMarket)
                         Label { Text(L10n.k("auto.content_view.models", fallback: "模型")) } icon: { Text("🧠") }
                             .tag(NavDestination.models)
                         Label(L10n.k("auto.content_view.network", fallback: "网络"), systemImage: "network")
@@ -129,8 +132,11 @@ struct ContentView: View {
                     DashboardView()
                         .environment(helperClient)
                 case .clawPool:
-                    ClawPoolView(onLoadUsers: { pool.loadUsers() })
-                        .environment(helperClient)
+                    ClawPoolView(
+                        onLoadUsers: { pool.loadUsers() },
+                        onGoToRoleMarket: { navSelection = .roleMarket }
+                    )
+                    .environment(helperClient)
                 case .network:
                     NetworkPolicyView()
                         .environment(helperClient)
@@ -142,6 +148,8 @@ struct ContentView: View {
                     #endif
                 case .aiLab:
                     AILabView()
+                case .roleMarket:
+                    RoleMarketView()
                 case .audit:
                     SecurityAuditView()
                         .environment(helperClient)

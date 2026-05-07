@@ -3799,6 +3799,8 @@ private struct ResizeGrip: View {
 private enum DirectProviderChoice: String, CaseIterable, Identifiable {
     case kimiCoding = "kimi-coding"
     case minimax = "minimax"
+    case qiniu = "qiniu"
+    case zai = "zai"
 
     var id: String { rawValue }
 
@@ -3806,6 +3808,8 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return "Kimi Code"
         case .minimax: return "MiniMax"
+        case .qiniu: return "Qiniu AI"
+        case .zai: return "智谱 Z.AI"
         }
     }
 
@@ -3813,6 +3817,8 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return "Kimi Code API Key"
         case .minimax: return "MiniMax API Key"
+        case .qiniu: return "Qiniu API Key"
+        case .zai: return "智谱 API Key"
         }
     }
 
@@ -3820,6 +3826,8 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return "sk-..."
         case .minimax: return L10n.k("views.user_detail_view.minimax_api_key", fallback: "粘贴 MiniMax API Key")
+        case .qiniu: return "sk-..."
+        case .zai: return "sk-..."
         }
     }
 
@@ -3827,6 +3835,8 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return "https://www.kimi.com/code/console"
         case .minimax: return "https://platform.minimaxi.com/user-center/basic-information/interface-key"
+        case .qiniu: return "https://portal.qiniu.com/ai-inference/api-key?ref=clawdhome.app"
+        case .zai: return "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys"
         }
     }
 
@@ -3834,11 +3844,41 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return L10n.k("views.user_detail_view.kimi_code", fallback: "Kimi Code 控制台")
         case .minimax: return L10n.k("views.user_detail_view.minimax", fallback: "MiniMax 控制台")
+        case .qiniu: return "七牛 API Key"
+        case .zai: return "获取 API Key"
+        }
+    }
+
+    var promotionURL: String? {
+        switch self {
+        case .minimax:
+            return "https://platform.minimaxi.com/subscribe/token-plan?code=BvYUzElSu4&source=link"
+        case .qiniu:
+            return "https://www.qiniu.com/ai/promotion/invited?cps_key=1hdl63udiuyqa"
+        case .zai:
+            return "https://www.bigmodel.cn/glm-coding?ic=BXQV5BQ8BB"
+        default:
+            return nil
+        }
+    }
+
+    var promotionTitle: String? {
+        switch self {
+        case .minimax:
+            return "🎁 领取 9 折专属优惠"
+        case .qiniu:
+            return "免费领取 1000 万 Token"
+        case .zai:
+            return "95折优惠订阅"
+        default:
+            return nil
         }
     }
 }
 
 private enum DirectMinimaxModel: String, CaseIterable, Identifiable {
+    case m27 = "minimax/MiniMax-M2.7"
+    case m27Highspeed = "minimax/MiniMax-M2.7-highspeed"
     case m25 = "minimax/MiniMax-M2.5"
     case m25Highspeed = "minimax/MiniMax-M2.5-highspeed"
     case vl01 = "minimax/MiniMax-VL-01"
@@ -3887,6 +3927,83 @@ private enum DirectMinimaxModel: String, CaseIterable, Identifiable {
     }
 }
 
+private enum DirectQiniuModel: String, CaseIterable, Identifiable {
+    case deepseekV32 = "qiniu/deepseek-v3.2-251201"
+    case glm5 = "qiniu/z-ai/glm-5"
+    case kimiK25 = "qiniu/moonshotai/kimi-k2.5"
+    case minimaxM25 = "qiniu/minimax/minimax-m2.5"
+
+    var id: String { rawValue }
+
+    var alias: String {
+        switch self {
+        case .deepseekV32: return "DeepSeek V3.2"
+        case .glm5: return "GLM 5"
+        case .kimiK25: return "Kimi K2.5"
+        case .minimaxM25: return "Minimax M2.5"
+        }
+    }
+
+    var providerModelID: String {
+        rawValue.replacingOccurrences(of: "qiniu/", with: "")
+    }
+
+    var providerModelConfig: [String: Any] {
+        [
+            "id": providerModelID,
+            "name": alias,
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": contextWindow,
+            "maxTokens": 8192,
+            "compat": [
+                "supportsStore": false,
+                "supportsDeveloperRole": false,
+                "supportsReasoningEffort": false,
+            ],
+        ]
+    }
+
+    private var contextWindow: Int {
+        switch self {
+        case .kimiK25: return 256000
+        default: return 128000
+        }
+    }
+}
+
+private enum DirectZAIModel: String, CaseIterable, Identifiable {
+    case glm5_1 = "zai/glm-5.1"
+    case glm5 = "zai/glm-5"
+    case glm4_7 = "zai/glm-4.7"
+
+    var id: String { rawValue }
+
+    var alias: String {
+        switch self {
+        case .glm5_1: return "GLM-5.1"
+        case .glm5: return "GLM-5"
+        case .glm4_7: return "GLM-4.7"
+        }
+    }
+
+    var providerModelID: String {
+        rawValue.replacingOccurrences(of: "zai/", with: "")
+    }
+
+    var providerModelConfig: [String: Any] {
+        [
+            "id": providerModelID,
+            "name": alias,
+            "reasoning": true,
+            "input": ["text"],
+            "cost": ["input": 0.0, "output": 0.0, "cacheRead": 0.0, "cacheWrite": 0.0],
+            "contextWindow": 204800,
+            "maxTokens": 131072,
+        ]
+    }
+}
+
 private struct KimiMinimaxModelConfigPanel: View {
     let user: ManagedUser
     var onApplied: (() -> Void)? = nil
@@ -3896,7 +4013,9 @@ private struct KimiMinimaxModelConfigPanel: View {
     @State private var isLoading = true
     @State private var isSaving = false
     @State private var selectedProvider: DirectProviderChoice = .kimiCoding
-    @State private var selectedMinimaxModel: DirectMinimaxModel = .m25
+    @State private var selectedMinimaxModel: DirectMinimaxModel = .m27
+    @State private var selectedQiniuModel: DirectQiniuModel = .deepseekV32
+    @State private var selectedZAIModel: DirectZAIModel = .glm5
     @State private var providerKeys: [String: String] = [:]
     @State private var isShowingApiKey = false
     @State private var saveMessage: String? = nil
@@ -3917,7 +4036,7 @@ private struct KimiMinimaxModelConfigPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(L10n.k("user.detail.auto.configurationmodels_api_key_kimi_minimax", fallback: "直接配置模型与 API Key（当前支持 Kimi / MiniMax）"))
+            Text(L10n.k("user.detail.auto.configurationmodels_api_key_kimi_minimax", fallback: "直接配置模型与 API Key（当前支持 Kimi / MiniMax / 七牛 AI）"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
@@ -3942,6 +4061,19 @@ private struct KimiMinimaxModelConfigPanel: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                         Spacer()
+                        if let promotionTitle = selectedProvider.promotionTitle,
+                           let promotionURL = selectedProvider.promotionURL {
+                            Button {
+                                if let url = URL(string: promotionURL) {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            } label: {
+                                Label(promotionTitle, systemImage: "gift")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(Color.accentColor)
+                        }
                         Button {
                             if let url = URL(string: selectedProvider.consoleURL) {
                                 NSWorkspace.shared.open(url)
@@ -3986,6 +4118,36 @@ private struct KimiMinimaxModelConfigPanel: View {
                         }
                         .pickerStyle(.menu)
                         Text(selectedMinimaxModel.rawValue)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                } else if selectedProvider == .qiniu {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Qiniu AI 模型")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedQiniuModel) {
+                            ForEach(DirectQiniuModel.allCases) { model in
+                                Text(model.alias).tag(model)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        Text(selectedQiniuModel.rawValue)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                } else if selectedProvider == .zai {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("智谱 Z.AI 模型")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedZAIModel) {
+                            ForEach(DirectZAIModel.allCases) { model in
+                                Text(model.alias).tag(model)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        Text(selectedZAIModel.rawValue)
                             .font(.system(.caption2, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
@@ -4051,6 +4213,16 @@ private struct KimiMinimaxModelConfigPanel: View {
                 if let model = DirectMinimaxModel(rawValue: primary) {
                     selectedMinimaxModel = model
                 }
+            } else if primary.hasPrefix("qiniu/") {
+                selectedProvider = .qiniu
+                if let model = DirectQiniuModel(rawValue: primary) {
+                    selectedQiniuModel = model
+                }
+            } else if primary.hasPrefix("zai/") {
+                selectedProvider = .zai
+                if let model = DirectZAIModel(rawValue: primary) {
+                    selectedZAIModel = model
+                }
             } else if primary.hasPrefix("kimi-coding/") {
                 selectedProvider = .kimiCoding
             }
@@ -4061,8 +4233,12 @@ private struct KimiMinimaxModelConfigPanel: View {
 
         let kimiKey = ((profiles["kimi-coding:default"] as? [String: Any])?["key"] as? String) ?? ""
         let minimaxKey = ((profiles["minimax:cn"] as? [String: Any])?["key"] as? String) ?? ""
+        let qiniuKey = ((profiles["qiniu:default"] as? [String: Any])?["key"] as? String) ?? ""
+        let zaiKey = ((profiles["zai:default"] as? [String: Any])?["key"] as? String) ?? ""
         providerKeys[DirectProviderChoice.kimiCoding.rawValue] = kimiKey
         providerKeys[DirectProviderChoice.minimax.rawValue] = minimaxKey
+        providerKeys[DirectProviderChoice.qiniu.rawValue] = qiniuKey
+        providerKeys[DirectProviderChoice.zai.rawValue] = zaiKey
     }
 
     private func applyConfig() async {
@@ -4084,6 +4260,10 @@ private struct KimiMinimaxModelConfigPanel: View {
                 try await applyKimiConfig(apiKey: apiKey)
             case .minimax:
                 try await applyMinimaxConfig(apiKey: apiKey)
+            case .qiniu:
+                try await applyQiniuConfig(apiKey: apiKey)
+            case .zai:
+                try await applyZAIConfig(apiKey: apiKey)
             }
             saveMessage = L10n.k("user.detail.auto.configuration", fallback: "配置已应用")
             onApplied?()
@@ -4198,6 +4378,89 @@ private struct KimiMinimaxModelConfigPanel: View {
         try await syncMinimaxAgentFiles(apiKey: apiKey, providerModels: providerModels)
     }
 
+    private func applyQiniuConfig(apiKey: String) async throws {
+        let config = await helperClient.getConfigJSON(username: user.username)
+        let providerModels = DirectQiniuModel.allCases.map(\.providerModelConfig)
+        let normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: selectedQiniuModel.rawValue)
+        var aliasMap = ((((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:])
+        for model in DirectQiniuModel.allCases {
+            var aliasConfig = (aliasMap[model.rawValue] as? [String: Any]) ?? [:]
+            aliasConfig["alias"] = model.alias
+            aliasMap[model.rawValue] = aliasConfig
+        }
+
+        try await helperClient.setConfigDirect(username: user.username, path: "env.QINIU_API_KEY", value: apiKey)
+        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "models.providers.qiniu",
+            value: [
+                "baseUrl": "https://api.qnaigc.com/v1",
+                "apiKey": "${QINIU_API_KEY}",
+                "api": "openai-completions",
+                "models": providerModels,
+            ]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "auth.profiles.qiniu:default",
+            value: ["provider": "qiniu", "mode": "api_key"]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "agents.defaults.model",
+            value: normalizedModelConfig
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "agents.defaults.models",
+            value: aliasMap
+        )
+
+        try await syncQiniuAgentFiles(apiKey: apiKey, providerModels: providerModels)
+    }
+
+    private func applyZAIConfig(apiKey: String) async throws {
+        let config = await helperClient.getConfigJSON(username: user.username)
+        let providerModels = DirectZAIModel.allCases.map(\.providerModelConfig)
+        let normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: selectedZAIModel.rawValue)
+        var aliasMap = ((((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:])
+        for model in DirectZAIModel.allCases {
+            var aliasConfig = (aliasMap[model.rawValue] as? [String: Any]) ?? [:]
+            aliasConfig["alias"] = model.alias
+            aliasMap[model.rawValue] = aliasConfig
+        }
+
+        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "models.providers.zai",
+            value: [
+                "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+                "apiKey": apiKey,
+                "api": "openai-completions",
+                "models": providerModels,
+            ]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "auth.profiles.zai:default",
+            value: ["provider": "zai", "mode": "api_key"]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "agents.defaults.model",
+            value: normalizedModelConfig
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "agents.defaults.models",
+            value: aliasMap
+        )
+
+        try await syncZAIAgentFiles(apiKey: apiKey, providerModels: providerModels)
+    }
+
     private func syncMinimaxAgentFiles(apiKey: String, providerModels: [[String: Any]]) async throws {
         let agentDir = ".openclaw/agents/main/agent"
         try await helperClient.createDirectory(username: user.username, relativePath: agentDir)
@@ -4219,6 +4482,58 @@ private struct KimiMinimaxModelConfigPanel: View {
             "baseUrl": "https://api.minimaxi.com/anthropic",
             "api": "anthropic-messages",
             "authHeader": true,
+            "models": providerModels,
+        ]
+        modelsRoot["providers"] = providers
+        try await writeUserJSON(modelsRoot, relativePath: "\(agentDir)/models.json")
+    }
+
+    private func syncQiniuAgentFiles(apiKey: String, providerModels: [[String: Any]]) async throws {
+        let agentDir = ".openclaw/agents/main/agent"
+        try await helperClient.createDirectory(username: user.username, relativePath: agentDir)
+
+        var authProfilesRoot = await readUserJSON(relativePath: "\(agentDir)/auth-profiles.json")
+        var profiles = (authProfilesRoot["profiles"] as? [String: Any]) ?? [:]
+        profiles["qiniu:default"] = [
+            "type": "api_key",
+            "provider": "qiniu",
+            "key": apiKey,
+        ]
+        authProfilesRoot["version"] = (authProfilesRoot["version"] as? Int) ?? 1
+        authProfilesRoot["profiles"] = profiles
+        try await writeUserJSON(authProfilesRoot, relativePath: "\(agentDir)/auth-profiles.json")
+
+        var modelsRoot = await readUserJSON(relativePath: "\(agentDir)/models.json")
+        var providers = (modelsRoot["providers"] as? [String: Any]) ?? [:]
+        providers["qiniu"] = [
+            "baseUrl": "https://api.qnaigc.com/v1",
+            "api": "openai-completions",
+            "models": providerModels,
+        ]
+        modelsRoot["providers"] = providers
+        try await writeUserJSON(modelsRoot, relativePath: "\(agentDir)/models.json")
+    }
+
+    private func syncZAIAgentFiles(apiKey: String, providerModels: [[String: Any]]) async throws {
+        let agentDir = ".openclaw/agents/main/agent"
+        try await helperClient.createDirectory(username: user.username, relativePath: agentDir)
+
+        var authProfilesRoot = await readUserJSON(relativePath: "\(agentDir)/auth-profiles.json")
+        var profiles = (authProfilesRoot["profiles"] as? [String: Any]) ?? [:]
+        profiles["zai:default"] = [
+            "type": "api_key",
+            "provider": "zai",
+            "key": apiKey,
+        ]
+        authProfilesRoot["version"] = (authProfilesRoot["version"] as? Int) ?? 1
+        authProfilesRoot["profiles"] = profiles
+        try await writeUserJSON(authProfilesRoot, relativePath: "\(agentDir)/auth-profiles.json")
+
+        var modelsRoot = await readUserJSON(relativePath: "\(agentDir)/models.json")
+        var providers = (modelsRoot["providers"] as? [String: Any]) ?? [:]
+        providers["zai"] = [
+            "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+            "api": "openai-completions",
             "models": providerModels,
         ]
         modelsRoot["providers"] = providers

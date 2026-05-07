@@ -50,6 +50,8 @@ struct ModelGroup: Identifiable {
 /// 格式：provider/model-id，与 openclaw config 写入格式一致
 let builtInModelGroups: [ModelGroup] = [
     ModelGroup(id: "minimax", provider: "MiniMax", models: [
+        ModelEntry(id: "minimax/MiniMax-M2.7",           label: "MiniMax M2.7"),
+        ModelEntry(id: "minimax/MiniMax-M2.7-highspeed", label: "MiniMax M2.7 Highspeed"),
         ModelEntry(id: "minimax/MiniMax-M2.5",           label: "MiniMax M2.5"),
         ModelEntry(id: "minimax/MiniMax-M2.5-highspeed", label: "MiniMax M2.5 Highspeed"),
         ModelEntry(id: "minimax/MiniMax-VL-01",          label: "MiniMax VL-01"),
