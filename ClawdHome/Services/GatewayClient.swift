@@ -2,7 +2,9 @@
 // 单个用户 gateway 的 WebSocket JSON-RPC 客户端
 // 协议：ws://127.0.0.1:<port>/ + shared token auth
 // 不依赖 OpenClawKit（其要求 macOS 15，ClawdHome 目标 macOS 14）
+// 参考 openclaw/apps/shared/OpenClawKit/Sources/OpenClawKit/GatewayChannel.swift
 
+import CryptoKit
 import Foundation
 import OSLog
 
@@ -39,12 +41,12 @@ enum GatewayClientError: LocalizedError {
 
 /// 管理单个用户 openclaw gateway 的 WebSocket 连接
 /// - 协议：JSON-RPC over WebSocket
-/// - 认证：shared token（connect 帧的 auth.token 字段）
-/// - 设计简化：不实现 device identity / pairing，仅用于 operator 管理
+/// - 认证：shared token + Ed25519 device identity
 actor GatewayClient {
 
     private let url: URL
     private var token: String
+    private let deviceIdentity: DeviceIdentity
 
     private var socket: URLSessionWebSocketTask?
     private var session: URLSession?
@@ -59,9 +61,10 @@ actor GatewayClient {
 
     // MARK: - 初始化
 
-    init(port: Int, token: String) {
+    init(port: Int, token: String, deviceIdentity: DeviceIdentity = .loadOrCreate()) {
         self.url = URL(string: "ws://127.0.0.1:\(port)/")!
         self.token = token
+        self.deviceIdentity = deviceIdentity
         var cont: AsyncStream<GatewayEvent>.Continuation?
         let stream = AsyncStream<GatewayEvent> { cont = $0 }
         self.eventStream = stream
@@ -78,18 +81,31 @@ actor GatewayClient {
         let config = URLSessionConfiguration.default
         config.waitsForConnectivity = false
         let sess = URLSession(configuration: config)
-        let sock = sess.webSocketTask(with: url)
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        var wsRequest = URLRequest(url: url)
+        wsRequest.setValue("ClawdHome/\(appVersion)", forHTTPHeaderField: "User-Agent")
+        // Gateway Control UI 校验 Origin header；设为同 host 的 HTTP origin 以通过检查
+        wsRequest.setValue("http://\(url.host ?? "127.0.0.1"):\(url.port ?? 80)", forHTTPHeaderField: "Origin")
+        let sock = sess.webSocketTask(with: wsRequest)
         sock.maximumMessageSize = 16 * 1024 * 1024  // 16 MB，与 OpenClawKit 一致
         sock.resume()
         self.session = sess
         self.socket = sock
 
         do {
-            // 1. 等待服务端发送 connect.challenge（最多 6s）
-            try await waitForChallenge(socket: sock)
+            // 1. 等待服务端发送 connect.challenge（最多 6s），提取 nonce
+            let nonce = try await waitForChallenge(socket: sock)
 
-            // 2. 发送 connect 请求（operator 角色，shared token，无 device identity）
+            // 2. 发送 connect 请求（operator 角色，shared token + device identity）
             let reqId = UUID().uuidString
+            let clientId = "openclaw-control-ui"
+            let clientMode = "ui"
+            let role = "operator"
+            let scopes = ["operator.admin", "operator.read", "operator.write"]
+            let device = deviceIdentity.connectDevice(
+                clientId: clientId, clientMode: clientMode,
+                role: role, scopes: scopes, token: token, nonce: nonce
+            )
             let frame: [String: Any] = [
                 "type": "req",
                 "id": reqId,
@@ -98,14 +114,15 @@ actor GatewayClient {
                     "minProtocol": 3,
                     "maxProtocol": 3,
                     "client": [
-                        "id": "openclaw-control-ui",
+                        "id": clientId,
                         "displayName": "ClawdHome",
                         "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0",
                         "platform": "macos",
-                        "mode": "ui",
+                        "mode": clientMode,
                     ],
-                    "role": "operator",
-                    "scopes": ["operator.admin", "operator.read", "operator.write"],
+                    "role": role,
+                    "scopes": scopes,
+                    "device": device,
                     "auth": ["token": token],
                 ],
             ]
@@ -202,6 +219,47 @@ actor GatewayClient {
         _ = try await request(method: "config.set", params: ["path": path, "value": value])
     }
 
+    /// 读取完整配置快照 + hash（用于 config.patch 的乐观锁）
+    /// 返回的 ConfigFileSnapshot 中 hash 字段名为 "hash"，传给 config.patch 时用作 baseHash
+    func configGetFull() async throws -> (config: [String: Any], baseHash: String) {
+        guard let payload = try await request(method: "config.get") else {
+            throw GatewayClientError.requestFailed(code: nil, message: "config.get returned nil")
+        }
+        // config.get 返回 ConfigFileSnapshot，config 在 "config" 字段，hash 在 "hash" 字段
+        let config = payload["config"] as? [String: Any] ?? payload
+        let hash = payload["hash"] as? String ?? ""
+        return (config, hash)
+    }
+
+    /// JSON Merge Patch 方式写入配置，自动触发 Gateway 热重启
+    /// - Parameters:
+    ///   - patch: 要合并的配置补丁（只包含变更部分）
+    ///   - baseHash: 从 configGetFull() 获取的 hash（乐观锁）
+    ///   - note: 变更说明（可选，记录在审计日志中）
+    /// - Returns: (noop: 是否无实际变更, config: 脱敏后完整配置)
+    @discardableResult
+    func configPatch(patch: [String: Any], baseHash: String, note: String? = nil) async throws -> (noop: Bool, config: [String: Any]) {
+        let raw = try serializeJSON(patch)
+        var params: [String: Any] = ["raw": raw, "baseHash": baseHash]
+        if let note { params["note"] = note }
+        guard let payload = try await request(method: "config.patch", params: params) else {
+            throw GatewayClientError.requestFailed(code: nil, message: "config.patch returned nil")
+        }
+        let noop = payload["noop"] as? Bool ?? false
+        let config = payload["config"] as? [String: Any] ?? [:]
+        return (noop, config)
+    }
+
+    private func serializeJSON(_ value: Any) throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw GatewayClientError.encodingError(
+                NSError(domain: "GatewayClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "UTF-8 encoding failed"])
+            )
+        }
+        return json
+    }
+
     /// 读取健康状态
     func health() async throws -> [String: Any]? {
         try await request(method: "health")
@@ -216,9 +274,10 @@ actor GatewayClient {
 
     // MARK: - 握手内部实现
 
-    private func waitForChallenge(socket: URLSessionWebSocketTask) async throws {
+    /// 等待 connect.challenge 事件，返回 nonce 字符串
+    private func waitForChallenge(socket: URLSessionWebSocketTask) async throws -> String {
         // 使用 TaskGroup 实现超时竞争：challenge 到达 vs 6s 超时
-        try await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: String.self) { group in
             group.addTask {
                 try await Task.sleep(nanoseconds: 6_000_000_000)
                 throw GatewayClientError.connectFailed(L10n.k("services.gateway_client.connect_challenge_timeout", fallback: "connect.challenge 超时"))
@@ -228,14 +287,17 @@ actor GatewayClient {
                     let msg = try await socket.receive()
                     guard let dict = Self.decodeMessage(msg),
                           (dict["type"] as? String) == "event",
-                          (dict["event"] as? String) == "connect.challenge"
+                          (dict["event"] as? String) == "connect.challenge",
+                          let payload = dict["payload"] as? [String: Any],
+                          let nonce = payload["nonce"] as? String
                     else { continue }
-                    return  // 收到 challenge，退出
+                    return nonce
                 }
             }
             // 取第一个完成（成功或失败）
-            try await group.next()
+            let nonce = try await group.next()!
             group.cancelAll()
+            return nonce
         }
     }
 
