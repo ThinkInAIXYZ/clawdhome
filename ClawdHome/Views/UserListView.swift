@@ -1482,27 +1482,15 @@ private struct ClawCard: View {
                     statusDot
                 }
 
-                // 名称
-                VStack(spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(claw.fullName.isEmpty ? claw.username : claw.fullName)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-                        if claw.isAdmin {
-                            Image(systemName: "shield.fill")
-                                .font(.caption2)
-                                .foregroundStyle(Color.accentColor)
-                        }
-                    }
+                // 用户名（仅 @username，角色信息统一在底部 pill 区域展示）
+                HStack(spacing: 4) {
                     Text("@\(claw.username)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .fontWeight(.medium)
                         .lineLimit(1)
-                    if let profileDescription = visibleProfileDescription {
-                        Text(profileDescription)
+                    if claw.isAdmin {
+                        Image(systemName: "shield.fill")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .foregroundStyle(Color.accentColor)
                     }
                 }
 
@@ -1544,10 +1532,8 @@ private struct ClawCard: View {
                 .font(.caption2)
                 .lineLimit(1)
 
-                // Agent pill 标签区域（仅多 agent 时显示）
-                if agents.count > 1 {
-                    agentPillsSection
-                }
+                // 角色标签区域（始终显示，单 agent 时显示角色名称）
+                agentPillsSection
 
                 // 操作按钮行
                 HStack(spacing: 8) {
@@ -1679,9 +1665,17 @@ private struct ClawCard: View {
 
     @ViewBuilder
     private var agentPillsSection: some View {
+        let displayAgents: [AgentProfile] = {
+            if agents.isEmpty {
+                // 无 agent 数据时，用 fullName 作为默认角色名
+                let name = claw.fullName.isEmpty ? claw.username : claw.fullName
+                return [AgentProfile(id: "main", name: name, emoji: "", modelPrimary: nil, workspacePath: nil, isDefault: true)]
+            }
+            return agents
+        }()
         let maxVisible = 4
-        let visible = Array(agents.prefix(maxVisible))
-        let overflow = agents.count - maxVisible
+        let visible = Array(displayAgents.prefix(maxVisible))
+        let overflow = displayAgents.count - maxVisible
 
         FlowLayout(spacing: 4) {
             ForEach(visible) { agent in
@@ -1693,11 +1687,11 @@ private struct ClawCard: View {
                             Text(agent.emoji).font(.system(size: 10))
                         }
                         Text(agent.name)
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.system(size: 10, weight: .medium))
                             .lineLimit(1)
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
                     .background(
                         Capsule().fill(Color.primary.opacity(0.06))
                     )
@@ -1709,7 +1703,7 @@ private struct ClawCard: View {
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 3)
                     .background(
                         Capsule().fill(Color.primary.opacity(0.04))
                     )
