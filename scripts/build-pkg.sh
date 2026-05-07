@@ -5,11 +5,13 @@
 # 用法：
 #   bash scripts/build-pkg.sh              # 构建 + 打包
 #   bash scripts/build-pkg.sh --skip-build # 跳过 xcodebuild，直接打包（用于重复打包）
-#   bash scripts/build-pkg.sh --no-sync-api-version # 不同步 clawdhome_website/api/version.json
+#   bash scripts/build-pkg.sh --sync-api-version    # 同步 clawdhome_website/api/version.json（默认不同步）
+#   SIGN_APP=true SIGN_PKG=true bash scripts/build-pkg.sh # 生成 Developer ID 签名 pkg
+#   SIGN_APP=true SIGN_PKG=true NOTARIZE=true NOTARY_PROFILE=clawdhome-release bash scripts/build-pkg.sh
 #
 # 输出：dist/ClawdHome-<VERSION>.pkg
 #
-# 依赖：xcodebuild（Xcode Command Line Tools）
+# 依赖：xcodebuild / codesign / productsign / notarytool（按需）
 
 set -euo pipefail
 export LC_ALL=C  # 修复 Bash 3.2 UTF-8 编码问题
@@ -30,12 +32,26 @@ EXPORT_DIR="$REPO_ROOT/build/export"
 DIST_DIR="$REPO_ROOT/dist"
 WEBSITE_DIR="${WEBSITE_DIR:-$REPO_ROOT/../clawdhome_website}"
 API_VERSION_JSON="$WEBSITE_DIR/api/version.json"
+SOURCE_INFO_PLIST="$REPO_ROOT/ClawdHome/Info.plist"
+BUILD_COUNTER_FILE="$REPO_ROOT/.build-version"
+INITIAL_BUILD_NUMBER=500
+BUILD_COUNTER_SCRIPT="$SCRIPT_DIR/build_counter.sh"
 
 SKIP_BUILD=false
-SYNC_API_VERSION=true
+SYNC_API_VERSION=false
+SIGN_APP="${SIGN_APP:-false}"
+SIGN_PKG="${SIGN_PKG:-false}"
+NOTARIZE="${NOTARIZE:-false}"
+APPLE_TEAM_ID="${APPLE_TEAM_ID:-Y7P5QLKLYG}"
+APP_SIGN_IDENTITY="${APP_SIGN_IDENTITY:-Developer ID Application: Mengjun Xie (Y7P5QLKLYG)}"
+PKG_SIGN_IDENTITY="${PKG_SIGN_IDENTITY:-Developer ID Installer: Mengjun Xie (Y7P5QLKLYG)}"
+NOTARY_PROFILE="${NOTARY_PROFILE:-}"
+RELEASE_VERSION="${RELEASE_VERSION:-}"
+QUIET_XCODE="${QUIET_XCODE:-true}"
 for arg in "$@"; do
   [[ "$arg" == "--skip-build" ]] && SKIP_BUILD=true
   [[ "$arg" == "--no-sync-api-version" ]] && SYNC_API_VERSION=false
+  [[ "$arg" == "--sync-api-version" ]] && SYNC_API_VERSION=true
 done
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────────
@@ -43,6 +59,98 @@ done
 log()  { echo "▶ $*"; }
 ok()   { echo "✅ $*"; }
 fail() { echo "❌ $*" >&2; exit 1; }
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || fail "缺少命令：$1"
+}
+
+assert_bool() {
+  case "$2" in
+    true|false) ;;
+    *) fail "$1 必须是 true 或 false（当前：$2）" ;;
+  esac
+}
+
+assert_bool "SIGN_APP" "$SIGN_APP"
+assert_bool "SIGN_PKG" "$SIGN_PKG"
+assert_bool "NOTARIZE" "$NOTARIZE"
+assert_bool "QUIET_XCODE" "$QUIET_XCODE"
+
+if [ "$NOTARIZE" = true ] && [ "$SIGN_PKG" != true ]; then
+  fail "NOTARIZE=true 时必须同时设置 SIGN_PKG=true"
+fi
+
+if [ "$NOTARIZE" = true ] && [ -z "$NOTARY_PROFILE" ]; then
+  fail "NOTARIZE=true 时必须提供 NOTARY_PROFILE（xcrun notarytool store-credentials 的 profile 名）"
+fi
+
+read_source_plist() {
+  local key="$1"
+  /usr/libexec/PlistBuddy -c "Print :$key" "$SOURCE_INFO_PLIST" 2>/dev/null || true
+}
+
+compute_marketing_version() {
+  if [ -n "$RELEASE_VERSION" ]; then
+    echo "$RELEASE_VERSION"
+    return
+  fi
+
+  local current_version next_version describe fallback_version
+  current_version=$(bash "$SCRIPT_DIR/semver.sh" --current 2>/dev/null || true)
+  next_version=$(bash "$SCRIPT_DIR/semver.sh" 2>/dev/null || true)
+  describe=$(git describe --tags --match "v*" --long --dirty --always 2>/dev/null || true)
+  fallback_version=$(read_source_plist "CFBundleShortVersionString")
+
+  if [[ "$describe" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)-g([0-9a-f]+)(-dirty)?$ ]]; then
+    if [ "${BASH_REMATCH[2]}" = "0" ] && [ -z "${BASH_REMATCH[4]:-}" ]; then
+      echo "${BASH_REMATCH[1]}"
+      return
+    fi
+    [ -n "$next_version" ] && echo "$next_version" && return
+  fi
+
+  [ -n "$current_version" ] && echo "$current_version" && return
+  [ -n "$fallback_version" ] && echo "$fallback_version" && return
+  echo "0.0.0"
+}
+
+compute_build_number() {
+  if [ "$SKIP_BUILD" = false ]; then
+    BUILD_COUNTER_FILE="$BUILD_COUNTER_FILE" \
+      INITIAL_BUILD_NUMBER="$INITIAL_BUILD_NUMBER" \
+      bash "$BUILD_COUNTER_SCRIPT" reserve
+    return
+  fi
+
+  local reserved_build fallback_build
+  reserved_build=$(BUILD_COUNTER_FILE="$BUILD_COUNTER_FILE" \
+    INITIAL_BUILD_NUMBER="$INITIAL_BUILD_NUMBER" \
+    bash "$BUILD_COUNTER_SCRIPT" current)
+  fallback_build=$(read_source_plist "CFBundleVersion")
+  [ "$reserved_build" -ge "$INITIAL_BUILD_NUMBER" ] && echo "$reserved_build" && return
+  [ -n "$fallback_build" ] && echo "$fallback_build" && return
+  echo "$INITIAL_BUILD_NUMBER"
+}
+
+BUILD_MARKETING_VERSION=$(compute_marketing_version)
+BUILD_NUMBER=$(compute_build_number)
+
+run_xcodebuild() {
+  local log_file="$1"
+  shift
+
+  if [ "$QUIET_XCODE" = true ]; then
+    mkdir -p "$(dirname "$log_file")"
+    if ! xcodebuild "$@" >"$log_file" 2>&1; then
+      echo "❌ xcodebuild 失败，日志：$log_file" >&2
+      tail -n 120 "$log_file" >&2 || true
+      exit 1
+    fi
+    ok "xcodebuild 完成（日志：$log_file）"
+  else
+    xcodebuild "$@"
+  fi
+}
 
 # ── Step 1：构建 ──────────────────────────────────────────────────────────────
 
@@ -56,23 +164,48 @@ if [ "$SKIP_BUILD" = false ]; then
 
   # 清除 DerivedData 增量缓存，确保 Release 从干净状态编译
   # （避免 Debug 残留中间产物影响 Release archive）
-  xcodebuild clean \
-    -project "$REPO_ROOT/${APP_NAME}.xcodeproj" \
-    -scheme "$SCHEME" \
-    -configuration "$CONFIGURATION" \
-    -quiet
+  XCODE_ARGS=(
+    -project "$REPO_ROOT/${APP_NAME}.xcodeproj"
+    -scheme "$SCHEME"
+    -configuration "$CONFIGURATION"
+  )
 
-  xcodebuild archive \
-    -project "$REPO_ROOT/${APP_NAME}.xcodeproj" \
-    -scheme "$SCHEME" \
-    -configuration "$CONFIGURATION" \
-    -destination "generic/platform=macOS" \
-    -archivePath "$ARCHIVE_PATH" \
-    ARCHS=arm64 \
-    ONLY_ACTIVE_ARCH=NO \
-    CODE_SIGN_IDENTITY="-" \
-    CODE_SIGNING_REQUIRED=NO \
-    CODE_SIGNING_ALLOWED=NO
+  run_xcodebuild "$REPO_ROOT/build/logs/xcodebuild-clean.log" clean "${XCODE_ARGS[@]}" -quiet
+
+  ARCHIVE_ARGS=(
+    archive
+    "${XCODE_ARGS[@]}"
+    -destination "generic/platform=macOS"
+    -archivePath "$ARCHIVE_PATH"
+    ARCHS=arm64
+    ONLY_ACTIVE_ARCH=NO
+  )
+
+  if [ "$SIGN_APP" = true ]; then
+    log "使用 Developer ID 签名 archive..."
+    ARCHIVE_ARGS+=(
+      DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
+      CODE_SIGN_STYLE=Manual
+      CODE_SIGN_IDENTITY="$APP_SIGN_IDENTITY"
+      MARKETING_VERSION="$BUILD_MARKETING_VERSION"
+      CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+      INFOPLIST_KEY_CFBundleShortVersionString="$BUILD_MARKETING_VERSION"
+      INFOPLIST_KEY_CFBundleVersion="$BUILD_NUMBER"
+      OTHER_CODE_SIGN_FLAGS="--timestamp"
+    )
+  else
+    ARCHIVE_ARGS+=(
+      CODE_SIGN_IDENTITY=-
+      CODE_SIGNING_REQUIRED=NO
+      CODE_SIGNING_ALLOWED=NO
+      MARKETING_VERSION="$BUILD_MARKETING_VERSION"
+      CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+      INFOPLIST_KEY_CFBundleShortVersionString="$BUILD_MARKETING_VERSION"
+      INFOPLIST_KEY_CFBundleVersion="$BUILD_NUMBER"
+    )
+  fi
+
+  run_xcodebuild "$REPO_ROOT/build/logs/xcodebuild-archive.log" "${ARCHIVE_ARGS[@]}"
 
   # 从 archive 中取出 app
   mkdir -p "$EXPORT_DIR"
@@ -87,11 +220,26 @@ APP_BUNDLE="$EXPORT_DIR/${APP_NAME}.app"
 APP_INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 [ -f "$APP_INFO_PLIST" ] || fail "未找到 $APP_INFO_PLIST"
 
+if [ "$SIGN_APP" = true ]; then
+  require_cmd codesign
+  log "校验 app 签名..."
+  codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+  ok "app 签名校验通过"
+fi
+
 # 统一版本来源：始终以“构建产物 app 的 Info.plist”为准
 FULL_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_INFO_PLIST" 2>/dev/null || true)
 [ -n "$FULL_VERSION" ] || fail "无法从构建产物读取 CFBundleShortVersionString"
+APP_BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_INFO_PLIST" 2>/dev/null || true)
+[ -n "$APP_BUILD_NUMBER" ] || fail "无法从构建产物读取 CFBundleVersion"
 
-PKG_NAME="${APP_NAME}-${FULL_VERSION}.pkg"
+if [ -n "$RELEASE_VERSION" ]; then
+  PKG_VERSION_LABEL="$FULL_VERSION"
+else
+  PKG_VERSION_LABEL="${FULL_VERSION}-b${APP_BUILD_NUMBER}"
+fi
+
+PKG_NAME="${APP_NAME}-${PKG_VERSION_LABEL}.pkg"
 PKG_OUTPUT="$DIST_DIR/$PKG_NAME"
 
 # ── Step 2：准备 pkg 目录结构 ─────────────────────────────────────────────────
@@ -190,13 +338,47 @@ ok "安装脚本生成完成"
 log "生成 $PKG_NAME..."
 mkdir -p "$DIST_DIR"
 
+UNSIGNED_PKG_OUTPUT="$PKG_OUTPUT"
+if [ "$SIGN_PKG" = true ]; then
+  UNSIGNED_PKG_OUTPUT="$DIST_DIR/${APP_NAME}-${FULL_VERSION}.unsigned.pkg"
+  rm -f "$UNSIGNED_PKG_OUTPUT" "$PKG_OUTPUT"
+fi
+
 pkgbuild \
   --root "$PKG_ROOT" \
   --scripts "$PKG_SCRIPTS" \
   --identifier "$BUNDLE_ID" \
   --version "$FULL_VERSION" \
   --install-location "/" \
-  "$PKG_OUTPUT"
+  "$UNSIGNED_PKG_OUTPUT"
+
+if [ "$SIGN_PKG" = true ]; then
+  require_cmd productsign
+  require_cmd pkgutil
+  log "使用 Developer ID Installer 签名 pkg..."
+  productsign \
+    --sign "$PKG_SIGN_IDENTITY" \
+    --timestamp \
+    "$UNSIGNED_PKG_OUTPUT" \
+    "$PKG_OUTPUT"
+  pkgutil --check-signature "$PKG_OUTPUT"
+  rm -f "$UNSIGNED_PKG_OUTPUT"
+  ok "pkg 签名校验通过"
+fi
+
+if [ "$NOTARIZE" = true ]; then
+  require_cmd xcrun
+  require_cmd stapler
+  require_cmd spctl
+  log "提交 pkg 公证..."
+  xcrun notarytool submit "$PKG_OUTPUT" --keychain-profile "$NOTARY_PROFILE" --wait
+  log "写入 notarization ticket..."
+  xcrun stapler staple "$PKG_OUTPUT"
+  xcrun stapler validate "$PKG_OUTPUT"
+  log "校验 Gatekeeper 对已公证 pkg 的放行状态..."
+  spctl --assess --type install --verbose=2 "$PKG_OUTPUT"
+  ok "pkg 公证完成"
+fi
 
 ok "安装包已生成：$PKG_OUTPUT"
 
@@ -231,7 +413,9 @@ rm -rf "$PKG_ROOT" "$PKG_SCRIPTS"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  📦 ${PKG_NAME}"
-echo "  版本：${FULL_VERSION}"
+echo "  App 版本：${FULL_VERSION}"
+echo "  Build：${APP_BUILD_NUMBER}"
+echo "  包版本：${PKG_VERSION_LABEL}"
 echo "  大小：$(du -sh "$PKG_OUTPUT" | cut -f1)"
 echo "  路径：$PKG_OUTPUT"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

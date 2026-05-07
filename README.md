@@ -156,10 +156,28 @@ make build
 make build-helper
 ```
 
-- Build pkg:
+- Run the Release app bundle directly without installing a pkg:
+
+```bash
+make run-release
+```
+
+- Build a fast local development pkg (unsigned):
 
 ```bash
 make pkg
+```
+
+- Build a signed installer pkg for pre-release local validation:
+
+```bash
+make pkg-signed
+```
+
+- Run the full release flow (signed pkg, optional notarization, GitHub Release):
+
+```bash
+make release NOTARIZE=true
 ```
 
 - Show helper logs:
