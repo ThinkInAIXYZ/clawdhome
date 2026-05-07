@@ -386,6 +386,8 @@ struct UserFilesView: View {
     private static var preselectedDailyPathByUser: [String: (dayKey: String, path: String)] = [:]
 
     @Environment(HelperClient.self) private var helperClient
+    @Environment(\.openWindow) private var openWindow
+    @Environment(MaintenanceWindowRegistry.self) private var maintenanceWindowRegistry
 
     @State private var selectedUser: ManagedUser?
     @State private var currentPath: String = ""      // 相对 home 的路径
@@ -416,10 +418,6 @@ struct UserFilesView: View {
 
     // 显示隐藏文件（默认开启，.openclaw 等隐藏目录是主要管理对象）
     @State private var showHidden = true
-
-    // 内置终端面板
-    @State private var showTerminalPanel = false
-    @State private var terminalSessionID = UUID()
 
     // 上传进度
     @State private var uploadStatus: UploadStatus? = nil
@@ -536,37 +534,6 @@ struct UserFilesView: View {
                 }
             }
 
-            // 内置终端面板
-            if showTerminalPanel, let user = selectedUser {
-                Divider()
-                VStack(spacing: 0) {
-                    HStack {
-                        Image(systemName: "apple.terminal")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("终端 — \(user.username)")
-                            .font(.caption).fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button {
-                            showTerminalPanel = false
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(.bar)
-                    Divider()
-                    terminalPanelView(user: user)
-                        .id(terminalSessionID)
-                        .frame(height: 200)
-                }
-            }
-
             // 上传进度条
             if let status = uploadStatus {
                 Divider()
@@ -626,7 +593,6 @@ struct UserFilesView: View {
         }
         .onChange(of: selectedUser) { _, user in
             guard preselectedUser == nil else { return }
-            showTerminalPanel = false
             if user != nil {
                 currentPath = ".openclaw"
                 shouldFallbackMissingOpenClaw = true
@@ -1331,22 +1297,16 @@ struct UserFilesView: View {
     }
 
     private func openTerminalAtCurrentPath() {
-        guard selectedUser != nil else { return }
-        terminalSessionID = UUID()
-        showTerminalPanel = true
-    }
-
-    /// 内置终端：以虾用户身份在当前目录启动交互 shell
-    private func terminalPanelView(user: ManagedUser) -> some View {
+        guard let user = selectedUser else { return }
         let home = "/Users/\(user.username)"
         let fullPath = currentPath.isEmpty ? home : "\(home)/\(currentPath)"
         let escaped = fullPath.replacingOccurrences(of: "'", with: "'\\''")
-        return LocalProcessNSView(
+        let payload = maintenanceWindowRegistry.makePayload(
             username: user.username,
-            executable: "/bin/zsh",
-            executableArgs: ["-c", "cd '\(escaped)' && exec /bin/zsh -l"],
-            onExit: { _ in showTerminalPanel = false }
+            title: "文件管理终端",
+            command: ["zsh", "-lc", "cd '\(escaped)' && exec /bin/zsh -l"]
         )
+        openWindow(id: "maintenance-terminal", value: payload)
     }
 
     private func copyCurrentPathToPasteboard() {
