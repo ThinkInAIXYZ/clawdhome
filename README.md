@@ -22,8 +22,8 @@ ClawdHome is designed for makers and operators who want to run multiple OpenClaw
     <td><img src="docs/assets/readme/github-claw-pool.png" alt="Claw Pool" /></td>
   </tr>
   <tr>
-    <td><img src="docs/assets/readme/github-filemanager.png" alt="File Manager" /></td>
-    <td><img src="docs/assets/readme/github-process.png" alt="Process" /></td>
+      <td><img src="docs/assets/readme/github-role-center.png" alt="Role Center" /></td>
+      <td><img src="docs/assets/readme/github-role-awaken.png" alt="Role Awaken" /></td>
   </tr>
 </table>
 
