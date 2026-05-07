@@ -6897,7 +6897,7 @@ private final class EmbeddedGatewayConsoleCoordinator: NSObject, WKNavigationDel
 
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
         NSSound.beep()
-        print("[EmbeddedGatewayConsoleView] download failed: \(error.localizedDescription)")
+        appLog("[EmbeddedGatewayConsoleView] download failed: \(error.localizedDescription)", level: .error)
     }
 }
 
