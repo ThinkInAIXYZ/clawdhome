@@ -9,6 +9,8 @@ enum HermesDetailMode: Hashable {
     case chat
     case profiles
     case config
+    case browser
+    case settings
     // 实例管理（与 OpenClaw 共享内容视图）
     case files
     case terminal
@@ -20,8 +22,8 @@ struct HermesDetailView: View {
     let user: ManagedUser
     let mode: HermesDetailMode
     let chatTabManager: HermesChatTabManager
-    let configTabManager: ShrimpTerminalTabManager
-    let shellTabManager: ShrimpTerminalTabManager
+    let configTabManager: HermesTerminalTabManager
+    let shellTabManager: HermesTerminalTabManager
     let profiles: [AgentProfile]
     let selectedProfileID: String?
     let isConnected: Bool
@@ -42,7 +44,6 @@ struct HermesDetailView: View {
     let onUpdateProfile: (String, String, String) -> Void
     let onDeleteProfile: (String) -> Void
     let onShowChat: () -> Void
-    let onSwitchToTerminal: () -> Void
     // T6.1 per-profile 状态
     let profileStatuses: [String: (running: Bool, pid: Int32)]
     let onStartProfile: (String) -> Void
@@ -70,6 +71,24 @@ struct HermesDetailView: View {
     @State private var deleteProfileID: String?
     @State private var showOnlySelectedProfileTabs = false
     @State private var hermesLogSearchText = ""
+    @State private var browserAccountStatus: BrowserAccountStatus?
+    @State private var isOpeningBrowserAccount = false
+    @State private var isInstallingBrowserAccountTool = false
+    @State private var showInstallToolSuccess = false
+    @State private var installToolError: String?
+    @State private var isResettingBrowserAccount = false
+    @State private var isInstallingOpenCLI = false
+    @State private var isRunningOpenCLIDoctor = false
+    @State private var opencliVersion: String?
+    @State private var opencliDoctorMessage: String?
+    @State private var showResetBrowserAccountConfirm = false
+    @State private var showAddManualLoginSite = false
+    @State private var manualLoginSiteName = ""
+    @State private var manualLoginSiteURL = ""
+    @State private var promptMemoryCurrentInput = ""
+    @State private var promptMemoryRequestedQuery: String?
+    @State private var promptMemoryMenuToken = 0
+    @AppStorage("browser.manualLogin.customSites") private var manualLoginCustomSitesRaw = "[]"
 
     private var showMultiAgentEntrypoints: Bool {
         HermesFeaturePolicy.shouldShowMultiAgentEntrypoints
@@ -95,31 +114,39 @@ struct HermesDetailView: View {
                     .opacity(mode == .terminal ? 1 : 0)
                     .allowsHitTesting(mode == .terminal)
 
-                if mode == .profiles && showMultiAgentEntrypoints {
+                if mode == .browser {
+                    hermesBrowserBody
+                } else if mode == .settings {
+                    ShrimpSettingsV2View(user: user, initialTab: .model, includeAgentsTab: false)
+                } else if mode == .profiles && showMultiAgentEntrypoints {
                     profilesBody
                 } else if mode == .files {
-                    UserFilesView(
-                        users: [user],
-                        preselectedUser: user,
-                        scope: .runtime(.hermes),
-                        onOpenTerminalAt: { relPath in
-                            let title = relPath.isEmpty
-                                ? L10n.k("terminal.tab.home", fallback: "home")
-                                : (relPath as NSString).lastPathComponent
-                            shellTabManager.addTab(cdRelativePath: relPath, titleHint: title)
-                            onSwitchToTerminal()
-                        }
-                    )
+                    UserFilesView(users: [user], preselectedUser: user, scope: .runtime(.hermes))
                 } else if mode == .processes {
                     ProcessTabView(username: user.username)
                 } else if mode == .logs {
                     GatewayLogViewer(username: user.username, runtime: .hermes, externalSearchQuery: $hermesLogSearchText)
                 }
             }
-            // right panel 改为浮动覆盖（zIndex/shadow 已配置），内容层不再让位以避免终端宽度被挤压
+            .padding(.top, 44)
+            .padding(.trailing, isRightPanelExpanded ? UserDetailWindowLayout.expandedSidebarWidth + 12 : 0)
 
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 6) {
+                    Button {
+                        promptMemoryMenuToken += 1
+                    } label: {
+                        Image(systemName: "text.bubble.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: 34, height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                    .fill(Color(nsColor: .controlBackgroundColor))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Prompt 和随手记")
+
                     if mode == .profiles && showMultiAgentEntrypoints {
                         Button {
                             showNewProfilePopover = true
@@ -206,16 +233,29 @@ struct HermesDetailView: View {
                         .zIndex(5)
                 }
             }
-            // 浮层按钮整体上移：让 sidebar 切换按钮贴近窗口顶部，配合 console top padding 压缩留白
-            .padding(.top, -12)
+            .padding(.top, 44)
+
+            PromptMemoryOverlay(
+                username: user.username,
+                currentInput: promptMemoryCurrentInput,
+                requestedQuery: promptMemoryRequestedQuery,
+                requestedMenuToken: promptMemoryMenuToken,
+                onConsumeRequest: { promptMemoryRequestedQuery = nil },
+                onInsert: { text, mode in
+                    insertPromptTextIntoActiveHermesTerminal(text, mode: mode)
+                }
+            )
         }
         .padding(20)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             configureChatTabsIfNeeded()
+            Task { await refreshBrowserAccountStatus() }
         }
         .onChange(of: user.username) { _, _ in
             configureChatTabsIfNeeded()
+            browserAccountStatus = nil
+            Task { await refreshBrowserAccountStatus() }
         }
         .alert(
             L10n.k("hermes.profile.close_chat_tab_title", fallback: "关闭会话标签？"),
@@ -253,6 +293,45 @@ struct HermesDetailView: View {
         } message: {
             Text(L10n.k("hermes.profile.delete_message", fallback: "删除后该 profile 的会话和配置不可恢复。"))
         }
+        .alert(
+            L10n.k("hermes.browser.install_tool_success_title", fallback: "浏览器工具安装成功"),
+            isPresented: $showInstallToolSuccess
+        ) {
+            Button(L10n.k("common.action.confirm", fallback: "确定"), role: .cancel) {}
+        } message: {
+            Text(L10n.k("hermes.browser.install_tool_success_message", fallback: "浏览器工具已就绪，Hermes 现在可以操控浏览器。"))
+        }
+        .alert(
+            L10n.k("common.error.action_failed", fallback: "操作失败"),
+            isPresented: Binding(get: { installToolError != nil }, set: { if !$0 { installToolError = nil } })
+        ) {
+            Button(L10n.k("common.action.confirm", fallback: "确定"), role: .cancel) { installToolError = nil }
+        } message: {
+            Text(installToolError ?? "")
+        }
+        .alert(
+            L10n.k("hermes.browser.reset_title", fallback: "重置 Hermes 浏览器？"),
+            isPresented: $showResetBrowserAccountConfirm
+        ) {
+            Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {
+                showResetBrowserAccountConfirm = false
+            }
+            Button(L10n.k("common.action.reset", fallback: "重置"), role: .destructive) {
+                Task { await resetBrowserAccount() }
+            }
+        } message: {
+            Text(L10n.k("hermes.browser.reset_message", fallback: "将备份并清空该用户的 ClawdHome Chrome profile。Hermes 的 OAuth 和网页登录态会被清空，其他用户与主浏览器不受影响。"))
+        }
+        .alert("添加登录网站", isPresented: $showAddManualLoginSite) {
+            TextField("名称", text: $manualLoginSiteName)
+            TextField("https://example.com", text: $manualLoginSiteURL)
+            Button("添加") {
+                addManualLoginSiteAndOpen()
+            }
+            Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {}
+        } message: {
+            Text("添加后会立即在该用户的 ClawdHome Chrome 中打开。")
+        }
     }
 
     private var chatBody: some View {
@@ -261,22 +340,175 @@ struct HermesDetailView: View {
     }
 
     private var configBody: some View {
-        ShrimpTerminalConsole(
+        HermesTerminalConsole(
             username: user.username,
             tabManager: configTabManager,
             isActive: mode == .config,
-            showsTemplateMenu: false
+            onPromptInputChanged: updatePromptMemoryInput,
+            onPromptMemoryRequest: openPromptMemory
         )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // 顶部留白，避开 HermesDetailView 右上角浮层（"+ 新建 Profile" / "sidebar 切换"）对 3 菜单的遮挡
-        .padding(.top, 28)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var shellBody: some View {
-        ShrimpTerminalConsole(username: user.username, tabManager: shellTabManager, isActive: mode == .terminal)
+        HermesTerminalConsole(
+            username: user.username,
+            tabManager: shellTabManager,
+            isActive: mode == .terminal,
+            onPromptInputChanged: updatePromptMemoryInput,
+            onPromptMemoryRequest: openPromptMemory
+        )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // 顶部留白，避开 HermesDetailView 右上角浮层对 3 菜单的遮挡
-            .padding(.top, 28)
+    }
+
+    private var hermesBrowserBody: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.k("hermes.browser.title", fallback: "Hermes 浏览器配置"))
+                        .font(.title3.weight(.semibold))
+                    Text(browserAccountStatus?.message ?? L10n.k("hermes.browser.status_unchecked", fallback: "尚未检查"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    Task { await refreshBrowserAccountStatus() }
+                } label: {
+                    Label(L10n.k("common.action.refresh", fallback: "刷新状态"), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!helperClient.isConnected)
+            }
+
+            GroupBox {
+                fixedSectionContent {
+                    row(L10n.k("hermes.browser.profile_path", fallback: "Chrome Profile"), browserAccountStatus?.profilePath ?? "—")
+                    row(L10n.k("hermes.browser.tool_path", fallback: "浏览器工具"), browserAccountStatus?.toolPath ?? "—")
+                    if let endpoint = browserAccountStatus?.httpEndpoint,
+                       browserAccountStatus?.browserReachable == true {
+                        row("CDP", endpoint)
+                    } else {
+                        row("CDP", "—")
+                    }
+                    row(
+                        L10n.k("hermes.browser.tool_state", fallback: "工具状态"),
+                        browserAccountStatus?.toolInstalled == true
+                            ? L10n.k("common.status.installed", fallback: "已安装")
+                            : L10n.k("common.status.not_installed", fallback: "未安装")
+                    )
+                    row(
+                        "OpenCLI",
+                        opencliVersion.map { "v\($0)" } ?? L10n.k("common.status.not_installed", fallback: "未安装")
+                    )
+                }
+            } label: {
+                Label(L10n.k("hermes.browser.runtime_account", fallback: "Hermes 浏览器账号"), systemImage: "globe")
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    Task { await openBrowserAccount() }
+                } label: {
+                    Label(
+                        isOpeningBrowserAccount
+                            ? L10n.k("hermes.browser.opening", fallback: "打开中…")
+                            : L10n.k("hermes.browser.open", fallback: "打开浏览器"),
+                        systemImage: "globe"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!helperClient.isConnected || isOpeningBrowserAccount)
+
+                Button {
+                    Task { await installBrowserAccountTool() }
+                } label: {
+                    Label(
+                        isInstallingBrowserAccountTool
+                            ? L10n.k("hermes.browser.installing_tool", fallback: "安装中…")
+                            : browserAccountStatus?.toolInstalled == true
+                                ? L10n.k("hermes.browser.tool_installed", fallback: "工具已安装")
+                                : L10n.k("hermes.browser.install_tool", fallback: "安装浏览器工具"),
+                        systemImage: "wrench.and.screwdriver"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!helperClient.isConnected || isInstallingBrowserAccountTool)
+
+                Button {
+                    Task { await installOpenCLI() }
+                } label: {
+                    Label(
+                        isInstallingOpenCLI
+                            ? "安装 OpenCLI 中…"
+                            : (opencliVersion == nil ? "安装 OpenCLI" : "升级 OpenCLI"),
+                        systemImage: "shippingbox"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!helperClient.isConnected || isInstallingOpenCLI || isRunningOpenCLIDoctor)
+
+                Button {
+                    Task { await runOpenCLIDoctor() }
+                } label: {
+                    Label(
+                        isRunningOpenCLIDoctor ? "Doctor 检测中…" : "OpenCLI Doctor",
+                        systemImage: "stethoscope"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!helperClient.isConnected || opencliVersion == nil || isInstallingOpenCLI || isRunningOpenCLIDoctor)
+
+                manualLoginMenu
+
+                Button(role: .destructive) {
+                    showResetBrowserAccountConfirm = true
+                } label: {
+                    Label(
+                        isResettingBrowserAccount
+                            ? L10n.k("hermes.browser.resetting", fallback: "重置中…")
+                            : L10n.k("common.action.reset", fallback: "重置"),
+                        systemImage: "trash"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!helperClient.isConnected || isResettingBrowserAccount)
+            }
+
+            if let opencliDoctorMessage, !opencliDoctorMessage.isEmpty {
+                Text(opencliDoctorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var manualLoginMenu: some View {
+        Menu {
+            ForEach(manualLoginSites) { site in
+                Button {
+                    Task { await openManualLoginSite(site) }
+                } label: {
+                    Text(site.name)
+                }
+            }
+            Divider()
+            Button {
+                manualLoginSiteName = ""
+                manualLoginSiteURL = ""
+                showAddManualLoginSite = true
+            } label: {
+                Label("添加网站…", systemImage: "plus")
+            }
+        } label: {
+            Label("手动登录", systemImage: "person.crop.circle.badge.plus")
+        }
+        .buttonStyle(.bordered)
+        .disabled(!helperClient.isConnected || isOpeningBrowserAccount)
     }
 
     private var terminalColumn: some View {
@@ -301,12 +533,14 @@ struct HermesDetailView: View {
                 ZStack {
                     ForEach(chatTabManager.tabs) { tab in
                         let isActive = tab.id == activeID
-                        ShrimpTerminalPanel(
+                        HermesChatTerminalPanel(
                             session: tab.session,
                             theme: .black,
                             minHeight: 520,
                             tabTitle: tab.title,
-                            isActive: isActive
+                            isActive: isActive,
+                            onPromptInputChanged: updatePromptMemoryInput,
+                            onPromptMemoryRequest: openPromptMemory
                         )
                         .opacity(isActive ? 1 : 0)
                         .allowsHitTesting(isActive)
@@ -634,6 +868,35 @@ struct HermesDetailView: View {
         return filtered.isEmpty ? chatTabManager.tabs : filtered
     }
 
+    private func updatePromptMemoryInput(_ input: String) {
+        guard promptMemoryCurrentInput != input else { return }
+        promptMemoryCurrentInput = input
+    }
+
+    private func openPromptMemory(_ input: String) {
+        promptMemoryCurrentInput = input
+        promptMemoryRequestedQuery = input
+    }
+
+    private func insertPromptTextIntoActiveHermesTerminal(_ text: String, mode: PromptInsertionMode) {
+        switch self.mode {
+        case .chat:
+            chatTabManager.selectedTab?.session.insertPromptText(text, mode: mode)
+        case .config:
+            configTabManager.selectedTab?.session.insertPromptText(text, mode: mode)
+        case .terminal:
+            shellTabManager.selectedTab?.session.insertPromptText(text, mode: mode)
+        case .profiles, .browser, .settings, .files, .processes, .logs:
+            if let session = chatTabManager.selectedTab?.session {
+                session.insertPromptText(text, mode: mode)
+            } else if let session = configTabManager.selectedTab?.session {
+                session.insertPromptText(text, mode: mode)
+            } else {
+                shellTabManager.selectedTab?.session.insertPromptText(text, mode: mode)
+            }
+        }
+    }
+
     private func profileAccentColor(index: Int) -> SwiftUI.Color {
         let palette: [SwiftUI.Color] = [.blue, .teal, .green, .orange, .pink, .indigo, .mint, .red]
         return palette[max(0, index) % palette.count]
@@ -724,6 +987,98 @@ struct HermesDetailView: View {
         )
     }
 
+    @MainActor
+    private func refreshBrowserAccountStatus() async {
+        browserAccountStatus = await helperClient.getBrowserAccountStatus(username: user.username)
+        opencliVersion = await helperClient.getOpenCLIVersion(username: user.username)
+    }
+
+    @MainActor
+    private func openBrowserAccount() async {
+        isOpeningBrowserAccount = true
+        defer { isOpeningBrowserAccount = false }
+        do {
+            _ = try await helperClient.openBrowserAccount(username: user.username)
+            await refreshBrowserAccountStatus()
+        } catch {
+            await refreshBrowserAccountStatus()
+        }
+    }
+
+    private var manualLoginSites: [BrowserManualLoginSite] {
+        BrowserManualLoginSite.defaults + BrowserManualLoginSite.customSites(from: manualLoginCustomSitesRaw)
+    }
+
+    @MainActor
+    private func openManualLoginSite(_ site: BrowserManualLoginSite) async {
+        isOpeningBrowserAccount = true
+        defer { isOpeningBrowserAccount = false }
+        do {
+            try await helperClient.openBrowserAccountURL(username: user.username, url: site.url)
+            await refreshBrowserAccountStatus()
+        } catch {
+            await refreshBrowserAccountStatus()
+        }
+    }
+
+    @MainActor
+    private func addManualLoginSiteAndOpen() {
+        guard let site = BrowserManualLoginSite.makeCustom(name: manualLoginSiteName, url: manualLoginSiteURL) else {
+            return
+        }
+        var sites = BrowserManualLoginSite.customSites(from: manualLoginCustomSitesRaw)
+        sites.append(site)
+        manualLoginCustomSitesRaw = BrowserManualLoginSite.encodeCustomSites(sites)
+        Task { await openManualLoginSite(site) }
+    }
+
+    @MainActor
+    private func installBrowserAccountTool() async {
+        isInstallingBrowserAccountTool = true
+        defer { isInstallingBrowserAccountTool = false }
+        do {
+            browserAccountStatus = try await helperClient.installBrowserAccountTool(username: user.username)
+            _ = try await helperClient.openBrowserAccount(username: user.username)
+            await refreshBrowserAccountStatus()
+            showInstallToolSuccess = true
+        } catch {
+            await refreshBrowserAccountStatus()
+            installToolError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func resetBrowserAccount() async {
+        isResettingBrowserAccount = true
+        defer { isResettingBrowserAccount = false }
+        do {
+            browserAccountStatus = try await helperClient.resetBrowserAccount(username: user.username)
+        } catch {
+            await refreshBrowserAccountStatus()
+        }
+    }
+
+    @MainActor
+    private func installOpenCLI() async {
+        isInstallingOpenCLI = true
+        defer { isInstallingOpenCLI = false }
+        do {
+            try await helperClient.installOpenCLI(username: user.username)
+            opencliDoctorMessage = "OpenCLI 安装完成。"
+            await refreshBrowserAccountStatus()
+        } catch {
+            opencliDoctorMessage = "OpenCLI 安装失败：\(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func runOpenCLIDoctor() async {
+        isRunningOpenCLIDoctor = true
+        defer { isRunningOpenCLIDoctor = false }
+        let (ok, output) = await helperClient.runOpenCLIDoctor(username: user.username)
+        opencliDoctorMessage = ok ? output : "Doctor 失败：\(output)"
+    }
+
     private func configureChatTabsIfNeeded() {
         guard mode == .chat else { return }
         chatTabManager.configureIfNeeded(
@@ -742,7 +1097,7 @@ final class HermesChatTabManager: ObservableObject {
         let profileID: String
         let profileName: String
         let profileColorIndex: Int
-        let session: ShrimpTerminalSession
+        let session: HermesChatTerminalSession
     }
 
     @Published private(set) var tabs: [Tab] = []
@@ -791,7 +1146,7 @@ final class HermesChatTabManager: ObservableObject {
             profileID: profileID,
             profileName: profileName,
             profileColorIndex: profileColorIndex,
-            session: ShrimpTerminalSession(
+            session: HermesChatTerminalSession(
                 helperClient: helperClient,
                 username: username,
                 command: command
@@ -834,6 +1189,510 @@ final class HermesChatTabManager: ObservableObject {
         let paletteCount = 8
         let hash = profileID.unicodeScalars.reduce(0) { ($0 * 31 + Int($1.value)) & 0x7fffffff }
         return hash % paletteCount
+    }
+}
+
+private struct HermesChatTerminalPanel: View {
+    @ObservedObject var session: HermesChatTerminalSession
+    let theme: MaintenanceTerminalTheme
+    let minHeight: CGFloat
+    let tabTitle: String
+    let isActive: Bool
+    var onPromptInputChanged: (String) -> Void = { _ in }
+    var onPromptMemoryRequest: (String) -> Void = { _ in }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "terminal")
+                    .font(.caption)
+                    .foregroundStyle(theme.headerSecondary)
+                Text(tabTitle)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(theme.headerSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Label(L10n.k("hermes.chat.helper_session", fallback: "Helper 会话"), systemImage: "bolt.horizontal.circle")
+                    .font(.caption2)
+                    .foregroundStyle(theme.headerSecondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            Divider()
+            HermesChatTerminalNSView(
+                session: session,
+                theme: theme,
+                fontSize: 11,
+                isActive: isActive,
+                onPromptInputChanged: onPromptInputChanged,
+                onPromptMemoryRequest: onPromptMemoryRequest
+            )
+            .padding(8)
+            .frame(minHeight: minHeight)
+        }
+        .background(theme.panelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.borderColor))
+    }
+}
+
+private struct HermesChatTerminalNSView: NSViewRepresentable {
+    @ObservedObject var session: HermesChatTerminalSession
+    let theme: MaintenanceTerminalTheme
+    let fontSize: CGFloat
+    let isActive: Bool
+    var onPromptInputChanged: (String) -> Void = { _ in }
+    var onPromptMemoryRequest: (String) -> Void = { _ in }
+
+    func makeCoordinator() -> HermesChatTerminalSession {
+        session
+    }
+
+    func makeNSView(context: Context) -> TerminalView {
+        let tv = UndoSafeTerminalView(frame: .zero)
+        tv.terminalDelegate = context.coordinator
+        tv.allowMouseReporting = false
+        tv.nativeForegroundColor = theme.terminalForeground
+        tv.nativeBackgroundColor = theme.terminalBackground
+        tv.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        context.coordinator.onPromptInputChanged = onPromptInputChanged
+        context.coordinator.onPromptMemoryRequest = onPromptMemoryRequest
+        context.coordinator.attachTerminalView(tv)
+        context.coordinator.updateActiveFocus(isActive, view: tv)
+        return tv
+    }
+
+    func updateNSView(_ nsView: TerminalView, context: Context) {
+        nsView.terminalDelegate = context.coordinator
+        if !nsView.nativeForegroundColor.isEqual(theme.terminalForeground) {
+            nsView.nativeForegroundColor = theme.terminalForeground
+        }
+        if !nsView.nativeBackgroundColor.isEqual(theme.terminalBackground) {
+            nsView.nativeBackgroundColor = theme.terminalBackground
+        }
+        if abs(nsView.font.pointSize - fontSize) > 0.01 {
+            nsView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        }
+        context.coordinator.onPromptInputChanged = onPromptInputChanged
+        context.coordinator.onPromptMemoryRequest = onPromptMemoryRequest
+        context.coordinator.attachTerminalView(nsView)
+        context.coordinator.updateActiveFocus(isActive, view: nsView)
+    }
+
+    static func dismantleNSView(_ nsView: TerminalView, coordinator: HermesChatTerminalSession) {
+        coordinator.detachTerminalView(nsView)
+    }
+}
+
+@MainActor
+final class HermesChatTerminalSession: NSObject, ObservableObject, @preconcurrency TerminalViewDelegate {
+    private let helperClient: HelperClient
+    private let username: String
+    private let command: [String]
+
+    private weak var terminalView: TerminalView?
+    private var sessionID: String?
+    private var offset: Int64 = 0
+    private var isStarting = false
+    private var isClosed = false
+    private var didExit = false
+
+    private var outputBuffer = ""
+    private let maxBufferLength = 180_000
+    private var consecutivePollErrors = 0
+    private let maxConsecutivePollErrors = 3
+
+    private var startTask: Task<Void, Never>?
+    private var pollTask: Task<Void, Never>?
+    private var lastResizeSent: (cols: Int, rows: Int)?
+    private var pendingResize: (cols: Int, rows: Int)?
+    private var lastKnownSize: (cols: Int, rows: Int)?
+    private var isReplaying = false
+    private var appDidBecomeActiveObserver: NSObjectProtocol?
+    private var wasTerminalActive = false
+    private var promptInputBuffer = ""
+    private var lastPromptTabAt: Date?
+    var onPromptInputChanged: ((String) -> Void)?
+    var onPromptMemoryRequest: ((String) -> Void)?
+
+    init(helperClient: HelperClient, username: String, command: [String]) {
+        self.helperClient = helperClient
+        self.username = username
+        self.command = command
+        super.init()
+        appDidBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleAppDidBecomeActive()
+        }
+    }
+
+    deinit {
+        startTask?.cancel()
+        pollTask?.cancel()
+        if let sessionID {
+            let client = helperClient
+            Task {
+                _ = await client.terminateMaintenanceTerminalSession(sessionID: sessionID)
+            }
+        }
+        if let observer = appDidBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    func attachTerminalView(_ view: TerminalView) {
+        let isNewView = terminalView !== view
+        terminalView = view
+        if isNewView {
+            // 清空尺寸缓存，确保新 view layout 后触发 sizeChanged → SIGWINCH → hermes 重绘
+            lastResizeSent = nil
+            // replay 期间屏蔽 send()：防止历史 buffer 中的 CPR 查询触发响应，
+            // 这些响应会污染仍在运行的 hermes 进程，导致渲染错乱。
+            isReplaying = true
+            replayOutputIfNeeded()
+            isReplaying = false
+        }
+        startIfNeeded()
+        if let pendingResize {
+            self.pendingResize = nil
+            sendResize(cols: pendingResize.cols, rows: pendingResize.rows)
+        }
+    }
+
+    func detachTerminalView(_ view: TerminalView) {
+        guard terminalView === view else { return }
+        terminalView = nil
+        wasTerminalActive = false
+    }
+
+    func updateActiveFocus(_ isActive: Bool, view: TerminalView) {
+        defer { wasTerminalActive = isActive }
+        guard isActive, !wasTerminalActive else { return }
+        DispatchQueue.main.async { [weak view] in
+            guard let view else { return }
+            view.window?.makeFirstResponder(view)
+        }
+    }
+
+    func close() {
+        guard !isClosed else { return }
+        isClosed = true
+        startTask?.cancel()
+        pollTask?.cancel()
+
+        let sid = sessionID
+        sessionID = nil
+        guard let sid else { return }
+        let client = helperClient
+        Task {
+            _ = await client.terminateMaintenanceTerminalSession(sessionID: sid)
+        }
+    }
+
+    private func startIfNeeded() {
+        guard !isClosed, !didExit, !isStarting, sessionID == nil else { return }
+        isStarting = true
+        startTask?.cancel()
+        startTask = Task { [weak self] in
+            await self?.startSession()
+        }
+    }
+
+    private func startSession() async {
+        let startResult = await helperClient.startMaintenanceTerminalSession(
+            username: username,
+            command: command
+        )
+
+        let finalResult: (Bool, String, String?)
+        if !startResult.0,
+           startResult.2 == L10n.k("services.helper_client.disconnected", fallback: "未连接") {
+            helperClient.connect()
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            finalResult = await helperClient.startMaintenanceTerminalSession(
+                username: username,
+                command: command
+            )
+        } else {
+            finalResult = startResult
+        }
+
+        await MainActor.run {
+            self.isStarting = false
+            if finalResult.0 {
+                self.sessionID = finalResult.1
+                self.offset = 0
+                self.beginPolling(sessionID: finalResult.1)
+                if let pendingResize = self.pendingResize {
+                    self.pendingResize = nil
+                    self.sendResize(cols: pendingResize.cols, rows: pendingResize.rows)
+                }
+            } else {
+                let message = L10n.f(
+                    "views.terminal_log_view.command_start_failed",
+                    fallback: "命令启动失败：%@\r\n",
+                    finalResult.2 ?? "unknown error"
+                )
+                self.appendOutput(message)
+                self.feedToTerminal(message)
+                self.didExit = true
+            }
+        }
+    }
+
+    private func beginPolling(sessionID: String) {
+        pollTask?.cancel()
+        pollTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                let snapshot = await helperClient.pollMaintenanceTerminalSession(
+                    sessionID: sessionID,
+                    fromOffset: self.offset
+                )
+                let shouldStop = await MainActor.run {
+                    self.handlePollResult(snapshot, expectedSessionID: sessionID)
+                }
+                if shouldStop {
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+        }
+    }
+
+    @discardableResult
+    private func handlePollResult(
+        _ snapshot: (Bool, Data, Int64, Bool, Int32, String?),
+        expectedSessionID: String
+    ) -> Bool {
+        guard sessionID == expectedSessionID else { return true }
+        let (ok, chunk, nextOffset, exited, exitCode, err) = snapshot
+
+        if !ok {
+            consecutivePollErrors += 1
+            if consecutivePollErrors >= maxConsecutivePollErrors {
+                let text = "会话错误（连续 \(consecutivePollErrors) 次失败）：\(err ?? "unknown")\r\n"
+                appendOutput(text)
+                feedToTerminal(text)
+                didExit = true
+                sessionID = nil
+                return true
+            }
+            // 瞬时错误，跳过本轮继续轮询
+            return false
+        }
+
+        consecutivePollErrors = 0
+        offset = nextOffset
+        if !chunk.isEmpty {
+            let text = String(decoding: chunk, as: UTF8.self)
+            appendOutput(text)
+            feedToTerminal(text)
+        }
+
+        if exited {
+            let exitLine = "\r\n[会话已结束，exit \(exitCode)]\r\n"
+            appendOutput(exitLine)
+            feedToTerminal(exitLine)
+            didExit = true
+            sessionID = nil
+            return true
+        }
+        return false
+    }
+
+    private func sendInput(_ data: Data) {
+        guard let sessionID else { return }
+        Task {
+            let (ok, err) = await helperClient.sendMaintenanceTerminalSessionInput(
+                sessionID: sessionID,
+                input: data
+            )
+            if !ok {
+                let msg = "\r\n输入失败：\(err ?? "unknown")\r\n"
+                await MainActor.run {
+                    self.appendOutput(msg)
+                    self.feedToTerminal(msg)
+                }
+            }
+        }
+    }
+
+    func insertPromptText(_ text: String, mode: PromptInsertionMode) {
+        guard !text.isEmpty else { return }
+        var payload = Data()
+        if mode == .replace {
+            payload.append(0x15)
+            promptInputBuffer = ""
+        }
+        payload.append(contentsOf: text.utf8)
+        sendInput(payload)
+        if mode == .replace {
+            promptInputBuffer = text
+        } else {
+            promptInputBuffer += text
+        }
+        onPromptInputChanged?(promptInputBuffer)
+    }
+
+    private func sendResize(cols: Int, rows: Int) {
+        guard cols > 0, rows > 0 else { return }
+        guard let sessionID else {
+            pendingResize = (cols, rows)
+            return
+        }
+        Task {
+            _ = await helperClient.resizeMaintenanceTerminalSession(
+                sessionID: sessionID,
+                cols: cols,
+                rows: rows
+            )
+        }
+    }
+
+    private func handleAppDidBecomeActive() {
+        guard !isClosed, !didExit else { return }
+        guard let size = lastKnownSize ?? lastResizeSent ?? pendingResize else { return }
+        // 重新激活时强制触发一次 resize，确保 PTY/TUI 在未发生尺寸变化时也能重绘。
+        lastResizeSent = nil
+        sendResize(cols: size.cols, rows: size.rows)
+    }
+
+    private func appendOutput(_ text: String) {
+        guard !text.isEmpty else { return }
+        outputBuffer += text
+        if outputBuffer.count > maxBufferLength {
+            let overflow = outputBuffer.count - maxBufferLength
+            outputBuffer.removeFirst(overflow)
+        }
+    }
+
+    private func replayOutputIfNeeded() {
+        guard let terminalView, !outputBuffer.isEmpty else { return }
+        let bytes = ArraySlice(Array(outputBuffer.utf8))
+        terminalView.feed(byteArray: bytes)
+    }
+
+    private func feedToTerminal(_ text: String) {
+        guard let terminalView else { return }
+        let bytes = ArraySlice(Array(text.utf8))
+        terminalView.feed(byteArray: bytes)
+    }
+
+    // MARK: TerminalViewDelegate
+
+    func send(source: TerminalView, data: ArraySlice<UInt8>) {
+        guard !isReplaying else { return }
+        if handlePromptMemoryInput(data) {
+            return
+        }
+        sendInput(Data(data))
+    }
+
+    private func handlePromptMemoryInput(_ data: ArraySlice<UInt8>) -> Bool {
+        let bytes = Array(data)
+        guard !bytes.isEmpty else { return false }
+
+        if bytes.count == 1, bytes[0] == 0x09 {
+            let now = Date()
+            if let lastPromptTabAt, now.timeIntervalSince(lastPromptTabAt) < 1.5 {
+                self.lastPromptTabAt = nil
+                onPromptMemoryRequest?(promptInputBuffer)
+                return true
+            }
+            lastPromptTabAt = now
+            return false
+        }
+        lastPromptTabAt = nil
+
+        if bytes.count == 1 {
+            switch bytes[0] {
+            case 0x03, 0x0D, 0x0A:
+                promptInputBuffer = ""
+                onPromptInputChanged?(promptInputBuffer)
+                return false
+            case 0x15:
+                promptInputBuffer = ""
+                onPromptInputChanged?(promptInputBuffer)
+                return false
+            case 0x7F, 0x08:
+                if !promptInputBuffer.isEmpty {
+                    promptInputBuffer.removeLast()
+                    onPromptInputChanged?(promptInputBuffer)
+                }
+                return false
+            default:
+                break
+            }
+        }
+
+        guard bytes.first != 0x1B,
+              let text = String(data: Data(bytes), encoding: .utf8),
+              !text.isEmpty,
+              text.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else {
+            return false
+        }
+        promptInputBuffer += text
+        onPromptInputChanged?(promptInputBuffer)
+        return false
+    }
+
+    func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+        guard newCols > 0, newRows > 0 else { return }
+        lastKnownSize = (newCols, newRows)
+        if let lastResizeSent,
+           lastResizeSent.cols == newCols,
+           lastResizeSent.rows == newRows {
+            return
+        }
+        lastResizeSent = (newCols, newRows)
+        sendResize(cols: newCols, rows: newRows)
+    }
+
+    func setTerminalTitle(source: TerminalView, title: String) {}
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+    func scrolled(source: TerminalView, position: Double) {}
+    func bell(source: TerminalView) {}
+    func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
+    func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+
+    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        guard let url = URL(string: link) else { return }
+        let scheme = url.scheme?.lowercased()
+        guard scheme == "http" || scheme == "https" else {
+            openHermesExternalURL(url)
+            return
+        }
+        let username = username
+        let helperClient = helperClient
+        Task {
+            do {
+                try await helperClient.openBrowserAccountURL(username: username, url: url.absoluteString)
+            } catch {
+                openHermesExternalURL(url)
+            }
+        }
+    }
+
+    func clipboardCopy(source: TerminalView, content: Data) {
+        guard !content.isEmpty else { return }
+        let board = NSPasteboard.general
+        board.clearContents()
+        if let text = String(data: content, encoding: .utf8) {
+            board.setString(text, forType: .string)
+        } else {
+            board.setData(content, forType: .string)
+        }
+    }
+}
+
+private func openHermesExternalURL(_ url: URL) {
+    DispatchQueue.main.async {
+        _ = NSWorkspace.shared.open(url)
     }
 }
 
@@ -887,6 +1746,254 @@ private struct HermesProfileStatusPill: View {
     }
 }
 
+// MARK: - 终端 Tab 管理器
+
+@MainActor
+final class HermesTerminalTabManager: ObservableObject {
+    struct Tab: Identifiable {
+        let id: UUID
+        let title: String
+        let session: HermesChatTerminalSession
+    }
+
+    @Published private(set) var tabs: [Tab] = []
+    @Published var selectedTabID: UUID?
+
+    let titlePrefix: String
+    let defaultCommand: [String]
+
+    private var username: String?
+    private weak var helperClient: HelperClient?
+    private var tabCounter = 0
+
+    init(titlePrefix: String = "配置", defaultCommand: [String] = ["hermes", "setup"]) {
+        self.titlePrefix = titlePrefix
+        self.defaultCommand = defaultCommand
+    }
+
+    var selectedTab: Tab? {
+        if let selectedTabID,
+           let match = tabs.first(where: { $0.id == selectedTabID }) {
+            return match
+        }
+        return tabs.first
+    }
+
+    func configureIfNeeded(username: String, helperClient: HelperClient) {
+        let shouldReset = self.username != username || self.helperClient !== helperClient
+        self.username = username
+        self.helperClient = helperClient
+        if shouldReset {
+            closeAllTabs()
+            tabCounter = 0
+        }
+    }
+
+    func addTab(command: [String]? = nil) {
+        guard let username, let helperClient else { return }
+        let cmd = command ?? defaultCommand
+        tabCounter += 1
+        let title = "\(titlePrefix) \(tabCounter)"
+        let newTab = Tab(
+            id: UUID(),
+            title: title,
+            session: HermesChatTerminalSession(
+                helperClient: helperClient,
+                username: username,
+                command: cmd
+            )
+        )
+        tabs.append(newTab)
+        selectedTabID = newTab.id
+    }
+
+    func selectTab(id: UUID) {
+        guard tabs.contains(where: { $0.id == id }) else { return }
+        selectedTabID = id
+    }
+
+    func closeTab(id: UUID) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let closing = tabs.remove(at: index)
+        closing.session.close()
+
+        if tabs.isEmpty {
+            selectedTabID = nil
+            return
+        }
+        if selectedTabID == id {
+            let nextIndex = min(index, tabs.count - 1)
+            selectedTabID = tabs[nextIndex].id
+        }
+    }
+
+    func closeAllTabs() {
+        let existing = tabs
+        tabs = []
+        selectedTabID = nil
+        for tab in existing {
+            tab.session.close()
+        }
+    }
+}
+
+// MARK: - 终端 Console（侧边栏 Tab 内容）
+
+struct HermesTerminalConsole: View {
+    let username: String
+    @ObservedObject var tabManager: HermesTerminalTabManager
+    var isActive: Bool = true
+    var onPromptInputChanged: (String) -> Void = { _ in }
+    var onPromptMemoryRequest: (String) -> Void = { _ in }
+
+    @Environment(HelperClient.self) private var helperClient
+    @State private var pendingCloseTabID: UUID?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Tab 栏
+            HStack(spacing: 10) {
+                Text(L10n.k("common.label.terminal", fallback: "终端"))
+                    .font(.headline)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(tabManager.tabs) { tab in
+                            terminalTabChip(tab)
+                        }
+                        addTabButton
+                    }
+                    .padding(.vertical, 2)
+                }
+                Spacer()
+            }
+
+            // 终端内容
+            if !tabManager.tabs.isEmpty {
+                let activeID = tabManager.selectedTabID ?? tabManager.tabs.first?.id
+                ZStack {
+                    ForEach(tabManager.tabs) { tab in
+                        let isActive = tab.id == activeID
+                        HermesChatTerminalPanel(
+                            session: tab.session,
+                            theme: .black,
+                            minHeight: 520,
+                            tabTitle: tab.title,
+                            isActive: isActive,
+                            onPromptInputChanged: onPromptInputChanged,
+                            onPromptMemoryRequest: onPromptMemoryRequest
+                        )
+                        .opacity(isActive ? 1 : 0)
+                        .allowsHitTesting(isActive)
+                        .accessibilityHidden(!isActive)
+                    }
+                }
+            } else {
+                VStack(spacing: 16) {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.tertiary)
+                    Text(L10n.k("hermes.terminal.empty_hint", fallback: "点击下方按钮打开终端会话"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        tabManager.addTab()
+                    } label: {
+                        Label(L10n.k("hermes.terminal.open", fallback: "打开终端"), systemImage: "play.fill")
+                            .font(.body.weight(.medium))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .onAppear {
+            tabManager.configureIfNeeded(username: username, helperClient: helperClient)
+            if isActive && tabManager.tabs.isEmpty {
+                tabManager.addTab()
+            }
+        }
+        .onChange(of: isActive) { _, newActive in
+            guard newActive else { return }
+            tabManager.configureIfNeeded(username: username, helperClient: helperClient)
+            if tabManager.tabs.isEmpty {
+                tabManager.addTab()
+            }
+        }
+        .alert(
+            L10n.k("hermes.terminal.close_tab_title", fallback: "关闭终端标签？"),
+            isPresented: Binding(
+                get: { pendingCloseTabID != nil },
+                set: { if !$0 { pendingCloseTabID = nil } }
+            )
+        ) {
+            Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {
+                pendingCloseTabID = nil
+            }
+            Button(L10n.k("common.action.close", fallback: "关闭"), role: .destructive) {
+                guard let tabID = pendingCloseTabID else { return }
+                tabManager.closeTab(id: tabID)
+                pendingCloseTabID = nil
+            }
+        } message: {
+            Text(L10n.k("hermes.terminal.close_tab_message", fallback: "关闭后该终端会话将被终止，无法恢复。"))
+        }
+    }
+
+    @ViewBuilder
+    private func terminalTabChip(_ tab: HermesTerminalTabManager.Tab) -> some View {
+        let isSelected = tab.id == tabManager.selectedTabID
+        HStack(spacing: 6) {
+            Image(systemName: "terminal")
+                .font(.system(size: 10))
+            Button {
+                tabManager.selectTab(id: tab.id)
+            } label: {
+                Text(tab.title)
+                    .lineLimit(1)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                pendingCloseTabID = tab.id
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .help(L10n.k("common.action.close_tab", fallback: "关闭标签"))
+        }
+        .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isSelected ? Color.primary.opacity(0.12) : Color.primary.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(isSelected ? 0.22 : 0.08), lineWidth: 1)
+        )
+    }
+
+    private var addTabButton: some View {
+        Button {
+            tabManager.addTab()
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 24, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.primary.opacity(0.08))
+                )
+        }
+        .buttonStyle(.plain)
+        .help(L10n.k("hermes.terminal.new_tab", fallback: "新建终端标签"))
+    }
+}
+
 // MARK: - Hermes 详情容器（独立窗口入口）
 
 /// ClawDetailWindow 会根据 `user.prefersHermesRuntime` 分流到此容器。
@@ -902,15 +2009,8 @@ struct HermesDetailContainer: View {
 
     @State private var mode: HermesDetailMode = .chat
     @StateObject private var chatTabManager = HermesChatTabManager()
-    @StateObject private var configTabManager = ShrimpTerminalTabManager(
-        engine: .hermes,
-        titlePrefix: "配置",
-        defaultCommand: ["hermes", "setup"]
-    )
-    @StateObject private var shellTabManager = ShrimpTerminalTabManager(
-        engine: .hermes,
-        titlePrefix: "终端"
-    )
+    @StateObject private var configTabManager = HermesTerminalTabManager()
+    @StateObject private var shellTabManager = HermesTerminalTabManager(titlePrefix: "终端", defaultCommand: ["hermes-shell", "-l"])
     @State private var profiles: [AgentProfile] = []
     @State private var selectedProfileID: String? = nil
     @State private var isLoading = false
@@ -992,7 +2092,6 @@ struct HermesDetailContainer: View {
                     onUpdateProfile: { id, name, emoji in Task { await updateProfile(id: id, name: name, emoji: emoji) } },
                     onDeleteProfile: { id in Task { await deleteProfile(id: id) } },
                     onShowChat: { mode = .chat },
-                    onSwitchToTerminal: { mode = .terminal },
                     profileStatuses: profileStatuses,
                     onStartProfile: { id in Task { await startProfile(id) } },
                     onStopProfile: { id in Task { await stopProfile(id) } },
@@ -1166,6 +2265,7 @@ struct HermesDetailContainer: View {
                 hermesSidebarButton(.profiles, label: "角色", icon: "theatermasks")
             }
             hermesSidebarButton(.config, label: "配置", icon: "gearshape")
+            hermesSidebarButton(.browser, label: "浏览器", icon: "globe")
 
             Divider()
                 .padding(.horizontal, detailSidebarShowsLabels ? 10 : 4)
@@ -1183,6 +2283,7 @@ struct HermesDetailContainer: View {
             hermesSidebarButton(.terminal, label: "终端", icon: "terminal")
             hermesSidebarButton(.processes, label: L10n.k("user.detail.auto.processes", fallback: "进程"), icon: "square.3.layers.3d")
             hermesSidebarButton(.logs, label: L10n.k("user.detail.auto.logs", fallback: "日志"), icon: "doc.text.magnifyingglass")
+            hermesSidebarButton(.settings, label: L10n.k("user.detail.sidebar.settings", fallback: "设置"), icon: "gearshape")
 
             Spacer()
 

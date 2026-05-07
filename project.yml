@@ -72,6 +72,7 @@ targets:
       properties:
         CFBundleName: ClawdHome
         CFBundleDisplayName: ClawdHome
+        CFBundleShortVersionString: "1.9.0"
         CFBundleIconFile: AppIcon.icns
         NSHumanReadableDescription: OpenClaw 家庭管理器
         LSApplicationCategoryType: public.app-category.utilities

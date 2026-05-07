@@ -128,6 +128,15 @@ struct UserDetailView: View {
     @State private var quickTransferAlertMessage: String?
     @State private var quickTransferClipboardText = ""
     @State private var quickTransferLastPaths: [String] = []
+    @State private var browserAccountStatus: BrowserAccountStatus? = nil
+    @State private var isOpeningBrowserAccount = false
+    @State private var isInstallingBrowserAccountTool = false
+    @State private var isResettingBrowserAccount = false
+    @State private var showResetBrowserAccountConfirm = false
+    @State private var showAddManualLoginSite = false
+    @State private var manualLoginSiteName = ""
+    @State private var manualLoginSiteURL = ""
+    @AppStorage("browser.manualLogin.customSites") private var manualLoginCustomSitesRaw = "[]"
     // Tab
     @State private var selectedTab: ClawTab = .overview
     /// 跳转到 settings tab 时，让 ShrimpSettingsV2View 内部默认选中哪个二级 tab（model/agents/...）
@@ -148,6 +157,8 @@ struct UserDetailView: View {
     @State private var isOverviewSidebarCollapsed = false
     @State private var hasOpenedStandaloneInitWindow = false
     @State private var detailAutoRefreshActive = false
+    @State private var promptMemoryCurrentInput = ""
+    @State private var promptMemoryRequestedQuery: String?
     private var embeddedOverviewConsoleStore: EmbeddedGatewayConsoleStore {
         EmbeddedGatewayConsoleStoreRegistry.shared.store(for: user.username)
     }
@@ -514,6 +525,20 @@ struct UserDetailView: View {
             tabContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .overlay {
+            if shouldEmbedOverviewConsole, embeddedOverviewConsoleURL != nil {
+                PromptMemoryOverlay(
+                    username: user.username,
+                    currentInput: promptMemoryCurrentInput,
+                    requestedQuery: promptMemoryRequestedQuery,
+                    onConsumeRequest: { promptMemoryRequestedQuery = nil },
+                    onInsert: { text, mode in
+                        embeddedOverviewConsoleStore.insertPromptText(text, mode: mode)
+                    }
+                )
+                .zIndex(4000)
+            }
+        }
         .task { await refreshStatus() }
         .task { await loadShrimpBindings() }
         .task {
@@ -759,6 +784,30 @@ struct UserDetailView: View {
         } message: {
             Text(L10n.k("user.detail.auto.userprocess_openclaw_process_start", fallback: "将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。"))
         }
+        .confirmationDialog(
+            "重置浏览器账号？",
+            isPresented: $showResetBrowserAccountConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("备份并重置", role: .destructive) {
+                Task { await resetBrowserAccount() }
+            }
+            Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) {
+                showResetBrowserAccountConfirm = false
+            }
+        } message: {
+            Text("将备份并清空该用户的 ClawdHome Chrome profile。其他用户和你的主浏览器账号不会受影响。")
+        }
+        .alert("添加登录网站", isPresented: $showAddManualLoginSite) {
+            TextField("名称", text: $manualLoginSiteName)
+            TextField("https://example.com", text: $manualLoginSiteURL)
+            Button("添加") {
+                addManualLoginSiteAndOpen()
+            }
+            Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) {}
+        } message: {
+            Text("添加后会立即在该用户的 ClawdHome Chrome 中打开。")
+        }
         .alert(
             L10n.k("user.detail.auto.file", fallback: "文件快传结果"),
             isPresented: Binding(
@@ -922,6 +971,15 @@ struct UserDetailView: View {
         if shouldEmbedOverviewConsole,
            let url = embeddedOverviewConsoleURL {
             EmbeddedGatewayConsoleView(url: url, store: embeddedOverviewConsoleStore)
+                .onAppear {
+                    embeddedOverviewConsoleStore.onPromptMemoryRequest = { text in
+                        promptMemoryCurrentInput = text
+                        promptMemoryRequestedQuery = text
+                    }
+                    embeddedOverviewConsoleStore.onPromptInputChanged = { text in
+                        promptMemoryCurrentInput = text
+                    }
+                }
         } else if shouldEmbedOverviewConsole, isEffectivelyRunning {
             ContentUnavailableView {
                 Label(L10n.k("user.detail.auto.waiting_token", fallback: "等待 Token…"), systemImage: "network")
@@ -1254,8 +1312,89 @@ struct UserDetailView: View {
                 }
             }
 
+            overviewBrowserAccountCard
             overviewChannelCard
         }
+    }
+
+    private var overviewBrowserAccountCard: some View {
+        overviewSupplementaryCard(
+            title: "浏览器账号",
+            subtitle: browserAccountStatus?.message ?? "尚未检查"
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                if let endpoint = browserAccountStatus?.httpEndpoint,
+                   browserAccountStatus?.browserReachable == true {
+                    Text(endpoint)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                HStack(spacing: 8) {
+                    overviewCompactActionButton(
+                        title: isOpeningBrowserAccount ? "打开中…" : "打开",
+                        systemImage: "globe",
+                        tint: Color.blue.opacity(0.12),
+                        foreground: .blue,
+                        disabled: !helperClient.isConnected || isOpeningBrowserAccount
+                    ) {
+                        Task { await openBrowserAccount() }
+                    }
+                    overviewCompactActionButton(
+                        title: browserAccountStatus?.toolInstalled == true ? "已安装" : "安装工具",
+                        systemImage: "wrench.and.screwdriver",
+                        tint: Color.secondary.opacity(0.08),
+                        foreground: .primary,
+                        disabled: !helperClient.isConnected || isInstallingBrowserAccountTool
+                    ) {
+                        Task { await installBrowserAccountTool() }
+                    }
+                }
+                HStack(spacing: 8) {
+                    manualLoginMenuCompact
+                    overviewCompactActionButton(
+                        title: isResettingBrowserAccount ? "重置中…" : "重置",
+                        systemImage: "trash",
+                        tint: Color.red.opacity(0.10),
+                        foreground: .red,
+                        disabled: !helperClient.isConnected || isResettingBrowserAccount
+                    ) {
+                        showResetBrowserAccountConfirm = true
+                    }
+                }
+            }
+        }
+    }
+
+    private var manualLoginMenuCompact: some View {
+        Menu {
+            ForEach(manualLoginSites) { site in
+                Button {
+                    Task { await openManualLoginSite(site) }
+                } label: {
+                    Text(site.name)
+                }
+            }
+            Divider()
+            Button {
+                manualLoginSiteName = ""
+                manualLoginSiteURL = ""
+                showAddManualLoginSite = true
+            } label: {
+                Label("添加网站…", systemImage: "plus")
+            }
+        } label: {
+            overviewCompactActionLabel(
+                title: "手动登录",
+                systemImage: "person.crop.circle.badge.plus",
+                tint: Color.orange.opacity(0.12),
+                foreground: .orange
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .disabled(!helperClient.isConnected || isOpeningBrowserAccount)
+        .opacity((!helperClient.isConnected || isOpeningBrowserAccount) ? 0.55 : 1)
     }
 
     private var overviewResourceCard: some View {
@@ -2596,6 +2735,7 @@ struct UserDetailView: View {
         async let nodeInstalledResult = helperClient.isNodeInstalled(username: user.username)
         async let urlResult = helperClient.getGatewayURL(username: user.username)
         async let installedVersionResult = helperClient.getOpenclawVersion(username: user.username)
+        async let browserAccountStatusResult = helperClient.getBrowserAccountStatus(username: user.username)
 
         // --- 处理结果 ---
 
@@ -2639,6 +2779,7 @@ struct UserDetailView: View {
             gatewayURLTokenPollTask?.cancel()
             gatewayURLTokenPollTask = nil
         }
+        browserAccountStatus = await browserAccountStatusResult
         loadPreUpgradeInfo()
         // Gateway 运行且有地址时，建立 WebSocket 连接（幂等）
         if user.isRunning, let gatewayURLValue = gatewayURL {
@@ -2805,6 +2946,81 @@ struct UserDetailView: View {
 
         await loadAgents()
         appLog("[V2] persona 写入全部完成 @\(user.username)")
+    }
+
+    @MainActor
+    private func refreshBrowserAccountStatus() async {
+        browserAccountStatus = await helperClient.getBrowserAccountStatus(username: user.username)
+    }
+
+    @MainActor
+    private func openBrowserAccount() async {
+        isOpeningBrowserAccount = true
+        actionError = nil
+        defer { isOpeningBrowserAccount = false }
+        do {
+            _ = try await helperClient.openBrowserAccount(username: user.username)
+            await refreshBrowserAccountStatus()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private var manualLoginSites: [BrowserManualLoginSite] {
+        BrowserManualLoginSite.defaults + BrowserManualLoginSite.customSites(from: manualLoginCustomSitesRaw)
+    }
+
+    @MainActor
+    private func openManualLoginSite(_ site: BrowserManualLoginSite) async {
+        isOpeningBrowserAccount = true
+        actionError = nil
+        defer { isOpeningBrowserAccount = false }
+        do {
+            try await helperClient.openBrowserAccountURL(username: user.username, url: site.url)
+            await refreshBrowserAccountStatus()
+        } catch {
+            actionError = error.localizedDescription
+            await refreshBrowserAccountStatus()
+        }
+    }
+
+    @MainActor
+    private func addManualLoginSiteAndOpen() {
+        guard let site = BrowserManualLoginSite.makeCustom(name: manualLoginSiteName, url: manualLoginSiteURL) else {
+            actionError = "请输入有效的 http(s) 登录地址。"
+            return
+        }
+        var sites = BrowserManualLoginSite.customSites(from: manualLoginCustomSitesRaw)
+        sites.append(site)
+        manualLoginCustomSitesRaw = BrowserManualLoginSite.encodeCustomSites(sites)
+        Task { await openManualLoginSite(site) }
+    }
+
+    @MainActor
+    private func installBrowserAccountTool() async {
+        isInstallingBrowserAccountTool = true
+        actionError = nil
+        defer { isInstallingBrowserAccountTool = false }
+        do {
+            browserAccountStatus = try await helperClient.installBrowserAccountTool(username: user.username)
+            _ = try await helperClient.openBrowserAccount(username: user.username)
+            await refreshBrowserAccountStatus()
+        } catch {
+            actionError = error.localizedDescription
+            await refreshBrowserAccountStatus()
+        }
+    }
+
+    @MainActor
+    private func resetBrowserAccount() async {
+        isResettingBrowserAccount = true
+        actionError = nil
+        defer { isResettingBrowserAccount = false }
+        do {
+            browserAccountStatus = try await helperClient.resetBrowserAccount(username: user.username)
+        } catch {
+            actionError = error.localizedDescription
+        }
     }
 
     private func refreshGatewayURLUntilTokenReady(

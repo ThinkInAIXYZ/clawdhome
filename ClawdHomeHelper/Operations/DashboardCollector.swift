@@ -33,6 +33,7 @@ final class DashboardCollector {
     private var fastTimer: Timer?
     private var slowTimer: Timer?
     private var userRefreshTimer: Timer?
+    private var isStarted = false
 
     // 网络采集后台任务重入保护（DispatchQueue.global 不自动串行化）
     private var isCollectingNet = false
@@ -62,10 +63,22 @@ final class DashboardCollector {
 
     private init() {}
 
+    // MARK: - 用户枚举缓存
+
+    private static let managedUserBaseCacheLock = NSLock()
+    private static var managedUserBaseCache: (expiresAt: Date, users: [(username: String, uid: uid_t)])?
+    private static let managedUserBaseCacheTTL: TimeInterval = 60
+
     // MARK: - 生命周期
 
     /// 启动双频采集（主线程调用；Timer 加入 main RunLoop）
     func start() {
+        guard !isStarted else {
+            helperLog("[dashboard] start() ignored: already started", level: .warn, channel: .diagnostics)
+            return
+        }
+        isStarted = true
+
         // 立即刷新用户列表，确保快照有虾列表
         managedUsers = DashboardCollector.fetchManagedUsers()
         // 立即将用户列表写入快照（网络采集尚未运行，先用空值占位）
@@ -85,8 +98,8 @@ final class DashboardCollector {
         slowTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { [weak self] _ in
             self?.collectSlow()
         }
-        // 每 5 秒刷新用户列表（包含 gateway 运行状态）—— 与 XPC 热路径完全解耦
-        userRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        // 每 15 秒刷新用户列表（包含 gateway 运行状态）—— 与 XPC 热路径完全解耦
+        userRefreshTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
             guard let self else { return }
             let users = DashboardCollector.fetchManagedUsers()
             self.managedUsers = users
@@ -115,6 +128,7 @@ final class DashboardCollector {
         fastTimer?.invalidate(); fastTimer = nil
         slowTimer?.invalidate(); slowTimer = nil
         userRefreshTimer?.invalidate(); userRefreshTimer = nil
+        isStarted = false
     }
 
     // MARK: - 快照读取（线程安全）
@@ -473,30 +487,49 @@ final class DashboardCollector {
     /// 排除管理员账户、系统保留账户和 _ 开头服务账户
     /// 每 5 秒由 userRefreshTimer 调用，与 XPC 热路径完全解耦
     static func fetchManagedUsers() -> [(username: String, uid: uid_t, isRunning: Bool)] {
-        // 收集 admin 组成员名单
-        var adminNames = Set<String>()
-        if let grp = getgrnam("admin") {
-            var i = 0
-            while let member = grp.pointee.gr_mem?[i] {
-                adminNames.insert(String(cString: member))
-                i += 1
+        let now = Date()
+        let baseUsers: [(username: String, uid: uid_t)] = {
+            managedUserBaseCacheLock.lock()
+            if let cached = managedUserBaseCache, cached.expiresAt > now {
+                managedUserBaseCacheLock.unlock()
+                return cached.users
             }
-        }
+            managedUserBaseCacheLock.unlock()
 
-        let usersDir = "/Users"
-        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: usersDir) else {
-            return []
-        }
-        return contents.compactMap { name -> (String, uid_t, Bool)? in
-            guard ManagedUserFilter.shouldConsiderUsersDirectoryEntry(name) else { return nil }
-            guard let pw = getpwnam(name) else { return nil }
-            let uid = pw.pointee.pw_uid
-            let signedUID = Int32(bitPattern: uid)
-            guard ManagedUserFilter.isEligibleManagedUser(
-                username: name,
-                uid: Int(signedUID),
-                adminNames: adminNames
-            ) else { return nil }
+            // 收集 admin 组成员名单
+            var adminNames = Set<String>()
+            if let grp = getgrnam("admin") {
+                var i = 0
+                while let member = grp.pointee.gr_mem?[i] {
+                    adminNames.insert(String(cString: member))
+                    i += 1
+                }
+            }
+
+            let usersDir = "/Users"
+            guard let contents = try? FileManager.default.contentsOfDirectory(atPath: usersDir) else {
+                return []
+            }
+            let computed: [(username: String, uid: uid_t)] = contents.compactMap { name in
+                guard ManagedUserFilter.shouldConsiderUsersDirectoryEntry(name) else { return nil }
+                guard let pw = getpwnam(name) else { return nil }
+                let uid = pw.pointee.pw_uid
+                let signedUID = Int32(bitPattern: uid)
+                guard ManagedUserFilter.isEligibleManagedUser(
+                    username: name,
+                    uid: Int(signedUID),
+                    adminNames: adminNames
+                ) else { return nil }
+                return (name, uid)
+            }
+
+            managedUserBaseCacheLock.lock()
+            managedUserBaseCache = (now.addingTimeInterval(managedUserBaseCacheTTL), computed)
+            managedUserBaseCacheLock.unlock()
+            return computed
+        }()
+
+        return baseUsers.map { name, uid in
             // 仪表盘周期性刷新使用轻量状态查询，避免触发 ps/lsof 回溯造成线程堆积。
             let (running, _) = GatewayManager.status(
                 username: name,

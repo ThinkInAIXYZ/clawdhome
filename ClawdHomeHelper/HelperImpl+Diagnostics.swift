@@ -351,9 +351,24 @@ extension ClawdHomeHelperImpl {
         if let hinted = normalizeDiagnosticsEngine(hint) {
             return hinted
         }
+        // 显式运行时锚点优先，避免 Hermes/OpenClaw 共存时自动检测误判。
+        if let config = HermesInstaller.readRuntimeConfig(username: username) {
+            switch config.runtime {
+            case "hermes":
+                return .hermes
+            case "openclaw":
+                return .openclaw
+            default:
+                break
+            }
+        }
+
+        // 无锚点时再按安装态兜底。若两者都存在，优先 Hermes（与详情页运行时优先级一致）。
         let hasHermes = HermesInstaller.installedVersion(username: username) != nil
-        let hasOpenclaw = (try? ConfigWriter.findOpenclawBinary(for: username)) != nil
-        return (hasHermes && !hasOpenclaw) ? .hermes : .openclaw
+        let hasOpenclaw = InstallManager.installedVersion(username: username) != nil
+        if hasHermes { return .hermes }
+        if hasOpenclaw { return .openclaw }
+        return .openclaw
     }
 
     private func itemsForGroup(
@@ -487,6 +502,7 @@ extension ClawdHomeHelperImpl {
                 "HOME": home,
                 "USER": username,
                 "PATH": HermesInstaller.buildPath(for: username),
+                "BROWSER": "\(home)/.clawdhome/tools/clawdhome-browser/clawdhome-browser open %s",
                 "HERMES_HOME": hermesHome,
             ]
             if let actual = hermesGatewayPlistEnvironment(username: username) {

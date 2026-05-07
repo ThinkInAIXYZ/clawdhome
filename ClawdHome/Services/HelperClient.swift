@@ -617,6 +617,138 @@ final class HelperClient {
         }
     }
 
+    // MARK: - 浏览器账号
+
+    func openBrowserAccount(username: String) async throws -> BrowserAccountSession {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.openBrowserAccount(username: username) { ok, payload in
+                done((ok, payload))
+            }
+        }
+        guard ok else {
+            throw HelperError.operationFailed(payload)
+        }
+        guard let data = payload.data(using: .utf8),
+              let session = try? JSONDecoder().decode(BrowserAccountSession.self, from: data) else {
+            throw HelperError.operationFailed("浏览器账号会话解析失败")
+        }
+        return session
+    }
+
+    func openBrowserAccountURL(username: String, url: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.openBrowserAccountURL(username: username, url: url) { ok, payload in
+                done((ok, payload))
+            }
+        }
+        guard ok else {
+            if BrowserAccountInstallSkipPolicy.shouldTreatAsOptionalChromeWarmupFailure(payload) {
+                return
+            }
+            throw HelperError.operationFailed(payload)
+        }
+    }
+
+    func getBrowserAccountStatus(username: String) async -> BrowserAccountStatus? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            let payload: String = try await xpcCall { done in
+                proxy.getBrowserAccountStatus(username: username) { payload in
+                    done(payload)
+                }
+            }
+            guard let data = payload.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(BrowserAccountStatus.self, from: data)
+        } catch {
+            return nil
+        }
+    }
+
+    func resetBrowserAccount(username: String) async throws -> BrowserAccountStatus {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.resetBrowserAccount(username: username) { ok, payload in
+                done((ok, payload))
+            }
+        }
+        guard ok else {
+            throw HelperError.operationFailed(payload)
+        }
+        guard let data = payload.data(using: .utf8),
+              let status = try? JSONDecoder().decode(BrowserAccountStatus.self, from: data) else {
+            throw HelperError.operationFailed("浏览器账号状态解析失败")
+        }
+        return status
+    }
+
+    func installBrowserAccountTool(username: String) async throws -> BrowserAccountStatus {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.installBrowserAccountTool(username: username) { ok, payload in
+                done((ok, payload))
+            }
+        }
+        guard ok else {
+            throw HelperError.operationFailed(payload)
+        }
+        guard let data = payload.data(using: .utf8),
+              let status = try? JSONDecoder().decode(BrowserAccountStatus.self, from: data) else {
+            throw HelperError.operationFailed("浏览器账号状态解析失败")
+        }
+        return status
+    }
+
+    func prepareBrowserAccountForRuntimeInstall(username: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.prepareBrowserAccountForRuntimeInstall(username: username) { ok, payload in
+                done((ok, payload))
+            }
+        }
+        guard ok else {
+            throw HelperError.operationFailed(payload)
+        }
+    }
+
+    func installOpenCLI(username: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.installOpenCLI(username: username) { ok, msg in
+                done((ok, msg))
+            }
+        }
+        if !ok {
+            throw HelperError.operationFailed(msg ?? "OpenCLI 安装失败")
+        }
+    }
+
+    func getOpenCLIVersion(username: String) async -> String? {
+        guard let proxy = metadataProxy else { return nil }
+        do {
+            let v: String = try await xpcCall { done in
+                proxy.getOpenCLIVersion(username: username) { done($0) }
+            }
+            return v.isEmpty ? nil : v
+        } catch {
+            return nil
+        }
+    }
+
+    func runOpenCLIDoctor(username: String) async -> (Bool, String) {
+        guard let proxy = controlProxy else { return (false, "Helper 未连接") }
+        do {
+            return try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+                proxy.runOpenCLIDoctor(username: username) { ok, out in
+                    done((ok, out))
+                }
+            }
+        } catch {
+            return (false, error.localizedDescription)
+        }
+    }
+
     // MARK: - 配置管理
 
     func setConfig(username: String, key: String, value: String) async throws {
@@ -2379,6 +2511,15 @@ enum HelperHealthState: Equatable {
     var isHealthy: Bool {
         if case .connected = self { return true }
         return false
+    }
+}
+
+private enum BrowserAccountInstallSkipPolicy {
+    static func shouldTreatAsOptionalChromeWarmupFailure(_ message: String) -> Bool {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.contains("未找到 Google Chrome")
+            || normalized.localizedCaseInsensitiveContains("Google Chrome")
+                && normalized.localizedCaseInsensitiveContains("not found")
     }
 }
 

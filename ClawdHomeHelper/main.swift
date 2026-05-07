@@ -188,6 +188,9 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
     /// 只有 Helper 自身是正式签名产物时，才强制校验调用方签名。
     /// 这样 `make pkg`（未签名快速包）可正常联通；`pkg-signed/release` 仍保持严格校验。
     private static let shouldEnforceCallerSignature = isHelperReleaseSigned()
+    private static let adminCacheLock = NSLock()
+    private static var adminUIDCache: [uid_t: (isAdmin: Bool, expiresAt: Date)] = [:]
+    private static let adminCacheTTL: TimeInterval = 120
 
     /// 每个 PID 的连接序号（仅递增）和活跃连接数
     private var seqByPID: [Int32: Int] = [:]
@@ -354,12 +357,24 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
 
     /// 用 getgrouplist() 检查 UID 是否属于 admin 组（gid 80），纯 libc 调用
     private static func isAdminUID(_ uid: uid_t) -> Bool {
+        let now = Date()
+        adminCacheLock.lock()
+        if let cached = adminUIDCache[uid], cached.expiresAt > now {
+            adminCacheLock.unlock()
+            return cached.isAdmin
+        }
+        adminCacheLock.unlock()
+
         let adminGID: gid_t = 80
         guard let pw = getpwuid(uid) else { return false }
         var groups = [gid_t](repeating: 0, count: 64)
         var count = Int32(groups.count)
         getgrouplist(pw.pointee.pw_name, Int32(bitPattern: pw.pointee.pw_gid), &groups, &count)
-        return groups.prefix(Int(count)).contains(adminGID)
+        let isAdmin = groups.prefix(Int(count)).contains(adminGID)
+        adminCacheLock.lock()
+        adminUIDCache[uid] = (isAdmin, now.addingTimeInterval(adminCacheTTL))
+        adminCacheLock.unlock()
+        return isAdmin
     }
 }
 

@@ -182,4 +182,3 @@ final class VaultPermissionGuardian {
         return type == .typeSymbolicLink
     }
 }
-

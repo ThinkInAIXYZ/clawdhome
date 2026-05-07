@@ -126,6 +126,7 @@ struct GatewayManager {
                 if existingPlist == newPlist {
                     // 端口一致，真正的 no-op
                     helperLog("[GatewayManager] START_SKIP: 已在运行 pid=\(existingPid) port=\(resolvedPort) @\(username)")
+                    refreshBrowserToolWrappersAfterGatewayStart(username: username)
                     return
                 }
                 // 配置变更（含端口）→ launchd 不会重读 plist，kickstart -k 无效
@@ -196,6 +197,16 @@ struct GatewayManager {
 
         let finalPid = status(username: username, uid: uid).pid
         helperLog("[GatewayManager] START_OK: port=\(resolvedPort) label=\(label) pid=\(finalPid) @\(username)")
+        refreshBrowserToolWrappersAfterGatewayStart(username: username)
+    }
+
+    private static func refreshBrowserToolWrappersAfterGatewayStart(username: String) {
+        do {
+            _ = try BrowserAccountManager.installTool(username: username)
+            helperLog("[GatewayManager] START_STEP: 浏览器工具 wrapper 已刷新 @\(username)")
+        } catch {
+            helperLog("[GatewayManager] START_WARN: 浏览器工具 wrapper 刷新失败 @\(username): \(error.localizedDescription)", level: .warn)
+        }
     }
 
     private static func writePlist(_ content: String, to path: String) throws {
