@@ -13837,24 +13837,6 @@
         }
       }
     },
-    "user.detail.auto.executable_file": {
-      "comment": "",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Executable file"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "可执行文件"
-          }
-        }
-      }
-    },
     "user.detail.auto.flash_freeze": {
       "comment": "",
       "extractionState": "stale",
