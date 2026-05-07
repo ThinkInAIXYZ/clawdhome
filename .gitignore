@@ -34,6 +34,7 @@ docs/plans
 
 # 本地命名空间切换脚本（不托管）
 scripts/switch-namespace.local.sh
+scripts/test_cli_init.local.env
 .githooks/pre-commit
 .gstack/
 .worktrees/
@@ -54,3 +55,7 @@ scripts/switch-namespace.local.sh
 *.developerprofile
 *.keychain
 *.keychain-db
+
+# 本地文档 / 观测笔记
+docs/obs_docs
+docs/testing/

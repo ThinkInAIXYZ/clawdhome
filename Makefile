@@ -19,7 +19,7 @@ SIGN_PKG ?= false
 NOTARIZE ?= true
 BUILD_ARCHS ?= arm64
 
-.PHONY: help bump-build build build-cli build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-dry-run release-notes-draft changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli
+.PHONY: help bump-build build build-cli build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-dry-run release-notes-draft changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli test-cli-onboard-env test-cli-onboard-help test-cli-onboard test-cli-onboard-step test-cli-onboard-clean
 
 WEBSITE_DIR ?= ../clawdhome_website
 
@@ -29,6 +29,11 @@ help:
 	@echo "  build-cli        Debug 构建 CLI（仅 CLI，不含 App/Helper）"
 	@echo "  run-cli          构建并运行 CLI（传参: make run-cli ARGS='shrimp list'）"
 	@echo "  test-cli         构建并运行 CLI 集成测试"
+	@echo "  test-cli-onboard-env   初始化本地测试配置文件（若不存在）"
+	@echo "  test-cli-onboard-help  显示初始化测试控制台帮助（full/step）"
+	@echo "  test-cli-onboard       跑 CLI 初始化全流程（支持扫码绑定/chat 验证）"
+	@echo "  test-cli-onboard-step  跑单步骤（示例: make test-cli-onboard-step STEP=bind-weixin）"
+	@echo "  test-cli-onboard-clean 清理测试用户（需要 ADMIN_PW）"
 	@echo "  build-helper     Debug 构建 Helper"
 	@echo "  build-release    Release 归档构建（构建时自动递增本地 Build 号）"
 	@echo "  bump-build       预览下一次构建将使用的 Build 号"
@@ -140,6 +145,36 @@ test-cli: build-cli
 	@CLI=$$(find ~/Library/Developer/Xcode/DerivedData/ClawdHome-*/Build/Products/Debug/ClawdHomeCLI -maxdepth 0 2>/dev/null | head -1); \
 	[ -n "$$CLI" ] || (echo "❌ 未找到 CLI 二进制"; exit 1); \
 	bash scripts/test-cli.sh "$$CLI"
+
+# CLI 初始化测试控制台（支持 full/step）
+test-cli-onboard-env:
+	@if [ -f scripts/test_cli_init.local.env ]; then \
+		echo "✅ scripts/test_cli_init.local.env 已存在"; \
+	else \
+		cp scripts/test_cli_init.local.env.example scripts/test_cli_init.local.env; \
+		echo "✅ 已创建 scripts/test_cli_init.local.env（请填写 ADMIN_PW 等本地参数）"; \
+	fi
+
+test-cli-onboard-help: build-cli
+	@CLI=$$(find ~/Library/Developer/Xcode/DerivedData/ClawdHome-*/Build/Products/Debug/ClawdHomeCLI -maxdepth 0 2>/dev/null | head -1); \
+	[ -n "$$CLI" ] || (echo "❌ 未找到 CLI 二进制"; exit 1); \
+	bash scripts/test_cli_init_ctl.sh help "$$CLI"
+
+test-cli-onboard: build-cli
+	@CLI=$$(find ~/Library/Developer/Xcode/DerivedData/ClawdHome-*/Build/Products/Debug/ClawdHomeCLI -maxdepth 0 2>/dev/null | head -1); \
+	[ -n "$$CLI" ] || (echo "❌ 未找到 CLI 二进制"; exit 1); \
+	bash scripts/test_cli_init_ctl.sh full "$$CLI"
+
+test-cli-onboard-step: build-cli
+	@[ -n "$(STEP)" ] || (echo "❌ 需要 STEP 参数，例如: make test-cli-onboard-step STEP=bind-feishu"; exit 1)
+	@CLI=$$(find ~/Library/Developer/Xcode/DerivedData/ClawdHome-*/Build/Products/Debug/ClawdHomeCLI -maxdepth 0 2>/dev/null | head -1); \
+	[ -n "$$CLI" ] || (echo "❌ 未找到 CLI 二进制"; exit 1); \
+	bash scripts/test_cli_init_ctl.sh "$(STEP)" "$$CLI"
+
+test-cli-onboard-clean: build-cli
+	@CLI=$$(find ~/Library/Developer/Xcode/DerivedData/ClawdHome-*/Build/Products/Debug/ClawdHomeCLI -maxdepth 0 2>/dev/null | head -1); \
+	[ -n "$$CLI" ] || (echo "❌ 未找到 CLI 二进制"; exit 1); \
+	bash scripts/test_cli_init_ctl.sh clean "$$CLI"
 
 build-helper: bump-build
 	xcodebuild \

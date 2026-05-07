@@ -4,6 +4,15 @@
 import Foundation
 
 enum ExecCommand {
+    private static func setEnv(_ envArgs: inout [String], key: String, value: String) {
+        let prefix = "\(key)="
+        if let idx = envArgs.firstIndex(where: { $0.hasPrefix(prefix) }) {
+            envArgs[idx] = "\(key)=\(value)"
+        } else {
+            envArgs.append("\(key)=\(value)")
+        }
+    }
+
     static func run(_ args: [String], client: CLIHelperClient) throws {
         guard let username = args.first else {
             Output.printError("用法: clawdhome exec <name>")
@@ -70,6 +79,17 @@ enum ExecCommand {
             "LANG=\(ProcessInfo.processInfo.environment["LANG"] ?? "en_US.UTF-8")",
         ]
 
+        // 透传终端相关环境，尽量贴近当前会话体验（颜色、locale 等）
+        for key in [
+            "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "COLORTERM",
+            "LC_ALL", "LC_CTYPE", "LC_MESSAGES", "LANG", "TZ",
+            "SSH_AUTH_SOCK",
+        ] {
+            if let value = ProcessInfo.processInfo.environment[key], !value.isEmpty {
+                setEnv(&envArgs, key: key, value: value)
+            }
+        }
+
         // 追加代理环境（如果存在）
         for key in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
                      "http_proxy", "https_proxy", "all_proxy", "no_proxy"] {
@@ -84,7 +104,9 @@ enum ExecCommand {
         Output.printErr("进入 \(username) 的 shell 环境...")
 
         // 4. exec 替换当前进程
-        let fullArgs = ["/usr/bin/sudo", "-u", username, "-H", "/usr/bin/env"] + envArgs + ["/bin/zsh", "-l"]
+        // 关键：先切到目标用户 HOME，避免继承当前目录导致 getcwd PermissionError。
+        let shellBootstrap = "cd \"$HOME\" 2>/dev/null || cd /; exec /bin/zsh -l"
+        let fullArgs = ["/usr/bin/sudo", "-u", username, "-H", "/usr/bin/env"] + envArgs + ["/bin/zsh", "-lc", shellBootstrap]
         let cArgs = fullArgs.map { strdup($0) } + [nil]
         execvp(cArgs[0]!, cArgs)
 

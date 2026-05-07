@@ -82,7 +82,7 @@ final class DaemonInstaller {
         var error: NSDictionary?
         NSAppleScript(source: script)?.executeAndReturnError(&error)
         if let error {
-            let msg = error[NSAppleScript.errorMessage] as? String ?? "未知错误"
+            let msg = error[NSAppleScript.errorMessage] as? String ?? L10n.k("services.daemon_installer.unknown_error", fallback: "未知错误")
             os_log(.error, "[DaemonInstaller] forceRestart failed: %{public}@", msg)
             return false
         }
