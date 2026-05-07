@@ -19056,13 +19056,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Installing dependencies. Please wait; no need to click continue repeatedly."
+            "value": "Installing dependencies. Please wait.."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在安装依赖，请稍候。此阶段无需重复点击继续。"
+            "value": "正在安装依赖，请稍候.."
           }
         }
       }
