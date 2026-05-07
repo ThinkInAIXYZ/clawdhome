@@ -32,27 +32,8 @@ struct AddProviderModelSheet: View {
     private var isCustomGroup: Bool { selectedGroupId == "custom" }
 
     private var providerGroups: [ModelGroup] {
+        // 模型 (id, label) 统一来自 builtInModelGroups，仅追加"自定义"空组
         var groups = builtInModelGroups
-        if !groups.contains(where: { $0.id == "kimi-coding" }) {
-            groups.append(ModelGroup(id: "kimi-coding", provider: "Kimi Code", models: [
-                ModelEntry(id: "kimi-coding/k2p5", label: "Kimi K2.5"),
-            ]))
-        }
-        if !groups.contains(where: { $0.id == "qiniu" }) {
-            groups.append(ModelGroup(id: "qiniu", provider: "Qiniu AI", models: [
-                ModelEntry(id: "qiniu/deepseek-v3.2-251201", label: "DeepSeek V3.2"),
-                ModelEntry(id: "qiniu/z-ai/glm-5", label: "GLM 5"),
-                ModelEntry(id: "qiniu/moonshotai/kimi-k2.5", label: "Kimi K2.5"),
-                ModelEntry(id: "qiniu/minimax/minimax-m2.5", label: "Minimax M2.5"),
-            ]))
-        }
-        if !groups.contains(where: { $0.id == "zai" }) {
-            groups.append(ModelGroup(id: "zai", provider: "智谱 Z.AI", models: [
-                ModelEntry(id: "zai/glm-5.1", label: "GLM-5.1"),
-                ModelEntry(id: "zai/glm-5", label: "GLM-5"),
-                ModelEntry(id: "zai/glm-4.7", label: "GLM-4.7"),
-            ]))
-        }
         if !groups.contains(where: { $0.id == "custom" }) {
             groups.append(ModelGroup(id: "custom", provider: "自定义", models: []))
         }

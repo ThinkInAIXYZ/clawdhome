@@ -56,37 +56,11 @@ enum AddModelProvider: String, CaseIterable, Identifiable {
         }
     }
 
-    /// 该提供商预设的模型列表
+    /// 该提供商预设的模型列表（统一来自 builtInModelGroups）
     var presetModels: [(id: String, label: String)] {
-        switch self {
-        case .kimiCoding:
-            return [("kimi-coding/k2p5", "Kimi K2.5")]
-        case .minimax:
-            return [
-                ("minimax/MiniMax-M2.7", "MiniMax M2.7"),
-                ("minimax/MiniMax-M2.7-highspeed", "MiniMax M2.7 Highspeed"),
-                ("minimax/MiniMax-M2.5", "MiniMax M2.5"),
-                ("minimax/MiniMax-M2.5-highspeed", "MiniMax M2.5 Highspeed"),
-                ("minimax/MiniMax-VL-01", "MiniMax VL-01"),
-                ("minimax/MiniMax-M2", "MiniMax M2"),
-                ("minimax/MiniMax-M2.1", "MiniMax M2.1"),
-            ]
-        case .qiniu:
-            return [
-                ("qiniu/deepseek-v3.2-251201", "DeepSeek V3.2"),
-                ("qiniu/z-ai/glm-5", "GLM 5"),
-                ("qiniu/moonshotai/kimi-k2.5", "Kimi K2.5"),
-                ("qiniu/minimax/minimax-m2.5", "Minimax M2.5"),
-            ]
-        case .zai:
-            return [
-                ("zai/glm-5.1", "GLM-5.1"),
-                ("zai/glm-5", "GLM-5"),
-                ("zai/glm-4.7", "GLM-4.7"),
-            ]
-        case .custom:
-            return []
-        }
+        if self == .custom { return [] }
+        guard let group = builtInModelGroups.first(where: { $0.id == rawValue }) else { return [] }
+        return group.models.map { ($0.id, $0.label) }
     }
 
     var baseURL: String {
