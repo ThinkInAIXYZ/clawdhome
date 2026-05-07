@@ -29,6 +29,7 @@ Browser Account 的核心目标：
 | 路径 | 归属 | 权限 | 用途 |
 | --- | --- | --- | --- |
 | `/Users/<console>/Library/Application Support/ClawdHome/BrowserProfiles/<username>/` | 当前 console 用户 | Chrome 默认 | ClawdHome UI/launcher 启动的 Chrome profile |
+| `/Users/<console>/Library/Application Support/ClawdHome/BrowserProfiles/<username>/ClawdHomeExtensions/opencli-browser-bridge/` | 当前 console 用户 | `0755` | OpenCLI Browser Bridge unpacked Chrome extension |
 | `/Users/<username>/.clawdhome/browser/` | 目标用户 | `0755` | browser session、debug、warmup 状态目录 |
 | `/Users/<username>/.clawdhome/browser/session.json` | 目标用户 | `0600` | 当前 CDP endpoint、profile、端口、console 用户 |
 | `/Users/<username>/.clawdhome/browser/install-warmup.json` | 目标用户 | `0600` | 初始化预热完成标记 |
@@ -97,7 +98,8 @@ sequenceDiagram
     Manager->>Manager: resolveContext(username)
     Manager->>Manager: resolve current console user
     Manager->>Manager: create BrowserProfiles/<username>
-    Manager->>Chrome: launchctl asuser <consoleUID> open -na Google Chrome --args --user-data-dir=<profile> --remote-debugging-port=0
+    Manager->>Manager: download/unzip OpenCLI Browser Bridge extension
+    Manager->>Chrome: launchctl asuser <consoleUID> open -na Google Chrome --args --user-data-dir=<profile> --remote-debugging-port=0 --load-extension=<profile>/ClawdHomeExtensions/opencli-browser-bridge
     Chrome-->>Manager: DevToolsActivePort
     Manager->>Manager: write ~/.clawdhome/browser/session.json
     Manager-->>UI: BrowserAccountSession JSON
@@ -107,6 +109,7 @@ sequenceDiagram
 
 - `username` 是受管 macOS 用户，不是 runtime 类型。
 - Chrome GUI 进程属于 console 用户；登录态隔离依赖独立 profile。
+- OpenCLI Browser Bridge 扩展随 profile 安装并通过 `--load-extension` 加载，不要求用户手动进入 `chrome://extensions`。
 - 找不到系统 Google Chrome 时返回安装提示，不自动下载 Chrome。
 - session 文件写入前会确保 `~/.clawdhome/browser` 归目标用户所有，避免 root 创建目录后目标用户无法写日志。
 
@@ -131,6 +134,22 @@ flowchart TD
 - `~/.npm-global/bin`：OpenClaw/npm 生态入口，覆盖 OpenCLI 这类 npm 全局命令。
 
 wrapper 写日志时使用 `|| true`，日志目录权限异常不会导致 `open`、`opencli` 或 `open-cli` 命令直接失败。
+
+## 7.1 OpenCLI Browser Bridge 扩展安装
+
+官方手动流程是下载 OpenCLI release 中的 extension zip，然后在 `chrome://extensions` 中开启 Developer Mode 并 Load unpacked。ClawdHome 在浏览器初始化时自动完成等价流程：
+
+1. 请求 `https://api.github.com/repos/jackwener/opencli/releases/latest`。
+2. 选择 release assets 中名称包含 `extension` 且后缀为 `.zip` 的包，例如 `opencli-extension-v1.0.4.zip`。
+3. 下载并解压到当前 Chrome profile：
+   `<profile>/ClawdHomeExtensions/opencli-browser-bridge/`。
+4. 验证解压结果必须包含 `manifest.json`，并拒绝 zip 中的绝对路径或 `..` 路径。
+5. 按用户名计算该用户独立的 OpenCLI daemon 端口，并把扩展 `dist/background.js` 中的 `DAEMON_PORT` 改写为该端口。
+6. 启动 Chrome 后通过 CDP `Extensions.loadUnpacked` 加载该扩展。
+
+扩展目录放在 profile 下，而不是目标用户 home 下。原因是 macOS GUI Chrome 进程实际由 console 用户承载，profile 及 unpacked extension 必须对该 GUI 进程可读。
+
+所有 ClawdHome 管理的 Chrome 启动路径都应通过 `clawdhome-browser-pipe-launcher` 加载 OpenCLI Browser Bridge。`clawdhome-browser` 以目标用户身份运行，通常不能读取 console 用户 `Library/Application Support` 下的 profile，因此它只负责请求启动；扩展下载、端口改写、解压和 `manifest.json` 校验由 root helper / setuid launcher 侧完成。缺插件时 launcher 会失败并提示用户回到 ClawdHome 重新安装/初始化浏览器工具，不会裸启动没有 Browser Bridge 的 Chrome。
 
 ## 8. `clawdhome-browser` 命令
 
@@ -207,8 +226,9 @@ OpenCLI 的 Browser Bridge extension 必须在 Chrome 打开后才会连接。Br
 2. 生成新的 `opencli` wrapper。
 3. 每次执行真实 OpenCLI 前，先运行：
    `CLAWDHOME_BROWSER_HIDE=1 clawdhome-browser open https://clawdhome.ai`
-4. 如 daemon 未运行，启动真实 daemon。
-5. 再执行 `opencli.clawdhome-real <原参数>`。
+4. Chrome profile 自动加载已安装的 OpenCLI Browser Bridge extension。
+5. wrapper 设置该用户专属 `OPENCLI_DAEMON_PORT`；如该端口上的 daemon 未运行，启动真实 daemon。
+6. 再执行 `opencli.clawdhome-real <原参数>`。
 
 这样 `opencli xiaohongshu search AI` 不需要用户先手动打开浏览器。
 

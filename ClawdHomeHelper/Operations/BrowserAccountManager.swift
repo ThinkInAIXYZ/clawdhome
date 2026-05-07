@@ -32,6 +32,7 @@ enum BrowserAccountError: LocalizedError {
 
 enum BrowserAccountManager {
     private static let chromeAppPath = "/Applications/Google Chrome.app"
+    private static let openCLIReleaseAPIURL = "https://api.github.com/repos/jackwener/opencli/releases/latest"
 
     static func prepareForRuntimeInstall(username: String, logURL: URL? = nil) throws {
         appendInstallLog("→ 安装 ClawdHome 用户级浏览器工具\n", logURL: logURL)
@@ -50,6 +51,8 @@ enum BrowserAccountManager {
 
         appendInstallLog("→ 首次打开用户级 Chrome 浏览器账号并写入 session\n", logURL: logURL)
         let context = try resolveContext(username: username)
+        let extensionPath = try ensureOpenCLIBrowserBridgeExtensionInstalled(context: context, logURL: logURL)
+        appendInstallLog("✓ OpenCLI Browser Bridge 扩展已安装：\(extensionPath)\n", logURL: logURL)
         var openedProfilePath = context.paths.profileDirectory.path
         do {
             let session = try open(username: username)
@@ -72,22 +75,19 @@ enum BrowserAccountManager {
         }
 
         try prepareProfileDirectory(context.paths.profileDirectory.path, consoleUsername: context.consoleUsername)
+        let extensionPath = try ensureOpenCLIBrowserBridgeExtensionInstalled(context: context, logURL: nil)
+        try ensurePrivilegedBrowserLauncherInstalled(username: username)
+        try closeBrowserProcessesMissingExtension(
+            profilePath: context.paths.profileDirectory.path,
+            extensionPath: extensionPath,
+            logURL: nil
+        )
         try removeStaleActivePortIfNeeded(context.paths.devToolsActivePortFile.path)
 
-        let args = [
-            "asuser", "\(context.consoleUID)",
-            "/usr/bin/sudo", "-u", context.consoleUsername, "-H",
-            "/usr/bin/open", "-na", "Google Chrome", "--args",
-            "--user-data-dir=\(context.paths.profileDirectory.path)",
-            "--remote-debugging-address=127.0.0.1",
-            "--remote-debugging-port=0",
-            "--no-first-run",
-            "--new-window",
-            "about:blank",
-        ]
-        try run("/bin/launchctl", args: args)
+        let port = try findAvailableLocalPort()
+        try spawnPipeBrowserLauncher(context: context, port: port, target: "about:blank", hidden: false)
 
-        guard let activePort = waitForActivePort(filePath: context.paths.devToolsActivePortFile.path, timeout: 8) else {
+        guard let activePort = waitForReachableEndpoint(port: port, timeout: 8) else {
             throw BrowserAccountError.devToolsPortUnavailable
         }
 
@@ -225,6 +225,10 @@ enum BrowserAccountManager {
         try FilePermissionHelper.chownRecursive(toolDir, owner: username)
         try FilePermissionHelper.chmod(toolPath, mode: "755")
         try installPrivilegedBrowserLauncher(username: username, toolDir: toolDir)
+        if isChromeInstalled() {
+            let context = try resolveContext(username: username)
+            _ = try ensureOpenCLIBrowserBridgeExtensionInstalled(context: context, logURL: nil)
+        }
 
         for binDir in binDirs {
             try FileManager.default.createDirectory(atPath: binDir, withIntermediateDirectories: true)
@@ -245,6 +249,7 @@ enum BrowserAccountManager {
                 toolPath: toolPath
             )
         }
+        try installOpenCLIPathShadowWrapperIfPresent(username: username, binDirs: binDirs, toolPath: toolPath)
         try ensureBrowserShellEnvironment(username: username, toolPath: toolPath)
 
         try appendToolsGuidanceIfNeeded(username: username)
@@ -313,6 +318,7 @@ enum BrowserAccountManager {
         let sourcePath = "\(toolDir)/clawdhome-browser-launcher.c"
         let launcherDirectory = "/Library/Application Support/ClawdHome/BrowserLaunchers/\(username)"
         let launcherPath = "\(launcherDirectory)/clawdhome-browser-launcher"
+        let pipeLauncherPath = "\(launcherDirectory)/clawdhome-browser-pipe-launcher"
         try browserLauncherSource.write(toFile: sourcePath, atomically: true, encoding: .utf8)
         try FilePermissionHelper.chown(sourcePath, owner: username)
         try FilePermissionHelper.chmod(sourcePath, mode: "600")
@@ -323,11 +329,28 @@ enum BrowserAccountManager {
         )
         try FilePermissionHelper.chown(launcherDirectory, owner: "root", group: "wheel")
         try FilePermissionHelper.chmod(launcherDirectory, mode: "755")
+        try browserPipeLauncherScript.write(toFile: pipeLauncherPath, atomically: true, encoding: .utf8)
+        try FilePermissionHelper.chown(pipeLauncherPath, owner: "root", group: "wheel")
+        try? FilePermissionHelper.clearACL(pipeLauncherPath)
+        try FilePermissionHelper.chmod(pipeLauncherPath, mode: "755")
         try run("/usr/bin/clang", args: [sourcePath, "-o", launcherPath])
         try FilePermissionHelper.chown(launcherPath, owner: "root", group: "wheel")
         try? FilePermissionHelper.clearACL(launcherPath)
         try FilePermissionHelper.chmod(launcherPath, mode: "4755")
         try verifyPrivilegedBrowserLauncher(launcherPath)
+    }
+
+    private static func ensurePrivilegedBrowserLauncherInstalled(username: String) throws {
+        let toolDir = "/Users/\(username)/\(BrowserAccountPaths.toolDirectoryRelativePath)"
+        let launcherPath = "/Library/Application Support/ClawdHome/BrowserLaunchers/\(username)/clawdhome-browser-launcher"
+        let pipeLauncherPath = "/Library/Application Support/ClawdHome/BrowserLaunchers/\(username)/clawdhome-browser-pipe-launcher"
+        if FileManager.default.isExecutableFile(atPath: launcherPath),
+           FileManager.default.isExecutableFile(atPath: pipeLauncherPath) {
+            return
+        }
+        try FileManager.default.createDirectory(atPath: toolDir, withIntermediateDirectories: true)
+        try FilePermissionHelper.chownRecursive("/Users/\(username)/.clawdhome", owner: username)
+        try installPrivilegedBrowserLauncher(username: username, toolDir: toolDir)
     }
 
     private static func verifyPrivilegedBrowserLauncher(_ launcherPath: String) throws {
@@ -420,10 +443,60 @@ enum BrowserAccountManager {
         }
 
         let daemonPath = "\(binDir)/../lib/node_modules/@jackwener/opencli/dist/src/daemon.js"
-        let wrapper = openCLIWrapperScript(toolPath: toolPath, realPath: realPath, daemonPath: daemonPath)
+        let wrapper = openCLIWrapperScript(
+            username: username,
+            toolPath: toolPath,
+            realPath: realPath,
+            daemonPath: daemonPath
+        )
         try wrapper.write(toFile: opencliPath, atomically: true, encoding: .utf8)
         try FilePermissionHelper.chown(opencliPath, owner: username)
         try FilePermissionHelper.chmod(opencliPath, mode: "755")
+    }
+
+    private static func installOpenCLIPathShadowWrapperIfPresent(
+        username: String,
+        binDirs: [String],
+        toolPath: String
+    ) throws {
+        guard let preferredBinDir = binDirs.first else { return }
+        let wrapperPath = "\(preferredBinDir)/opencli"
+        let realExecutableName = BrowserAccountPaths.openCLIRealExecutableName
+        let fm = FileManager.default
+
+        let realCandidates = binDirs.flatMap { binDir -> [String] in
+            [
+                "\(binDir)/\(realExecutableName)",
+                "\(binDir)/opencli",
+            ]
+        }
+        guard let realPath = realCandidates.first(where: { path in
+            guard path != wrapperPath, fm.fileExists(atPath: path) else { return false }
+            let existing = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+            return !existing.contains("CLAWDHOME_OPENCLI_WRAPPER")
+        }) else {
+            return
+        }
+
+        try fm.createDirectory(atPath: preferredBinDir, withIntermediateDirectories: true)
+        let existingWrapper = (try? String(contentsOfFile: wrapperPath, encoding: .utf8)) ?? ""
+        if fm.fileExists(atPath: wrapperPath), !existingWrapper.contains("CLAWDHOME_OPENCLI_WRAPPER") {
+            let backupPath = "\(wrapperPath).backup-\(timestamp())"
+            try fm.moveItem(atPath: wrapperPath, toPath: backupPath)
+            try FilePermissionHelper.chown(backupPath, owner: username)
+        }
+
+        let realBinDir = (realPath as NSString).deletingLastPathComponent
+        let daemonPath = "\(realBinDir)/../lib/node_modules/@jackwener/opencli/dist/src/daemon.js"
+        let wrapper = openCLIWrapperScript(
+            username: username,
+            toolPath: toolPath,
+            realPath: realPath,
+            daemonPath: daemonPath
+        )
+        try wrapper.write(toFile: wrapperPath, atomically: true, encoding: .utf8)
+        try FilePermissionHelper.chown(wrapperPath, owner: username)
+        try FilePermissionHelper.chmod(wrapperPath, mode: "755")
     }
 
     private static func installOpenURLCLIWrapper(
@@ -439,8 +512,9 @@ enum BrowserAccountManager {
         try FilePermissionHelper.chmod(wrapperPath, mode: "755")
     }
 
-    private static func openCLIWrapperScript(toolPath: String, realPath: String, daemonPath: String) -> String {
-        """
+    private static func openCLIWrapperScript(username: String, toolPath: String, realPath: String, daemonPath: String) -> String {
+        let daemonPort = openCLIDaemonPort(username: username)
+        return """
         #!/bin/zsh
         # CLAWDHOME_OPENCLI_WRAPPER
         set -e
@@ -461,7 +535,8 @@ enum BrowserAccountManager {
         }
         echo "opencli-prelaunch=done" >> "$LOG" 2>&1 || true
 
-        port="${OPENCLI_DAEMON_PORT:-19825}"
+        port="${OPENCLI_DAEMON_PORT:-\(daemonPort)}"
+        export OPENCLI_DAEMON_PORT="$port"
         if ! /usr/bin/nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
           echo "opencli-daemon=start port=$port" >> "$LOG" 2>&1 || true
           mkdir -p "$HOME/.opencli"
@@ -513,6 +588,7 @@ enum BrowserAccountManager {
     }
 
     private struct Context {
+        let username: String
         let consoleUsername: String
         let consoleUID: uid_t
         let paths: BrowserAccountPaths
@@ -525,6 +601,7 @@ enum BrowserAccountManager {
         let (consoleUsername, consoleUID) = try resolveConsoleSession()
         let appSupport = URL(fileURLWithPath: "/Users/\(consoleUsername)/Library/Application Support/ClawdHome")
         return Context(
+            username: username,
             consoleUsername: consoleUsername,
             consoleUID: consoleUID,
             paths: BrowserAccountPaths(username: username, appSupportDirectory: appSupport)
@@ -549,6 +626,130 @@ enum BrowserAccountManager {
         try FilePermissionHelper.chmod(path, mode: "700")
     }
 
+    private static func openCLIDaemonPort(username: String) -> Int {
+        let hash = username.utf8.reduce(UInt32(2166136261)) { partial, byte in
+            (partial ^ UInt32(byte)) &* 16777619
+        }
+        return 20000 + Int(hash % 20000)
+    }
+
+    private static func ensureOpenCLIBrowserBridgeExtensionInstalled(context: Context, logURL: URL?) throws -> String {
+        let extensionPath = context.paths.openCLIBrowserBridgeExtensionDirectory.path
+        let manifestPath = "\(extensionPath)/manifest.json"
+        let backgroundPath = "\(extensionPath)/dist/background.js"
+        let markerPath = "\(extensionPath)/.clawdhome-extension.json"
+        let daemonPort = openCLIDaemonPort(username: context.username)
+        let fm = FileManager.default
+        if fm.fileExists(atPath: manifestPath),
+           openCLIExtensionMarkerDaemonPort(markerPath) == daemonPort,
+           let background = try? String(contentsOfFile: backgroundPath, encoding: .utf8),
+           background.contains("const DAEMON_PORT = \(daemonPort);") {
+            return extensionPath
+        }
+
+        appendInstallLog("→ 下载 OpenCLI Browser Bridge 扩展\n", logURL: logURL)
+        try? closeWarmupBrowser(profilePath: context.paths.profileDirectory.path, logURL: logURL)
+        let asset = try latestOpenCLIExtensionAsset()
+        let tmpRoot = "/tmp/clawdhome-opencli-extension-\(UUID().uuidString)"
+        let zipPath = "\(tmpRoot)/extension.zip"
+        let stagingPath = "\(tmpRoot)/staging"
+        defer { try? fm.removeItem(atPath: tmpRoot) }
+
+        try fm.createDirectory(atPath: stagingPath, withIntermediateDirectories: true)
+        try run("/usr/bin/curl", args: ["-fL", "--retry", "2", "-o", zipPath, asset.downloadURL])
+        try validateZipEntries(zipPath: zipPath)
+        try run("/usr/bin/unzip", args: ["-q", "-o", zipPath, "-d", stagingPath])
+
+        guard fm.fileExists(atPath: "\(stagingPath)/manifest.json") else {
+            throw BrowserAccountError.commandFailed("OpenCLI Browser Bridge 扩展包无效：缺少 manifest.json")
+        }
+        try patchOpenCLIExtensionDaemonPort(extensionPath: stagingPath, daemonPort: daemonPort)
+
+        let parent = (extensionPath as NSString).deletingLastPathComponent
+        try fm.createDirectory(atPath: parent, withIntermediateDirectories: true)
+        if fm.fileExists(atPath: extensionPath) {
+            try fm.removeItem(atPath: extensionPath)
+        }
+        try fm.moveItem(atPath: stagingPath, toPath: extensionPath)
+        let marker: [String: Any] = [
+            "source": asset.downloadURL,
+            "assetName": asset.name,
+            "daemonPort": daemonPort,
+            "installedAt": Date().timeIntervalSince1970,
+        ]
+        let markerData = try JSONSerialization.data(withJSONObject: marker, options: [.prettyPrinted, .sortedKeys])
+        try markerData.write(to: URL(fileURLWithPath: markerPath), options: .atomic)
+        try FilePermissionHelper.chownRecursive(parent, owner: context.consoleUsername)
+        try FilePermissionHelper.chmodRecursive(parent, mode: "755")
+        return extensionPath
+    }
+
+    private static func openCLIExtensionMarkerDaemonPort(_ markerPath: String) -> Int? {
+        guard let data = FileManager.default.contents(atPath: markerPath),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return json["daemonPort"] as? Int
+    }
+
+    private static func patchOpenCLIExtensionDaemonPort(extensionPath: String, daemonPort: Int) throws {
+        let backgroundPath = "\(extensionPath)/dist/background.js"
+        guard var background = try? String(contentsOfFile: backgroundPath, encoding: .utf8) else {
+            throw BrowserAccountError.commandFailed("OpenCLI Browser Bridge 扩展包无效：缺少 dist/background.js")
+        }
+        guard background.contains("const DAEMON_PORT = 19825;")
+                || background.range(of: #"const DAEMON_PORT = \d+;"#, options: .regularExpression) != nil else {
+            throw BrowserAccountError.commandFailed("OpenCLI Browser Bridge 扩展包端口常量未找到")
+        }
+        background = background.replacingOccurrences(
+            of: #"const DAEMON_PORT = \d+;"#,
+            with: "const DAEMON_PORT = \(daemonPort);",
+            options: .regularExpression
+        )
+        try background.write(toFile: backgroundPath, atomically: true, encoding: .utf8)
+    }
+
+    private struct OpenCLIExtensionAsset {
+        let name: String
+        let downloadURL: String
+    }
+
+    private static func latestOpenCLIExtensionAsset() throws -> OpenCLIExtensionAsset {
+        let raw = try run("/usr/bin/curl", args: ["-fsSL", openCLIReleaseAPIURL])
+        guard let data = raw.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let assets = json["assets"] as? [[String: Any]] else {
+            throw BrowserAccountError.commandFailed("无法读取 OpenCLI release 信息：\(openCLIReleaseAPIURL)")
+        }
+
+        let candidates = assets.compactMap { asset -> OpenCLIExtensionAsset? in
+            guard let name = asset["name"] as? String,
+                  let downloadURL = asset["browser_download_url"] as? String,
+                  name.lowercased().contains("extension"),
+                  name.lowercased().hasSuffix(".zip") else {
+                return nil
+            }
+            return OpenCLIExtensionAsset(name: name, downloadURL: downloadURL)
+        }
+        guard let selected = candidates.sorted(by: { $0.name < $1.name }).last else {
+            throw BrowserAccountError.commandFailed("OpenCLI release 中未找到 Browser Bridge 扩展 zip")
+        }
+        return selected
+    }
+
+    private static func validateZipEntries(zipPath: String) throws {
+        let listing = try run("/usr/bin/unzip", args: ["-Z1", zipPath])
+        for rawEntry in listing.split(whereSeparator: \.isNewline) {
+            let entry = String(rawEntry)
+            if entry.hasPrefix("/")
+                || entry.contains("../")
+                || entry == ".."
+                || entry.hasPrefix("..") {
+                throw BrowserAccountError.commandFailed("OpenCLI Browser Bridge 扩展包包含非法路径：\(entry)")
+            }
+        }
+    }
+
     private static func removeStaleActivePortIfNeeded(_ path: String) throws {
         guard FileManager.default.fileExists(atPath: path),
               let raw = try? String(contentsOfFile: path, encoding: .utf8),
@@ -570,6 +771,34 @@ enum BrowserAccountManager {
             Thread.sleep(forTimeInterval: 0.2)
         }
         return nil
+    }
+
+    private static func waitForReachableEndpoint(port: Int, timeout: TimeInterval) -> BrowserAccountActivePort? {
+        let endpoint = "http://127.0.0.1:\(port)"
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if isReachable(httpEndpoint: endpoint) {
+                let webSocketPath = webSocketPathForEndpoint(endpoint) ?? "/devtools/browser"
+                return BrowserAccountActivePort(
+                    port: port,
+                    webSocketPath: webSocketPath.hasPrefix("/") ? webSocketPath : "/\(webSocketPath)"
+                )
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return nil
+    }
+
+    private static func webSocketPathForEndpoint(_ endpoint: String) -> String? {
+        guard let url = URL(string: "\(endpoint)/json/version"),
+              let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let raw = json["webSocketDebuggerUrl"] as? String,
+              let parsed = URL(string: raw),
+              !parsed.path.isEmpty else {
+            return nil
+        }
+        return parsed.path
     }
 
     private static func writeSession(_ session: BrowserAccountSession, username: String) throws {
@@ -676,7 +905,32 @@ enum BrowserAccountManager {
         appendInstallLog("✓ Chrome profile 进程已强制关闭\n", logURL: logURL)
     }
 
+    private static func closeBrowserProcessesMissingExtension(profilePath: String, extensionPath: String, logURL: URL?) throws {
+        var matchedPIDs = browserProcessIDs(profilePath: profilePath, missingRequiredExtensionPath: extensionPath)
+        guard !matchedPIDs.isEmpty else { return }
+        appendInstallLog("→ 发现未加载 Browser Bridge 插件的 Chrome profile，准备重启：\(matchedPIDs.joined(separator: ", "))\n", logURL: logURL)
+        for pid in matchedPIDs {
+            _ = try? run("/bin/kill", args: ["-TERM", pid])
+        }
+        let deadline = Date().addingTimeInterval(4)
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.25)
+            matchedPIDs = browserProcessIDs(profilePath: profilePath, missingRequiredExtensionPath: extensionPath)
+            if matchedPIDs.isEmpty {
+                return
+            }
+        }
+        for pid in matchedPIDs {
+            _ = try? run("/bin/kill", args: ["-KILL", pid])
+        }
+        Thread.sleep(forTimeInterval: 0.5)
+    }
+
     private static func browserProcessIDs(profilePath: String) -> [String] {
+        browserProcessIDs(profilePath: profilePath, missingRequiredExtensionPath: nil)
+    }
+
+    private static func browserProcessIDs(profilePath: String, missingRequiredExtensionPath: String?) -> [String] {
         guard let raw = try? run("/bin/ps", args: ["-ax", "-o", "pid=,command="]) else {
             return []
         }
@@ -684,17 +938,59 @@ enum BrowserAccountManager {
             .split(whereSeparator: \.isNewline)
             .compactMap { line -> String? in
                 let text = String(line)
-                guard text.contains("Google Chrome"),
+                guard isMainChromeProcessCommand(text),
                       text.contains("--user-data-dir=\(profilePath)") || text.contains(profilePath) else {
+                    return nil
+                }
+                if let missingRequiredExtensionPath,
+                   text.contains("--enable-unsafe-extension-debugging") {
                     return nil
                 }
                 return text.split(separator: " ", maxSplits: 1).first.map(String.init)
             }
     }
 
+    private static func isMainChromeProcessCommand(_ text: String) -> Bool {
+        text.contains("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome ")
+            || text.hasSuffix("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    }
+
     private static func isReachable(httpEndpoint: String) -> Bool {
         guard let url = URL(string: "\(httpEndpoint)/json/version") else { return false }
         return (try? Data(contentsOf: url)) != nil
+    }
+
+    private static func findAvailableLocalPort() throws -> Int {
+        let script = "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1]); s.close()"
+        let raw = try run("/usr/bin/python3", args: ["-c", script]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let port = Int(raw), port > 0, port <= 65535 else {
+            throw BrowserAccountError.commandFailed("无法分配 Chrome 调试端口")
+        }
+        return port
+    }
+
+    private static func spawnPipeBrowserLauncher(context: Context, port: Int, target: String, hidden: Bool) throws {
+        let pipeLauncherPath = "/Library/Application Support/ClawdHome/BrowserLaunchers/\(context.username)/clawdhome-browser-pipe-launcher"
+        guard FileManager.default.isExecutableFile(atPath: pipeLauncherPath) else {
+            throw BrowserAccountError.commandFailed("ClawdHome pipe launcher missing. Reinstall browser tool in ClawdHome first.")
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        process.arguments = [
+            "asuser", "\(context.consoleUID)",
+            "/usr/bin/sudo", "-u", context.consoleUsername, "-H",
+            pipeLauncherPath,
+            context.paths.profileDirectory.path,
+            "\(port)",
+            target,
+            hidden ? "1" : "0",
+            "/Users/\(context.username)",
+        ]
+        process.standardOutput = FileHandle(forWritingAtPath: "/dev/null")
+        process.standardError = FileHandle(forWritingAtPath: "/dev/null")
+        process.standardInput = FileHandle(forReadingAtPath: "/dev/null")
+        try process.run()
     }
 
     private static func appendToolsGuidanceIfNeeded(username: String) throws {
@@ -768,6 +1064,8 @@ LEGACY_SESSION_PATH = os.path.expanduser("~/.openclaw/clawdhome-browser-session.
 PROFILE_PATH = os.path.expanduser("~/.clawdhome/browser/profile")
 LEGACY_PROFILE_PATH = os.path.expanduser("~/.openclaw/browser-profile")
 ACTIVE_PORT_PATH = os.path.join(PROFILE_PATH, "DevToolsActivePort")
+PROFILE_EXTENSIONS_DIR_NAME = "ClawdHomeExtensions"
+OPENCLI_EXTENSION_DIR_NAME = "opencli-browser-bridge"
 LAUNCHER_PATH = os.path.expanduser("~/.clawdhome/tools/clawdhome-browser/clawdhome-browser-launcher")
 LEGACY_LAUNCHER_PATH = os.path.expanduser("~/.openclaw/tools/clawdhome-browser/clawdhome-browser-launcher")
 CHROME_APP = "/Applications/Google Chrome.app"
@@ -833,6 +1131,62 @@ def endpoint_reachable(endpoint):
 
 def should_hide_browser():
     return os.environ.get("CLAWDHOME_BROWSER_HIDE") == "1"
+
+def opencli_extension_path(profile_path):
+    return os.path.join(profile_path, PROFILE_EXTENSIONS_DIR_NAME, OPENCLI_EXTENSION_DIR_NAME)
+
+def opencli_extension_args(profile_path):
+    extension_path = opencli_extension_path(profile_path)
+    # The CLI runs as the managed user, but the Chrome profile lives under the
+    # console user's Library. The managed user often cannot stat that path.
+    # Always pass the required extension arg; helper/launcher perform privileged
+    # installation and manifest validation.
+    return [f"--disable-extensions-except={extension_path}", f"--load-extension={extension_path}"]
+
+def chrome_processes_missing_extension(profile_path):
+    extension_arg = f"--load-extension={opencli_extension_path(profile_path)}"
+    try:
+        result = subprocess.run(
+            ["/bin/ps", "-ax", "-o", "pid=,command="],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except Exception as exc:
+        debug_log(f"chrome_processes_missing_extension ps_fail error={exc!r}")
+        return []
+    pids = []
+    for line in result.stdout.splitlines():
+        text = line.strip()
+        if "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome " not in text:
+            continue
+        if f"--user-data-dir={profile_path}" not in text and profile_path not in text:
+            continue
+        if "--enable-unsafe-extension-debugging" in text:
+            continue
+        pid = text.split(" ", 1)[0]
+        if pid.isdigit():
+            pids.append(pid)
+    return pids
+
+def close_chrome_processes_missing_extension(profile_path):
+    pids = chrome_processes_missing_extension(profile_path)
+    if not pids:
+        return
+    debug_log(f"close_chrome_processes_missing_extension term pids={pids!r} profile={profile_path!r}")
+    for pid in pids:
+        subprocess.run(["/bin/kill", "-TERM", pid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    deadline = time.time() + 4
+    while time.time() < deadline:
+        time.sleep(0.25)
+        if not chrome_processes_missing_extension(profile_path):
+            return
+    remaining = chrome_processes_missing_extension(profile_path)
+    debug_log(f"close_chrome_processes_missing_extension kill pids={remaining!r} profile={profile_path!r}")
+    for pid in remaining:
+        subprocess.run(["/bin/kill", "-KILL", pid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(0.5)
 
 def launcher_candidates():
     username = os.environ.get("USER") or getpass.getuser()
@@ -1057,6 +1411,17 @@ def command_launch(url=None):
     debug_log(f"command_launch start url={url!r} argv={sys.argv!r} user={os.environ.get('USER')!r} path={os.environ.get('PATH')!r} hide={should_hide_browser()}")
     session = current_session_reachable()
     if session:
+        try:
+            opencli_extension_args(session.get("profilePath", PROFILE_PATH))
+            close_chrome_processes_missing_extension(session.get("profilePath", PROFILE_PATH))
+        except SystemExit:
+            raise
+        session = current_session_reachable()
+        if not session:
+            debug_log("command_launch existing_session_closed_for_missing_extension")
+        else:
+            debug_log(f"command_launch existing_session_still_reachable endpoint={session.get('httpEndpoint')!r}")
+    if session:
         debug_log(f"command_launch existing_session_reachable endpoint={session.get('httpEndpoint')!r}")
         if url:
             command_open(url)
@@ -1112,8 +1477,9 @@ def command_launch(url=None):
         "--remote-debugging-address=127.0.0.1",
         f"--remote-debugging-port={port_arg}",
         "--no-first-run",
-        "--new-window",
-        target,
+        ] + opencli_extension_args(launch_profile_path) + [
+            "--new-window",
+            target,
         ]
         debug_log(f"command_launch route=direct-open-fallback args={args!r} profile={launch_profile_path!r} port={launch_port}")
     try:
@@ -1162,7 +1528,12 @@ def command_open(url):
     debug_log(f"command_open start url={url!r} argv={sys.argv!r} user={os.environ.get('USER')!r} path={os.environ.get('PATH')!r}")
     if not url:
         fail("用法: clawdhome-browser open <url>")
-    if not current_session_reachable():
+    session = current_session_reachable()
+    if session:
+        opencli_extension_args(session.get("profilePath", PROFILE_PATH))
+        close_chrome_processes_missing_extension(session.get("profilePath", PROFILE_PATH))
+        session = current_session_reachable()
+    if not session:
         debug_log("command_open route=launch because session missing/unreachable")
         command_launch(url)
         return
@@ -1220,6 +1591,123 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""#
+
+private let browserPipeLauncherScript = #"""
+#!/usr/bin/env python3
+import json
+import os
+import select
+import signal
+import subprocess
+import sys
+import time
+
+CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+def log(home, message):
+    try:
+        path = os.path.join(home, ".clawdhome", "browser", "debug.log")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} pipe-launcher pid={os.getpid()} {message}\n")
+    except Exception:
+        pass
+
+def send(fd, msg_id, method, params=None):
+    payload = json.dumps({"id": msg_id, "method": method, "params": params or {}}).encode("utf-8") + b"\0"
+    os.write(fd, payload)
+
+def recv(fd, target_id, timeout=30):
+    buf = b""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        ready, _, _ = select.select([fd], [], [], 0.5)
+        if fd not in ready:
+            continue
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            raise RuntimeError("Chrome debugging pipe closed")
+        buf += chunk
+        while b"\0" in buf:
+            raw, buf = buf.split(b"\0", 1)
+            if not raw:
+                continue
+            msg = json.loads(raw.decode("utf-8"))
+            if msg.get("id") == target_id:
+                if "error" in msg:
+                    raise RuntimeError(msg["error"].get("message", str(msg["error"])))
+                return msg.get("result", {})
+    raise TimeoutError("Chrome debugging pipe timed out")
+
+def main():
+    if len(sys.argv) < 5:
+        print("usage: clawdhome-browser-pipe-launcher <profile> <port> <target> <hidden> <log-home>", file=sys.stderr)
+        return 64
+    profile, port, target, hidden = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
+    log_home = sys.argv[5] if len(sys.argv) > 5 else os.path.expanduser("~")
+    extension = os.path.join(profile, "ClawdHomeExtensions", "opencli-browser-bridge")
+    manifest = os.path.join(extension, "manifest.json")
+    if not os.path.exists(manifest):
+        log(log_home, f"extension manifest missing path={manifest!r}")
+        return 77
+
+    in_r, in_w = os.pipe()
+    out_r, out_w = os.pipe()
+    def setup_child():
+        os.dup2(in_r, 3)
+        os.dup2(out_w, 4)
+        for fd in (in_r, in_w, out_r, out_w):
+            try:
+                if fd not in (3, 4):
+                    os.close(fd)
+            except OSError:
+                pass
+
+    args = [
+        CHROME,
+        f"--user-data-dir={profile}",
+        "--remote-debugging-pipe",
+        "--enable-unsafe-extension-debugging",
+        "--remote-debugging-address=127.0.0.1",
+        f"--remote-debugging-port={port}",
+        "--no-first-run",
+        "--new-window",
+        target or "about:blank",
+    ]
+    log(log_home, f"exec chrome profile={profile!r} port={port!r} target={target!r}")
+    proc = subprocess.Popen(
+        args,
+        pass_fds=(3, 4),
+        preexec_fn=setup_child,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    os.close(in_r)
+    os.close(out_w)
+    try:
+        send(in_w, 1, "Browser.getVersion")
+        recv(out_r, 1)
+        send(in_w, 2, "Extensions.loadUnpacked", {"path": extension})
+        loaded = recv(out_r, 2)
+        log(log_home, f"extension loaded id={loaded.get('id')!r}")
+        if hidden:
+            subprocess.run(
+                ["/usr/bin/osascript", "-e", 'tell application "Google Chrome" to hide'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        return proc.wait()
+    except Exception as exc:
+        log(log_home, f"failed error={exc!r}")
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        return 78
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 """#
 
 private let browserLauncherSource = #"""
@@ -1348,12 +1836,15 @@ int main(int argc, char **argv) {
         return 75;
     }
 
-    char uidbuf[32], portarg[128], profilearg[4096], stale[4096];
-    snprintf(uidbuf, sizeof(uidbuf), "%u", (unsigned)st.st_uid);
-    snprintf(portarg, sizeof(portarg), "--remote-debugging-port=%d", port);
-    snprintf(profilearg, sizeof(profilearg), "--user-data-dir=%s", profile);
     const char *target = (argc > 1 && argv[1] && argv[1][0]) ? argv[1] : "about:blank";
     int hidden = argc > 2 && strcmp(argv[2], "--hidden") == 0;
+
+    char uidbuf[32], portbuf[32], extensionmanifest[4096], pipe_launcher[4096], hiddenarg[8], stale[4096];
+    snprintf(uidbuf, sizeof(uidbuf), "%u", (unsigned)st.st_uid);
+    snprintf(portbuf, sizeof(portbuf), "%d", port);
+    snprintf(extensionmanifest, sizeof(extensionmanifest), "%s/ClawdHomeExtensions/opencli-browser-bridge/manifest.json", profile);
+    snprintf(pipe_launcher, sizeof(pipe_launcher), "/Library/Application Support/ClawdHome/BrowserLaunchers/%s/clawdhome-browser-pipe-launcher", pw->pw_name);
+    snprintf(hiddenarg, sizeof(hiddenarg), "%d", hidden ? 1 : 0);
 
     snprintf(stale, sizeof(stale), "%s/DevToolsActivePort", profile);
     unlink(stale);
@@ -1364,7 +1855,18 @@ int main(int argc, char **argv) {
     snprintf(stale, sizeof(stale), "%s/SingletonSocket", profile);
     unlink(stale);
 
-    char *args[22];
+    if (access(extensionmanifest, R_OK) != 0) {
+        append_log(pw->pw_dir, "opencli extension manifest missing, abort launch");
+        fprintf(stderr, "OpenCLI Browser Bridge extension missing. Reinstall browser tool in ClawdHome first.\\n");
+        return 77;
+    }
+    if (access(pipe_launcher, X_OK) != 0) {
+        append_log(pw->pw_dir, "pipe launcher missing, abort launch");
+        fprintf(stderr, "ClawdHome pipe launcher missing. Reinstall browser tool in ClawdHome first.\\n");
+        return 78;
+    }
+
+    char *args[24];
     int i = 0;
     args[i++] = "/bin/launchctl";
     args[i++] = "asuser";
@@ -1373,24 +1875,33 @@ int main(int argc, char **argv) {
     args[i++] = "-u";
     args[i++] = console->pw_name;
     args[i++] = "-H";
-    args[i++] = "/usr/bin/open";
-    args[i++] = "-na";
-    args[i++] = "Google Chrome";
-    if (hidden) args[i++] = "-j";
-    args[i++] = "--args";
-    args[i++] = profilearg;
-    args[i++] = "--remote-debugging-address=127.0.0.1";
-    args[i++] = portarg;
-    args[i++] = "--no-first-run";
-    args[i++] = "--new-window";
+    args[i++] = pipe_launcher;
+    args[i++] = profile;
+    args[i++] = portbuf;
     args[i++] = (char *)target;
+    args[i++] = hiddenarg;
+    args[i++] = pw->pw_dir;
     args[i] = NULL;
     char msg[4096];
-    snprintf(msg, sizeof(msg), "exec launchctl console=%s target=%s profile=%s port=%d hidden=%d", console->pw_name, target, profile, port, hidden);
+    snprintf(msg, sizeof(msg), "spawn pipe launchctl console=%s target=%s profile=%s port=%d hidden=%d", console->pw_name, target, profile, port, hidden);
     append_log(pw->pw_dir, msg);
-    execv(args[0], args);
-    append_log(pw->pw_dir, "exec launchctl failed");
-    perror("exec launchctl");
-    return 76;
+    pid_t child = fork();
+    if (child < 0) {
+        append_log(pw->pw_dir, "fork launchctl failed");
+        perror("fork");
+        return 76;
+    }
+    if (child == 0) {
+        FILE *devnull = fopen("/dev/null", "r+");
+        if (devnull) {
+            int fd = fileno(devnull);
+            dup2(fd, STDIN_FILENO);
+            dup2(fd, STDOUT_FILENO);
+            dup2(fd, STDERR_FILENO);
+        }
+        execv(args[0], args);
+        _exit(127);
+    }
+    return 0;
 }
 """#

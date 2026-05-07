@@ -14,6 +14,8 @@ struct BrowserAccountPaths: Codable, Equatable {
     static let legacyToolBrowserProfileRelativePath = ".openclaw/browser-profile"
     static let debugLogRelativePath = ".clawdhome/browser/debug.log"
     static let installWarmupMarkerRelativePath = ".clawdhome/browser/install-warmup.json"
+    static let openCLIBrowserBridgeExtensionDirectoryName = "opencli-browser-bridge"
+    static let profileExtensionsDirectoryName = "ClawdHomeExtensions"
     static let userLocalBinRelativePath = ".local/bin"
     static let npmGlobalBinRelativePath = ".npm-global/bin"
     static let toolsGuideRelativePath = ".clawdhome/TOOLS.md"
@@ -37,6 +39,12 @@ struct BrowserAccountPaths: Codable, Equatable {
 
     var devToolsActivePortFile: URL {
         profileDirectory.appendingPathComponent("DevToolsActivePort")
+    }
+
+    var openCLIBrowserBridgeExtensionDirectory: URL {
+        profileDirectory
+            .appendingPathComponent(Self.profileExtensionsDirectoryName, isDirectory: true)
+            .appendingPathComponent(Self.openCLIBrowserBridgeExtensionDirectoryName, isDirectory: true)
     }
 
     var sessionRelativePath: String {
@@ -98,4 +106,48 @@ struct BrowserAccountStatus: Codable, Equatable {
     let browserReachable: Bool
     let httpEndpoint: String?
     let message: String
+}
+
+struct BrowserManualLoginSite: Codable, Equatable, Identifiable {
+    let id: String
+    let name: String
+    let url: String
+
+    static let defaults: [BrowserManualLoginSite] = [
+        BrowserManualLoginSite(id: "xiaohongshu", name: "小红书", url: "https://www.xiaohongshu.com"),
+        BrowserManualLoginSite(id: "x", name: "X", url: "https://x.com"),
+    ]
+
+    static func customSites(from raw: String) -> [BrowserManualLoginSite] {
+        guard let data = raw.data(using: .utf8),
+              let sites = try? JSONDecoder().decode([BrowserManualLoginSite].self, from: data) else {
+            return []
+        }
+        return sites.filter { !$0.name.isEmpty && !$0.url.isEmpty }
+    }
+
+    static func encodeCustomSites(_ sites: [BrowserManualLoginSite]) -> String {
+        guard let data = try? JSONEncoder().encode(sites),
+              let raw = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+        return raw
+    }
+
+    static func makeCustom(name: String, url: String) -> BrowserManualLoginSite? {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty,
+              let parsed = URL(string: trimmedURL),
+              let scheme = parsed.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              parsed.host != nil else {
+            return nil
+        }
+        return BrowserManualLoginSite(
+            id: "custom-\(UUID().uuidString)",
+            name: trimmedName,
+            url: trimmedURL
+        )
+    }
 }
