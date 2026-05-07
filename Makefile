@@ -7,7 +7,7 @@ SCHEME_HLP := ClawdHomeHelper
 INFO_PLIST := ClawdHome/Info.plist
 PLIST      := /usr/libexec/PlistBuddy
 
-.PHONY: help bump-build build build-helper build-release install-helper uninstall-helper pkg pkg-skip-build release release-dry-run changelog version-next install-hooks clean version i18n i18n-check
+.PHONY: help bump-build build build-helper build-release install-helper uninstall-helper pkg pkg-skip-build release release-dry-run release-notes-draft changelog version-next install-hooks clean version i18n i18n-check test-release-scripts
 
 WEBSITE_DIR ?= ../clawdhome_website
 
@@ -19,13 +19,15 @@ help:
 	@echo "  bump-build       仅递增 Build 号（不构建）"
 	@echo "  version          显示当前版本和 Build 号"
 	@echo "  version-next     预览下一个语义化版本号"
-	@echo "  changelog        预览将生成的 CHANGELOG 内容"
+	@echo "  changelog        预览基于 git log 自动生成的发布草稿"
+	@echo "  release-notes-draft  用 claude -p 生成中英文发布说明草稿并打开"
 	@echo "  install-helper   安装 Helper 到系统（需要 sudo）"
 	@echo "  uninstall-helper 卸载 Helper（需要 sudo）"
 	@echo "  pkg              打包 .pkg 安装包"
 	@echo "  pkg-skip-build   跳过构建直接打包"
-	@echo "  release          一键发布：changelog + tag + pkg + GitHub Release"
+	@echo "  release          一键发布：读取 release-notes/ + changelog + tag + pkg + GitHub Release"
 	@echo "  release-dry-run  预览发布流程（不执行）"
+	@echo "  test-release-scripts  校验 release/changelog 脚本"
 	@echo "  install-hooks    安装 git commit-msg hook"
 	@echo "  run-release      直接运行 build/export 里的 Release 包（无需安装）"
 	@echo "  install-pkg      安装最新 pkg 到 /Applications（需要 sudo）"
@@ -48,6 +50,9 @@ version-next:
 
 changelog:
 	@bash scripts/changelog.sh --stdout
+
+test-release-scripts:
+	@bash tests/release_scripts_test.sh
 
 bump-build:
 	@echo "Build 号由 git 提交数自动决定，无需手动递增（当前：$$(git rev-list --count HEAD)）"
@@ -103,6 +108,9 @@ release:
 
 release-dry-run:
 	bash scripts/release.sh --dry-run
+
+release-notes-draft:
+	bash scripts/release_notes_draft.sh
 
 # ── 运行 ──────────────────────────────────────────────────────────────────────
 

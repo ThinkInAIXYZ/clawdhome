@@ -2,9 +2,10 @@
 # changelog.sh — 从 git log 自动生成 CHANGELOG
 #
 # 用法：
-#   bash scripts/changelog.sh --stdout              # 输出当前版本 changelog 到终端
-#   bash scripts/changelog.sh --stdout --version 1.2.0  # 指定版本号
-#   bash scripts/changelog.sh --write --version 1.2.0   # 写入 CHANGELOG.md 顶部
+#   bash scripts/changelog.sh --stdout
+#   bash scripts/changelog.sh --stdout --lang zh --version 1.2.0
+#   bash scripts/changelog.sh --write --lang zh --version 1.2.0 \
+#     --notes-file release-notes/v1.2.0.zh.md --changelog CHANGELOG.zh.md
 #
 # 兼容 macOS bash 3.2，零外部依赖。
 
@@ -18,12 +19,18 @@ cd "$REPO_ROOT"
 
 MODE="stdout"  # stdout | write
 VERSION=""
+LANG="en"
+NOTES_FILE=""
+CHANGELOG=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --stdout)   MODE="stdout"; shift ;;
-    --write)    MODE="write"; shift ;;
-    --version)  VERSION="$2"; shift 2 ;;
+    --stdout)     MODE="stdout"; shift ;;
+    --write)      MODE="write"; shift ;;
+    --version)    VERSION="$2"; shift 2 ;;
+    --lang)       LANG="$2"; shift 2 ;;
+    --notes-file) NOTES_FILE="$2"; shift 2 ;;
+    --changelog)  CHANGELOG="$2"; shift 2 ;;
     *)          shift ;;
   esac
 done
@@ -31,6 +38,56 @@ done
 # 自动获取版本号
 if [ -z "$VERSION" ]; then
   VERSION=$(bash "$SCRIPT_DIR/semver.sh" 2>/dev/null || echo "0.0.0")
+fi
+
+# ── 工具函数 ──────────────────────────────────────────────────────────────────
+
+resolve_default_changelog() {
+  case "$LANG" in
+    zh) echo "$REPO_ROOT/CHANGELOG.zh.md" ;;
+    en) echo "$REPO_ROOT/CHANGELOG.en.md" ;;
+    *)
+      echo "❌ 不支持的语言：$LANG" >&2
+      exit 1
+      ;;
+  esac
+}
+
+title_for_lang() {
+  case "$LANG" in
+    zh) echo "更新记录" ;;
+    *)  echo "Changelog" ;;
+  esac
+}
+
+section_name() {
+  case "$LANG:$1" in
+    zh:features) echo "新功能" ;;
+    zh:fixes) echo "修复" ;;
+    zh:performance) echo "性能" ;;
+    zh:chores) echo "杂项" ;;
+    zh:other) echo "其他" ;;
+    en:features) echo "Features" ;;
+    en:fixes) echo "Fixes" ;;
+    en:performance) echo "Performance" ;;
+    en:chores) echo "Chores" ;;
+    en:other) echo "Other" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+append_section() {
+  local current="$1"
+  local key="$2"
+  local body="$3"
+  if [ -n "$body" ]; then
+    current="${current}\n### $(section_name "$key")\n${body}"
+  fi
+  printf '%b' "$current"
+}
+
+if [ -z "$CHANGELOG" ]; then
+  CHANGELOG="$(resolve_default_changelog)"
 fi
 
 # ── 获取最近 tag ──────────────────────────────────────────────────────────────
@@ -87,20 +144,16 @@ done < <(git log "$RANGE" --oneline 2>/dev/null)
 TODAY=$(date +%Y-%m-%d)
 OUTPUT="## [${VERSION}] - ${TODAY}\n"
 
-if [ -n "$FEATS" ]; then
-  OUTPUT="${OUTPUT}\n### Features\n${FEATS}"
-fi
-if [ -n "$FIXES" ]; then
-  OUTPUT="${OUTPUT}\n### Fixes\n${FIXES}"
-fi
-if [ -n "$PERFS" ]; then
-  OUTPUT="${OUTPUT}\n### Performance\n${PERFS}"
-fi
-if [ -n "$CHORES" ]; then
-  OUTPUT="${OUTPUT}\n### Chores\n${CHORES}"
-fi
-if [ -n "$OTHERS" ]; then
-  OUTPUT="${OUTPUT}\n### Other\n${OTHERS}"
+if [ -n "$NOTES_FILE" ]; then
+  [ -f "$NOTES_FILE" ] || { echo "❌ 未找到 release notes: $NOTES_FILE" >&2; exit 1; }
+  NOTES_BODY=$(cat "$NOTES_FILE")
+  OUTPUT="${OUTPUT}\n${NOTES_BODY}\n"
+else
+  OUTPUT="$(append_section "$OUTPUT" "features" "$FEATS")"
+  OUTPUT="$(append_section "$OUTPUT" "fixes" "$FIXES")"
+  OUTPUT="$(append_section "$OUTPUT" "performance" "$PERFS")"
+  OUTPUT="$(append_section "$OUTPUT" "chores" "$CHORES")"
+  OUTPUT="$(append_section "$OUTPUT" "other" "$OTHERS")"
 fi
 
 # ── 输出 ──────────────────────────────────────────────────────────────────────
@@ -110,22 +163,26 @@ if [ "$MODE" = "stdout" ]; then
   exit 0
 fi
 
-# write 模式：插入 CHANGELOG.md 顶部
-CHANGELOG="$REPO_ROOT/CHANGELOG.md"
+# write 模式：插入 changelog 顶部
+TITLE="# $(title_for_lang)"
 
-if [ ! -f "$CHANGELOG" ]; then
-  printf '%s\n\n%b' "# Changelog" "$OUTPUT" > "$CHANGELOG"
-else
-  # 在 # Changelog 标题后插入新版本块
-  TMP=$(mktemp)
-  {
-    head -1 "$CHANGELOG"
-    echo ""
-    printf '%b' "$OUTPUT"
-    # 跳过原文件第一行（标题行）和紧跟的空行
-    tail -n +2 "$CHANGELOG"
-  } > "$TMP"
-  mv "$TMP" "$CHANGELOG"
-fi
+TMP=$(mktemp)
+{
+  printf '%s\n\n' "$TITLE"
+  printf '%b' "$OUTPUT"
+  if [ -f "$CHANGELOG" ]; then
+    EXISTING_CONTENT=$(cat "$CHANGELOG")
+    FIRST_LINE=$(head -1 "$CHANGELOG" || true)
+    if [ "$FIRST_LINE" = "$TITLE" ]; then
+      REMAINDER=$(tail -n +2 "$CHANGELOG")
+    else
+      REMAINDER="$EXISTING_CONTENT"
+    fi
+    if [ -n "${REMAINDER:-}" ]; then
+      printf '\n%s' "$REMAINDER"
+    fi
+  fi
+} > "$TMP"
+mv "$TMP" "$CHANGELOG"
 
-echo "✅ CHANGELOG.md 已更新（v${VERSION}）"
+echo "✅ $(basename "$CHANGELOG") 已更新（v${VERSION}）"

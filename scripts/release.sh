@@ -8,11 +8,12 @@
 #
 # 流程：
 #   1. semver.sh 计算下一版本号
-#   2. changelog.sh 生成 CHANGELOG
-#   3. git commit + tag
-#   4. build-pkg.sh 构建打包
-#   5. 同步 version.json release_notes
-#   6. git push + gh release create
+#   2. 读取 release-notes/vX.Y.Z.{zh,en}.md
+#   3. 更新 CHANGELOG.zh.md / CHANGELOG.en.md
+#   4. git commit + tag
+#   5. build-pkg.sh 构建打包
+#   6. 同步 version.json release_notes / release_notes_en
+#   7. git push + gh release create
 #
 # 兼容 macOS bash 3.2，需要 gh CLI。
 
@@ -27,6 +28,7 @@ cd "$REPO_ROOT"
 
 WEBSITE_DIR="${WEBSITE_DIR:-$REPO_ROOT/../clawdhome_website}"
 API_VERSION_JSON="$WEBSITE_DIR/api/version.json"
+NOTES_DIR="${NOTES_DIR:-$REPO_ROOT/release-notes}"
 
 DRY_RUN=false
 SKIP_PUSH=false
@@ -44,22 +46,34 @@ ok()   { echo "✅ $*"; }
 warn() { echo "⚠️  $*"; }
 fail() { echo "❌ $*" >&2; exit 1; }
 
+render_changelog_preview() {
+  local lang="$1"
+  local notes_file="$2"
+  if [ -f "$notes_file" ]; then
+    bash "$SCRIPT_DIR/changelog.sh" --stdout --lang "$lang" --version "$NEXT_VERSION" --notes-file "$notes_file"
+  else
+    bash "$SCRIPT_DIR/changelog.sh" --stdout --lang "$lang" --version "$NEXT_VERSION"
+  fi
+}
+
 # ── 前置检查 ──────────────────────────────────────────────────────────────────
 
-# 检查工作区是否干净（允许 CHANGELOG.md 未跟踪）
-DIRTY=$(git status --porcelain 2>/dev/null | grep -v "^?? CHANGELOG.md$" | grep -v "^?? scripts/" || true)
-if [ -n "$DIRTY" ]; then
-  echo "$DIRTY"
-  fail "工作区有未提交的更改，请先 commit 或 stash"
+if [ "$DRY_RUN" = false ]; then
+  # 检查工作区是否干净（允许文档草稿目录未跟踪）
+  DIRTY=$(git status --porcelain 2>/dev/null | grep -v "^?? scripts/" | grep -v "^?? release-notes/" || true)
+  if [ -n "$DIRTY" ]; then
+    echo "$DIRTY"
+    fail "工作区有未提交的更改，请先 commit 或 stash"
+  fi
 fi
 
 # 检查 gh CLI
-if [ "$SKIP_PUSH" = false ] && ! command -v gh &>/dev/null; then
+if [ "$DRY_RUN" = false ] && [ "$SKIP_PUSH" = false ] && ! command -v gh &>/dev/null; then
   fail "需要 GitHub CLI（gh）。安装：brew install gh && gh auth login"
 fi
 
 # 检查 gh 登录状态
-if [ "$SKIP_PUSH" = false ] && ! gh auth status &>/dev/null 2>&1; then
+if [ "$DRY_RUN" = false ] && [ "$SKIP_PUSH" = false ] && ! gh auth status &>/dev/null 2>&1; then
   fail "gh 未登录。请运行：gh auth login"
 fi
 
@@ -74,40 +88,58 @@ BUMP_TYPE=$(bash "$SCRIPT_DIR/semver.sh" --bump-type 2>/dev/null || echo "none")
 log "当前版本：${CURRENT_VERSION:-无 tag}"
 log "下一版本：v${NEXT_VERSION}（${BUMP_TYPE} bump）"
 
+ZH_NOTES_FILE="$NOTES_DIR/v${NEXT_VERSION}.zh.md"
+EN_NOTES_FILE="$NOTES_DIR/v${NEXT_VERSION}.en.md"
+
 if [ "$BUMP_TYPE" = "none" ]; then
   warn "自上次 tag 以来没有 feat/fix commit，将执行 patch bump"
 fi
 
 if [ "$DRY_RUN" = true ]; then
+  if [ ! -f "$ZH_NOTES_FILE" ] || [ ! -f "$EN_NOTES_FILE" ]; then
+    warn "未找到正式 release notes，以下预览使用 git log 自动生成的草稿"
+    [ -f "$ZH_NOTES_FILE" ] || warn "待补中文文件：$ZH_NOTES_FILE"
+    [ -f "$EN_NOTES_FILE" ] || warn "待补英文文件：$EN_NOTES_FILE"
+    warn "可先运行：make release-notes-draft"
+  fi
   echo ""
   log "=== DRY RUN 模式 — 以下为预览 ==="
   echo ""
-  log "将生成的 CHANGELOG："
-  bash "$SCRIPT_DIR/changelog.sh" --stdout --version "$NEXT_VERSION"
+  log "将写入的中文 CHANGELOG："
+  render_changelog_preview zh "$ZH_NOTES_FILE"
+  echo ""
+  log "将写入的英文 CHANGELOG："
+  render_changelog_preview en "$EN_NOTES_FILE"
   echo ""
   log "将执行的操作："
-  echo "  1. 更新 CHANGELOG.md"
+  echo "  1. 更新 CHANGELOG.zh.md / CHANGELOG.en.md"
   echo "  2. git commit -m \"chore(release): v${NEXT_VERSION}\""
   echo "  3. git tag -a v${NEXT_VERSION}"
   echo "  4. xcodebuild + pkgbuild → dist/ClawdHome-${NEXT_VERSION}.pkg"
-  echo "  5. 同步 version.json"
+  echo "  5. 同步 version.json（含中英文 release notes）"
   echo "  6. git push && git push --tags"
   echo "  7. gh release create v${NEXT_VERSION}"
   exit 0
 fi
 
+[ -f "$ZH_NOTES_FILE" ] || fail "缺少中文 release notes：$ZH_NOTES_FILE"
+[ -f "$EN_NOTES_FILE" ] || fail "缺少英文 release notes：$EN_NOTES_FILE"
+
 # ── Step 2：生成 CHANGELOG ────────────────────────────────────────────────────
 
-log "生成 CHANGELOG..."
-bash "$SCRIPT_DIR/changelog.sh" --write --version "$NEXT_VERSION"
+log "更新中英文 CHANGELOG..."
+bash "$SCRIPT_DIR/changelog.sh" --write --lang zh --version "$NEXT_VERSION" --notes-file "$ZH_NOTES_FILE"
+bash "$SCRIPT_DIR/changelog.sh" --write --lang en --version "$NEXT_VERSION" --notes-file "$EN_NOTES_FILE"
 
-# 同时获取 release notes 文本（用于 version.json 和 gh release）
-RELEASE_NOTES=$(bash "$SCRIPT_DIR/changelog.sh" --stdout --version "$NEXT_VERSION")
+# GitHub Release 和应用内更新使用同一份 release-notes 源
+GITHUB_RELEASE_NOTES=$(bash "$SCRIPT_DIR/release_notes.sh" --github --version "$NEXT_VERSION" --notes-dir "$NOTES_DIR")
+API_RELEASE_NOTES_ZH=$(bash "$SCRIPT_DIR/release_notes.sh" --api zh --version "$NEXT_VERSION" --notes-dir "$NOTES_DIR")
+API_RELEASE_NOTES_EN=$(bash "$SCRIPT_DIR/release_notes.sh" --api en --version "$NEXT_VERSION" --notes-dir "$NOTES_DIR")
 
 # ── Step 3：commit + tag ──────────────────────────────────────────────────────
 
 log "提交 release commit..."
-git add CHANGELOG.md
+git add CHANGELOG.zh.md CHANGELOG.en.md "$ZH_NOTES_FILE" "$EN_NOTES_FILE"
 git commit -m "chore(release): v${NEXT_VERSION}"
 
 log "打 tag v${NEXT_VERSION}..."
@@ -124,7 +156,7 @@ rollback() {
     warn "发布失败，正在回滚..."
     git tag -d "v${NEXT_VERSION}" 2>/dev/null || true
     git reset --soft HEAD~1 2>/dev/null || true
-    git restore --staged CHANGELOG.md 2>/dev/null || true
+    git restore --staged CHANGELOG.zh.md CHANGELOG.en.md "$ZH_NOTES_FILE" "$EN_NOTES_FILE" 2>/dev/null || true
     warn "已回滚：删除 tag v${NEXT_VERSION}，撤销 release commit"
   fi
 }
@@ -147,21 +179,24 @@ if [ -f "$API_VERSION_JSON" ]; then
 
   DOWNLOAD_URL="https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}.pkg"
 
-  # 提取中文和英文 release notes（简单处理：用 changelog 内容）
-  # 生成纯文本版 release notes（去掉 ## 和 ### 标记）
-  NOTES_PLAIN=$(echo "$RELEASE_NOTES" | sed 's/^## .*//; s/^### //' | sed '/^$/d')
-
   TMP_JSON=$(mktemp)
-  awk -v ver="$NEXT_VERSION" -v dl="$DOWNLOAD_URL" -v notes="$NOTES_PLAIN" '
-  {
-    if ($0 ~ /"version"[[:space:]]*:/) {
-      sub(/"version"[[:space:]]*:[[:space:]]*"[^"]*"/, "\"version\": \"" ver "\"")
-    }
-    if ($0 ~ /"download_url"[[:space:]]*:/) {
-      sub(/"download_url"[[:space:]]*:[[:space:]]*"[^"]*"/, "\"download_url\": \"" dl "\"")
-    }
-    print
-  }' "$API_VERSION_JSON" > "$TMP_JSON"
+  /usr/bin/python3 - "$API_VERSION_JSON" "$TMP_JSON" "$NEXT_VERSION" "$DOWNLOAD_URL" "$API_RELEASE_NOTES_ZH" "$API_RELEASE_NOTES_EN" <<'PY'
+import json
+import sys
+
+src, dst, version, download_url, notes_zh, notes_en = sys.argv[1:]
+with open(src, "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+
+data["version"] = version
+data["download_url"] = download_url
+data["release_notes"] = notes_zh
+data["release_notes_en"] = notes_en
+
+with open(dst, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, ensure_ascii=False, indent=2)
+    fh.write("\n")
+PY
   mv "$TMP_JSON" "$API_VERSION_JSON"
   chmod 644 "$API_VERSION_JSON"
 
@@ -190,7 +225,7 @@ if [ "$SKIP_PUSH" = false ]; then
 
   log "创建 GitHub Release..."
   RELEASE_NOTES_FILE=$(mktemp)
-  echo "$RELEASE_NOTES" > "$RELEASE_NOTES_FILE"
+  echo "$GITHUB_RELEASE_NOTES" > "$RELEASE_NOTES_FILE"
 
   gh release create "v${NEXT_VERSION}" "$PKG" \
     --title "ClawdHome ${NEXT_VERSION}" \
