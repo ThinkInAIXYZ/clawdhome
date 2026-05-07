@@ -135,6 +135,7 @@ actor GatewayClient {
         session = nil
         failAllPending(GatewayClientError.notConnected)
         eventContinuation?.finish()
+        eventContinuation = nil
     }
 
     func updateToken(_ newToken: String) {
@@ -337,14 +338,14 @@ actor GatewayClient {
         let payload = try await request(method: "cron.list", params: ["includeDisabled": true])
         guard let arr = payload?["jobs"] as? [[String: Any]] else { return [] }
         let data = try JSONSerialization.data(withJSONObject: arr)
-        return (try? JSONDecoder().decode([GatewayCronJob].self, from: data)) ?? []
+        return try JSONDecoder().decode([GatewayCronJob].self, from: data)
     }
 
     func cronRuns(jobId: String, limit: Int = 100) async throws -> [GatewayCronRunLogEntry] {
         let payload = try await request(method: "cron.runs", params: ["id": jobId, "limit": limit])
         guard let arr = payload?["entries"] as? [[String: Any]] else { return [] }
         let data = try JSONSerialization.data(withJSONObject: arr)
-        return (try? JSONDecoder().decode([GatewayCronRunLogEntry].self, from: data)) ?? []
+        return try JSONDecoder().decode([GatewayCronRunLogEntry].self, from: data)
     }
 
     func cronRun(jobId: String) async throws {
