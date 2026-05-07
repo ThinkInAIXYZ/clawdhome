@@ -90,6 +90,7 @@
 		528A031AEEFF0701F4E96EBD /* ModelManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6805588FE98C2E1FE665C5F1 /* ModelManagerView.swift */; };
 		52DC4DCC5F6553B9DA7AE563 /* UserManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14984A3D87B04508056F24CF /* UserManager.swift */; };
 		532614A1A20BC13444A50815 /* ProcessModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76A73EBA6C37473C494E20D /* ProcessModels.swift */; };
+		53B5904E46FC046DB108BC4E /* AgentBotListEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B045F82432FF233FDA7D7F5 /* AgentBotListEditor.swift */; };
 		542353D2DCB8485EE797FCEF /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3551CFADD2A6045F6096E2DD /* main.swift */; };
 		55CB96D5B61D248282E612F1 /* BackupManagerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB9584EDF129A0295EBB14A /* BackupManagerSheet.swift */; };
 		5A9570E544EE11988AAA01BC /* IMAccountModelsV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46BB2187C1CBAE602D47A53E /* IMAccountModelsV2.swift */; };
@@ -250,6 +251,7 @@
 		0600D2F59788F6F8E907084B /* CreateAgentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAgentSheet.swift; sourceTree = "<group>"; };
 		09AC66C79FE1B7EABAA7A9EE /* ConfigCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigCommand.swift; sourceTree = "<group>"; };
 		0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInitPresentationRouting.swift; sourceTree = "<group>"; };
+		0B045F82432FF233FDA7D7F5 /* AgentBotListEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBotListEditor.swift; sourceTree = "<group>"; };
 		0BCB213B1B4677F1FBAC5433 /* SecurityAuditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityAuditView.swift; sourceTree = "<group>"; };
 		0DFA0D3288E6276A9630CE4B /* AppLockScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockScreen.swift; sourceTree = "<group>"; };
 		0E9752B678217A482704DF5A /* HermesConfigWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesConfigWriter.swift; sourceTree = "<group>"; };
@@ -475,6 +477,7 @@
 			isa = PBXGroup;
 			children = (
 				7F26137ECBA9185EB4744FD6 /* AddBotSheet.swift */,
+				0B045F82432FF233FDA7D7F5 /* AgentBotListEditor.swift */,
 				7642815724059E4D93CC56E0 /* AgentListEditor.swift */,
 				519C02F90956251A6A7DCB79 /* BindingFormSheet.swift */,
 				EC3A7281B970E8EFA6FCAD2B /* HermesPendingBindingsSheet.swift */,
@@ -1000,6 +1003,7 @@
 				BD0432723571AEC02E2938BF /* AddProviderModelSheet.swift in Sources */,
 				4FCD2C3BFF60D4569A0E7DD0 /* AddUserSheet.swift in Sources */,
 				08839820BB974F902ED7A261 /* AdoptTeamSheet.swift in Sources */,
+				53B5904E46FC046DB108BC4E /* AgentBotListEditor.swift in Sources */,
 				F7840BAD3978447C9CF012D5 /* AgentListEditor.swift in Sources */,
 				62FEC4E2E0447CE225724632 /* AgentModelEditSheet.swift in Sources */,
 				84C8DA8A847353DF24E6FECC /* AgentProfile.swift in Sources */,
