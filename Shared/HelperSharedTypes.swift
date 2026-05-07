@@ -44,14 +44,21 @@ enum HermesProfileRuntimeSummary {
         profilesLoaded: Bool
     ) -> String {
         guard profilesLoaded else {
-            return "Hermes · 加载中…"
+            return String(localized: "hermes.runtime.badge.loading", defaultValue: "Hermes · Loading…")
         }
         let running = runningCount(
             profileIDs: profileIDs,
             runningProfileIDs: runningProfileIDs,
             mainRuntimeRunning: mainRuntimeRunning
         )
-        return "Hermes · \(running)/\(profileIDs.count) 运行中"
+        return String(
+            format: String(
+                localized: "hermes.runtime.badge.running_count",
+                defaultValue: "Hermes · %d/%d running"
+            ),
+            running,
+            profileIDs.count
+        )
     }
 
     static func runningCount(

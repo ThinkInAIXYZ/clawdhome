@@ -244,11 +244,11 @@ enum PromptMemorySearch {
 
     private static func score(normalizedQuery: String, index: PromptSearchIndex) -> (score: Double, fields: [String]) {
         let fields: [(name: String, weight: Double, values: [String])] = [
-            ("标题", 0.34, [index.normalizedTitle]),
-            ("关键词", 0.26, index.normalizedKeywords),
-            ("标签", 0.16, index.normalizedTags),
-            ("摘要", 0.14, [index.normalizedSummary]),
-            ("正文", 0.10, [index.normalizedBodyPreview])
+            ("title", 0.34, [index.normalizedTitle]),
+            ("keywords", 0.26, index.normalizedKeywords),
+            ("tags", 0.16, index.normalizedTags),
+            ("summary", 0.14, [index.normalizedSummary]),
+            ("body", 0.10, [index.normalizedBodyPreview])
         ]
 
         var total = 0.0
@@ -262,27 +262,27 @@ enum PromptMemorySearch {
         }
 
         let coreMatchCount = matched.reduce(into: 0) { count, field in
-            if field == "标题" || field == "关键词" || field == "标签" {
+            if field == "title" || field == "keywords" || field == "tags" {
                 count += 1
             }
         }
         if coreMatchCount >= 2 {
             total += 0.06 + (Double(coreMatchCount - 2) * 0.04)
         }
-        if matched.contains("标题"), matched.contains("关键词") {
+        if matched.contains("title"), matched.contains("keywords") {
             total += 0.03
         }
 
         if index.normalizedSummary.contains(normalizedQuery) {
             total = max(total, 0.5)
-            if !matched.contains("摘要") {
-                matched.append("摘要")
+            if !matched.contains("summary") {
+                matched.append("summary")
             }
         }
         if index.normalizedBodyPreview.contains(normalizedQuery) {
             total = max(total, 0.5)
-            if !matched.contains("正文") {
-                matched.append("正文")
+            if !matched.contains("body") {
+                matched.append("body")
             }
         }
         return (min(1, total), matched)

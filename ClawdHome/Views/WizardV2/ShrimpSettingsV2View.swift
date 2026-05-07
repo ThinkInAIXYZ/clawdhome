@@ -6,7 +6,7 @@
 //                 （由 AgentBotListEditor 共用组件渲染；原 IM 账号 / 绑定矩阵 tab 合并进此处）
 // 2. model     —— Shrimp 模型池（共享 ModelConfigWizard）
 // 3. advanced  —— 高级：dmScope / session 隔离配置
-// 4. plugins   —— OpenClaw 插件管理
+// 4. plugins   —— 浏览器/OpenCLI 运行时依赖管理
 
 import SwiftUI
 
@@ -33,11 +33,7 @@ struct ShrimpSettingsV2View: View {
     @State private var saveError: String?
     @State private var isDirty = false
 
-    // Plugins
-    @State private var installedPlugins: [String] = []
-    @State private var isLoadingPlugins = false
-    @State private var pluginInstallTarget = ""
-    @State private var pluginError: String?
+    // Runtime dependencies
     @State private var browserAccountStatus: BrowserAccountStatus?
     @State private var opencliVersion: String?
     @State private var isInstallingBrowserTool = false
@@ -46,13 +42,14 @@ struct ShrimpSettingsV2View: View {
     @State private var dependencyMessage: String?
 
     enum SettingsTab: String, CaseIterable {
-        case agents, model, advanced
+        case agents, model, advanced, plugins
 
         var title: String {
             switch self {
             case .agents:   return L10n.k("settings_v2.tab.agents", fallback: "Agents")
             case .model:    return L10n.k("settings_v2.tab.model", fallback: "模型")
             case .advanced: return L10n.k("settings_v2.tab.advanced", fallback: "高级")
+            case .plugins: return L10n.k("settings_v2.tab.plugins", fallback: "插件")
             }
         }
 
@@ -61,6 +58,7 @@ struct ShrimpSettingsV2View: View {
             case .agents:   return "person.2"
             case .model:    return "cpu"
             case .advanced: return "slider.horizontal.3"
+            case .plugins: return "puzzlepiece.extension"
             }
         }
     }
@@ -102,6 +100,7 @@ struct ShrimpSettingsV2View: View {
                     case .agents:   agentsTab
                     case .model:    modelTab
                     case .advanced: advancedTab
+                    case .plugins:  pluginsTab
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -129,7 +128,7 @@ struct ShrimpSettingsV2View: View {
     }
 
     private var visibleTabs: [SettingsTab] {
-        includeAgentsTab ? SettingsTab.allCases : [.model, .advanced]
+        includeAgentsTab ? SettingsTab.allCases : [.model, .advanced, .plugins]
     }
 
     @ViewBuilder
@@ -236,64 +235,9 @@ struct ShrimpSettingsV2View: View {
                 }
             }
 
-            Section(L10n.k("shrimp.settings.dependencies", fallback: "依赖工具")) {
-                dependencyRow(
-                    title: L10n.k("shrimp.settings.dependency.browser.title", fallback: "浏览器工具"),
-                    subtitle: L10n.k("shrimp.settings.dependency.browser.subtitle", fallback: "用于 OAuth 登录、网页自动化与授权回调。"),
-                    statusText: browserAccountStatus?.toolInstalled == true
-                        ? L10n.k("shrimp.settings.dependency.status.installed", fallback: "已安装")
-                        : L10n.k("common.status.not_installed", fallback: "未安装"),
-                    statusColor: browserAccountStatus?.toolInstalled == true ? .green : .secondary,
-                    actionTitle: isInstallingBrowserTool
-                        ? L10n.k("hermes.browser.installing_tool", fallback: "安装中…")
-                        : L10n.k("shrimp.settings.dependency.browser.install_or_reinstall", fallback: "安装/重装")
-                ) {
-                    installBrowserTool()
-                }
-                .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
-
-                dependencyRow(
-                    title: "OpenCLI",
-                    subtitle: L10n.k("shrimp.settings.dependency.opencli.subtitle", fallback: "统一自动化 CLI，便于后续网站工具编排与执行。"),
-                    statusText: opencliVersion.map {
-                        L10n.f("shrimp.settings.dependency.status.installed_with_version", fallback: "已安装（%@）", $0)
-                    } ?? L10n.k("common.status.not_installed", fallback: "未安装"),
-                    statusColor: opencliVersion == nil ? .secondary : .green,
-                    actionTitle: isInstallingOpenCLI
-                        ? L10n.k("hermes.browser.installing_tool", fallback: "安装中…")
-                        : L10n.k("shrimp.settings.dependency.opencli.install_or_upgrade", fallback: "安装/升级")
-                ) {
-                    installOpenCLI()
-                }
-                .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
-
-                HStack(spacing: 10) {
-                    Button(isRunningOpenCLIDoctor
-                           ? L10n.k("shrimp.settings.dependency.opencli.doctor_running", fallback: "检测中…")
-                           : L10n.k("shrimp.settings.dependency.opencli.doctor_run", fallback: "运行 OpenCLI Doctor")) {
-                        runOpenCLIDoctor()
-                    }
-                    .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor || opencliVersion == nil)
-
-                    Spacer()
-                    Button(L10n.k("common.action.refresh", fallback: "刷新状态")) {
-                        refreshDependencyToolsStatus()
-                    }
-                    .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
-                }
-
-                if let dependencyMessage {
-                    Text(dependencyMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
         }
         .formStyle(.grouped)
         .padding()
-        .onAppear {
-            refreshDependencyToolsStatus()
-        }
     }
 
     private func dependencyRow(
@@ -331,55 +275,115 @@ struct ShrimpSettingsV2View: View {
     // MARK: - Tab 6: Plugins
 
     private var pluginsTab: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text(L10n.k("settings_v2.plugins.hint", fallback: "管理 OpenClaw 插件"))
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-                Spacer()
-                Button(action: { loadPlugins() }) {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.plain)
-                .disabled(isLoadingPlugins)
-            }
+        VStack(alignment: .leading, spacing: 18) {
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(L10n.k("shrimp.settings.plugins.runtime.title", fallback: "运行时插件"))
+                        .font(.headline)
+                    Text(L10n.k("shrimp.settings.plugins.runtime.subtitle", fallback: "管理 Browser Tool、OpenCLI 与 OpenCLI Browser Bridge 扩展。"))
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
 
-            if isLoadingPlugins {
-                ProgressView()
-            } else if installedPlugins.isEmpty {
-                Text(L10n.k("settings_v2.plugins.empty", fallback: "暂无已安装插件"))
-                    .foregroundStyle(.tertiary)
-            } else {
-                ForEach(installedPlugins, id: \.self) { plugin in
-                    HStack {
-                        Text(plugin)
-                        Spacer()
-                        Button(action: { removePlugin(plugin) }) {
-                            Image(systemName: "minus.circle")
-                                .foregroundStyle(.red)
-                        }
-                        .buttonStyle(.plain)
+                    dependencyRow(
+                        title: L10n.k("shrimp.settings.dependency.browser.title", fallback: "Browser Tool"),
+                        subtitle: L10n.k("shrimp.settings.dependency.browser.subtitle", fallback: "用于 OAuth 登录、网页自动化与授权回调。"),
+                        statusText: browserAccountStatus?.toolInstalled == true
+                            ? L10n.k("shrimp.settings.dependency.status.installed", fallback: "已安装")
+                            : L10n.k("common.status.not_installed", fallback: "未安装"),
+                        statusColor: browserAccountStatus?.toolInstalled == true ? .green : .secondary,
+                        actionTitle: isInstallingBrowserTool
+                            ? L10n.k("hermes.browser.installing_tool", fallback: "安装中…")
+                            : L10n.k("shrimp.settings.dependency.browser.install_or_reinstall", fallback: "安装/重装")
+                    ) {
+                        installBrowserTool()
                     }
-                    Divider()
+                    .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
+
+                    dependencyRow(
+                        title: "OpenCLI",
+                        subtitle: L10n.k("shrimp.settings.dependency.opencli.subtitle", fallback: "统一自动化 CLI，便于后续网站工具编排与执行。"),
+                        statusText: opencliVersion.map {
+                            L10n.f("shrimp.settings.dependency.status.installed_with_version", fallback: "已安装（%@）", $0)
+                        } ?? L10n.k("common.status.not_installed", fallback: "未安装"),
+                        statusColor: opencliVersion == nil ? .secondary : .green,
+                        actionTitle: isInstallingOpenCLI
+                            ? L10n.k("hermes.browser.installing_tool", fallback: "安装中…")
+                            : L10n.k("shrimp.settings.dependency.opencli.install_or_upgrade", fallback: "安装/升级")
+                    ) {
+                        installOpenCLI()
+                    }
+                    .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
+
+                    dependencyRow(
+                        title: L10n.k("shrimp.settings.dependency.bridge.title", fallback: "OpenCLI Browser Bridge"),
+                        subtitle: L10n.k("shrimp.settings.dependency.bridge.subtitle", fallback: "OpenCLI 与浏览器通信的扩展插件。"),
+                        statusText: bridgeStatusText,
+                        statusColor: browserAccountStatus?.openCLIBrowserBridgeInstalled == true ? .green : .secondary,
+                        actionTitle: isInstallingBrowserTool
+                            ? L10n.k("hermes.browser.installing_tool", fallback: "安装中…")
+                            : (
+                                browserAccountStatus?.openCLIBrowserBridgeUpdateAvailable == true
+                                ? L10n.k("shrimp.settings.dependency.bridge.upgrade", fallback: "升级扩展")
+                                : L10n.k("shrimp.settings.dependency.bridge.reinstall", fallback: "重装扩展")
+                            )
+                    ) {
+                        installBrowserTool()
+                    }
+                    .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
+
+                    HStack(spacing: 10) {
+                        Button(isRunningOpenCLIDoctor
+                               ? L10n.k("shrimp.settings.dependency.opencli.doctor_running", fallback: "检测中…")
+                               : L10n.k("shrimp.settings.dependency.opencli.doctor_run", fallback: "运行 OpenCLI Doctor")) {
+                            runOpenCLIDoctor()
+                        }
+                        .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor || opencliVersion == nil)
+
+                        Spacer()
+                        Button(L10n.k("common.action.refresh", fallback: "刷新状态")) {
+                            refreshDependencyToolsStatus()
+                        }
+                        .disabled(isInstallingBrowserTool || isInstallingOpenCLI || isRunningOpenCLIDoctor)
+                    }
+
+                    if let dependencyMessage {
+                        Text(dependencyMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
-            HStack {
-                TextField(L10n.k("settings_v2.plugins.add_placeholder", fallback: "@scope/plugin-name"), text: $pluginInstallTarget)
-                    .textFieldStyle(.roundedBorder)
-                Button(L10n.k("settings_v2.plugins.install", fallback: "安装")) {
-                    installPlugin()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(pluginInstallTarget.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-
-            if let err = pluginError {
-                Text(err).foregroundStyle(.red).font(.caption)
-            }
+            Spacer(minLength: 0)
         }
         .padding(20)
-        .onAppear { loadPlugins() }
+        .onAppear {
+            refreshDependencyToolsStatus()
+        }
+    }
+
+    private var bridgeStatusText: String {
+        guard let status = browserAccountStatus else {
+            return L10n.k("common.status.not_installed", fallback: "未安装")
+        }
+        guard status.openCLIBrowserBridgeInstalled == true else {
+            return L10n.k("common.status.not_installed", fallback: "未安装")
+        }
+        let installed = status.openCLIBrowserBridgeInstalledVersion ?? L10n.k("shrimp.settings.dependency.status.installed", fallback: "已安装")
+        if status.openCLIBrowserBridgeUpdateAvailable == true,
+           let latest = status.openCLIBrowserBridgeLatestVersion {
+            return L10n.f(
+                "shrimp.settings.dependency.bridge.update_available",
+                fallback: "已安装（%@），可升级到 %@",
+                installed,
+                latest
+            )
+        }
+        return L10n.f(
+            "shrimp.settings.dependency.status.installed_with_version",
+            fallback: "已安装（%@）",
+            installed
+        )
     }
 
     // MARK: - Data loading
@@ -418,7 +422,7 @@ struct ShrimpSettingsV2View: View {
                     if ok {
                         isDirty = false
                     } else {
-                        saveError = err ?? "保存失败"
+                        saveError = err ?? L10n.k("common.save_failed", fallback: "Save failed")
                     }
                 }
             } catch {
@@ -430,52 +434,7 @@ struct ShrimpSettingsV2View: View {
         }
     }
 
-    // MARK: - Plugin actions
-
-    private func loadPlugins() {
-        isLoadingPlugins = true
-        Task {
-            let (json, _) = await helperClient.listOpenclawPlugins(username: user.username)
-            await MainActor.run {
-                isLoadingPlugins = false
-                if let j = json, let data = j.data(using: .utf8),
-                   let list = try? JSONDecoder().decode([String].self, from: data) {
-                    installedPlugins = list
-                }
-            }
-        }
-    }
-
-    private func installPlugin() {
-        let spec = pluginInstallTarget.trimmingCharacters(in: .whitespaces)
-        guard !spec.isEmpty else { return }
-        pluginError = nil
-        Task {
-            let (ok, err) = await helperClient.installOpenclawPlugin(username: user.username, packageSpec: spec)
-            await MainActor.run {
-                if ok {
-                    pluginInstallTarget = ""
-                    loadPlugins()
-                } else {
-                    pluginError = err
-                }
-            }
-        }
-    }
-
-    private func removePlugin(_ spec: String) {
-        pluginError = nil
-        Task {
-            let (ok, err) = await helperClient.removeOpenclawPlugin(username: user.username, packageSpec: spec)
-            await MainActor.run {
-                if ok {
-                    loadPlugins()
-                } else {
-                    pluginError = err
-                }
-            }
-        }
-    }
+    // MARK: - Runtime dependency actions
 
     private func refreshDependencyToolsStatus() {
         Task {
