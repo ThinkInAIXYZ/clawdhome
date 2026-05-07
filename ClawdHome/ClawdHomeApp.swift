@@ -50,7 +50,7 @@ struct ClawdHomeApp: App {
                 .environment(\.locale, appLanguage.locale)
                 .task { await maintainConnection() }
                 .task { await updater.checkIfNeeded() }
-                .task { await updater.checkAppIfNeeded() }
+                .task { await updater.refreshAppUpdateState(helperClient: helperClient) }
                 .task { await MainActor.run { shrimpPool.start() } }
                 .onAppear { modelStore.load() }
                 .task {

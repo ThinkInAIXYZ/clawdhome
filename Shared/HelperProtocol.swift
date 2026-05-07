@@ -223,6 +223,10 @@ enum ManagedUserFilter {
     /// Helper 内部缓存，调用无阻塞
     func getDashboardSnapshot(withReply reply: @escaping (String) -> Void)
 
+    /// 获取 Helper 缓存的 App 更新状态（JSON 编码的 AppUpdateState）
+    /// 无缓存时返回 nil，不触发实时网络请求
+    func getCachedAppUpdateState(withReply reply: @escaping (String?) -> Void)
+
     /// 获取当前连接列表（JSON 编码的 [ConnectionInfo]，无连接时返回 nil）
     func getConnections(withReply reply: @escaping (String?) -> Void)
 
