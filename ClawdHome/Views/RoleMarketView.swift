@@ -1,6 +1,7 @@
 // ClawdHome/Views/RoleMarketView.swift
 // 角色中心：本地 HTML 市场 + JS Bridge + 唤醒向导
 
+import Network
 import SwiftUI
 import WebKit
 
@@ -131,6 +132,8 @@ private struct RoleMarketSkeletonView: View {
 final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var onAdoptAgent: ((AgentDNA) -> Void)?
     var onPageLoaded: (() -> Void)?
+    /// Stored by the cache so didFailProvisionalNavigation can fall back to local HTML
+    var localFallbackURL: URL?
 
     // MARK: JS Bridge
     func userContentController(
@@ -166,6 +169,15 @@ final class RoleMarketCoordinator: NSObject, WKScriptMessageHandler, WKNavigatio
             self.onPageLoaded?()
         }
     }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: Error) {
+        appLog("[RoleMarketCoordinator] Remote load failed: \(error.localizedDescription), falling back to local", level: .warn)
+        if let url = localFallbackURL ?? Bundle.main.url(forResource: "roles", withExtension: "html") {
+            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        } else {
+            DispatchQueue.main.async { self.onPageLoaded?() }
+        }
+    }
 }
 
 private func resolvedRoleMarketLocaleIdentifier() -> String {
@@ -196,7 +208,10 @@ private func javaScriptStringLiteral(_ value: String) -> String {
 private func makeRoleMarketConfiguration(coordinator: RoleMarketCoordinator, localeIdentifier: String) -> WKWebViewConfiguration {
     let config = WKWebViewConfiguration()
     let localeLiteral = javaScriptStringLiteral(localeIdentifier)
-    let bootstrap = "window.__clawdhomeLocale = \(localeLiteral);"
+    // Inject locale + app version at document start
+    let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+    let versionLiteral = javaScriptStringLiteral(appVersion)
+    let bootstrap = "window.__clawdhomeLocale = \(localeLiteral); window.__clawdhomeAppVersion = \(versionLiteral);"
     let script = WKUserScript(source: bootstrap, injectionTime: .atDocumentStart, forMainFrameOnly: true)
     config.userContentController.addUserScript(script)
     config.userContentController.add(coordinator, name: "ClawdHomeBridge")
@@ -234,16 +249,45 @@ final class RoleMarketWebViewCache {
         wv.navigationDelegate = c
         wv.setValue(false, forKey: "drawsBackground")  // 透明背景，防止白屏闪烁
 
-        // 加载本地 HTML（未来改线上只需替换为 wv.load(URLRequest(url:...))）
+        // Check network synchronously via NWPathMonitor snapshot
+        let monitor = NWPathMonitor()
+        let queue = DispatchQueue(label: "ai.clawdhome.rolemarketpath")
+        var networkAvailable = false
+        let sema = DispatchSemaphore(value: 0)
+        monitor.pathUpdateHandler = { path in
+            networkAvailable = path.status == .satisfied
+            sema.signal()
+        }
+        monitor.start(queue: queue)
+        sema.wait()
+        monitor.cancel()
+
+        loadRoleMarket(into: wv, networkAvailable: networkAvailable, coordinator: c)
+
+        self.coordinator = c
+        self.webView = wv
+        appLog("[RoleMarketWebViewCache] WebView preloaded (network: \(networkAvailable))")
+    }
+
+    @MainActor
+    func loadRoleMarket(into wv: WKWebView, networkAvailable: Bool, coordinator: RoleMarketCoordinator) {
+        if networkAvailable, let remoteURL = URL(string: "https://platform.clawdhome.ai/roles") {
+            coordinator.localFallbackURL = Bundle.main.url(forResource: "roles", withExtension: "html")
+            wv.load(URLRequest(url: remoteURL))
+            appLog("[RoleMarketWebViewCache] Loading remote URL")
+        } else {
+            loadLocalRoles(into: wv)
+            appLog("[RoleMarketWebViewCache] No network, loading local fallback")
+        }
+    }
+
+    @MainActor
+    func loadLocalRoles(into wv: WKWebView) {
         if let url = Bundle.main.url(forResource: "roles", withExtension: "html") {
             wv.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else {
             appLog("[RoleMarketWebViewCache] roles.html not found in Bundle!", level: .error)
         }
-
-        self.coordinator = c
-        self.webView = wv
-        appLog("[RoleMarketWebViewCache] WebView preloaded")
     }
 }
 
