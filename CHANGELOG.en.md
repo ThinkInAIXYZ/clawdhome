@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.0] - 2026-03-31
+
+### Features
+- Proxy settings are now automatically applied to managed users
+- Added authentication assist for terminal-based flows
+- Expanded role presets in the Role Center with full localization
+
+### Improvements & Fixes
+- Streamlined user onboarding with a clearer step-by-step flow
+- Improved in-app update and model configuration experiences
+- Universal packaging now supports both Intel and Apple Silicon
+- App notarization enabled by default for improved macOS trust
+
+
 ## [1.3.0] - 2026-03-29
 
 ### Features
