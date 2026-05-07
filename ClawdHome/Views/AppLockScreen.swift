@@ -28,15 +28,15 @@ struct AppLockScreen: View {
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: 6) {
-                    Text("ClawdHome 已锁定")
+                    Text(L10n.k("views.app_lock_screen.clawdhome_locked", fallback: "ClawdHome 已锁定"))
                         .font(.title2.weight(.semibold))
-                    Text("请输入管理密码以继续")
+                    Text(L10n.k("views.app_lock_screen.enter_admin_password_continue", fallback: "请输入管理密码以继续"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
                 VStack(spacing: 10) {
-                    SecureField("管理密码", text: $password)
+                    SecureField(L10n.k("views.app_lock_screen.admin_password", fallback: "管理密码"), text: $password)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 260)
                         .focused($focused)
@@ -47,12 +47,12 @@ struct AppLockScreen: View {
                         Group {
                             switch err {
                             case .wrongPassword:
-                                Label("密码错误，请重试", systemImage: "xmark.circle.fill")
+                                Label(L10n.k("views.app_lock_screen.password_incorrect_retry", fallback: "密码错误，请重试"), systemImage: "xmark.circle.fill")
                             case .keychainDenied:
                                 VStack(spacing: 4) {
-                                    Label("Keychain 访问被拒绝", systemImage: "exclamationmark.lock.fill")
+                                    Label(L10n.k("views.app_lock_screen.keychain", fallback: "Keychain 访问被拒绝"), systemImage: "exclamationmark.lock.fill")
                                         .fontWeight(.medium)
-                                    Text("请在系统弹窗中点击\"允许\"，或前往\n钥匙串访问手动授权 ClawdHome")
+                                    Text(L10n.k("app_lock.keychain_denied.desc", fallback: "请在系统弹窗中点击\"允许\"，或前往\n钥匙串访问手动授权 ClawdHome"))
                                         .multilineTextAlignment(.center)
                                         .foregroundStyle(.secondary)
                                 }
@@ -62,7 +62,7 @@ struct AppLockScreen: View {
                         .foregroundStyle(.red)
                     }
 
-                    Button("解锁") { tryUnlock() }
+                    Button(L10n.k("views.app_lock_screen.unlock", fallback: "解锁")) { tryUnlock() }
                         .buttonStyle(.borderedProminent)
                         .disabled(password.isEmpty)
                 }
@@ -71,7 +71,7 @@ struct AppLockScreen: View {
                     Button {
                         Task { await lockStore.unlockWithBiometrics() }
                     } label: {
-                        Label("使用 Touch ID 解锁", systemImage: "touchid")
+                        Label(L10n.k("views.app_lock_screen.touch_id_unlock", fallback: "使用 Touch ID 解锁"), systemImage: "touchid")
                             .font(.subheadline)
                     }
                     .buttonStyle(.plain)

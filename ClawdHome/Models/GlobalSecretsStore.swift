@@ -8,7 +8,7 @@ import Foundation
 /// 单条 secret 的存储结构
 struct SecretEntry: Codable {
     var provider: String     // e.g. "anthropic"
-    var accountName: String  // e.g. "主账号"
+    var accountName: String  // e.g. L10n.k("models.global_secrets_store.text_0010795e", fallback: "主账号")
     var value: String        // 明文 API Key 或 URL
 
     /// 在 secrets 文件中的 key（也用作 openclaw keyRef.id）
@@ -73,7 +73,7 @@ final class GlobalSecretsStore {
         load().secrets[secretKey] != nil
     }
 
-    /// 所有已存储的条目（供"同步到虾"功能使用）
+    /// 所有已存储的条目（供L10n.k("models.global_secrets_store.text_1ff177a5", fallback: "同步到虾")功能使用）
     func allEntries() -> [SecretEntry] {
         Array(load().secrets.values)
     }

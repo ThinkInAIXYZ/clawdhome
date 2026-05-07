@@ -7,9 +7,9 @@ enum TTSEngineType: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .f5tts:      return "F5-TTS MLX（本地）"
-        case .elevenlabs: return "ElevenLabs（云端）"
-        case .fishAudio:  return "Fish Audio（云端）"
+        case .f5tts:      return L10n.k("models.voice_profile.f5_tts_mlx_local", fallback: "F5-TTS MLX（本地）")
+        case .elevenlabs: return L10n.k("models.voice_profile.elevenlabs_cloud", fallback: "ElevenLabs（云端）")
+        case .fishAudio:  return L10n.k("models.voice_profile.fish_audio_cloud", fallback: "Fish Audio（云端）")
         }
     }
 }

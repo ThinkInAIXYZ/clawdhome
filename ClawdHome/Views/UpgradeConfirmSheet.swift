@@ -21,9 +21,9 @@ struct UpgradeConfirmSheet: View {
             HStack {
                 Image(systemName: "arrow.up.circle.fill")
                     .foregroundStyle(.green)
-                Text("升级 openclaw").font(.headline)
+                Text(L10n.k("auto.upgrade_confirm_sheet.upgrade_openclaw", fallback: "升级 openclaw")).font(.headline)
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(L10n.k("auto.upgrade_confirm_sheet.cancel", fallback: "取消")) { dismiss() }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.escape, modifiers: [])
             }
@@ -36,18 +36,18 @@ struct UpgradeConfirmSheet: View {
                 // 版本信息
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
                     GridRow {
-                        Text("当前版本").foregroundStyle(.secondary)
-                        Text(currentVersion ?? "未知").monospacedDigit()
+                        Text(L10n.k("auto.upgrade_confirm_sheet.current_version", fallback: "当前版本")).foregroundStyle(.secondary)
+                        Text(currentVersion ?? L10n.k("auto.upgrade_confirm_sheet.unknown", fallback: "未知")).monospacedDigit()
                     }
                     GridRow {
-                        Text("最新版本").foregroundStyle(.secondary)
+                        Text(L10n.k("auto.upgrade_confirm_sheet.latest_version", fallback: "最新版本")).foregroundStyle(.secondary)
                         Text(targetVersion)
                             .monospacedDigit()
                             .foregroundStyle(.green)
                             .fontWeight(.medium)
                     }
                     GridRow {
-                        Text("用户").foregroundStyle(.secondary)
+                        Text(L10n.k("auto.upgrade_confirm_sheet.user", fallback: "用户")).foregroundStyle(.secondary)
                         Text("@\(username)")
                     }
                 }
@@ -56,20 +56,20 @@ struct UpgradeConfirmSheet: View {
 
                 // 备份开关
                 VStack(alignment: .leading, spacing: 6) {
-                    Toggle("升级前自动备份配置", isOn: $autoBackup)
+                    Toggle(L10n.k("auto.upgrade_confirm_sheet.upgradebackupconfiguration", fallback: "升级前自动备份配置"), isOn: $autoBackup)
 
                     if autoBackup {
-                        Text("将在 ~/Documents/ClawdHome Backups/ 保存一份备份，升级后可一键回退。")
+                        Text(L10n.k("auto.upgrade_confirm_sheet.documents_clawdhome_backups_savebackup_upgraderollback", fallback: "将在 ~/Documents/ClawdHome Backups/ 保存一份备份，升级后可一键回退。"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("不备份则无法回退，请确认已手动保存重要配置。")
+                        Text(L10n.k("auto.upgrade_confirm_sheet.backuprollback_saveconfiguration", fallback: "不备份则无法回退，请确认已手动保存重要配置。"))
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
                 }
 
-                Text("升级期间 Gateway 将暂时停止。")
+                Text(L10n.k("auto.upgrade_confirm_sheet.upgrade_gateway_stop", fallback: "升级期间 Gateway 将暂时停止。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -82,16 +82,16 @@ struct UpgradeConfirmSheet: View {
             // 底部操作栏
             HStack {
                 if let url = releaseURL {
-                    Button("查看更新内容") {
+                    Button(L10n.k("auto.upgrade_confirm_sheet.view_release_notes", fallback: "查看更新内容")) {
                         NSWorkspace.shared.open(url)
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.tint)
                 }
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(L10n.k("auto.upgrade_confirm_sheet.cancel", fallback: "取消")) { dismiss() }
                     .buttonStyle(.bordered)
-                Button("升级") {
+                Button(L10n.k("auto.upgrade_confirm_sheet.upgrade", fallback: "升级")) {
                     let shouldBackup = autoBackup
                     dismiss()
                     onConfirm(targetVersion, shouldBackup)

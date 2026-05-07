@@ -80,7 +80,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 删除用户（由 Helper 以 root 执行）
@@ -91,7 +91,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 删除前预清理：停止 gateway + 从系统群组移除（必须在 sysadminctl 之前）
@@ -102,7 +102,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 删除后清理：移除 Helper 侧状态文件
@@ -113,7 +113,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 设置 Gateway 开机自启（写标志文件到 /var/lib/clawdhome/）
@@ -122,7 +122,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.setGatewayAutostart(enabled: enabled) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 读取 Gateway 开机自启状态（默认 true）
@@ -141,7 +141,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "设置 DEBUG 日志失败") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.settings_debug", fallback: "设置 DEBUG 日志失败")) }
     }
 
     /// 读取 Helper DEBUG 日志开关状态
@@ -160,7 +160,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 读取指定用户的开机自启状态（默认 true）
@@ -177,7 +177,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.logoutUser(username: username) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     // MARK: - Gateway 管理
@@ -187,7 +187,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.startGateway(username: username) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     func stopGateway(username: String) async throws {
@@ -195,7 +195,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.stopGateway(username: username) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     func restartGateway(username: String) async throws {
@@ -203,7 +203,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.restartGateway(username: username) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 查询 gateway 运行状态
@@ -226,7 +226,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     // MARK: - 安装管理
@@ -240,7 +240,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     // MARK: - 版本查询
@@ -269,7 +269,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.installNode(username: username, nodeDistURL: nodeDistURL) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// Node.js 是否已安装就绪（用于控制 npm 相关操作）
@@ -314,7 +314,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.installXcodeCommandLineTools { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "触发安装失败") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.trigger_install_failed", fallback: "触发安装失败")) }
     }
 
     /// 接受 Xcode license（非交互）
@@ -323,7 +323,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.acceptXcodeLicense { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "接受 license 失败") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.accept_license_failed", fallback: "接受 license 失败")) }
     }
 
     /// 初始化 npm 全局目录（~/.npm-global）并配置 shell 环境
@@ -332,7 +332,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.setupNpmEnv(username: username) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 设置 npm 安装源（写入用户级 ~/.npmrc）
@@ -343,7 +343,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 读取 npm 安装源（优先用户级配置）
@@ -370,7 +370,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 读取向导进度 JSON（文件不存在返回空字符串）
@@ -387,7 +387,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.resetUserEnv(username: username) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 备份指定用户的 ~/.openclaw 到目标路径（tar.gz）
@@ -398,7 +398,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 从备份包恢复指定用户的 ~/.openclaw（解压 tar.gz 并修正权限）
@@ -409,7 +409,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     /// 扫描来源虾可克隆项与大小
@@ -423,7 +423,7 @@ final class HelperClient {
         if let err { throw HelperError.operationFailed(err) }
         guard let data = json.data(using: .utf8),
               let result = try? JSONDecoder().decode(CloneScanResult.self, from: data) else {
-            throw HelperError.operationFailed("克隆扫描结果解析失败")
+            throw HelperError.operationFailed(L10n.k("services.helper_client.failed", fallback: "克隆扫描结果解析失败"))
         }
         return result
     }
@@ -433,17 +433,17 @@ final class HelperClient {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
         guard let reqData = try? JSONEncoder().encode(request),
               let reqJSON = String(data: reqData, encoding: .utf8) else {
-            throw HelperError.operationFailed("克隆请求序列化失败")
+            throw HelperError.operationFailed(L10n.k("services.helper_client.clone_request_serialization_failed", fallback: "克隆请求序列化失败"))
         }
         let (ok, resultJSON, err): (Bool, String, String?) = await withCheckedContinuation { cont in
             proxy.cloneClaw(requestJSON: reqJSON) { ok, json, err in
                 cont.resume(returning: (ok, json, err))
             }
         }
-        if !ok { throw HelperError.operationFailed(err ?? "克隆失败") }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.clone_failed", fallback: "克隆失败")) }
         guard let data = resultJSON.data(using: .utf8),
               let result = try? JSONDecoder().decode(CloneClawResult.self, from: data) else {
-            throw HelperError.operationFailed("克隆结果解析失败")
+            throw HelperError.operationFailed(L10n.k("services.helper_client.clone_result_parse_failed", fallback: "克隆结果解析失败"))
         }
         return result
     }
@@ -500,14 +500,14 @@ final class HelperClient {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
         guard let data = try? JSONEncoder().encode(policy),
               let json = String(data: data, encoding: .utf8) else {
-            throw HelperError.operationFailed("序列化失败")
+            throw HelperError.operationFailed(L10n.k("services.helper_client.serialization_failed", fallback: "序列化失败"))
         }
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.setShrimpNetworkPolicy(username: username, policyJSON: json) { ok, msg in
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     func getGlobalNetworkConfig() async -> GlobalNetworkConfig {
@@ -526,14 +526,14 @@ final class HelperClient {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
         guard let data = try? JSONEncoder().encode(config),
               let json = String(data: data, encoding: .utf8) else {
-            throw HelperError.operationFailed("序列化失败")
+            throw HelperError.operationFailed(L10n.k("services.helper_client.serialization_failed", fallback: "序列化失败"))
         }
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.setGlobalNetworkConfig(configJSON: json) { ok, msg in
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     // MARK: - 配置（直接读写 JSON，零 CLI 开销）
@@ -560,7 +560,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "写入失败") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.write_failed", fallback: "写入失败")) }
     }
 
     /// 将 Any 序列化为 JSON 文本，支持对象/数组，也支持顶层 String/Bool/Number/null。
@@ -578,7 +578,7 @@ final class HelperClient {
               let data = try? JSONSerialization.data(withJSONObject: wrapped),
               var json = String(data: data, encoding: .utf8),
               json.first == "[", json.last == "]" else {
-            throw HelperError.operationFailed("值序列化失败")
+            throw HelperError.operationFailed(L10n.k("services.helper_client.value_serialization_failed", fallback: "值序列化失败"))
         }
         json.removeFirst()
         json.removeLast()
@@ -601,7 +601,7 @@ final class HelperClient {
 
     /// 运行 openclaw models 子命令，返回 (success, output)（仅用于兜底场景）
     private func runModelCommand(username: String, args: [String]) async -> (Bool, String) {
-        guard let proxy = controlProxy else { return (false, "未连接") }
+        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         let argsJSON = (try? String(data: JSONEncoder().encode(args), encoding: .utf8)) ?? "[]"
         return await withCheckedContinuation { cont in
             proxy.runModelCommand(username: username, argsJSON: argsJSON) { ok, out in
@@ -614,7 +614,7 @@ final class HelperClient {
 
     /// 以指定用户身份运行 openclaw 任意子命令，返回 (success, output)
     func runOpenclawCommand(username: String, args: [String]) async -> (Bool, String) {
-        guard let proxy = controlProxy else { return (false, "未连接") }
+        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         let argsJSON = (try? String(data: JSONEncoder().encode(args), encoding: .utf8)) ?? "[]"
         return await withCheckedContinuation { cont in
             proxy.runOpenclawCommand(username: username, argsJSON: argsJSON) { ok, out in
@@ -627,7 +627,7 @@ final class HelperClient {
 
     /// 运行 openclaw pairing 子命令，返回 (success, output)
     func runPairingCommand(username: String, args: [String]) async -> (Bool, String) {
-        guard let proxy = controlProxy else { return (false, "未连接") }
+        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         let argsJSON = (try? String(data: JSONEncoder().encode(args), encoding: .utf8)) ?? "[]"
         return await withCheckedContinuation { cont in
             proxy.runPairingCommand(username: username, argsJSON: argsJSON) { ok, out in
@@ -638,7 +638,7 @@ final class HelperClient {
 
     /// 运行飞书独立配置命令（当前 install-only）：npx -y @larksuite/openclaw-lark-tools install
     func runFeishuOnboardCommand(username: String, args: [String]) async -> (Bool, String) {
-        guard let proxy = controlProxy else { return (false, "未连接") }
+        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         let argsJSON = (try? String(data: JSONEncoder().encode(args), encoding: .utf8)) ?? "[]"
         appLog("[feishu] request start @\(username) args=\(args.joined(separator: " "))")
         return await withCheckedContinuation { cont in
@@ -655,7 +655,7 @@ final class HelperClient {
 
     /// 启动通用维护终端会话（Helper 侧 PTY）
     func startMaintenanceTerminalSession(username: String, command: [String]) async -> (Bool, String, String?) {
-        guard let proxy = controlProxy else { return (false, "", "未连接") }
+        guard let proxy = controlProxy else { return (false, "", L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         let commandJSON = (try? String(data: JSONEncoder().encode(command), encoding: .utf8)) ?? "[]"
         appLog("[maintenance] session start request @\(username) cmd=\(command.joined(separator: " "))")
         return await withCheckedContinuation { cont in
@@ -677,7 +677,7 @@ final class HelperClient {
     func pollMaintenanceTerminalSession(sessionID: String, fromOffset: Int64) async
     -> (Bool, String, Int64, Bool, Int32, String?) {
         guard let proxy = controlProxy else {
-            return (false, "", fromOffset, true, -1, "未连接")
+            return (false, "", fromOffset, true, -1, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
         }
         return await withCheckedContinuation { cont in
             proxy.pollMaintenanceTerminalSession(sessionID: sessionID, fromOffset: fromOffset) {
@@ -689,7 +689,7 @@ final class HelperClient {
 
     /// 向通用维护终端会话发送输入
     func sendMaintenanceTerminalSessionInput(sessionID: String, input: Data) async -> (Bool, String?) {
-        guard let proxy = controlProxy else { return (false, "未连接") }
+        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         let base64 = input.base64EncodedString()
         return await withCheckedContinuation { cont in
             proxy.sendMaintenanceTerminalSessionInput(sessionID: sessionID, inputBase64: base64) { ok, err in
@@ -700,7 +700,7 @@ final class HelperClient {
 
     /// 调整通用维护终端会话终端尺寸
     func resizeMaintenanceTerminalSession(sessionID: String, cols: Int, rows: Int) async -> (Bool, String?) {
-        guard let proxy = controlProxy else { return (false, "未连接") }
+        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         return await withCheckedContinuation { cont in
             proxy.resizeMaintenanceTerminalSession(sessionID: sessionID, cols: Int32(cols), rows: Int32(rows)) { ok, err in
                 cont.resume(returning: (ok, err))
@@ -710,7 +710,7 @@ final class HelperClient {
 
     /// 终止通用维护终端会话
     func terminateMaintenanceTerminalSession(sessionID: String) async -> (Bool, String?) {
-        guard let proxy = controlProxy else { return (false, "未连接") }
+        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         return await withCheckedContinuation { cont in
             proxy.terminateMaintenanceTerminalSession(sessionID: sessionID) { ok, err in
                 cont.resume(returning: (ok, err))
@@ -801,7 +801,7 @@ final class HelperClient {
         }
         if let err { throw HelperError.operationFailed(err) }
         guard let json, let data = json.data(using: .utf8) else {
-            throw HelperError.operationFailed("无效响应")
+            throw HelperError.operationFailed(L10n.k("services.helper_client.invalid_response", fallback: "无效响应"))
         }
         return try JSONDecoder().decode([FileEntry].self, from: data)
     }
@@ -824,7 +824,7 @@ final class HelperClient {
             }
         }
         if let err { throw HelperError.operationFailed(err) }
-        guard let data else { throw HelperError.operationFailed("无文件数据") }
+        guard let data else { throw HelperError.operationFailed(L10n.k("services.helper_client.file", fallback: "无文件数据")) }
         return data
     }
 
@@ -837,7 +837,7 @@ final class HelperClient {
             }
         }
         if let err { throw HelperError.operationFailed(err) }
-        guard let data else { throw HelperError.operationFailed("无文件数据") }
+        guard let data else { throw HelperError.operationFailed(L10n.k("services.helper_client.file", fallback: "无文件数据")) }
         return data
     }
 
@@ -849,7 +849,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, e))
             }
         }
-        if !ok { throw HelperError.operationFailed(err ?? "写入失败") }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.write_failed", fallback: "写入失败")) }
     }
 
     /// 删除文件或目录
@@ -860,7 +860,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, e))
             }
         }
-        if !ok { throw HelperError.operationFailed(err ?? "删除失败") }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.delete", fallback: "删除失败")) }
     }
 
     // MARK: - Secrets 同步
@@ -877,7 +877,7 @@ final class HelperClient {
                 authProfilesJSON: authProfilesPayload
             ) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "secrets 同步失败") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.secrets_sync_failed", fallback: "secrets 同步失败")) }
     }
 
     /// 通知虾的 openclaw 热加载 secrets
@@ -886,7 +886,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.reloadSecrets(username: username) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "secrets reload 失败") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.secrets_reload_failed", fallback: "secrets reload 失败")) }
     }
 
     /// 新建目录
@@ -897,7 +897,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, e))
             }
         }
-        if !ok { throw HelperError.operationFailed(err ?? "创建目录失败") }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.create_directory_failed", fallback: "创建目录失败")) }
     }
 
     /// 重命名文件或目录
@@ -908,7 +908,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, e))
             }
         }
-        if !ok { throw HelperError.operationFailed(err ?? "重命名失败") }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.rename_failed", fallback: "重命名失败")) }
     }
 
     /// 解压压缩包到同目录
@@ -919,7 +919,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, e))
             }
         }
-        if !ok { throw HelperError.operationFailed(err ?? "解压失败") }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.unzip_failed", fallback: "解压失败")) }
     }
 
     // MARK: - 记忆搜索
@@ -950,7 +950,7 @@ final class HelperClient {
                 cont.resume(returning: (ok, msg))
             }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "密码修改失败") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.password_change_failed", fallback: "密码修改失败")) }
     }
 
     // MARK: - 屏幕共享
@@ -969,7 +969,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.enableScreenSharing { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "启用屏幕共享失败") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.enable_screen_sharing_failed", fallback: "启用屏幕共享失败")) }
     }
 
     // MARK: - 本地 AI — omlx
@@ -979,7 +979,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.installOmlx { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     func getLocalLLMStatus() async -> LocalServiceStatus {
@@ -1006,7 +1006,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.startLocalLLM { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     func stopLocalLLM() async throws {
@@ -1014,7 +1014,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.stopLocalLLM { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     func downloadLocalModel(_ modelId: String) async throws {
@@ -1022,7 +1022,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.downloadLocalModel(modelId) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     func deleteLocalModel(_ modelId: String) async throws {
@@ -1030,7 +1030,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.deleteLocalModel(modelId) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
     // MARK: - 进程管理
@@ -1067,7 +1067,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
             proxy.killProcess(pid: pid, signal: signal) { ok, msg in cont.resume(returning: (ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "未知错误") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 }
 
@@ -1079,9 +1079,9 @@ enum HelperError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notConnected:              return "Helper 未连接，请确认 ClawdHome 已正确安装"
+        case .notConnected:              return L10n.k("services.helper_client.helper_clawdhome", fallback: "Helper 未连接，请确认 ClawdHome 已正确安装")
         case .operationFailed(let msg): return msg
-        case .brewNotFound:             return "Homebrew 未安装"
+        case .brewNotFound:             return L10n.k("services.helper_client.homebrew_not_installed", fallback: "Homebrew 未安装")
         }
     }
 }

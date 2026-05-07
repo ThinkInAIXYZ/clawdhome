@@ -22,10 +22,10 @@ struct HealthCheckSheet: View {
             HStack {
                 Image(systemName: "stethoscope")
                     .foregroundStyle(.tint)
-                Text("体检结果").font(.headline)
+                Text(L10n.k("auto.health_check_sheet.health_check", fallback: "体检结果")).font(.headline)
                 Text("@\(user.username)").foregroundStyle(.secondary)
                 Spacer()
-                Button("完成") { dismiss() }
+                Button(L10n.k("auto.health_check_sheet.done", fallback: "完成")) { dismiss() }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.escape, modifiers: [])
             }
@@ -36,7 +36,7 @@ struct HealthCheckSheet: View {
 
             // 内容区
             if isLoading {
-                ProgressView("检查中…")
+                ProgressView(L10n.k("auto.health_check_sheet.text_5fc65af5b3", fallback: "检查中…"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let r = result {
                 ScrollView {
@@ -53,14 +53,14 @@ struct HealthCheckSheet: View {
                 // 底部操作栏
                 HStack(spacing: 12) {
                     if r.fixableIssueCount > 0 {
-                        Button(isFixing ? "修复中…" : "修复全部（\(r.fixableIssueCount) 项）") {
+                        Button(isFixing ? L10n.k("auto.health_check_sheet.text_114268798e", fallback: "修复中…") : "修复全部（\(r.fixableIssueCount) 项）") {
                             Task { await runCheck(fix: true) }
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(isFixing)
                     }
                     Spacer()
-                    Button(isLoading || isFixing ? "检查中…" : "重新检查") {
+                    Button(isLoading || isFixing ? L10n.k("auto.health_check_sheet.text_5fc65af5b3", fallback: "检查中…") : L10n.k("auto.health_check_sheet.recheck", fallback: "重新检查")) {
                         Task { await runCheck(fix: false) }
                     }
                     .buttonStyle(.bordered)
@@ -71,7 +71,7 @@ struct HealthCheckSheet: View {
 
             } else if let err = loadError {
                 ContentUnavailableView(
-                    "检查失败",
+                    L10n.k("auto.health_check_sheet.check_failed", fallback: "检查失败"),
                     systemImage: "exclamationmark.triangle",
                     description: Text(err)
                 )
@@ -88,21 +88,22 @@ struct HealthCheckSheet: View {
     private func summaryBar(_ r: HealthCheckResult) -> some View {
         HStack(spacing: 16) {
             if r.criticalCount > 0 {
-                Label("\(r.criticalCount) 个严重问题", systemImage: "xmark.circle.fill")
+                Label(L10n.f("views.health_check_sheet.text_977a5060", fallback: "%@ 个严重问题", String(describing: r.criticalCount)), systemImage: "xmark.circle.fill")
                     .foregroundStyle(.red)
             }
             if r.warnCount > 0 {
-                Label("\(r.warnCount) 个警告", systemImage: "exclamationmark.triangle.fill")
+                Label(L10n.f("views.health_check_sheet.text_600eda8e", fallback: "%@ 个警告", String(describing: r.warnCount)), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             }
             if !r.hasIssues {
-                Label("一切正常", systemImage: "checkmark.circle.fill")
+                Label(L10n.k("auto.health_check_sheet.all_good", fallback: "一切正常"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
             }
             Spacer()
             // 检查时间
             let date = Date(timeIntervalSince1970: r.checkedAt)
-            Text("检查于 \(date, style: .time)")
+            let timeText = date.formatted(date: .omitted, time: .shortened)
+            Text(L10n.f("views.health_check_sheet.text_7eba8ea1", fallback: "检查于 %@", timeText))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -114,7 +115,7 @@ struct HealthCheckSheet: View {
     @ViewBuilder
     private func isolationSection(_ r: HealthCheckResult) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("环境隔离检查")
+            Text(L10n.k("auto.health_check_sheet.environment_isolation_check", fallback: "环境隔离检查"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
 
@@ -122,7 +123,7 @@ struct HealthCheckSheet: View {
             if issues.isEmpty {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                    Text("权限配置正常，无隔离风险")
+                    Text(L10n.k("auto.health_check_sheet.configuration", fallback: "权限配置正常，无隔离风险"))
                 }
                 .font(.callout)
                 .padding(.vertical, 4)
@@ -137,14 +138,14 @@ struct HealthCheckSheet: View {
     @ViewBuilder
     private func auditSection(_ r: HealthCheckResult) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("应用安全审计")
+            Text(L10n.k("auto.health_check_sheet.security_audit", fallback: "应用安全审计"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
 
             if r.auditSkipped {
                 HStack(spacing: 6) {
                     Image(systemName: "minus.circle").foregroundStyle(.secondary)
-                    Text("openclaw 未安装，跳过审计")
+                    Text(L10n.k("views.health_check_sheet.openclaw", fallback: "openclaw 未安装，跳过审计"))
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -158,7 +159,7 @@ struct HealthCheckSheet: View {
             } else if r.auditFindings.isEmpty {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                    Text("无安全审计问题")
+                    Text(L10n.k("auto.health_check_sheet.security_audit", fallback: "无安全审计问题"))
                 }
                 .font(.callout)
                 .padding(.vertical, 4)
@@ -179,7 +180,7 @@ struct HealthCheckSheet: View {
             result = r
             onCompleted?(r)
         } else {
-            loadError = "无法连接到 Helper 服务，请确认 ClawdHome 已正确安装"
+            loadError = L10n.k("auto.health_check_sheet.helper_clawdhome", fallback: "无法连接到 Helper 服务，请确认 ClawdHome 已正确安装")
         }
         isFixing = false
         isLoading = false
@@ -204,14 +205,14 @@ private struct FindingRow: View {
                         .font(.callout.weight(.medium))
                     if let fixed = finding.fixed {
                         if fixed {
-                            Text("已修复")
+                            Text(L10n.k("auto.health_check_sheet.fixed", fallback: "已修复"))
                                 .font(.caption)
                                 .foregroundStyle(.green)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
                                 .background(.green.opacity(0.12), in: Capsule())
                         } else {
-                            Text("修复失败")
+                            Text(L10n.k("auto.health_check_sheet.fix_failed", fallback: "修复失败"))
                                 .font(.caption)
                                 .foregroundStyle(.red)
                                 .padding(.horizontal, 5)
@@ -226,7 +227,7 @@ private struct FindingRow: View {
                         .foregroundStyle(.secondary)
                 }
                 if let err = finding.fixError {
-                    Text("修复出错：\(err)")
+                    Text(L10n.f("views.health_check_sheet.text_c5187b4b", fallback: "修复出错：%@", String(describing: err)))
                         .font(.caption)
                         .foregroundStyle(.red)
                 }

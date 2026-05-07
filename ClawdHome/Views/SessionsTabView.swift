@@ -43,10 +43,10 @@ struct SessionEntry: Identifiable {
         if parts.count >= 3 {
             let platform = parts[2]
             switch platform {
-            case "direct":   return parts.count > 3 ? "私聊 · \(parts[3])" : "私聊"
-            case "group":    return parts.count > 3 ? "群组 · \(parts[3])" : "群组"
-            case "cron":     return "定时任务"
-            case "channel":  return parts.count > 3 ? "频道 · \(parts[3])" : "频道"
+            case "direct":   return parts.count > 3 ? "\(L10n.k("views.sessions_tab_view.direct_message", fallback: "私聊")) · \(parts[3])" : L10n.k("views.sessions_tab_view.direct_message", fallback: "私聊")
+            case "group":    return parts.count > 3 ? "\(L10n.k("views.sessions_tab_view.group", fallback: "群组")) · \(parts[3])" : L10n.k("views.sessions_tab_view.group", fallback: "群组")
+            case "cron":     return L10n.k("views.sessions_tab_view.scheduled_tasks", fallback: "定时任务")
+            case "channel":  return parts.count > 3 ? "\(L10n.k("views.sessions_tab_view.channel", fallback: "频道")) · \(parts[3])" : L10n.k("views.sessions_tab_view.channel", fallback: "频道")
             default:         return platform
             }
         }
@@ -112,7 +112,7 @@ struct SessionsTabView: View {
                 // 搜索框
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary).font(.caption)
-                    TextField("搜索会话", text: $searchText)
+                    TextField(L10n.k("views.sessions_tab_view.searchsession", fallback: "搜索会话"), text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.subheadline)
                 }
@@ -125,7 +125,7 @@ struct SessionsTabView: View {
                 if loadingSessions {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredSessions.isEmpty {
-                    Text(sessions.isEmpty ? "暂无会话" : "无匹配结果")
+                    Text(sessions.isEmpty ? L10n.k("views.sessions_tab_view.session", fallback: "暂无会话") : L10n.k("views.sessions_tab_view.no_matching_results", fallback: "无匹配结果"))
                         .foregroundStyle(.tertiary)
                         .font(.subheadline)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -178,7 +178,7 @@ struct SessionsTabView: View {
                 }
 
                 if loadingTranscript {
-                    ProgressView("加载中…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ProgressView(L10n.k("views.sessions_tab_view.loading", fallback: "加载中…")).frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let err = transcriptError {
                     VStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
@@ -186,7 +186,7 @@ struct SessionsTabView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if transcript.isEmpty {
-                    Text("会话为空").foregroundStyle(.tertiary)
+                    Text(L10n.k("views.sessions_tab_view.empty_session", fallback: "会话为空")).foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollViewReader { proxy in
@@ -208,7 +208,7 @@ struct SessionsTabView: View {
                 }
             }
         } else {
-            Text("选择一个会话查看完整对话")
+            Text(L10n.k("views.sessions_tab_view.selectsession", fallback: "选择一个会话查看完整对话"))
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -256,7 +256,7 @@ struct SessionsTabView: View {
         }
         guard let data = rawData,
               let text = String(data: data, encoding: .utf8) else {
-            transcriptError = "找不到会话文件"
+            transcriptError = L10n.k("views.sessions_tab_view.sessionfile", fallback: "找不到会话文件")
             return
         }
         transcript = parseJSONL(text)
@@ -275,7 +275,7 @@ struct SessionsTabView: View {
 
             // 跳过 header/compaction 记录
             if let type_ = obj["type"] as? String, type_ != "message" {
-                // type == "session" 是 header，"compaction" 是压缩标记
+                // type == "sessionL10n.k("views.sessions_tab_view.header", fallback: " 是 header，")compaction" 是压缩标记
                 if type_ != "message" { continue }
             }
 
@@ -306,8 +306,10 @@ struct SessionsTabView: View {
                 guard let type_ = block["type"] as? String else { return nil }
                 switch type_ {
                 case "text":         return block["text"] as? String
-                case "tool_use":     return "[工具调用: \(block["name"] as? String ?? "")]"
-                case "tool_result":  return "[工具结果]"
+                case "tool_use":
+                    let name = block["name"] as? String ?? ""
+                    return String(format: L10n.k("views.sessions_tab_view.tool_call_block", fallback: "[工具调用: %@]"), name)
+                case "tool_result":  return L10n.k("views.sessions_tab_view.tool_result_block", fallback: "[工具结果]")
                 default:             return nil
                 }
             }.joined(separator: "\n")
@@ -410,10 +412,10 @@ private struct TranscriptBubble: View {
 
     private var roleLabel: String {
         switch message.role {
-        case "user":      return "用户"
-        case "assistant": return "助手"
-        case "system":    return "系统"
-        case "tool":      return "工具"
+        case "user":      return L10n.k("views.sessions_tab_view.user", fallback: "用户")
+        case "assistant": return L10n.k("views.sessions_tab_view.assistant", fallback: "助手")
+        case "system":    return L10n.k("views.sessions_tab_view.system", fallback: "系统")
+        case "tool":      return L10n.k("views.sessions_tab_view.tools", fallback: "工具")
         default:          return message.role
         }
     }

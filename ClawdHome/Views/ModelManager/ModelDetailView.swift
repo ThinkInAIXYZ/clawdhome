@@ -18,10 +18,10 @@ struct ModelDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                GroupBox("模型信息") {
+                GroupBox(L10n.k("auto.model_detail_view.models", fallback: "模型信息")) {
                     VStack(alignment: .leading, spacing: 6) {
-                        LabeledContent("名称", value: model.label)
-                        LabeledContent("模型 ID") {
+                        LabeledContent(L10n.k("auto.model_detail_view.name", fallback: "名称"), value: model.label)
+                        LabeledContent(L10n.k("auto.model_detail_view.models_id", fallback: "模型 ID")) {
                             Text(model.id)
                                 .font(.system(.body, design: .monospaced))
                                 .textSelection(.enabled)
@@ -33,7 +33,7 @@ struct ModelDetailView: View {
                                         .foregroundStyle(keychainStore.hasKey(for: p) ? .green : .secondary)
                                     Text(p.displayName)
                                 } else {
-                                    Text("未知").foregroundStyle(.secondary)
+                                    Text(L10n.k("auto.model_detail_view.unknown", fallback: "未知")).foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -42,16 +42,16 @@ struct ModelDetailView: View {
                     .padding(.top, 4)
                 }
 
-                GroupBox("连通性测试") {
+                GroupBox(L10n.k("auto.model_detail_view.connectivity_test", fallback: "连通性测试")) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 10) {
-                            Button(isPinging ? "测试中…" : "⚡ Ping") {
+                            Button(isPinging ? L10n.k("auto.model_detail_view.text_49562bf14c", fallback: "测试中…") : "⚡ Ping") {
                                 Task { await runPing() }
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(isPinging || apiKey == nil)
                             if apiKey == nil {
-                                Text("需先配置 API Key").font(.caption).foregroundStyle(.orange)
+                                Text(L10n.k("auto.model_detail_view.configuration_api_key", fallback: "需先配置 API Key")).font(.caption).foregroundStyle(.orange)
                             }
                         }
                         if let r = pingResult {
@@ -62,7 +62,7 @@ struct ModelDetailView: View {
                                     Text(String(format: "%.0f ms", r.latencyMs))
                                         .monospacedDigit().foregroundStyle(.green)
                                 } else {
-                                    Text(r.errorMessage ?? "失败")
+                                    Text(r.errorMessage ?? L10n.k("auto.model_detail_view.failed", fallback: "失败"))
                                         .font(.caption).foregroundStyle(.red)
                                 }
                             }
@@ -72,10 +72,10 @@ struct ModelDetailView: View {
                     .padding(.top, 4)
                 }
 
-                GroupBox("对话测试") {
+                GroupBox(L10n.k("auto.model_detail_view.conversation_test", fallback: "对话测试")) {
                     VStack(alignment: .leading, spacing: 8) {
                         if chatMessages.isEmpty {
-                            Text("发送消息与模型对话，验证功能是否正常")
+                            Text(L10n.k("auto.model_detail_view.models", fallback: "发送消息与模型对话，验证功能是否正常"))
                                 .font(.caption).foregroundStyle(.secondary)
                         } else {
                             ScrollView {
@@ -83,7 +83,11 @@ struct ModelDetailView: View {
                                     ForEach(chatMessages.indices, id: \.self) { i in
                                         let msg = chatMessages[i]
                                         HStack(alignment: .top, spacing: 8) {
-                                            Text(msg.role == "user" ? "你" : "模型")
+                                            Text(
+                                                msg.role == "user"
+                                                    ? L10n.k("views.model_detail_view.chat_role_you", fallback: "你")
+                                                    : L10n.k("views.model_detail_view.chat_role_model", fallback: "模型")
+                                            )
                                                 .font(.caption).foregroundStyle(.secondary)
                                                 .frame(width: 36, alignment: .trailing)
                                             Text(msg.text)
@@ -102,15 +106,15 @@ struct ModelDetailView: View {
                             Text(err).font(.caption).foregroundStyle(.red)
                         }
                         HStack {
-                            TextField("输入消息…", text: $chatInput)
+                            TextField(L10n.k("auto.model_detail_view.input", fallback: "输入消息…"), text: $chatInput)
                                 .textFieldStyle(.roundedBorder)
                                 .disabled(isChatting || apiKey == nil)
                                 .onSubmit { Task { await sendChat() } }
-                            Button(isChatting ? "发送中…" : "发送") { Task { await sendChat() } }
+                            Button(isChatting ? L10n.k("auto.model_detail_view.text_c1b894480d", fallback: "发送中…") : L10n.k("auto.model_detail_view.send", fallback: "发送")) { Task { await sendChat() } }
                                 .buttonStyle(.bordered)
                                 .disabled(isChatting || chatInput.trimmingCharacters(in: .whitespaces).isEmpty || apiKey == nil)
                             if !chatMessages.isEmpty {
-                                Button("清空") { chatMessages = [] }
+                                Button(L10n.k("auto.model_detail_view.clear", fallback: "清空")) { chatMessages = [] }
                                     .buttonStyle(.plain).foregroundStyle(.secondary).font(.caption)
                             }
                         }
@@ -119,8 +123,8 @@ struct ModelDetailView: View {
                     .padding(.top, 4)
                 }
 
-                GroupBox("用量统计") {
-                    Text("暂无数据（功能待实现）")
+                GroupBox(L10n.k("auto.model_detail_view.usage_statistics", fallback: "用量统计")) {
+                    Text(L10n.k("auto.model_detail_view.no_data_yet_feature_pending", fallback: "暂无数据（功能待实现）"))
                         .font(.caption).foregroundStyle(.tertiary).padding(.top, 4)
                 }
             }

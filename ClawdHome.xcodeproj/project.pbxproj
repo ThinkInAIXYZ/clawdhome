@@ -15,6 +15,7 @@
 		11E36D7F3E8604EC77253D31 /* AccountKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2AF7BE5DA61BB38781D130C /* AccountKeychain.swift */; };
 		1341606F6D75E669F4AD5C6F /* HealthCheckSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C20B1E3239A0D8780AACFFE /* HealthCheckSheet.swift */; };
 		13E72438B5B5A0997D964566 /* HelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 467287AC8BE705E07CE3C366 /* HelperProtocol.swift */; };
+		14F81C6AACC151937FD46137 /* Stable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = F15483BD5BB3DE26EC5C82BB /* Stable.xcstrings */; };
 		1549B24326311C26E1701BA8 /* CloneClawManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EAFFDC5338D0ACC3A06CDD /* CloneClawManager.swift */; };
 		154A63E1DAAB7EE61B0B79A5 /* ShrimpPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5F77D9351528C6DEEFC633 /* ShrimpPool.swift */; };
 		161CF0DA6073064097C48EB7 /* GatewayProviderKeySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DDA04FF248DF6DFABA79529 /* GatewayProviderKeySheet.swift */; };
@@ -27,7 +28,6 @@
 		27EAFF1F05E455130B72B22C /* ConnectionCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA495FBE50F338DEF7A55573 /* ConnectionCollector.swift */; };
 		288E715EE589A7D76A68455D /* CloneClawModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */; };
 		2B83A4BD11F3D23D044AAE93 /* CommandOutputPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC7D68C6A9C0FEAD2BF30EA /* CommandOutputPanel.swift */; };
-		F1A7D6434A5E91B2000F7A11 /* FeishuChannelOnboardingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A7D6434A5E91B2000F7A12 /* FeishuChannelOnboardingSheet.swift */; };
 		2B9BC8730AB3B78B208861BD /* ProcessModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76A73EBA6C37473C494E20D /* ProcessModels.swift */; };
 		315C6CEC2A97C5D4E9AB211A /* LogViewerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9F9AD8700941AFBF1F34673 /* LogViewerSheet.swift */; };
 		32D9B81BFBF01C467C5EF953 /* ManagedUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77A62354E2723BF8150EDAF6 /* ManagedUser.swift */; };
@@ -37,6 +37,7 @@
 		3A3F42C9E4F1D40D1214CDA8 /* ModelPingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9363CE8F8DF377157FAE1D71 /* ModelPingService.swift */; };
 		3B5E95B51DE262D04BC56FBA /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE86644B5FC4578CCB9C6FF /* ConfigWriter.swift */; };
 		3B8D878C4D830AA5B9390BED /* ProviderKeyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */; };
+		3D7B3D66E56E6D32CFC39D1F /* NodeDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB4BFDC6320B7C035E22C884 /* NodeDownloader.swift */; };
 		42784EA2B3A334AF6AF8E881 /* LLMManagerTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155680EF2A850BB4215754A8 /* LLMManagerTab.swift */; };
 		46AE452761C8D472CAEA4D2D /* LocalAIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */; };
 		4853C793D4CFACBA2205144A /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5177F3CC658EC613A8D76CF1 /* UpdateChecker.swift */; };
@@ -53,10 +54,10 @@
 		61122BA3487584B844D57BB3 /* GlobalModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89D6CAF4FF1A5DD31BFE266E /* GlobalModelStore.swift */; };
 		647F82D1797FC9D80FF86C16 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6474BB5EEF5B87B65666E978 /* NetworkModels.swift */; };
 		69BF685059BE6B7AEB250E07 /* HelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F39F27916E7B56B4688842 /* HelperClient.swift */; };
+		6B6B8E332776101B198630AC /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 806D35D06FA4AFEDDAA912AD /* L10n.swift */; };
 		6E8E862B9D09268ABD86C619 /* DashboardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7E5FF24A0246F866BFF996 /* DashboardModels.swift */; };
 		6F9101485DF1A9C40CE39C65 /* ProcessModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76A73EBA6C37473C494E20D /* ProcessModels.swift */; };
 		7038876B62DAABF3E0D5672A /* InstallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9091EC70CE63EDC745444F7 /* InstallManager.swift */; };
-		7049A3C1B8E2F600D1234567 /* NodeDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7049A3C1B8E2F600D1234568 /* NodeDownloader.swift */; };
 		70983A6303C616757188623F /* ConfigEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3793B8613E7B9D05787DDB8B /* ConfigEditorSheet.swift */; };
 		7A11F882D706844DD3EF518F /* WizardConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C409AF7F1CC045A211F7F27E /* WizardConnection.swift */; };
 		7A19BA1D08E439220F09D5CD /* CloneClawSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A692ECF0806042C37B632CB /* CloneClawSheet.swift */; };
@@ -87,6 +88,7 @@
 		BC5CEE02450C97178238E88A /* UserDirectoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1B997BD537C60950ED9DD3 /* UserDirectoryService.swift */; };
 		BD0432723571AEC02E2938BF /* AddProviderModelSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F559F8DF4F4C0D9025810C7 /* AddProviderModelSheet.swift */; };
 		BD523BF37E409AB6FA1D6D27 /* UpgradeConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800B6FF59BBD8AF1F7721480 /* UpgradeConfirmSheet.swift */; };
+		BE20A437ADC0E25426EC7750 /* FeishuChannelOnboardingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40305CC98880248434C11684 /* FeishuChannelOnboardingSheet.swift */; };
 		C11B2113E212A1BBC279EC49 /* UserFileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAD293FACB59B2F45FF9D4A /* UserFileManager.swift */; };
 		C72DF5FEB4906D0AA459139E /* UserDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46E3226FB170F1C35BB73B5 /* UserDetailView.swift */; };
 		C745EB73F505520BE75D6E88 /* GeneratedVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */; };
@@ -102,6 +104,7 @@
 		E0C160E2E632CFA784D943BB /* ModelConfigWizard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 922B9F0332920FE79B0EF0B8 /* ModelConfigWizard.swift */; };
 		E0CEA96A5FE7483DCDA6DC57 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C17363344B936997067010 /* DashboardView.swift */; };
 		E0ED6F92E9AE39B2FEDD39E7 /* TTSManagerTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C3E609AB9C9441B29AE88E3 /* TTSManagerTab.swift */; };
+		E2AF48EFF2D8470BF06BF3CA /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D52045A2822C8DE4579737 /* AppLanguage.swift */; };
 		ED40DBD9596B50649987B59A /* FallbackManagerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D5AE60DA0449BC16B42DAA /* FallbackManagerSheet.swift */; };
 		EFB354F72C60BB435A62D4B4 /* NetworkPolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54673332FA3CBD020381CD20 /* NetworkPolicyView.swift */; };
 		F7E5A9A08C640A5E7684F7B1 /* UserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */; };
@@ -109,6 +112,7 @@
 		FB35463F40D9D7B9C7166E4E /* OpenDirectory.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 05980B1012E839BAA33AD8CE /* OpenDirectory.framework */; };
 		FBCAA5C027073F120856AC08 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6474BB5EEF5B87B65666E978 /* NetworkModels.swift */; };
 		FD7FF04B316FD5DFE140F7E4 /* BackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E6E607472BCCB5C61A50EA /* BackupView.swift */; };
+		FEEE2C606A086D0D191F1200 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 5D7D1F12DB908202E9E91105 /* AppIcon.icns */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -143,6 +147,7 @@
 		3793B8613E7B9D05787DDB8B /* ConfigEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigEditorSheet.swift; sourceTree = "<group>"; };
 		38A912F0A5514717350027B5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		3C20B1E3239A0D8780AACFFE /* HealthCheckSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCheckSheet.swift; sourceTree = "<group>"; };
+		40305CC98880248434C11684 /* FeishuChannelOnboardingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeishuChannelOnboardingSheet.swift; sourceTree = "<group>"; };
 		41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderKeyConfig.swift; sourceTree = "<group>"; };
 		41E6E607472BCCB5C61A50EA /* BackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupView.swift; sourceTree = "<group>"; };
 		442171CEA410BEA9920973CC /* DashboardCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCollector.swift; sourceTree = "<group>"; };
@@ -157,6 +162,7 @@
 		54673332FA3CBD020381CD20 /* NetworkPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkPolicyView.swift; sourceTree = "<group>"; };
 		5C63492C6F439FBCA71D8BF5 /* NStatCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NStatCollector.swift; sourceTree = "<group>"; };
 		5C6946296FDE26A0A2A7A8EC /* ProcessManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessManager.swift; sourceTree = "<group>"; };
+		5D7D1F12DB908202E9E91105 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		5F97A493AAFD488D32EC70F5 /* ClawdHome.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClawdHome.entitlements; sourceTree = "<group>"; };
 		6474BB5EEF5B87B65666E978 /* NetworkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkModels.swift; sourceTree = "<group>"; };
 		67AB0A69D9F15FA551CD2FFE /* ClawPoolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawPoolView.swift; sourceTree = "<group>"; };
@@ -165,6 +171,7 @@
 		6F559F8DF4F4C0D9025810C7 /* AddProviderModelSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddProviderModelSheet.swift; sourceTree = "<group>"; };
 		77A62354E2723BF8150EDAF6 /* ManagedUser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedUser.swift; sourceTree = "<group>"; };
 		800B6FF59BBD8AF1F7721480 /* UpgradeConfirmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradeConfirmSheet.swift; sourceTree = "<group>"; };
+		806D35D06FA4AFEDDAA912AD /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
 		81B47FD58BA6519F937D3A52 /* GatewayLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayLog.swift; sourceTree = "<group>"; };
 		81E5226083EF9356F8C51363 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
 		89D6CAF4FF1A5DD31BFE266E /* GlobalModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalModelStore.swift; sourceTree = "<group>"; };
@@ -195,7 +202,6 @@
 		BD7D77647990268437A60AA1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BFAD293FACB59B2F45FF9D4A /* UserFileManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserFileManager.swift; sourceTree = "<group>"; };
 		BFC7D68C6A9C0FEAD2BF30EA /* CommandOutputPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandOutputPanel.swift; sourceTree = "<group>"; };
-		F1A7D6434A5E91B2000F7A12 /* FeishuChannelOnboardingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelOnboarding/FeishuChannelOnboardingSheet.swift; sourceTree = "<group>"; };
 		C1EAFFDC5338D0ACC3A06CDD /* CloneClawManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneClawManager.swift; sourceTree = "<group>"; };
 		C409AF7F1CC045A211F7F27E /* WizardConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardConnection.swift; sourceTree = "<group>"; };
 		C587B0EBFC1DB0062C0195FF /* VoiceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceProfile.swift; sourceTree = "<group>"; };
@@ -212,13 +218,15 @@
 		DFD718E7777280D5BC94DE0D /* UserPasswordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPasswordStore.swift; sourceTree = "<group>"; };
 		E46E3226FB170F1C35BB73B5 /* UserDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDetailView.swift; sourceTree = "<group>"; };
 		E9F9AD8700941AFBF1F34673 /* LogViewerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerSheet.swift; sourceTree = "<group>"; };
+		EB4BFDC6320B7C035E22C884 /* NodeDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeDownloader.swift; sourceTree = "<group>"; };
 		EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAIModels.swift; sourceTree = "<group>"; };
 		F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneClawModels.swift; sourceTree = "<group>"; };
+		F15483BD5BB3DE26EC5C82BB /* Stable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Stable.xcstrings; sourceTree = "<group>"; };
+		F3D52045A2822C8DE4579737 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
 		F71156CAD7673A87034AF0D8 /* FileModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileModels.swift; sourceTree = "<group>"; };
 		F76A73EBA6C37473C494E20D /* ProcessModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessModels.swift; sourceTree = "<group>"; };
 		F7D8BDF74255B3A14CF069B0 /* ClawdHome.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClawdHome.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F9091EC70CE63EDC745444F7 /* InstallManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallManager.swift; sourceTree = "<group>"; };
-		7049A3C1B8E2F600D1234568 /* NodeDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeDownloader.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -244,6 +252,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0836569296D71804D39AAEE4 /* ChannelOnboarding */ = {
+			isa = PBXGroup;
+			children = (
+				40305CC98880248434C11684 /* FeishuChannelOnboardingSheet.swift */,
+			);
+			path = ChannelOnboarding;
+			sourceTree = "<group>";
+		};
 		3D8863F2146A4E82963EC03B /* Services */ = {
 			isa = PBXGroup;
 			children = (
@@ -298,6 +314,15 @@
 				DBF03DABAB9FAB6E33B46BDE /* VoiceLibraryTab.swift */,
 			);
 			path = ModelManager;
+			sourceTree = "<group>";
+		};
+		7DDDB6BDF87471A716820EF0 /* Localization */ = {
+			isa = PBXGroup;
+			children = (
+				F3D52045A2822C8DE4579737 /* AppLanguage.swift */,
+				806D35D06FA4AFEDDAA912AD /* L10n.swift */,
+			);
+			path = Localization;
 			sourceTree = "<group>";
 		};
 		849301842B00AAF8E21D222B /* Products */ = {
@@ -361,11 +386,14 @@
 		DD78AF08CF47E52FD656EA06 /* ClawdHome */ = {
 			isa = PBXGroup;
 			children = (
+				5D7D1F12DB908202E9E91105 /* AppIcon.icns */,
 				38A912F0A5514717350027B5 /* Assets.xcassets */,
 				5F97A493AAFD488D32EC70F5 /* ClawdHome.entitlements */,
 				1AF76BC505A9925D08297CB1 /* ClawdHomeApp.swift */,
 				13F07CE9D25F72DDB11AB739 /* ContentView.swift */,
 				BD7D77647990268437A60AA1 /* Info.plist */,
+				F15483BD5BB3DE26EC5C82BB /* Stable.xcstrings */,
+				7DDDB6BDF87471A716820EF0 /* Localization */,
 				9572E344E021584CF2DC9A63 /* Models */,
 				3D8863F2146A4E82963EC03B /* Services */,
 				D9AEFAE68497CFF499C58C38 /* Utils */,
@@ -383,7 +411,9 @@
 				442171CEA410BEA9920973CC /* DashboardCollector.swift */,
 				81B47FD58BA6519F937D3A52 /* GatewayLog.swift */,
 				CAA3C56D1FE192B7799A3FDC /* GatewayManager.swift */,
-				F9091EC70CE63EDC745444F7 /* InstallManager.swift */,					7049A3C1B8E2F600D1234568 /* NodeDownloader.swift */,				B9DBC78DA4D1FFD0EB50D466 /* LocalLLMManager.swift */,
+				F9091EC70CE63EDC745444F7 /* InstallManager.swift */,
+				B9DBC78DA4D1FFD0EB50D466 /* LocalLLMManager.swift */,
+				EB4BFDC6320B7C035E22C884 /* NodeDownloader.swift */,
 				5C63492C6F439FBCA71D8BF5 /* NStatCollector.swift */,
 				5C6946296FDE26A0A2A7A8EC /* ProcessManager.swift */,
 				D6C76557D6C46315D058A794 /* ShellRunner.swift */,
@@ -403,7 +433,6 @@
 				94D002A8E22C08FDDD74BE18 /* AppUpdateBanner.swift */,
 				0EB9584EDF129A0295EBB14A /* BackupManagerSheet.swift */,
 				41E6E607472BCCB5C61A50EA /* BackupView.swift */,
-				F1A7D6434A5E91B2000F7A12 /* FeishuChannelOnboardingSheet.swift */,
 				67AB0A69D9F15FA551CD2FFE /* ClawPoolView.swift */,
 				BC953D5E3DFF20B87A053D04 /* CLIConfigStep.swift */,
 				9A692ECF0806042C37B632CB /* CloneClawSheet.swift */,
@@ -428,6 +457,7 @@
 				A623F9F0DFBC22F900B5ACED /* UserFilesView.swift */,
 				0EE6965A7DA630D46B4F1B50 /* UserInitWizardView.swift */,
 				DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */,
+				0836569296D71804D39AAEE4 /* ChannelOnboarding */,
 				78E04859045A1EC490479CDF /* ModelManager */,
 			);
 			path = Views;
@@ -504,6 +534,7 @@
 			knownRegions = (
 				Base,
 				en,
+				"zh-Hans",
 			);
 			mainGroup = 606BD2CE5EDD3B1CA5DBE376;
 			minimizedProjectReferenceProxies = 1;
@@ -525,7 +556,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FEEE2C606A086D0D191F1200 /* AppIcon.icns in Resources */,
 				0E07E58A241BA58310F6443A /* Assets.xcassets in Resources */,
+				14F81C6AACC151937FD46137 /* Stable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -601,6 +634,7 @@
 				11E36D7F3E8604EC77253D31 /* AccountKeychain.swift in Sources */,
 				BD0432723571AEC02E2938BF /* AddProviderModelSheet.swift in Sources */,
 				4FCD2C3BFF60D4569A0E7DD0 /* AddUserSheet.swift in Sources */,
+				E2AF48EFF2D8470BF06BF3CA /* AppLanguage.swift in Sources */,
 				8782D0C95C1470BAA40F3CB3 /* AppLockScreen.swift in Sources */,
 				DA1F41ECCF5EF07721BC8FCF /* AppLockStore.swift in Sources */,
 				B81D3332811AFA345F523E3D /* AppLogger.swift in Sources */,
@@ -609,7 +643,6 @@
 				55CB96D5B61D248282E612F1 /* BackupManagerSheet.swift in Sources */,
 				FD7FF04B316FD5DFE140F7E4 /* BackupView.swift in Sources */,
 				7C6F9710AD100210ABE9D075 /* CLIConfigStep.swift in Sources */,
-				F1A7D6434A5E91B2000F7A11 /* FeishuChannelOnboardingSheet.swift in Sources */,
 				1D4EDB9DB0495FE0EFA54FE4 /* ClawPoolView.swift in Sources */,
 				A8BE1B4D2DCDE54C8F63CBF2 /* ClawdHomeApp.swift in Sources */,
 				B57160D717A6898E887EADDD /* CloneClawModels.swift in Sources */,
@@ -622,6 +655,7 @@
 				6E8E862B9D09268ABD86C619 /* DashboardModels.swift in Sources */,
 				E0CEA96A5FE7483DCDA6DC57 /* DashboardView.swift in Sources */,
 				ED40DBD9596B50649987B59A /* FallbackManagerSheet.swift in Sources */,
+				BE20A437ADC0E25426EC7750 /* FeishuChannelOnboardingSheet.swift in Sources */,
 				0E9D058F70E41C9D8D9E2FBB /* FileModels.swift in Sources */,
 				A17E7AB99A51E1819E434548 /* FormatUtils.swift in Sources */,
 				0B88F32EFCC07BC3B59A465E /* GatewayClient.swift in Sources */,
@@ -633,6 +667,7 @@
 				1341606F6D75E669F4AD5C6F /* HealthCheckSheet.swift in Sources */,
 				69BF685059BE6B7AEB250E07 /* HelperClient.swift in Sources */,
 				13E72438B5B5A0997D964566 /* HelperProtocol.swift in Sources */,
+				6B6B8E332776101B198630AC /* L10n.swift in Sources */,
 				42784EA2B3A334AF6AF8E881 /* LLMManagerTab.swift in Sources */,
 				DDC38ED579B3E862A571B156 /* LocalAIModels.swift in Sources */,
 				9685174F8F965C6D07F8FBCB /* LocalAITab.swift in Sources */,
@@ -689,11 +724,11 @@
 				A74D7C244C8DC0ECFAE9A55B /* HealthCheck.swift in Sources */,
 				4D9977D09130B0CC18E9FEAF /* HelperProtocol.swift in Sources */,
 				7038876B62DAABF3E0D5672A /* InstallManager.swift in Sources */,
-				7049A3C1B8E2F600D1234567 /* NodeDownloader.swift in Sources */,
 				46AE452761C8D472CAEA4D2D /* LocalAIModels.swift in Sources */,
 				5FF1FC550784127BA01FA09D /* LocalLLMManager.swift in Sources */,
 				236B40A5073B4CF61B88CB83 /* NStatCollector.swift in Sources */,
 				647F82D1797FC9D80FF86C16 /* NetworkModels.swift in Sources */,
+				3D7B3D66E56E6D32CFC39D1F /* NodeDownloader.swift in Sources */,
 				33377A070BA5CD38AF3D570D /* ProcessManager.swift in Sources */,
 				6F9101485DF1A9C40CE39C65 /* ProcessModels.swift in Sources */,
 				7F1931508A7DA6D48319500F /* ShellRunner.swift in Sources */,

@@ -168,6 +168,15 @@ make pkg
 make log-helper
 ```
 
+## Internationalization
+
+- Localization guide: [docs/i18n.md](docs/i18n.md)
+- Run i18n checks:
+
+```bash
+make i18n-check
+```
+
 ## Roadmap
 
 - [ ] External key management (Exec-based secrets provider).

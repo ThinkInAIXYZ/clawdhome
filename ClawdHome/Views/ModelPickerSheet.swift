@@ -54,10 +54,10 @@ struct ModelPickerSheet: View {
         VStack(spacing: 0) {
             // 标题栏
             HStack {
-                Text("选择默认模型").font(.headline)
+                Text(L10n.k("views.model_picker_sheet.select_default_model", fallback: "选择默认模型")).font(.headline)
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.escape)
-                Button(applyingModel == nil ? "确认" : "应用中…") {
+                Button(L10n.k("views.model_picker_sheet.cancel", fallback: "取消")) { dismiss() }.keyboardShortcut(.escape)
+                Button(applyingModel == nil ? L10n.k("views.model_picker_sheet.confirm", fallback: "确认") : L10n.k("views.model_picker_sheet.applying", fallback: "应用中…")) {
                     let m = confirmModel
                     guard !m.isEmpty else { return }
                     applyingModel = m
@@ -75,7 +75,7 @@ struct ModelPickerSheet: View {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.caption2).foregroundStyle(Color.accentColor)
-                    Text("来自全局模型池").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("views.model_picker_sheet.global_model_pool", fallback: "来自全局模型池")).font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(.horizontal).padding(.top, 6)
             }
@@ -84,7 +84,7 @@ struct ModelPickerSheet: View {
             if let cur = current, !cur.isEmpty {
                 HStack {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
-                    Text("当前：").foregroundStyle(.secondary).font(.caption)
+                    Text(L10n.k("views.model_picker_sheet.current_colon", fallback: "当前：")).foregroundStyle(.secondary).font(.caption)
                     Text(cur).font(.system(.caption, design: .monospaced))
                     Spacer()
                 }
@@ -95,14 +95,14 @@ struct ModelPickerSheet: View {
             // 搜索 + 手动输入切换
             HStack(spacing: 8) {
                 if useCustom {
-                    TextField("输入模型 ID，如 anthropic/claude-opus-4-6", text: $customInput)
+                    TextField(L10n.k("views.model_picker_sheet.input_model_id_example", fallback: "输入模型 ID，如 anthropic/claude-opus-4-6"), text: $customInput)
                         .textFieldStyle(.roundedBorder)
                 } else {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("搜索模型…", text: $filterText)
+                    TextField(L10n.k("views.model_picker_sheet.search_models", fallback: "搜索模型…"), text: $filterText)
                         .textFieldStyle(.plain)
                 }
-                Button(useCustom ? "从清单选" : "手动输入") {
+                Button(useCustom ? L10n.k("views.model_picker_sheet.choose_from_list", fallback: "从清单选") : L10n.k("views.model_picker_sheet.manual_input", fallback: "手动输入")) {
                     useCustom.toggle()
                     filterText = ""
                     if !useCustom { customInput = "" }
@@ -128,7 +128,7 @@ struct ModelPickerSheet: View {
                                 }
                                 Spacer()
                                 if model.id == current {
-                                    Text("当前").font(.caption2).foregroundStyle(.secondary)
+                                    Text(L10n.k("views.model_picker_sheet.current", fallback: "当前")).font(.caption2).foregroundStyle(.secondary)
                                 } else if model.id == selected {
                                     Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
                                 }
@@ -145,11 +145,11 @@ struct ModelPickerSheet: View {
                 // 手动输入时展示格式提示
                 VStack(spacing: 12) {
                     Image(systemName: "keyboard").font(.largeTitle).foregroundStyle(.secondary)
-                    Text("输入完整模型 ID").font(.headline)
+                    Text(L10n.k("views.model_picker_sheet.input_full_model_id", fallback: "输入完整模型 ID")).font(.headline)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("格式：provider/model-id").font(.caption).foregroundStyle(.secondary)
-                        Text("示例：anthropic/claude-opus-4-6").font(.system(.caption, design: .monospaced))
-                        Text("示例：openrouter/deepseek/deepseek-r1").font(.system(.caption, design: .monospaced))
+                        Text(L10n.k("views.model_picker_sheet.format_provider_model_id", fallback: "格式：provider/model-id")).font(.caption).foregroundStyle(.secondary)
+                        Text(L10n.k("views.model_picker_sheet.example_anthropic_opus", fallback: "示例：anthropic/claude-opus-4-6")).font(.system(.caption, design: .monospaced))
+                        Text(L10n.k("views.model_picker_sheet.example_openrouter_deepseek", fallback: "示例：openrouter/deepseek/deepseek-r1")).font(.system(.caption, design: .monospaced))
                     }
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))

@@ -47,10 +47,10 @@ enum ClawType: String, Sendable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .macosUser:   return "macOS用户"
+        case .macosUser:   return L10n.k("models.managed_user.macosuser", fallback: "macOS用户")
         case .docker:      return "Docker"
         case .ssh:         return "SSH"
-        case .raspberryPi: return "树莓派 / ESP32"
+        case .raspberryPi: return L10n.k("models.managed_user.esp32", fallback: "树莓派 / ESP32")
         }
     }
 
@@ -58,7 +58,7 @@ enum ClawType: String, Sendable, CaseIterable {
     static func defaultIdentifier(for type: ClawType, username: String) -> String {
         switch type {
         case .macosUser:   return "@\(username)"
-        case .docker:      return ":未配置"
+        case .docker:      return L10n.k("models.managed_user.configuration", fallback: ":未配置")
         case .ssh:         return "unknown-host"
         case .raspberryPi: return "unknown-host"
         }
@@ -72,25 +72,25 @@ enum FreezeMode: String, Sendable, Equatable, Codable {
 
     var statusLabel: String {
         switch self {
-        case .pause:  "已暂停"
-        case .normal: "已冻结"
-        case .flash:  "已速冻"
+        case .pause:  L10n.k("models.managed_user.paused", fallback: "已暂停")
+        case .normal: L10n.k("models.managed_user.freeze", fallback: "已冻结")
+        case .flash:  L10n.k("models.managed_user.flash_frozen", fallback: "已速冻")
         }
     }
 
     var title: String {
         switch self {
-        case .pause:  "暂停冻结"
-        case .normal: "普通冻结"
-        case .flash:  "速冻"
+        case .pause:  L10n.k("models.managed_user.pause_freeze_mode", fallback: "暂停冻结")
+        case .normal: L10n.k("models.managed_user.normal_freeze_mode", fallback: "普通冻结")
+        case .flash:  L10n.k("models.managed_user.flash_freeze", fallback: "速冻")
         }
     }
 
     var shortDescription: String {
         switch self {
-        case .pause:  "挂起 openclaw 进程，可恢复继续执行（不释放内存）"
-        case .normal: "停止 Gateway，保留用户空间其他进程"
-        case .flash:  "紧急终止用户空间进程（openclaw 优先）"
+        case .pause:  L10n.k("models.managed_user.suspend_openclaw_processes_resume_later_without_releasing_memory", fallback: "挂起 openclaw 进程，可恢复继续执行（不释放内存）")
+        case .normal: L10n.k("models.managed_user.stop_gateway_userprocess", fallback: "停止 Gateway，保留用户空间其他进程")
+        case .flash:  L10n.k("models.managed_user.userprocess_openclaw", fallback: "紧急终止用户空间进程（openclaw 优先）")
         }
     }
 }
@@ -198,10 +198,10 @@ final class ManagedUser: Identifiable, Hashable {
 
     /// 状态文字，用于 UI 展示
     var statusLabel: String {
-        if let msg = errorMessage { return "异常: \(msg)" }
+        if let msg = errorMessage { return "\(L10n.k("models.managed_user.error_prefix", fallback: "异常:")) \(msg)" }
         if let freezeMode { return freezeMode.statusLabel }
-        if isRunning { return "运行中" }
-        return "未运行"
+        if isRunning { return L10n.k("models.managed_user.running", fallback: "运行中") }
+        return L10n.k("models.managed_user.not_running", fallback: "未运行")
     }
 
     /// 冻结后强制停止网关；解冻只恢复可操作，不自动启动

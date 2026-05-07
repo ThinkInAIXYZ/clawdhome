@@ -25,6 +25,7 @@ struct ClawdHomeApp: App {
     @State private var gatewayHub = GatewayHub()
     @State private var lockStore = AppLockStore()
     @State private var maintenanceWindowRegistry = MaintenanceWindowRegistry()
+    @AppStorage("appLanguage") private var appLanguageRaw = AppLanguage.system.rawValue
 
     init() {
         // 强制忽略上次会话窗口恢复，确保每次启动从全新窗口开始
@@ -35,6 +36,7 @@ struct ClawdHomeApp: App {
     }
 
     var body: some Scene {
+        let appLanguage = AppLanguage(rawValue: appLanguageRaw) ?? .system
         WindowGroup {
             ContentView()
                 .environment(helperClient)
@@ -45,6 +47,7 @@ struct ClawdHomeApp: App {
                 .environment(gatewayHub)
                 .environment(lockStore)
                 .environment(maintenanceWindowRegistry)
+                .environment(\.locale, appLanguage.locale)
                 .task { await maintainConnection() }
                 .task { await updater.checkIfNeeded() }
                 .task { await updater.checkAppIfNeeded() }
@@ -57,7 +60,7 @@ struct ClawdHomeApp: App {
         .windowResizability(.automatic)
         .defaultSize(width: 1040, height: 660)
         .commands {
-            // 隐藏主窗口"新建窗口"菜单项（单主窗口）
+            // 隐藏主窗口L10n.k("clawd_home_app.text_ededdc48", fallback: "新建窗口")菜单项（单主窗口）
             CommandGroup(replacing: .newItem) { }
         }
 
@@ -73,6 +76,7 @@ struct ClawdHomeApp: App {
                     .environment(keychainStore)
                     .environment(gatewayHub)
                     .environment(maintenanceWindowRegistry)
+                    .environment(\.locale, appLanguage.locale)
                     .background(ClawDetailWindowPositioner())
             }
         }
@@ -90,6 +94,7 @@ struct ClawdHomeApp: App {
                 .environment(gatewayHub)
                 .environment(lockStore)
                 .environment(maintenanceWindowRegistry)
+                .environment(\.locale, appLanguage.locale)
         }
         .windowStyle(.titleBar)
         .windowResizability(.automatic)
@@ -100,6 +105,7 @@ struct ClawdHomeApp: App {
                 .environment(helperClient)
                 .environment(shrimpPool)
                 .environment(maintenanceWindowRegistry)
+                .environment(\.locale, appLanguage.locale)
         }
         .windowStyle(.titleBar)
         .windowResizability(.automatic)
@@ -178,20 +184,20 @@ private struct OpenClawQuickCommand: Identifiable {
 }
 
 private let openClawQuickCommandSections: [(section: String, items: [OpenClawQuickCommand])] = [
-    ("查询 / 诊断", [
-        OpenClawQuickCommand(label: "版本查询", command: "openclaw --version"),
-        OpenClawQuickCommand(label: "状态概览", command: "openclaw status"),
-        OpenClawQuickCommand(label: "模型状态", command: "openclaw models status --probe"),
-        OpenClawQuickCommand(label: "已连设备", command: "openclaw devices list"),
-        OpenClawQuickCommand(label: "系统体检", command: "openclaw doctor"),
-        OpenClawQuickCommand(label: "安全审计", command: "openclaw security audit"),
-        OpenClawQuickCommand(label: "实时日志", command: "openclaw logs --follow"),
+    (L10n.k("app.maintenance.quick.section.query_diagnose", fallback: "查询 / 诊断"), [
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.version", fallback: "版本查询"), command: "openclaw --version"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.status_overview", fallback: "状态概览"), command: "openclaw status"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.model_status", fallback: "模型状态"), command: "openclaw models status --probe"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.connected_devices", fallback: "已连设备"), command: "openclaw devices list"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.system_check", fallback: "系统体检"), command: "openclaw doctor"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.security_audit", fallback: "安全审计"), command: "openclaw security audit"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.live_logs", fallback: "实时日志"), command: "openclaw logs --follow"),
     ]),
-    ("配置 / 控制", [
-        OpenClawQuickCommand(label: "交互配置", command: "openclaw configure"),
-        OpenClawQuickCommand(label: "自动修复", command: "openclaw doctor --fix"),
-        OpenClawQuickCommand(label: "频道登录", command: "openclaw channels login"),
-        OpenClawQuickCommand(label: "重启服务", command: "openclaw gateway restart"),
+    (L10n.k("app.maintenance.quick.section.config_control", fallback: "配置 / 控制"), [
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.configure", fallback: "交互配置"), command: "openclaw configure"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.auto_fix", fallback: "自动修复"), command: "openclaw doctor --fix"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.channel_login", fallback: "频道登录"), command: "openclaw channels login"),
+        OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.restart_service", fallback: "重启服务"), command: "openclaw gateway restart"),
     ]),
 ]
 
@@ -205,9 +211,9 @@ private struct MaintenanceTerminalWindow: View {
             MaintenanceTerminalWindowContent(request: request)
         } else {
             ContentUnavailableView(
-                "维护终端参数无效",
+                L10n.k("app.maintenance.invalid_params", fallback: "维护终端参数无效"),
                 systemImage: "exclamationmark.triangle",
-                description: Text("请从虾详情页或初始化向导重新打开维护终端。")
+                description: Text(L10n.k("app.maintenance.invalid_params.desc", fallback: "请从虾详情页或初始化向导重新打开维护终端。"))
             )
         }
     }
@@ -231,7 +237,12 @@ private struct MaintenanceTerminalWindowContent: View {
     private let uiTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var windowTitle: String {
-        "@\(request.username) · 维护窗口 #\(request.index)"
+        L10n.f(
+            "app.maintenance.window.title",
+            fallback: L10n.k("clawd_home_app.arg_num", fallback: "@%@ · 维护窗口 #%d"),
+            request.username,
+            request.index
+        )
     }
     private var isRunning: Bool { didStart && exitCode == nil }
     private var isWaitingInput: Bool {
@@ -249,24 +260,26 @@ private struct MaintenanceTerminalWindowContent: View {
         HStack(spacing: 10) {
             if isRunning {
                 Label(
-                    isWaitingInput ? "运行中（等待输入）" : "运行中",
+                    isWaitingInput
+                        ? L10n.k("app.maintenance.status.running_waiting", fallback: "运行中（等待输入）")
+                        : L10n.k("app.maintenance.status.running", fallback: "运行中"),
                     systemImage: isWaitingInput ? "hourglass" : "play.circle.fill"
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
             } else {
-                Label("已退出", systemImage: "stop.circle")
+                Label(L10n.k("app.maintenance.status.exited", fallback: "已退出"), systemImage: "stop.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Text("耗时 \(elapsedText)")
+            Text(L10n.f("app.maintenance.elapsed", fallback: "耗时 %@", elapsedText))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Button("中断") { terminalControl.sendInterrupt() }
+            Button(L10n.k("common.action.interrupt", fallback: "中断")) { terminalControl.sendInterrupt() }
                 .disabled(!isRunning)
-            Button("重跑") { startRun() }
-            Button("复制输出") { copyTerminalOutput() }
+            Button(L10n.k("common.action.rerun", fallback: "重跑")) { startRun() }
+            Button(L10n.k("common.action.copy_output", fallback: "复制输出")) { copyTerminalOutput() }
                 .disabled(outputBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
             Spacer(minLength: 0)
@@ -290,7 +303,7 @@ private struct MaintenanceTerminalWindowContent: View {
                 }
             }
         } label: {
-            Text("🦞openclaw 指令")
+            Text(L10n.k("app.maintenance.quick.menu_title", fallback: "🦞openclaw 指令"))
         }
         .menuIndicator(.visible)
         .fixedSize()
@@ -372,10 +385,10 @@ private struct MaintenanceTerminalWindowContent: View {
         exitCode = code
         let normalized = code ?? -999
         if normalized == 0 {
-            statusText = "维护命令执行完成。"
+            statusText = L10n.k("app.clawd_home_app.done", fallback: "维护命令执行完成。")
             appLog("[maintenance-window] command success user=\(request.username) index=\(request.index)")
         } else {
-            statusText = "命令已退出（exit \(normalized)）。请查看终端输出。"
+            statusText = String(format: L10n.k("app.clawd_home_app.command_exit_code", fallback: "命令已退出（exit %d）。请查看终端输出。"), normalized)
             appLog(
                 "[maintenance-window] command failed user=\(request.username) index=\(request.index) exit=\(normalized)",
                 level: .error
@@ -386,12 +399,12 @@ private struct MaintenanceTerminalWindowContent: View {
     private func copyTerminalOutput() {
         let text = outputBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
-            statusText = "暂无可复制的命令输出。"
+            statusText = L10n.k("app.clawd_home_app.no_output_to_copy", fallback: "暂无可复制的命令输出。")
             return
         }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        statusText = "命令输出已复制。"
+        statusText = L10n.k("app.clawd_home_app.output_copied", fallback: "命令输出已复制。")
     }
 
     @ViewBuilder
@@ -399,9 +412,9 @@ private struct MaintenanceTerminalWindowContent: View {
         if let shrimp = pool.snapshot?.shrimps.first(where: { $0.username == request.username }) {
             HStack(spacing: 10) {
                 resourceChip(icon: "cpu", title: "CPU", value: shrimp.cpuPercent.map { String(format: "%.1f%%", $0) } ?? "—")
-                resourceChip(icon: "memorychip", title: "内存", value: shrimp.memRssMB.map { formatMem($0) } ?? "—")
-                resourceChip(icon: "arrow.down.circle", title: "入网", value: FormatUtils.formatBps(shrimp.netRateInBps))
-                resourceChip(icon: "arrow.up.circle", title: "出网", value: FormatUtils.formatBps(shrimp.netRateOutBps))
+                resourceChip(icon: "memorychip", title: L10n.k("common.resource.memory", fallback: "内存"), value: shrimp.memRssMB.map { formatMem($0) } ?? "—")
+                resourceChip(icon: "arrow.down.circle", title: L10n.k("common.resource.net_in", fallback: "入网"), value: FormatUtils.formatBps(shrimp.netRateInBps))
+                resourceChip(icon: "arrow.up.circle", title: L10n.k("common.resource.net_out", fallback: "出网"), value: FormatUtils.formatBps(shrimp.netRateOutBps))
                 Spacer(minLength: 0)
             }
             .font(.caption2)
@@ -460,9 +473,9 @@ private struct ChannelOnboardingWindow: View {
             }
         } else {
             ContentUnavailableView(
-                "通道参数无效",
+                L10n.k("app.channel.invalid_params", fallback: "通道参数无效"),
                 systemImage: "exclamationmark.triangle",
-                description: Text("请从虾详情页重新打开通道配置窗口。")
+                description: Text(L10n.k("app.channel.invalid_params.desc", fallback: "请从虾详情页重新打开通道配置窗口。"))
             )
         }
     }
@@ -537,7 +550,7 @@ private struct ClawDetailWindow: View {
                 ContentUnavailableView(
                     "@\(username)",
                     systemImage: "person.slash",
-                    description: Text("该用户已被删除或尚未加载")
+                    description: Text(L10n.k("app.claw_detail.user_missing", fallback: "该用户已被删除或尚未加载"))
                 )
                 .navigationTitle("@\(username)")
             }

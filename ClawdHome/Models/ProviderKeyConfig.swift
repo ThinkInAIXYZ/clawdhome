@@ -30,7 +30,7 @@ struct ProviderKeyConfig: Identifiable {
         self.sideConfigs = sideConfigs
     }
 
-    var inputLabel: String { isUrlConfig ? "服务地址" : "API Key" }
+    var inputLabel: String { isUrlConfig ? L10n.k("models.provider_key_config.service_url", fallback: "服务地址") : "API Key" }
 }
 
 /// 所有支持的 Provider（顺序即界面显示顺序）

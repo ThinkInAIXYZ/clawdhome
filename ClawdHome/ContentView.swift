@@ -29,7 +29,7 @@ struct ContentView: View {
             }
 
             if let err = pool.loadError {
-                Text("加载用户失败：\(err)")
+                Text(L10n.f("content_view.text_c851a279", fallback: "加载用户失败：%@", String(describing: err)))
                     .foregroundStyle(.red)
                     .font(.caption)
                     .padding(8)
@@ -37,26 +37,26 @@ struct ContentView: View {
 
             NavigationSplitView {
                 List(selection: $navSelection) {
-                    Section("日常") {
-                        Label("仪表盘", systemImage: "gauge.with.dots.needle.33percent")
+                    Section(L10n.k("auto.content_view.daily", fallback: "日常")) {
+                        Label(L10n.k("auto.content_view.dashboard", fallback: "仪表盘"), systemImage: "gauge.with.dots.needle.33percent")
                             .tag(NavDestination.dashboard)
-                        Label { Text("虾塘") } icon: { Text("🦞") }
+                        Label { Text(L10n.k("auto.content_view.claw_pool", fallback: "虾塘")) } icon: { Text("🦞") }
                             .tag(NavDestination.clawPool)
                     }
-                    Section("服务") {
-                        Label { Text("模型") } icon: { Text("🧠") }
+                    Section(L10n.k("auto.content_view.services", fallback: "服务")) {
+                        Label { Text(L10n.k("auto.content_view.models", fallback: "模型")) } icon: { Text("🧠") }
                             .tag(NavDestination.models)
-                        Label("网络", systemImage: "network")
+                        Label(L10n.k("auto.content_view.network", fallback: "网络"), systemImage: "network")
                             .tag(NavDestination.network)
                         Label("AI Lab", systemImage: "flask.fill")
                             .tag(NavDestination.aiLab)
                     }
-                    Section("系统") {
-                        Label("安全审计", systemImage: "shield.lefthalf.filled")
+                    Section(L10n.k("auto.content_view.system", fallback: "系统")) {
+                        Label(L10n.k("auto.content_view.security_audit", fallback: "安全审计"), systemImage: "shield.lefthalf.filled")
                             .tag(NavDestination.audit)
-                        Label("备份", systemImage: "externaldrive.badge.timemachine")
+                        Label(L10n.k("auto.content_view.backups", fallback: "备份"), systemImage: "externaldrive.badge.timemachine")
                             .tag(NavDestination.backup)
-                        Label("设置", systemImage: "gearshape")
+                        Label(L10n.k("auto.content_view.settings", fallback: "设置"), systemImage: "gearshape")
                             .tag(NavDestination.settings)
                     }
                 }
@@ -71,7 +71,7 @@ struct ContentView: View {
                         AppUpdateBanner()
                             .environment(updater)
                         HStack(spacing: 6) {
-                            Text("内测版")
+                            Text(L10n.k("auto.content_view.beta", fallback: "内测版"))
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                             Text("BETA")
@@ -98,11 +98,18 @@ struct ContentView: View {
                     if upgradeCount > 0 {
                         ToolbarItem(placement: .primaryAction) {
                             Button { navSelection = .clawPool } label: {
-                                Label("可升级 (\(upgradeCount))",
+                                Label(L10n.f("content_view.text_312c16ea", fallback: "可升级 (%@)", String(describing: upgradeCount)),
                                       systemImage: "arrow.up.circle.fill")
                                     .foregroundStyle(.blue)
                             }
-                            .help("有 \(upgradeCount) 只虾可升级到 v\(updater.latestVersion ?? "")")
+                            .help(
+                                L10n.f(
+                                    "content_view.upgrade_help",
+                                    fallback: "有 %@ 只虾可升级到 v%@",
+                                    String(describing: upgradeCount),
+                                    updater.latestVersion ?? ""
+                                )
+                            )
                         }
                     }
                     if lockStore.isEnabled {
@@ -111,7 +118,7 @@ struct ContentView: View {
                                 Image(systemName: lockStore.isLocked ? "lock.fill" : "lock.open.fill")
                                     .foregroundStyle(lockStore.isLocked ? .red : .secondary)
                             }
-                            .help(lockStore.isLocked ? "已锁定" : "点击锁定 App")
+                            .help(lockStore.isLocked ? L10n.k("auto.content_view.locked", fallback: "已锁定") : L10n.k("auto.content_view.app", fallback: "点击锁定 App"))
                             .disabled(lockStore.isLocked)
                         }
                     }
@@ -131,7 +138,7 @@ struct ContentView: View {
                     #if DEBUG
                     ModelManagerView()
                     #else
-                    ComingSoonView(title: "模型", icon: "cpu.fill")
+                    ComingSoonView(title: L10n.k("auto.content_view.models", fallback: "模型"), icon: "cpu.fill")
                     #endif
                 case .aiLab:
                     AILabView()
@@ -188,7 +195,7 @@ struct ComingSoonView: View {
                 .foregroundStyle(.tertiary)
             Text(title)
                 .font(.title2).fontWeight(.medium)
-            Text("敬请期待")
+            Text(L10n.k("auto.content_view.coming_soon", fallback: "敬请期待"))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

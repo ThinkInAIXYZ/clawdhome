@@ -318,15 +318,15 @@ final class ShrimpPool {
         switch mode {
         case .pause:
             if let resumed = openclawProcesses.first(where: { !$0.state.uppercased().hasPrefix("T") }) {
-                return "检测到暂停进程恢复运行（PID \(resumed.pid)）"
+                return String(format: L10n.k("services.shrimp_pool.paused_process_resumed_pid", fallback: "检测到暂停进程恢复运行（PID %d）"), resumed.pid)
             }
             return nil
         case .normal, .flash:
             if gatewayRunning {
-                return "检测到 Gateway 异常启动"
+                return L10n.k("services.shrimp_pool.gateway_start", fallback: "检测到 Gateway 异常启动")
             }
             if let restarted = openclawProcesses.first {
-                return "检测到 openclaw 相关进程异常启动（PID \(restarted.pid)）"
+                return String(format: L10n.k("services.shrimp_pool.openclaw_abnormal_start_pid", fallback: "检测到 openclaw 相关进程异常启动（PID %d）"), restarted.pid)
             }
             return nil
         }

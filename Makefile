@@ -7,7 +7,7 @@ SCHEME_HLP := ClawdHomeHelper
 INFO_PLIST := ClawdHome/Info.plist
 PLIST      := /usr/libexec/PlistBuddy
 
-.PHONY: help bump-build build build-helper build-release install-helper uninstall-helper pkg pkg-skip-build release release-notes clean version
+.PHONY: help bump-build build build-helper build-release install-helper uninstall-helper pkg pkg-skip-build release release-notes clean version i18n i18n-check
 
 RELEASE_NOTES_MODE ?= edit
 WEBSITE_DIR ?= ../clawdhome_website
@@ -32,6 +32,8 @@ help:
 	@echo "  install-pkg      安装最新 pkg 到 /Applications（需要 sudo）"
 	@echo "  log-helper       实时跟踪 Helper 日志（/tmp/clawdhome-helper.log）"
 	@echo "  log-app          实时跟踪 App 系统日志（os_log）"
+	@echo "  i18n             运行 Stable.xcstrings 本地化检查"
+	@echo "  i18n-check       本地化 CI 检查（未本地化/缺失翻译/占位符一致性）"
 	@echo "  clean            清理 build/ dist/ 目录"
 
 # ── 版本管理 ──────────────────────────────────────────────────────────────────
@@ -154,3 +156,13 @@ log-app:
 clean:
 	rm -rf build/ dist/
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME_APP) clean -quiet
+
+# ── i18n ──────────────────────────────────────────────────────────────────────
+
+i18n:
+	$(MAKE) i18n-check
+
+i18n-check:
+	scripts/i18n_check_untranslated.py
+	scripts/i18n_ci_check.py
+	scripts/i18n_forbid_legacy_t.py

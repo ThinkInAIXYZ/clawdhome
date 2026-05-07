@@ -43,10 +43,10 @@ struct BackupManagerSheet: View {
             HStack {
                 Image(systemName: "archivebox")
                     .foregroundStyle(.tint)
-                Text("备份管理").font(.headline)
+                Text(L10n.k("auto.backup_manager_sheet.backup_management", fallback: "备份管理")).font(.headline)
                 Text("@\(username)").foregroundStyle(.secondary)
                 Spacer()
-                Button("完成") { dismiss() }
+                Button(L10n.k("auto.backup_manager_sheet.done", fallback: "完成")) { dismiss() }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.escape, modifiers: [])
             }
@@ -57,9 +57,9 @@ struct BackupManagerSheet: View {
 
             if entries.isEmpty {
                 ContentUnavailableView(
-                    "暂无备份",
+                    L10n.k("auto.backup_manager_sheet.no_backups", fallback: "暂无备份"),
                     systemImage: "archivebox",
-                    description: Text("升级 openclaw 时开启备份后，历史备份将显示在这里。")
+                    description: Text(L10n.k("auto.backup_manager_sheet.upgrade_openclaw_backup_backup", fallback: "升级 openclaw 时开启备份后，历史备份将显示在这里。"))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -78,7 +78,7 @@ struct BackupManagerSheet: View {
             Divider()
 
             HStack {
-                Text("\(entries.count) 个备份")
+                Text(L10n.f("views.backup_manager_sheet.text_f8ebb8c7", fallback: "%@ 个备份", String(describing: entries.count)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -89,7 +89,7 @@ struct BackupManagerSheet: View {
         .frame(width: 520, height: 380)
         .task { loadEntries() }
         .confirmationDialog(
-            confirmDeleteEntry.map { _ in "删除备份？" } ?? "",
+            confirmDeleteEntry.map { _ in L10n.k("backup.manager.delete_confirm.title", fallback: "删除备份？") } ?? "",
             isPresented: Binding(
                 get: { confirmDeleteEntry != nil },
                 set: { if !$0 { confirmDeleteEntry = nil } }
@@ -97,18 +97,18 @@ struct BackupManagerSheet: View {
             titleVisibility: .visible
         ) {
             if let entry = confirmDeleteEntry {
-                Button("删除", role: .destructive) {
+                Button(L10n.k("auto.backup_manager_sheet.delete", fallback: "删除"), role: .destructive) {
                     deleteEntry(entry)
                     confirmDeleteEntry = nil
                 }
-                Button("取消", role: .cancel) { confirmDeleteEntry = nil }
+                Button(L10n.k("auto.backup_manager_sheet.cancel", fallback: "取消"), role: .cancel) { confirmDeleteEntry = nil }
             }
         } message: {
             if let entry = confirmDeleteEntry {
                 if entry.isActiveRollback {
-                    Text("\(entry.filename)\n\n这是当前回退备份，删除后将无法回退到上一版本。")
+                    Text(L10n.f("backup.manager.delete_confirm.active_rollback_message", fallback: "%@\n\n这是当前回退备份，删除后将无法回退到上一版本。", entry.filename))
                 } else {
-                    Text("\(entry.filename)\n\n此操作不可撤销。")
+                    Text(L10n.f("backup.manager.delete_confirm.irreversible_message", fallback: "%@\n\n此操作不可撤销。", entry.filename))
                 }
             }
         }
@@ -172,7 +172,7 @@ private struct BackupRow: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if entry.isActiveRollback {
-                        Text("回退用")
+                        Text(L10n.k("auto.backup_manager_sheet.rollback", fallback: "回退用"))
                             .font(.caption2)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)

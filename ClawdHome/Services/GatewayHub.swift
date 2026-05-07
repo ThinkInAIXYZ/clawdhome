@@ -233,13 +233,13 @@ final class GatewayHub {
 
     // MARK: - 即时状态标记（UI 操作时调用，消除等 probe 确认的延迟）
 
-    /// UI 发起启动/重启时调用，立即显示"启动中"
+    /// UI 发起启动/重启时调用，立即显示L10n.k("services.gateway_hub.text_d19349b5", fallback: "启动中")
     func markPendingStart(username: String) {
         readinessMap[username] = .starting
         healthzDeadSince.removeValue(forKey: username)
     }
 
-    /// UI 发起停止时调用，立即显示"已停止"
+    /// UI 发起停止时调用，立即显示L10n.k("services.gateway_hub.text_82977854", fallback: "已停止")
     func markPendingStopped(username: String) {
         readinessMap[username] = .stopped
         healthzDeadSince.removeValue(forKey: username)

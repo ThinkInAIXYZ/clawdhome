@@ -35,7 +35,7 @@ struct LocalAITab: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("本地推理引擎 omlx", systemImage: "cpu.fill")
+                    Label(L10n.k("auto.local_aitab.local_omlx", fallback: "本地推理引擎 omlx"), systemImage: "cpu.fill")
                         .font(.headline)
                     Spacer()
                     statusBadge
@@ -50,18 +50,18 @@ struct LocalAITab: View {
 
                 HStack(spacing: 8) {
                     if !llmStatus.isInstalled {
-                        Button(isInstalling ? "安装中…" : "一键安装 omlx") {
+                        Button(isInstalling ? L10n.k("auto.local_aitab.text_b2c6913616", fallback: "安装中…") : L10n.k("auto.local_aitab.omlx", fallback: "一键安装 omlx")) {
                             Task { await installOmlx() }
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(isInstalling)
                     } else if llmStatus.isRunning {
-                        Text("端口 \(llmStatus.port)").font(.caption).foregroundStyle(.secondary)
+                        Text(L10n.f("views.model_manager.local_aitab.text_f8186bb5", fallback: "端口 %@", String(describing: llmStatus.port))).font(.caption).foregroundStyle(.secondary)
                         Spacer()
-                        Button("停止") { Task { await stopLLM() } }
+                        Button(L10n.k("auto.local_aitab.stop", fallback: "停止")) { Task { await stopLLM() } }
                             .buttonStyle(.bordered)
                     } else {
-                        Button(isStarting ? "启动中…" : "启动服务") {
+                        Button(isStarting ? L10n.k("auto.local_aitab.start", fallback: "启动中…") : L10n.k("auto.local_aitab.start", fallback: "启动服务")) {
                             Task { await startLLM() }
                         }
                         .buttonStyle(.borderedProminent)
@@ -76,12 +76,12 @@ struct LocalAITab: View {
     private var statusBadge: some View {
         Group {
             if !llmStatus.isInstalled {
-                Text("未安装").foregroundStyle(.secondary)
+                Text(L10n.k("auto.local_aitab.not_installed", fallback: "未安装")).foregroundStyle(.secondary)
             } else if llmStatus.isRunning {
-                Label("运行中", systemImage: "circle.fill")
+                Label(L10n.k("auto.local_aitab.running", fallback: "运行中"), systemImage: "circle.fill")
                     .foregroundStyle(.green).font(.caption)
             } else {
-                Label("已停止", systemImage: "circle.fill")
+                Label(L10n.k("auto.local_aitab.stop", fallback: "已停止"), systemImage: "circle.fill")
                     .foregroundStyle(.orange).font(.caption)
             }
         }
@@ -93,12 +93,12 @@ struct LocalAITab: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("本地模型库").font(.headline)
+                    Text(L10n.k("auto.local_aitab.localmodels", fallback: "本地模型库")).font(.headline)
                     Spacer()
                     Button {
                         NSWorkspace.shared.open(URL(fileURLWithPath: modelDir))
                     } label: {
-                        Label("打开目录", systemImage: "folder")
+                        Label(L10n.k("auto.local_aitab.opendirectory", fallback: "打开目录"), systemImage: "folder")
                     }
                     .buttonStyle(.bordered)
                     .font(.caption)
@@ -121,14 +121,14 @@ struct LocalAITab: View {
                 }
                 if !notInstalled.isEmpty {
                     if !installedModels.isEmpty { Divider() }
-                    Text("可下载（精选）").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.k("auto.local_aitab.downloadable_curated", fallback: "可下载（精选）")).font(.caption).foregroundStyle(.secondary)
                     ForEach(notInstalled) { curated in
                         curatedModelRow(curated)
                     }
                 }
 
                 if installedModels.isEmpty && curatedLLMModels.isEmpty {
-                    Text("模型目录为空，可下载精选模型或手动放入目录")
+                    Text(L10n.k("auto.local_aitab.modelsdirectory_modelsdirectory", fallback: "模型目录为空，可下载精选模型或手动放入目录"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -142,7 +142,7 @@ struct LocalAITab: View {
                 HStack {
                     Text(model.displayName).font(.callout)
                     if model.isManual {
-                        Text("手动").font(.caption2)
+                        Text(L10n.k("auto.local_aitab.manual", fallback: "手动")).font(.caption2)
                             .padding(.horizontal, 4).padding(.vertical, 1)
                             .background(.secondary.opacity(0.2))
                             .cornerRadius(4)
@@ -166,14 +166,21 @@ struct LocalAITab: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(curated.displayName).font(.callout)
-                Text("\(curated.description) · 约 \(String(format: "%.1f", curated.estimatedSizeGB)) GB")
+                Text(
+                    L10n.f(
+                        "views.model_manager.local_aitab.curated_size",
+                        fallback: "%@ · 约 %@ GB",
+                        curated.description,
+                        String(format: "%.1f", curated.estimatedSizeGB)
+                    )
+                )
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             if downloadingModelId == curated.id {
                 ProgressView().scaleEffect(0.7)
             } else {
-                Button("下载") {
+                Button(L10n.k("auto.local_aitab.download", fallback: "下载")) {
                     Task { await downloadModel(curated.id) }
                 }
                 .buttonStyle(.bordered)
@@ -196,7 +203,7 @@ struct LocalAITab: View {
         successMessage = nil
         do {
             try await helperClient.installOmlx()
-            successMessage = "omlx 安装成功"
+            successMessage = L10n.k("auto.local_aitab.omlx", fallback: "omlx 安装成功")
             await refreshStatus()
         } catch {
             errorMessage = error.localizedDescription
@@ -233,7 +240,7 @@ struct LocalAITab: View {
             try await helperClient.downloadLocalModel(modelId)
             await refreshStatus()
         } catch {
-            errorMessage = "下载失败：\(error.localizedDescription)"
+            errorMessage = L10n.f("views.model_manager.local_aitab.text_a175d2e4", fallback: "下载失败：%@", String(describing: error.localizedDescription))
         }
         downloadingModelId = nil
     }

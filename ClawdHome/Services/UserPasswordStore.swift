@@ -14,12 +14,12 @@ enum UserPasswordStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidPasswordEncoding:
-            return "密码编码失败，请重试。"
+            return L10n.k("services.user_password_store.passwordfailed_retry", fallback: "密码编码失败，请重试。")
         case .keychainDenied(let operation, _):
-            return "Keychain 访问被拒绝（\(operation)），请在系统弹窗中允许后重试。"
+            return String(format: L10n.k("services.user_password_store.keychain_denied_operation", fallback: "Keychain 访问被拒绝（%@），请在系统弹窗中允许后重试。"), operation)
         case .keychainFailure(let operation, let status):
             let message = (SecCopyErrorMessageString(status, nil) as String?) ?? "OSStatus \(status)"
-            return "\(operation)失败：\(message)"
+            return String(format: L10n.k("services.user_password_store.operation_failed_detail", fallback: "%@失败：%@"), operation, message)
         }
     }
 }
@@ -58,7 +58,7 @@ enum UserPasswordStore {
         var addQuery = query
         addQuery[kSecValueData as String] = data
         let status = secItemAdd(addQuery as CFDictionary, nil)
-        try throwIfKeychainFailure(status, operation: "保存用户密码")
+        try throwIfKeychainFailure(status, operation: L10n.k("services.user_password_store.saveuserpassword", fallback: "保存用户密码"))
     }
 
     /// 读取已存储的密码（未存储时返回 nil）
@@ -73,7 +73,7 @@ enum UserPasswordStore {
         var result: CFTypeRef?
         let status = secItemCopyMatching(query as CFDictionary, &result)
         if status == errSecItemNotFound { return nil }
-        try throwIfKeychainFailure(status, operation: "读取用户密码")
+        try throwIfKeychainFailure(status, operation: L10n.k("services.user_password_store.userpassword", fallback: "读取用户密码"))
         guard let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }

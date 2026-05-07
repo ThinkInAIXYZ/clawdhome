@@ -11,7 +11,7 @@ struct ApplyCredentialSheet: View {
     @Environment(GlobalModelStore.self) private var modelStore
     @Environment(HelperClient.self) private var helperClient
 
-    /// 是否正在整体同步（"同步全部"按钮使用）
+    /// 是否正在整体同步（L10n.k("views.apply_credential_sheet.sync_all", fallback: "同步全部")按钮使用）
     @State private var isSyncingAll = false
     /// 单个账户同步中（accountId → 是否在进行）
     @State private var syncingId: UUID? = nil
@@ -30,22 +30,22 @@ struct ApplyCredentialSheet: View {
             // ── 标题栏 ─────────────────────────────────────────
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("同步凭据").font(.headline)
-                    Text("将全局 secrets 写入虾的 ~/.openclaw/")
+                    Text(L10n.k("views.apply_credential_sheet.sync_credentials", fallback: "同步凭据")).font(.headline)
+                    Text(L10n.k("views.apply_credential_sheet.secrets_openclaw", fallback: "将全局 secrets 写入虾的 ~/.openclaw/"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if isSyncingAll {
                     ProgressView().scaleEffect(0.8)
                 } else {
-                    Button("同步全部") {
+                    Button(L10n.k("views.apply_credential_sheet.sync_all", fallback: "同步全部")) {
                         Task { await syncAll() }
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(!canSyncAny)
                 }
-                Button("完成") { dismiss() }
+                Button(L10n.k("views.apply_credential_sheet.done", fallback: "完成")) { dismiss() }
                     .keyboardShortcut(.return)
             }
             .padding()
@@ -63,9 +63,9 @@ struct ApplyCredentialSheet: View {
             // ── 账户列表 ──────────────────────────────────────
             if modelStore.providers.isEmpty {
                 ContentUnavailableView {
-                    Label("尚未配置全局账户", systemImage: "key")
+                    Label(L10n.k("views.apply_credential_sheet.configuration_account", fallback: "尚未配置全局账户"), systemImage: "key")
                 } description: {
-                    Text("在「全局模型池」中添加 Provider 账户并配置凭据，\n即可在此一键同步到虾的 openclaw 配置。")
+                    Text(L10n.k("credential.apply.empty.desc", fallback: "在「全局模型池」中添加 Provider 账户并配置凭据，\n即可在此一键同步到虾的 openclaw 配置。"))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -75,7 +75,7 @@ struct ApplyCredentialSheet: View {
                             accountRow(account)
                         }
                     } header: {
-                        Text("同步后虾的 auth-profiles.json 将使用 keyRef 格式引用 secrets")
+                        Text(L10n.k("views.apply_credential_sheet.auth_profiles_json_keyref_secrets", fallback: "同步后虾的 auth-profiles.json 将使用 keyRef 格式引用 secrets"))
                             .font(.caption).foregroundStyle(.secondary)
                             .textCase(nil)
                     }
@@ -122,7 +122,7 @@ struct ApplyCredentialSheet: View {
                 if syncingId == account.id {
                     ProgressView().scaleEffect(0.7)
                 } else {
-                    Button("同步") {
+                    Button(L10n.k("views.apply_credential_sheet.text_6a620e3c", fallback: "同步")) {
                         Task { await syncAccount(account) }
                     }
                     .buttonStyle(.bordered)
@@ -130,14 +130,14 @@ struct ApplyCredentialSheet: View {
                 }
 
             case .oauth:
-                Button("OAuth 授权") { }
+                Button(L10n.k("views.apply_credential_sheet.oauth_authorize", fallback: "OAuth 授权")) { }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(true)
-                    .help("OAuth 授权功能即将推出")
+                    .help(L10n.k("views.apply_credential_sheet.oauth_authorize_a1326d", fallback: "OAuth 授权功能即将推出"))
 
             case .missing:
-                Text("未配置凭据")
+                Text(L10n.k("views.apply_credential_sheet.configuration_credential", fallback: "未配置凭据"))
                     .font(.caption2).foregroundStyle(.tertiary)
             }
         }
@@ -199,7 +199,7 @@ struct ApplyCredentialSheet: View {
     private func syncAccount(_ account: ProviderTemplate) async {
         let secretKey = "\(account.providerGroupId):\(account.name)"
         guard let value = GlobalSecretsStore.shared.value(for: secretKey) else {
-            errorMsg = "「\(account.name)」未配置凭据，请先在全局模型池中设置"
+            errorMsg = String(format: L10n.k("views.apply_credential_sheet.account_missing_credentials", fallback: "「%@」未配置凭据，请先在全局模型池中设置"), account.name)
             return
         }
         syncingId = account.id
@@ -212,10 +212,10 @@ struct ApplyCredentialSheet: View {
                 secretsPayload: secretsPayload,
                 authProfilesPayload: authProfilesPayload
             )
-            successMsg = "「\(account.name)」已同步到 \(username)"
+            successMsg = String(format: L10n.k("views.apply_credential_sheet.account_synced_to_user", fallback: "「%@」已同步到 %@"), account.name, username)
             _ = value  // suppress unused warning
         } catch {
-            errorMsg = "同步失败：\(error.localizedDescription)"
+            errorMsg = String(format: L10n.k("views.apply_credential_sheet.sync_failed_detail", fallback: "同步失败：%@"), error.localizedDescription)
         }
         syncingId = nil
     }
@@ -229,7 +229,7 @@ struct ApplyCredentialSheet: View {
         let providerKeys = modelStore.providers.map { "\($0.providerGroupId):\($0.name)" }
         let relevantKeys = allEntries.map(\.secretKey).filter { providerKeys.contains($0) }
         guard !relevantKeys.isEmpty else {
-            errorMsg = "没有已配置凭据的账户可同步"
+            errorMsg = L10n.k("views.apply_credential_sheet.configurationaccountsync", fallback: "没有已配置凭据的账户可同步")
             isSyncingAll = false
             return
         }
@@ -241,9 +241,9 @@ struct ApplyCredentialSheet: View {
                 secretsPayload: secretsPayload,
                 authProfilesPayload: authProfilesPayload
             )
-            successMsg = "已同步 \(relevantKeys.count) 个账户到 \(username)"
+            successMsg = String(format: L10n.k("views.apply_credential_sheet.synced_account_count_to_user", fallback: "已同步 %d 个账户到 %@"), relevantKeys.count, username)
         } catch {
-            errorMsg = "同步失败：\(error.localizedDescription)"
+            errorMsg = String(format: L10n.k("views.apply_credential_sheet.sync_failed_detail", fallback: "同步失败：%@"), error.localizedDescription)
         }
         isSyncingAll = false
     }

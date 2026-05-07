@@ -23,11 +23,11 @@ final class DaemonInstaller {
     /// 状态描述，用于 UI 展示
     var statusDescription: String {
         switch service.status {
-        case .notRegistered:    return "未安装"
-        case .enabled:          return "已安装并运行"
-        case .requiresApproval: return "等待用户授权（系统设置→登录项）"
-        case .notFound:         return "未找到（请检查 app bundle）"
-        @unknown default:       return "未知状态"
+        case .notRegistered:    return L10n.k("services.daemon_installer.not_installed", fallback: "未安装")
+        case .enabled:          return L10n.k("services.daemon_installer.run", fallback: "已安装并运行")
+        case .requiresApproval: return L10n.k("services.daemon_installer.waitinguser_settings", fallback: "等待用户授权（系统设置→登录项）")
+        case .notFound:         return L10n.k("services.daemon_installer.app_bundle", fallback: "未找到（请检查 app bundle）")
+        @unknown default:       return L10n.k("services.daemon_installer.unknownstatus", fallback: "未知状态")
         }
     }
 

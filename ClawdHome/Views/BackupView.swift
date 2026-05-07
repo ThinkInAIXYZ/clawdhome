@@ -12,13 +12,18 @@ struct BackupView: View {
     @State private var isBackingUpAll = false
     @State private var backingUpUser: String?
     @State private var errorMessage: String?
+    private let relativeDateFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter
+    }()
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
 
                 // 备份位置
-                GroupBox("备份位置") {
+                GroupBox(L10n.k("auto.backup_view.backup", fallback: "备份位置")) {
                     HStack {
                         Text(backupDirectory.path)
                             .font(.caption)
@@ -26,7 +31,7 @@ struct BackupView: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer()
-                        Button("在 Finder 中显示") {
+                        Button(L10n.k("auto.backup_view.finder", fallback: "在 Finder 中显示")) {
                             NSWorkspace.shared.open(backupDirectory)
                         }
                         .buttonStyle(.plain)
@@ -37,10 +42,10 @@ struct BackupView: View {
                 }
 
                 // 备份操作
-                GroupBox("备份操作") {
+                GroupBox(L10n.k("auto.backup_view.backup", fallback: "备份操作")) {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Button(isBackingUpAll ? "备份中…" : "备份全部用户") {
+                            Button(isBackingUpAll ? L10n.k("auto.backup_view.backup", fallback: "备份中…") : L10n.k("auto.backup_view.backupuser", fallback: "备份全部用户")) {
                                 Task { await backupAll() }
                             }
                             .buttonStyle(.borderedProminent)
@@ -64,7 +69,7 @@ struct BackupView: View {
                                         ProgressView().scaleEffect(0.7)
                                             .frame(width: 50)
                                     } else {
-                                        Button("备份") {
+                                        Button(L10n.k("auto.backup_view.backups", fallback: "备份")) {
                                             Task { await backupOne(user: user) }
                                         }
                                         .buttonStyle(.plain)
@@ -87,10 +92,10 @@ struct BackupView: View {
                 }
 
                 // 备份记录
-                GroupBox("备份记录（\(backups.count)）") {
+                GroupBox(L10n.f("views.backup_view.text_50f6634f", fallback: "备份记录（%@）", String(describing: backups.count))) {
                     VStack(alignment: .leading, spacing: 0) {
                         if backups.isEmpty {
-                            Text("暂无备份")
+                            Text(L10n.k("auto.backup_view.no_backups", fallback: "暂无备份"))
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .center)
                                 .padding(.vertical, 12)
@@ -101,12 +106,13 @@ struct BackupView: View {
                                         Text(backup.filename)
                                             .font(.system(.caption, design: .monospaced))
                                             .lineLimit(1)
-                                        Text("\(backup.formattedSize) · \(backup.date, style: .relative)前")
+                                        let relativeText = relativeDateFormatter.localizedString(for: backup.date, relativeTo: Date())
+                                        Text(L10n.f("views.backup_view.text_f010b454", fallback: "%@ · %@", backup.formattedSize, relativeText))
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                     }
                                     Spacer()
-                                    Button("显示") {
+                                    Button(L10n.k("auto.backup_view.show", fallback: "显示")) {
                                         NSWorkspace.shared.activateFileViewerSelecting([backup.url])
                                     }
                                     .buttonStyle(.plain)
@@ -126,7 +132,7 @@ struct BackupView: View {
             }
             .padding(20)
         }
-        .navigationTitle("备份")
+        .navigationTitle(L10n.k("auto.backup_view.backups", fallback: "备份"))
         .task { refreshBackupList() }
     }
 

@@ -17,13 +17,13 @@ enum GatewayClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notConnected:
-            return "Gateway 未连接"
+            return L10n.k("services.gateway_client.gateway", fallback: "Gateway 未连接")
         case .connectFailed(let msg):
-            return "连接失败：\(msg)"
+            return String(format: L10n.k("services.gateway_client.connect_failed_message", fallback: "连接失败：%@"), msg)
         case .requestFailed(let code, let msg):
             return code.map { "[\($0)] \(msg)" } ?? msg
         case .encodingError(let err):
-            return "JSON 编码错误：\(err.localizedDescription)"
+            return String(format: L10n.k("services.gateway_client.json_encoding_error", fallback: "JSON 编码错误：%@"), err.localizedDescription)
         }
     }
 }
@@ -205,7 +205,7 @@ actor GatewayClient {
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await Task.sleep(nanoseconds: 6_000_000_000)
-                throw GatewayClientError.connectFailed("connect.challenge 超时")
+                throw GatewayClientError.connectFailed(L10n.k("services.gateway_client.connect_challenge_timeout", fallback: "connect.challenge 超时"))
             }
             group.addTask {
                 while true {
@@ -227,7 +227,7 @@ actor GatewayClient {
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await Task.sleep(nanoseconds: 10_000_000_000)
-                throw GatewayClientError.connectFailed("connect response 超时")
+                throw GatewayClientError.connectFailed(L10n.k("services.gateway_client.connect_response_timeout", fallback: "connect response 超时"))
             }
             group.addTask {
                 while true {
@@ -271,7 +271,7 @@ actor GatewayClient {
                 if type == "res", let id = dict["id"] as? String {
                     guard let cont = pending.removeValue(forKey: id) else { continue }
                     if let ok = dict["ok"] as? Bool, !ok {
-                        let errMsg = (dict["error"] as? [String: Any])?["message"] as? String ?? "请求失败"
+                        let errMsg = (dict["error"] as? [String: Any])?["message"] as? String ?? L10n.k("services.gateway_client.request_failed", fallback: "请求失败")
                         let errCode = (dict["error"] as? [String: Any])?["code"] as? String
                         cont.resume(throwing: GatewayClientError.requestFailed(code: errCode, message: errMsg))
                     } else {
