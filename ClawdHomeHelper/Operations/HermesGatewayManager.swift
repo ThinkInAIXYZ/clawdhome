@@ -63,12 +63,12 @@ struct HermesGatewayManager {
                 }
                 Thread.sleep(forTimeInterval: 0.3)
                 try writePlist(newPlist, to: plistPath)
-                try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
+                try bootstrapSystem(label: label, plistPath: plistPath)
             }
         } else {
             helperLog("[HermesGateway] START_STEP: 首次注册，bootstrap @\(username)")
             try writePlist(newPlist, to: plistPath)
-            try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
+            try bootstrapSystem(label: label, plistPath: plistPath)
         }
 
         helperLog("[HermesGateway] START_OK: label=\(label) @\(username)")
@@ -186,6 +186,40 @@ struct HermesGatewayManager {
     private static func writePlist(_ content: String, to path: String) throws {
         try content.write(toFile: path, atomically: true, encoding: .utf8)
         try FilePermissionHelper.setRootPlistPermissions(path)
+    }
+
+    private static func bootstrapSystem(label: String, plistPath: String) throws {
+        var lastError: Error?
+        for attempt in 1...3 {
+            do {
+                try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
+                return
+            } catch {
+                lastError = error
+                guard shouldRetryBootstrap(error), attempt < 3 else { throw error }
+
+                let lintResult = (try? run("/usr/bin/plutil", args: ["-lint", plistPath])) ?? "(plutil failed)"
+                let printResult = (try? run("/bin/launchctl", args: ["print", "system/\(label)"])) ?? "(service not found)"
+                helperLog(
+                    "[HermesGateway] START_WARN: bootstrap attempt \(attempt)/3 失败，准备重试 label=\(label) plist=\(plistPath) lint=\(clampLog(lintResult)) print=\(clampLog(printResult))",
+                    level: .warn
+                )
+
+                _ = try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])
+                Thread.sleep(forTimeInterval: 0.5 * Double(attempt))
+            }
+        }
+        if let lastError { throw lastError }
+    }
+
+    private static func shouldRetryBootstrap(_ error: Error) -> Bool {
+        guard case let ShellError.nonZeroExit(command, status, _) = error else { return false }
+        return status == 5 && command.contains("/bin/launchctl bootstrap system ")
+    }
+
+    private static func clampLog(_ text: String, max: Int = 240) -> String {
+        guard text.count > max else { return text }
+        return String(text.prefix(max)) + "...(truncated)"
     }
 }
 

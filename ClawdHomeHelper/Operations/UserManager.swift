@@ -2,6 +2,7 @@
 // 用 OpenDirectory / dscl 管理 macOS 标准用户账户（需要 root 权限）
 
 import Foundation
+import Darwin
 
 struct UserManager {
 
@@ -35,6 +36,9 @@ struct UserManager {
     /// 删除用户账户（可选保留 home）并完成关联清理
     static func deleteUser(username: String, keepHome: Bool, auth: DirectoryAdminAuth? = nil) throws {
         prepareDeleteUser(username: username)
+        // Helper 作为 root 运行时，直接使用 root 身份执行目录操作更稳定；
+        // 携带 -u/-P 在部分系统会触发无交互授权异常或权限错误。
+        let commandAuth: DirectoryAdminAuth? = (geteuid() == 0) ? nil : auth
 
         // 用户已不存在时保持幂等：仅清理 helper 状态并返回成功
         guard userRecordExists(username: username) else {
@@ -44,13 +48,13 @@ struct UserManager {
 
         var sysadminctlArgs = ["-deleteUser", username]
         if keepHome { sysadminctlArgs.append("-keepHome") }
-        if let auth {
-            sysadminctlArgs = ["-adminUser", auth.user, "-adminPassword", auth.password] + sysadminctlArgs
+        if let commandAuth {
+            sysadminctlArgs = ["-adminUser", commandAuth.user, "-adminPassword", commandAuth.password] + sysadminctlArgs
         }
 
         func deleteViaDscl() throws {
-            if let auth {
-                try dscl(auth: auth, ["-delete", "/Users/\(username)"])
+            if let commandAuth {
+                try dscl(auth: commandAuth, ["-delete", "/Users/\(username)"])
             } else {
                 try dscl(["-delete", "/Users/\(username)"])
             }
