@@ -474,6 +474,8 @@ struct CharacterDefTabView: View {
         guard let agentId = agentId else { return }
         do {
             try await helperClient.removeAgent(username: username, agentId: agentId)
+            // 重启 gateway 让删除生效
+            try? await helperClient.restartGateway(username: username)
             // 删除后的 UI 刷新由 UserDetailView 的 onChange 处理
         } catch {
             loadError = error.localizedDescription
