@@ -24,6 +24,9 @@ xcuserdata/
 .swiftpm/
 Package.resolved
 
+# Embedded LLM Wiki 本地构建产物
+EmbeddedLLMWiki/runtime/target/
+
 # 自动生成
 ClawdHomeHelper/GeneratedVersion.swift
 

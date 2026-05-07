@@ -7,6 +7,8 @@ enum NavDestination: Hashable {
     case dashboard
     case clawPool
     case vaultFiles
+    case notes
+    case wikiSupport
     case prompts
     case network
     case aiLab
@@ -53,6 +55,10 @@ struct ContentView: View {
                             .tag(NavDestination.clawPool)
                         Label(L10n.k("auto.content_view.vault_files", fallback: "文件共享"), systemImage: "folder.badge.person.crop")
                             .tag(NavDestination.vaultFiles)
+                        Label(L10n.k("content_view.notes_center", fallback: "笔记"), systemImage: "book.closed")
+                            .tag(NavDestination.notes)
+                        Label("Wiki Support", systemImage: "wrench.and.screwdriver")
+                            .tag(NavDestination.wikiSupport)
                         Label("Prompt", systemImage: "text.bubble")
                             .tag(NavDestination.prompts)
                     }
@@ -143,6 +149,14 @@ struct ContentView: View {
                     .environment(helperClient)
                 case .vaultFiles:
                     VaultFilesView()
+                        .environment(helperClient)
+                        .environment(pool)
+                case .notes:
+                    WikiHostView {
+                        navSelection = .wikiSupport
+                    }
+                case .wikiSupport:
+                    NotesCenterView()
                         .environment(helperClient)
                         .environment(pool)
                 case .prompts:

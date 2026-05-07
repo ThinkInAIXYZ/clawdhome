@@ -1,0 +1,69 @@
+name: Package Bundles
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Package target set
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - macos-aarch64
+          - macos-x64
+          - windows-x64
+          - linux-x64
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            id: macos-aarch64
+            args: '--target aarch64-apple-darwin'
+            rust_target: aarch64-apple-darwin
+          - platform: macos-latest
+            id: macos-x64
+            args: '--target x86_64-apple-darwin'
+            rust_target: x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            id: linux-x64
+            args: ''
+            rust_target: ''
+          - platform: windows-latest
+            id: windows-x64
+            args: ''
+            rust_target: ''
+
+    if: ${{ github.event.inputs.target == 'all' || github.event.inputs.target == matrix.id }}
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup build environment
+        uses: ./.github/actions/setup-tauri-build
+        with:
+          node-version: "20"
+          rust-target: ${{ matrix.rust_target }}
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v1
+        with:
+          includeDebug: false
+          includeRelease: true
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: "llm-wiki-[platform]-[arch]-[bundle]"
+          args: ${{ matrix.args }}

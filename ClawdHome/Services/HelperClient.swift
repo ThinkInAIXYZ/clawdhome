@@ -423,6 +423,74 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.vault_init_failed", fallback: "Vault 初始化失败")) }
     }
 
+    func setupLlmWikiNotes(username: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.setupLlmWikiNotes(username: username) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "LLM Wiki notes 初始化失败") }
+    }
+
+    func repairLlmWikiProject() async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: .seconds(120)) { done in
+            proxy.repairLlmWikiProject { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "LLM Wiki project 修复失败") }
+    }
+
+    func repairLlmWikiMapping(username: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.repairLlmWikiMapping(username: username) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "LLM Wiki 映射修复失败") }
+    }
+
+    func repairLlmWikiRuntimePermissions() async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.repairLlmWikiRuntimePermissions { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "LLM Wiki runtime 修复失败") }
+    }
+
+    func repairBundledLlmWikiSkill(username: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.repairBundledLlmWikiSkill(username: username) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "LLM Wiki skill 修复失败") }
+    }
+
+    func auditLlmWikiState() async -> LLMWikiGlobalAudit? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            let json: String = try await xpcCall(timeout: .seconds(3)) { done in
+                proxy.auditLlmWikiState { done($0) }
+            }
+            guard let data = json.data(using: .utf8) else { return nil }
+            return try JSONDecoder().decode(LLMWikiGlobalAudit.self, from: data)
+        } catch {
+            appLog("[llmwiki] audit global failed: \(error.localizedDescription)", level: .warn)
+            return nil
+        }
+    }
+
+    func auditLlmWikiUserState(username: String) async -> LLMWikiUserAudit? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            let json: String = try await xpcCall(timeout: .seconds(3)) { done in
+                proxy.auditLlmWikiUserState(username: username) { done($0) }
+            }
+            guard let data = json.data(using: .utf8) else { return nil }
+            return try JSONDecoder().decode(LLMWikiUserAudit.self, from: data)
+        } catch {
+            appLog("[llmwiki] audit user \(username) failed: \(error.localizedDescription)", level: .warn)
+            return nil
+        }
+    }
+
     /// 删除用户（由 Helper 以 root 执行）
     func deleteUser(username: String, keepHome: Bool, adminUser: String, adminPassword: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
