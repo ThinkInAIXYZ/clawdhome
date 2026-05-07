@@ -46,6 +46,7 @@ final class GatewayCronStore {
             jobs = try await client.cronList()
             error = nil
         } catch {
+            appLog("GatewayCronStore refresh error: \(error.localizedDescription)", level: .error)
             self.error = error.localizedDescription
         }
     }
@@ -55,7 +56,7 @@ final class GatewayCronStore {
         do {
             runEntries = try await client.cronRuns(jobId: jobId)
         } catch {
-            // runs 加载失败静默处理，不覆盖主 error
+            appLog("GatewayCronStore refreshRuns(\(jobId)) error: \(error.localizedDescription)", level: .error)
         }
     }
 

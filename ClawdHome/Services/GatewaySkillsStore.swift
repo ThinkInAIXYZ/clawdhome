@@ -40,6 +40,7 @@ final class GatewaySkillsStore {
             skills = report.skills
             error = nil
         } catch {
+            appLog("GatewaySkillsStore refresh error: \(error.localizedDescription)", level: .error)
             self.error = error.localizedDescription
         }
     }

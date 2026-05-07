@@ -82,8 +82,11 @@ struct GatewayManager {
         do {
             try ConfigWriter.setConfig(username: username, key: "gateway.port", value: String(resolvedPort))
             try ConfigWriter.setConfig(username: username, key: "gateway.mode", value: "local")
+            // 允许 ClawdHome（本地 Control UI）以 token auth 连接而无需 device identity
+            // gateway 默认会清空无 device identity 客户端的 scopes，此配置保留 localhost 客户端的 scopes
+            try ConfigWriter.setConfig(username: username, key: "gateway.controlUi.allowInsecureAuth", value: "true")
             GatewayLog.log("START_STEP", username: username,
-                detail: "config 写入成功: port=\(resolvedPort) mode=local")
+                detail: "config 写入成功: port=\(resolvedPort) mode=local allowInsecureAuth=true")
         } catch {
             GatewayLog.log("START_FAIL", username: username,
                 detail: "config 写入失败: \(error.localizedDescription)")

@@ -98,7 +98,7 @@ actor GatewayClient {
                     "minProtocol": 3,
                     "maxProtocol": 3,
                     "client": [
-                        "id": "openclaw-macos",
+                        "id": "openclaw-control-ui",
                         "displayName": "ClawdHome",
                         "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0",
                         "platform": "macos",
