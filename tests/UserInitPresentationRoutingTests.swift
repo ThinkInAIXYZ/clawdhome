@@ -19,6 +19,8 @@ struct UserInitPresentationRoutingTests {
                 versionChecked: true,
                 hasInitStep: false,
                 hasPendingInitWizard: true,
+                hasInstalledOpenClawHint: false,
+                isGatewayOperationalHint: false,
                 isAdmin: false,
                 isMacOSUser: true
             ),
@@ -31,6 +33,8 @@ struct UserInitPresentationRoutingTests {
                 versionChecked: false,
                 hasInitStep: false,
                 hasPendingInitWizard: false,
+                hasInstalledOpenClawHint: false,
+                isGatewayOperationalHint: false,
                 isAdmin: false,
                 isMacOSUser: true
             ),
@@ -43,6 +47,8 @@ struct UserInitPresentationRoutingTests {
                 versionChecked: true,
                 hasInitStep: true,
                 hasPendingInitWizard: true,
+                hasInstalledOpenClawHint: false,
+                isGatewayOperationalHint: false,
                 isAdmin: true,
                 isMacOSUser: true
             ),
@@ -55,11 +61,27 @@ struct UserInitPresentationRoutingTests {
                 versionChecked: true,
                 hasInitStep: false,
                 hasPendingInitWizard: false,
+                hasInstalledOpenClawHint: true,
+                isGatewayOperationalHint: false,
                 isAdmin: false,
                 isMacOSUser: true
             ),
             equals: .detailTabs,
             "initialized users should stay in the normal detail tabs"
+        )
+
+        expect(
+            resolveUserInitPresentation(
+                versionChecked: false,
+                hasInitStep: false,
+                hasPendingInitWizard: false,
+                hasInstalledOpenClawHint: true,
+                isGatewayOperationalHint: false,
+                isAdmin: false,
+                isMacOSUser: true
+            ),
+            equals: .detailTabs,
+            "cached runtime hints should bypass the loading gate"
         )
 
         guard shouldEmbedOverviewGatewayConsole(

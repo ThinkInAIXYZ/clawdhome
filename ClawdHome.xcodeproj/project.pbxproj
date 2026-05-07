@@ -215,6 +215,7 @@
 		E31BC807CD66ED973B4DDB0B /* HelperImpl+Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE60C673397402540C236C95 /* HelperImpl+Diagnostics.swift */; };
 		E6FF122DB4FEB06A401BFC96 /* AgentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F115A85A4379CCBE8899FDB8 /* AgentManager.swift */; };
 		E7E82F61DD2D204B321B1710 /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62AE0CAFA22F67436019A51 /* BackupModels.swift */; };
+		E984B1493F46C8C58EF6FE0D /* VaultPermissionGuardian.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E0B89C871BDA2D5F629EB4 /* VaultPermissionGuardian.swift */; };
 		EAE109F85C1B6AE01667DC15 /* HermesIMPlatforms.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7A075B154CD7DCEB68CB3 /* HermesIMPlatforms.swift */; };
 		EBE0317E6293A88D48C9397B /* HermesWizardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3054CF3A88705201107FB7F /* HermesWizardState.swift */; };
 		ED40DBD9596B50649987B59A /* FallbackManagerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D5AE60DA0449BC16B42DAA /* FallbackManagerSheet.swift */; };
@@ -328,6 +329,7 @@
 		67B0925580BD2EF371BC98D4 /* WizardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardModels.swift; sourceTree = "<group>"; };
 		67CAB911E8CA15AEFAEA037C /* ShrimpInitWizardV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrimpInitWizardV2.swift; sourceTree = "<group>"; };
 		6805588FE98C2E1FE665C5F1 /* ModelManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerView.swift; sourceTree = "<group>"; };
+		69E0B89C871BDA2D5F629EB4 /* VaultPermissionGuardian.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultPermissionGuardian.swift; sourceTree = "<group>"; };
 		6CC9E8292B772B2D7305F978 /* HelperImpl+Install.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Install.swift"; sourceTree = "<group>"; };
 		6DACAEF3ABEDBC65F590466B /* QuickFileTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickFileTransfer.swift; sourceTree = "<group>"; };
 		6E1B997BD537C60950ED9DD3 /* UserDirectoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDirectoryService.swift; sourceTree = "<group>"; };
@@ -725,6 +727,7 @@
 				BFAD293FACB59B2F45FF9D4A /* UserFileManager.swift */,
 				14984A3D87B04508056F24CF /* UserManager.swift */,
 				B20AA8CD71AB761800F6128E /* VaultManager.swift */,
+				69E0B89C871BDA2D5F629EB4 /* VaultPermissionGuardian.swift */,
 			);
 			path = Operations;
 			sourceTree = "<group>";
@@ -1229,6 +1232,7 @@
 				844ED367CC5266A513A5FADE /* UserInitPresentationRouting.swift in Sources */,
 				52DC4DCC5F6553B9DA7AE563 /* UserManager.swift in Sources */,
 				B4186F49E2F4E5365DA22652 /* VaultManager.swift in Sources */,
+				E984B1493F46C8C58EF6FE0D /* VaultPermissionGuardian.swift in Sources */,
 				8880D4FA5302740F6CD8F7B2 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
