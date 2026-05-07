@@ -36,36 +36,36 @@ struct CuratedLocalModel: Identifiable {
 let curatedLLMModels: [CuratedLocalModel] = [
     CuratedLocalModel(
         id: "mlx-community/Qwen2.5-7B-Instruct-4bit",
-        displayName: "Qwen2.5 7B（推荐）",
+        displayName: String(localized: "model.qwen25.7b.name", defaultValue: "Qwen2.5 7B（推荐）"),
         estimatedSizeGB: 4.5,
-        description: "均衡型，中英双语，代码能力强"
+        description: String(localized: "model.qwen25.7b.desc", defaultValue: "均衡型，中英双语，代码能力强")
     ),
     CuratedLocalModel(
         id: "mlx-community/Qwen2.5-3B-Instruct-4bit",
-        displayName: "Qwen2.5 3B（轻量）",
+        displayName: String(localized: "model.qwen25.3b.name", defaultValue: "Qwen2.5 3B（轻量）"),
         estimatedSizeGB: 2.0,
-        description: "内存占用小，速度快，8GB 机器首选"
+        description: String(localized: "model.qwen25.3b.desc", defaultValue: "内存占用小，速度快，8GB 机器首选")
     ),
     CuratedLocalModel(
         id: "mlx-community/Llama-3.2-3B-Instruct-4bit",
         displayName: "Llama 3.2 3B",
         estimatedSizeGB: 1.8,
-        description: "Meta 轻量旗舰，英文为主"
+        description: String(localized: "model.llama32.3b.desc", defaultValue: "Meta 轻量旗舰，英文为主")
     ),
 ]
 
 let curatedTTSModels: [CuratedLocalModel] = [
     CuratedLocalModel(
         id: "mlx-community/Qwen3-TTS-0.6B-MLX",
-        displayName: "Qwen3-TTS 0.6B（快速）",
+        displayName: String(localized: "model.qwen3tts.0_6b.name", defaultValue: "Qwen3-TTS 0.6B（快速）"),
         estimatedSizeGB: 1.0,
-        description: "响应快，拟真度高"
+        description: String(localized: "model.qwen3tts.0_6b.desc", defaultValue: "响应快，拟真度高")
     ),
     CuratedLocalModel(
         id: "mlx-community/Qwen3-TTS-1.7B-MLX",
-        displayName: "Qwen3-TTS 1.7B（高质量）",
+        displayName: String(localized: "model.qwen3tts.1_7b.name", defaultValue: "Qwen3-TTS 1.7B（高质量）"),
         estimatedSizeGB: 2.5,
-        description: "音质更自然，需更多内存"
+        description: String(localized: "model.qwen3tts.1_7b.desc", defaultValue: "音质更自然，需更多内存")
     ),
 ]
 
@@ -74,6 +74,6 @@ let curatedSTTModels: [CuratedLocalModel] = [
         id: "mlx-community/whisper-large-v3-turbo",
         displayName: "Whisper Large v3 Turbo",
         estimatedSizeGB: 1.5,
-        description: "飞快，多语言，推荐首选"
+        description: String(localized: "model.whisper.turbo.desc", defaultValue: "飞快，多语言，推荐首选")
     ),
 ]

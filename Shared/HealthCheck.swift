@@ -45,8 +45,8 @@ enum NodeDistOption: String, CaseIterable, Codable {
 
     var title: String {
         switch self {
-        case .npmmirror: return "npmmirror 加速"
-        case .official:  return "nodejs.org 官方"
+        case .npmmirror: return String(localized: "node.dist.npmmirror", defaultValue: "npmmirror 加速")
+        case .official:  return String(localized: "node.dist.official", defaultValue: "nodejs.org 官方")
         }
     }
 

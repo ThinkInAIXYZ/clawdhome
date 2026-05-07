@@ -191,7 +191,7 @@ struct ModelConfigWizard: View {
 
             Spacer()
 
-            Text(isPrimary ? L10n.k("auto.model_config_wizard.models", fallback: "主模型") : "备用 \(index)")
+            Text(isPrimary ? L10n.k("auto.model_config_wizard.models", fallback: "主模型") : L10n.f("model.config.fallback_index", fallback: "备用 %@", String(index)))
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14).padding(.vertical, 8)

@@ -18,11 +18,11 @@ struct ProcessEntry: Codable, Identifiable {
 
     var stateLabel: String {
         switch state.prefix(1) {
-        case "R": return "运行"
-        case "S": return "等待"
-        case "I": return "空闲"
-        case "Z": return "僵尸"
-        case "T": return "暂停"
+        case "R": return String(localized: "process.state.running", defaultValue: "运行")
+        case "S": return String(localized: "process.state.sleeping", defaultValue: "等待")
+        case "I": return String(localized: "process.state.idle", defaultValue: "空闲")
+        case "Z": return String(localized: "process.state.zombie", defaultValue: "僵尸")
+        case "T": return String(localized: "process.state.stopped", defaultValue: "暂停")
         default:  return String(state.prefix(1))
         }
     }
@@ -100,11 +100,11 @@ struct ProcessDetail: Codable {
 extension ProcessDetail {
     var stateLabel: String {
         switch state.prefix(1) {
-        case "R": return "运行"
-        case "S": return "等待"
-        case "I": return "空闲"
-        case "Z": return "僵尸"
-        case "T": return "暂停"
+        case "R": return String(localized: "process.state.running", defaultValue: "运行")
+        case "S": return String(localized: "process.state.sleeping", defaultValue: "等待")
+        case "I": return String(localized: "process.state.idle", defaultValue: "空闲")
+        case "Z": return String(localized: "process.state.zombie", defaultValue: "僵尸")
+        case "T": return String(localized: "process.state.stopped", defaultValue: "暂停")
         default:  return String(state.prefix(1))
         }
     }
@@ -129,19 +129,19 @@ extension ProcessDetail {
 
 private enum ProcessPurposeCatalog {
     private static let known: [String: String] = [
-        "distnoted": "MacOS 系统通知分发服务，负责跨进程通知通信。",
-        "lsd": "MacOS LaunchServices 服务，负责应用/文档关联与启动解析。",
-        "cfprefsd": "MacOS 系统偏好设置守护进程，负责读写配置缓存。",
-        "trustd": "MacOS 证书信任服务（TLS/证书校验），系统网络安全所需。",
-        "secd": "MacOS 钥匙串与安全策略服务，管理密钥与凭据访问。",
-        "launchd": "MacOS 系统初始化与守护进程管理器，负责拉起后台服务。",
-        "WindowServer": "MacOS 窗口与图形合成服务，负责桌面图形显示。",
-        "kernel_task": "MacOS 内核任务，管理硬件与系统底层资源。",
-        "mds": "MacOS Spotlight 索引服务，负责文件搜索索引。",
-        "mDNSResponder": "MacOS Bonjour/mDNS 网络发现服务。",
-        "logd": "MacOS 统一日志服务，负责系统日志采集与查询。",
-        "runningboardd": "MacOS 进程生命周期与资源调度管理服务。",
-        "tccd": "MacOS 隐私权限服务（相机/麦克风/文件等授权）。"
+        "distnoted":     String(localized: "process.desc.distnoted",    defaultValue: "MacOS 系统通知分发服务，负责跨进程通知通信。"),
+        "lsd":           String(localized: "process.desc.lsd",          defaultValue: "MacOS LaunchServices 服务，负责应用/文档关联与启动解析。"),
+        "cfprefsd":      String(localized: "process.desc.cfprefsd",     defaultValue: "MacOS 系统偏好设置守护进程，负责读写配置缓存。"),
+        "trustd":        String(localized: "process.desc.trustd",       defaultValue: "MacOS 证书信任服务（TLS/证书校验），系统网络安全所需。"),
+        "secd":          String(localized: "process.desc.secd",         defaultValue: "MacOS 钥匙串与安全策略服务，管理密钥与凭据访问。"),
+        "launchd":       String(localized: "process.desc.launchd",      defaultValue: "MacOS 系统初始化与守护进程管理器，负责拉起后台服务。"),
+        "WindowServer":  String(localized: "process.desc.windowserver", defaultValue: "MacOS 窗口与图形合成服务，负责桌面图形显示。"),
+        "kernel_task":   String(localized: "process.desc.kernel_task",  defaultValue: "MacOS 内核任务，管理硬件与系统底层资源。"),
+        "mds":           String(localized: "process.desc.mds",          defaultValue: "MacOS Spotlight 索引服务，负责文件搜索索引。"),
+        "mDNSResponder": String(localized: "process.desc.mdnsresponder",defaultValue: "MacOS Bonjour/mDNS 网络发现服务。"),
+        "logd":          String(localized: "process.desc.logd",         defaultValue: "MacOS 统一日志服务，负责系统日志采集与查询。"),
+        "runningboardd": String(localized: "process.desc.runningboardd",defaultValue: "MacOS 进程生命周期与资源调度管理服务。"),
+        "tccd":          String(localized: "process.desc.tccd",         defaultValue: "MacOS 隐私权限服务（相机/麦克风/文件等授权）。"),
     ]
 
     static func description(forName rawName: String, cmdline _: String) -> String {

@@ -106,10 +106,10 @@ enum GatewayReadiness: Equatable {
     /// UI 显示文字
     var label: String {
         switch self {
-        case .stopped:  "未运行"
-        case .starting: "启动中…"
-        case .ready:    "运行中"
-        case .zombie:   "异常"
+        case .stopped:  String(localized: "gateway.readiness.stopped", defaultValue: "未运行")
+        case .starting: String(localized: "gateway.readiness.starting", defaultValue: "启动中…")
+        case .ready:    String(localized: "gateway.readiness.ready", defaultValue: "运行中")
+        case .zombie:   String(localized: "gateway.readiness.zombie", defaultValue: "异常")
         }
     }
 }

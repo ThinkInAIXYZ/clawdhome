@@ -31,9 +31,9 @@ public struct ShrimpNetworkPolicy: Codable, Sendable {
 
         public var label: String {
             switch self {
-            case .open:      "开放"
-            case .allowlist: "白名单"
-            case .blocklist: "黑名单"
+            case .open:      String(localized: "network.policy.open", defaultValue: "开放")
+            case .allowlist: String(localized: "network.policy.allowlist", defaultValue: "白名单")
+            case .blocklist: String(localized: "network.policy.blocklist", defaultValue: "黑名单")
             }
         }
     }

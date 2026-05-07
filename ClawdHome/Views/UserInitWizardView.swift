@@ -1160,13 +1160,13 @@ struct UserInitWizardView: View {
         await persistState()
         onSessionActiveChanged?(true)
 
-        appendLog("\n▶ 修复 Homebrew 权限（可选）\n")
+        appendLog("\n▶ \(String(localized: "wizard.homebrew.repair.start", defaultValue: "修复 Homebrew 权限（可选）"))\n")
         do {
             try await conn.repairHomebrewPermission(username: user.username)
-            appendLog("✓ Homebrew 权限修复已完成\n")
+            appendLog("✓ \(String(localized: "wizard.homebrew.repair.done", defaultValue: "Homebrew 权限修复已完成"))\n")
         } catch {
             // best-effort：失败不阻断初始化
-            appendLog("⚠️ Homebrew 权限修复失败（已跳过，不影响初始化）：\(error.localizedDescription)\n")
+            appendLog("⚠️ \(String(localized: "wizard.homebrew.repair.failed", defaultValue: "Homebrew 权限修复失败（已跳过，不影响初始化）"))：\(error.localizedDescription)\n")
         }
 
         let autoSteps: [(title: String, run: () async throws -> Void)] = [
