@@ -104,6 +104,10 @@ public struct IMAccount: Codable, Identifiable, Hashable, Sendable {
     /// 取出时拿到 JSON：{"appSecret":"...","encryptKey":"...","botToken":"..."}（按平台不同）。
     public var credsKeychainRef: String?
 
+    /// 明文 appSecret（仅用于 UI → XPC → helper 的一次性写入通路，写入后即丢弃）。
+    /// 飞书命名账号手动填写时使用；不存 Keychain，不持久化到磁盘上的 IMAccount 序列化。
+    public var appSecret: String?
+
     // 飞书特有
     public var brand: FeishuBrand?         // .feishu / .lark
     public var dmPolicy: DmPolicy?         // 私聊策略
@@ -119,6 +123,7 @@ public struct IMAccount: Codable, Identifiable, Hashable, Sendable {
         displayName: String,
         appId: String? = nil,
         credsKeychainRef: String? = nil,
+        appSecret: String? = nil,
         brand: FeishuBrand? = nil,
         dmPolicy: DmPolicy? = nil,
         allowFrom: [String] = [],
@@ -130,6 +135,7 @@ public struct IMAccount: Codable, Identifiable, Hashable, Sendable {
         self.displayName = displayName
         self.appId = appId
         self.credsKeychainRef = credsKeychainRef
+        self.appSecret = appSecret
         self.brand = brand
         self.dmPolicy = dmPolicy
         self.allowFrom = allowFrom

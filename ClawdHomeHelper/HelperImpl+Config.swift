@@ -445,6 +445,13 @@ extension ClawdHomeHelperImpl {
         noProxy: String
     ) {
         guard let uid = try? UserManager.uid(for: username) else { return }
+        // launchctl asuser 要求用户有活跃的 launchd domain（已登录会话）。
+        // 对无活跃 session 的用户（如新建虾）跳过，否则 launchctl 会挂起。
+        guard hasActiveLaunchdDomain(uid: uid) else {
+            helperLog("refreshLaunchctlProxyEnv @\(username): 无活跃 launchd domain，跳过 launchctl asuser")
+            return
+        }
+
         let proxyKeys = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]
         let noProxyKeys = ["NO_PROXY", "no_proxy"]
 
@@ -476,6 +483,14 @@ extension ClawdHomeHelperImpl {
                 }
             }
         }
+    }
+
+    /// 检测用户是否有活跃的 launchd domain（用于 launchctl asuser 前置守卫）
+    /// 通过 ps 检查该 uid 下是否有进程在运行：有进程 = 有活跃会话，无进程 = 无会话。
+    /// 注意：ps 是纯读操作，不触碰 launchd Mach port，可安全用于新建用户检测。
+    private func hasActiveLaunchdDomain(uid: Int) -> Bool {
+        guard let output = try? run("/bin/ps", args: ["-u", "\(uid)", "-o", "pid="]) else { return false }
+        return !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func runModelCommand(username: String, argsJSON: String,

@@ -135,6 +135,7 @@ struct UserDetailView: View {
     // Agent
     @State private var agents: [AgentProfile] = []
     @State private var selectedAgentId: String? = nil
+    @State private var shrimpBindings: [IMBinding] = []
     @State private var showCreateAgent = false
     @State private var editingAgentModel: AgentProfile? = nil
     @State private var isDetailSidebarCollapsed = false
@@ -477,6 +478,7 @@ struct UserDetailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task { await refreshStatus() }
+        .task { await loadShrimpBindings() }
         .task {
             // 视图首次出现时，如果 gateway 已就绪，补消费 pending 团队 agent
             if isEffectivelyRunning && gatewayHub.readinessMap[user.username] == .ready {
@@ -3301,30 +3303,50 @@ struct UserDetailView: View {
     ]
 
     /// compact 概览卡片：显示已绑定频道 + 默认频道
+    /// 多 Agent 模式下额外标注当前 Agent 是否绑定以及绑定到哪个账号
     private var overviewChannelCard: some View {
         let cStore = gatewayHub.channelStore(for: user.username)
         let visibleChannels = channelVisibleIds(store: cStore)
+        let isMultiAgent = agents.count > 1
+        // 当前 agent 的 channel → accountId 映射（仅多 agent 时有效）
+        let agentChannelMap: [String: String] = {
+            guard isMultiAgent, let agentId = selectedAgentId else { return [:] }
+            var map: [String: String] = [:]
+            for b in shrimpBindings where b.agentId == agentId {
+                map[b.channel] = b.accountId ?? "default"
+            }
+            return map
+        }()
         return overviewSupplementaryCard(
             title: L10n.k("user.detail.auto.channel", fallback: "IM 绑定"),
-            subtitle: channelSubtitle(store: cStore)
+            subtitle: isMultiAgent
+                ? agentChannelSubtitle(agentChannelMap: agentChannelMap)
+                : channelSubtitle(store: cStore)
         ) {
             let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: min(visibleChannels.count, 3))
             LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(visibleChannels, id: \.self) { chId in
                     let bound = isChannelBound(store: cStore, canonicalId: chId)
-                    let label = channelDisplayLabel(store: cStore, canonicalId: chId)
+                    let agentBound: Bool? = isMultiAgent
+                        ? Self.channelAliases(for: chId).contains(where: { agentChannelMap[$0] != nil })
+                        : nil
+                    let label = channelPillLabel(store: cStore, canonicalId: chId,
+                                                 agentChannelMap: isMultiAgent ? agentChannelMap : nil)
                     let icon = Self.channelSystemImages[chId] ?? "bubble.left"
+                    let isCurrentAgentBound = agentBound ?? bound
                     overviewCompactActionButton(
                         title: label,
                         systemImage: icon,
-                        tint: bound ? Color.accentColor.opacity(0.10) : Color.secondary.opacity(0.08),
-                        foreground: bound ? .accentColor : .primary,
+                        tint: isCurrentAgentBound
+                            ? Color.accentColor.opacity(0.10)
+                            : Color.secondary.opacity(isMultiAgent ? 0.04 : 0.08),
+                        foreground: isCurrentAgentBound ? .accentColor : (isMultiAgent ? .secondary : .primary),
                         disabled: !helperClient.isConnected
                     ) {
                         openChannelOnboarding(chId)
                     }
                     .overlay(alignment: .topTrailing) {
-                        if bound {
+                        if isCurrentAgentBound {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 10))
                                 .foregroundStyle(.white, Color.accentColor)
@@ -3423,6 +3445,46 @@ struct UserDetailView: View {
             }
         }
         return result
+    }
+
+    /// 从 openclaw.json 加载 bindings[]，存入 shrimpBindings
+    private func loadShrimpBindings() async {
+        let config = await helperClient.getConfigJSON(username: user.username)
+        let parsed: [IMBinding] = (config["bindings"] as? [[String: Any]] ?? []).compactMap { item in
+            guard let agentId = item["agentId"] as? String,
+                  let match = item["match"] as? [String: Any],
+                  let channel = match["channel"] as? String else { return nil }
+            return IMBinding(agentId: agentId, channel: channel, accountId: match["accountId"] as? String)
+        }
+        await MainActor.run { shrimpBindings = parsed }
+    }
+
+    /// 多 Agent 模式下频道卡片的副标题
+    private func agentChannelSubtitle(agentChannelMap: [String: String]) -> String {
+        guard !agentChannelMap.isEmpty else {
+            return L10n.k("user.detail.channel.agent_no_binding", fallback: "当前 Agent 未绑定频道")
+        }
+        let labels: [String] = agentChannelMap.keys.compactMap { chId in
+            let platform = IMPlatform.allCases.first(where: { $0.openclawChannelId == chId })
+            let baseName = platform?.displayName ?? chId
+            let accountId = agentChannelMap[chId]
+            if let accountId, accountId != "default" { return "\(baseName) · \(accountId)" }
+            return baseName
+        }.sorted()
+        return labels.joined(separator: "、")
+    }
+
+    /// 频道 pill 标签：多 Agent 时附加 accountId（非 default 时显示）
+    private func channelPillLabel(store: GatewayChannelStore, canonicalId: String,
+                                   agentChannelMap: [String: String]?) -> String {
+        let base = channelDisplayLabel(store: store, canonicalId: canonicalId)
+        guard let map = agentChannelMap else { return base }
+        for alias in Self.channelAliases(for: canonicalId) {
+            if let accountId = map[alias], accountId != "default" {
+                return "\(base) · \(accountId)"
+            }
+        }
+        return base
     }
 
     private func channelDisplayLabel(store: GatewayChannelStore, canonicalId: String) -> String {

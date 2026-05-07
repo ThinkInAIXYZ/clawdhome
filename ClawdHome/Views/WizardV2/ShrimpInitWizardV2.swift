@@ -207,6 +207,7 @@ struct ShrimpInitWizardV2: View {
     @State private var hermesSetupTerminalControl = LocalTerminalControl()
     @State private var hermesSetupExitCode: Int32?
     @State private var hermesSetupDone = false
+    @State private var showHermesSetupSkipConfirm = false
 
     // Step 4: agents
     @State private var agents: [AgentDef] = []
@@ -349,7 +350,11 @@ struct ShrimpInitWizardV2: View {
             HStack(spacing: 12) {
                 ForEach(WizardEngine.allCases, id: \.rawValue) { engine in
                     Button {
+                        let previous = selectedEngine
                         selectedEngine = engine
+                        if previous != nil && previous != engine {
+                            resetEnvStateOnEngineSwitch()
+                        }
                         if engine == .openclaw {
                             ensureOpenclawRolesSeeded()
                         }
@@ -857,11 +862,25 @@ struct ShrimpInitWizardV2: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             navigationButtons(canGoNext: true, nextLabel: L10n.k("common.next", fallback: "下一步")) {
-                advance()
+                if hermesSetupDone {
+                    advance()
+                } else {
+                    showHermesSetupSkipConfirm = true
+                }
             }
             .padding(.top, 12)
         }
         .padding(24)
+        .confirmationDialog(
+            "尚未完成 Hermes 配置",
+            isPresented: $showHermesSetupSkipConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("继续创建", role: .destructive) { advance() }
+            Button(L10n.k("common.cancel", fallback: "取消"), role: .cancel) {}
+        } message: {
+            Text("hermes setup 尚未成功完成，模型 / API Key 等可能未配置。继续将直接创建 profile，启动后可能需要再次进入 Hermes 配置。")
+        }
     }
 
     private func hermesSetupTerminalCommand() -> [String] {
@@ -1042,7 +1061,17 @@ struct ShrimpInitWizardV2: View {
         guard let phase = savePhase else {
             return L10n.k("wizard_v2.done.saving", fallback: "正在写入配置…")
         }
-        return "(\(phase.rawValue)/\(WizardV2SavePhase.allCases.count)) \(phase.title)…"
+        let activePhases = activeSavePhases
+        let idx = activePhases.firstIndex(of: phase).map { $0 + 1 } ?? phase.rawValue
+        return "(\(idx)/\(activePhases.count)) \(phase.title)…"
+    }
+
+    /// 当前引擎实际经过的 save 阶段（Hermes 跳过 serializeConfig / writeConfig）
+    private var activeSavePhases: [WizardV2SavePhase] {
+        if (selectedEngine ?? .openclaw) == .hermes {
+            return [.writeAgentSnapshot, .restartGateway, .finalize]
+        }
+        return WizardV2SavePhase.allCases
     }
 
     private func saveElapsedText(now: Date) -> String {
@@ -1085,23 +1114,26 @@ struct ShrimpInitWizardV2: View {
         }
 
         // 放弃时清理向导草稿，避免后续再次进入时恢复到已放弃的数据。
-        let emptyObject = Data("{}".utf8)
-        let emptyArray = Data("[]".utf8)
-        try? await helperClient.writeFile(
-            username: user.username,
-            relativePath: ".openclaw/workspace/pending_v2_team.json",
-            data: emptyObject
-        )
-        try? await helperClient.writeFile(
-            username: user.username,
-            relativePath: ".openclaw/workspace/pending_v2_agent_defs.json",
-            data: emptyArray
-        )
-        try? await helperClient.writeFile(
-            username: user.username,
-            relativePath: ".openclaw/workspace/pending_v2_agents.json",
-            data: emptyArray
-        )
+        // Hermes 路径不使用 .openclaw，跳过写入以避免误创建该目录。
+        if selectedEngine != .hermes {
+            let emptyObject = Data("{}".utf8)
+            let emptyArray = Data("[]".utf8)
+            for (relPath, payload) in [
+                (".openclaw/workspace/pending_v2_team.json", emptyObject),
+                (".openclaw/workspace/pending_v2_agent_defs.json", emptyArray),
+                (".openclaw/workspace/pending_v2_agents.json", emptyArray),
+            ] {
+                do {
+                    try await helperClient.writeFile(
+                        username: user.username,
+                        relativePath: relPath,
+                        data: payload
+                    )
+                } catch {
+                    appLog("[WizardV2] 取消向导清理 \(relPath) 失败 @\(user.username): \(error.localizedDescription)", level: .warn)
+                }
+            }
+        }
 
         onDismiss?()
         dismiss()
@@ -1221,6 +1253,18 @@ struct ShrimpInitWizardV2: View {
 
     // MARK: - Business logic
 
+    /// 切换引擎时清除上一引擎的环境状态，避免 sidebar/按钮误显示"已就绪"
+    private func resetEnvStateOnEngineSwitch() {
+        envReady = false
+        envError = nil
+        envInstallingPhase = nil
+        hermesEnvInstallingPhase = nil
+        hermesInstallExitCode = nil
+        hermesSetupExitCode = nil
+        hermesSetupDone = false
+        didClearInitialEnvLog = false
+    }
+
     private func checkEnvReady() {
         Task {
             let engine = selectedEngine ?? .openclaw
@@ -1245,7 +1289,7 @@ struct ShrimpInitWizardV2: View {
         guard !didClearInitialEnvLog else { return }
         guard !isInstallingEnv else { return }
         let logPath = envLogPath(for: selectedEngine ?? .openclaw)
-        FileManager.default.createFile(atPath: logPath, contents: nil, attributes: nil)
+        FileManager.default.createFile(atPath: logPath, contents: nil, attributes: [.posixPermissions: 0o666])
         didClearInitialEnvLog = true
     }
 
@@ -1264,7 +1308,7 @@ struct ShrimpInitWizardV2: View {
         }
         // 截断上次遗留的日志文件，让终端面板从空白开始
         let logPath = envLogPath(for: engine)
-        FileManager.default.createFile(atPath: logPath, contents: nil, attributes: nil)
+        FileManager.default.createFile(atPath: logPath, contents: nil, attributes: [.posixPermissions: 0o666])
         if engine == .hermes {
             Task { @MainActor in
                 // best-effort：失败不阻断
@@ -1400,7 +1444,16 @@ struct ShrimpInitWizardV2: View {
             Task {
                 await MainActor.run { savePhase = .writeAgentSnapshot }
                 do {
-                    for role in rolesSnapshot {
+                    // 先列出已有 profile，避免重试时重复创建报错（createHermesProfile 非幂等）
+                    let existingIDs: Set<String>
+                    do {
+                        let existing = try await helperClient.listHermesProfiles(username: username)
+                        existingIDs = Set(existing.map(\.id))
+                    } catch {
+                        appLog("[WizardV2] listHermesProfiles 失败 @\(username)，继续按全量创建尝试：\(error.localizedDescription)", level: .warn)
+                        existingIDs = []
+                    }
+                    for role in rolesSnapshot where !existingIDs.contains(role.id) {
                         let emoji = dnasSnapshot[role.id]?.emoji ?? (role.id == "main" ? "🎭" : "🤖")
                         let profile = AgentProfile(
                             id: role.id,
@@ -1426,7 +1479,15 @@ struct ShrimpInitWizardV2: View {
                 }
 
                 await MainActor.run { savePhase = .restartGateway }
-                try? await helperClient.startHermesGateway(username: username)
+                do {
+                    try await helperClient.startHermesGateway(username: username)
+                } catch {
+                    await MainActor.run {
+                        isSaving = false
+                        saveError = "[\(WizardV2SavePhase.restartGateway.title)] Hermes 网关启动失败：\(error.localizedDescription)"
+                    }
+                    return
+                }
 
                 await MainActor.run { savePhase = .finalize }
                 var doneState = InitWizardState()
@@ -1434,7 +1495,11 @@ struct ShrimpInitWizardV2: View {
                 doneState.completedAt = Date()
                 doneState.updatedAt = Date()
                 doneState.currentStep = "v2:done"
-                try? await helperClient.saveInitState(username: username, json: doneState.toJSON())
+                do {
+                    try await helperClient.saveInitState(username: username, json: doneState.toJSON())
+                } catch {
+                    appLog("[WizardV2] Hermes 完成态落盘失败 @\(username): \(error.localizedDescription)", level: .warn)
+                }
                 await MainActor.run {
                     isSaving = false
                     saveSuccess = true
@@ -1510,7 +1575,15 @@ struct ShrimpInitWizardV2: View {
             // 4. 重启 gateway，使新写入的 openclaw.json 生效，并触发 UserDetailView
             //    的 consumePendingV2Agents()（由 readinessMap == .ready 的 onChange 触发）
             await MainActor.run { savePhase = .restartGateway }
-            try? await helperClient.restartGateway(username: username)
+            do {
+                try await helperClient.restartGateway(username: username)
+            } catch {
+                await MainActor.run {
+                    isSaving = false
+                    saveError = "[\(WizardV2SavePhase.restartGateway.title)] 网关重启失败：\(error.localizedDescription)"
+                }
+                return
+            }
 
             // 5. 标记向导已完成，清理临时文件
             await MainActor.run { savePhase = .finalize }
@@ -1519,12 +1592,20 @@ struct ShrimpInitWizardV2: View {
             doneState.completedAt = Date()
             doneState.updatedAt = Date()
             doneState.currentStep = "v2:done"
-            try? await helperClient.saveInitState(username: username, json: doneState.toJSON())
-            try? await helperClient.writeFile(
-                username: username,
-                relativePath: ".openclaw/workspace/pending_v2_team.json",
-                data: "{}".data(using: .utf8) ?? Data()
-            )
+            do {
+                try await helperClient.saveInitState(username: username, json: doneState.toJSON())
+            } catch {
+                appLog("[WizardV2] OpenClaw 完成态落盘失败 @\(username): \(error.localizedDescription)", level: .warn)
+            }
+            do {
+                try await helperClient.writeFile(
+                    username: username,
+                    relativePath: ".openclaw/workspace/pending_v2_team.json",
+                    data: "{}".data(using: .utf8) ?? Data()
+                )
+            } catch {
+                appLog("[WizardV2] 清理 pending_v2_team.json 失败 @\(username): \(error.localizedDescription)", level: .warn)
+            }
 
             await MainActor.run {
                 isSaving = false
@@ -1589,7 +1670,11 @@ struct ShrimpInitWizardV2: View {
                 state.steps["v2_\(s)"] = "done"
             }
             state.steps["v2_\(currentStep)"] = "running"
-            try? await helperClient.saveInitState(username: user.username, json: state.toJSON())
+            do {
+                try await helperClient.saveInitState(username: user.username, json: state.toJSON())
+            } catch {
+                appLog("[WizardV2] 进度位图落盘失败 @\(user.username) step=\(currentStep): \(error.localizedDescription)", level: .warn)
+            }
 
             // 同步持久化 agent 定义（含模型选择），避免二次进入时丢失
             persistAgentDefs()
@@ -1602,11 +1687,15 @@ struct ShrimpInitWizardV2: View {
         Task {
             guard let data = try? JSONEncoder().encode(teamDNA) else { return }
             try? await helperClient.createDirectory(username: user.username, relativePath: ".openclaw/workspace")
-            try? await helperClient.writeFile(
-                username: user.username,
-                relativePath: ".openclaw/workspace/pending_v2_team.json",
-                data: data
-            )
+            do {
+                try await helperClient.writeFile(
+                    username: user.username,
+                    relativePath: ".openclaw/workspace/pending_v2_team.json",
+                    data: data
+                )
+            } catch {
+                appLog("[WizardV2] 团队 DNA 落盘失败 @\(user.username): \(error.localizedDescription)", level: .warn)
+            }
         }
     }
 
@@ -1616,11 +1705,15 @@ struct ShrimpInitWizardV2: View {
         Task {
             guard let data = try? JSONEncoder().encode(agents) else { return }
             try? await helperClient.createDirectory(username: user.username, relativePath: ".openclaw/workspace")
-            try? await helperClient.writeFile(
-                username: user.username,
-                relativePath: ".openclaw/workspace/pending_v2_agent_defs.json",
-                data: data
-            )
+            do {
+                try await helperClient.writeFile(
+                    username: user.username,
+                    relativePath: ".openclaw/workspace/pending_v2_agent_defs.json",
+                    data: data
+                )
+            } catch {
+                appLog("[WizardV2] Agent 定义落盘失败 @\(user.username): \(error.localizedDescription)", level: .warn)
+            }
         }
     }
 
@@ -1712,8 +1805,10 @@ struct ShrimpInitWizardV2: View {
         // 跳到第一个未完成的步骤
         if engine == .hermes {
             if isEnvReady {
-                visitedSteps = [.selectEngine, .basicEnv, .done]
-                currentStep = .done
+                // 环境就绪后停留在 hermesSetup 步骤，由用户完成 `hermes setup` 交互式配置
+                // 后再 advance 到 done；自动跳到 done 会绕过模型/密钥配置直接落盘 profile
+                visitedSteps = [.selectEngine, .basicEnv, .hermesSetup]
+                currentStep = .hermesSetup
             } else {
                 visitedSteps = [.selectEngine, .basicEnv]
                 currentStep = .basicEnv
@@ -1721,7 +1816,8 @@ struct ShrimpInitWizardV2: View {
         } else if isEnvReady && !agents.isEmpty {
             visitedSteps = [.selectEngine, .basicEnv, .configModel]
             currentStep = .configModel
-        } else if !agents.isEmpty {
+        } else if selectedEngine == .openclaw && !agents.isEmpty {
+            // 仅在引擎已明确检测到时才跳过引擎选择；新用户预填的 solo agent 不应触发此跳转
             visitedSteps = [.selectEngine, .basicEnv]
             currentStep = .basicEnv
         } else if isEnvReady {

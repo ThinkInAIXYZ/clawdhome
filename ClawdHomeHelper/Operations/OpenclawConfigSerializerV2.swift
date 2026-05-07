@@ -332,8 +332,13 @@ public enum OpenclawConfigSerializerV2 {
             for acc in platAccounts {
                 var dict: [String: Any] = [:]
                 if let appId = acc.appId { dict["appId"] = appId }
-                // appSecret 由 Keychain 管理；此处写入占位 ref（实际值由 OpenClaw 通过 secrets 引用读取）
-                if let ref = acc.credsKeychainRef { dict["appSecret"] = "{{secrets.\(ref)}}" }
+                // 优先直写明文 appSecret（飞书命名账号由 UI 手动填写后通过 XPC 传入）；
+                // 无明文时退回到 Keychain 模板引用。
+                if let secret = acc.appSecret {
+                    dict["appSecret"] = secret
+                } else if let ref = acc.credsKeychainRef {
+                    dict["appSecret"] = "{{secrets.\(ref)}}"
+                }
                 dict["botName"] = acc.displayName
                 if let p = acc.dmPolicy { dict["dmPolicy"] = p.rawValue }
                 if !acc.allowFrom.isEmpty { dict["allowFrom"] = acc.allowFrom }
