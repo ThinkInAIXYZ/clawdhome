@@ -20,6 +20,22 @@ xcuserdata/
 .LSOverride
 ._*
 
+# Logs / crash and local run output
+*.log
+*.trace
+*.xcactivitylog
+*.xcresult
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment files
+.env
+.env.*
+!.env.example
+!.env.*.example
+
 # Swift Package Manager
 .swiftpm/
 Package.resolved

@@ -28,6 +28,9 @@ struct ContentView: View {
     @State private var navSelection: NavDestination? = .clawPool
     @State private var chromeInstallCheckCompleted = false
     @State private var isChromeInstalled = true
+    @State private var browserSessionPromptUsername: String?
+    @State private var browserSessionPromptSuppressed = false
+    @State private var browserSessionPromptCheckInFlight = false
     // 0 = 跟随系统, 1 = 浅色, 2 = 深色
     @AppStorage("colorSchemePreference") private var colorSchemePreference: Int = 0
 
@@ -214,6 +217,28 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: helperClient.isConnected)
         .animation(.easeInOut(duration: 0.18), value: shouldShowChromeInstallHint)
+        .alert(
+            "初始化浏览器 Session？",
+            isPresented: Binding(
+                get: { browserSessionPromptUsername != nil },
+                set: { if !$0 { browserSessionPromptUsername = nil } }
+            ),
+            presenting: browserSessionPromptUsername
+        ) { username in
+            Button("这次不初始化", role: .cancel) {
+                browserSessionPromptSuppressed = true
+                browserSessionPromptUsername = nil
+            }
+            Button("打开浏览器") {
+                browserSessionPromptSuppressed = true
+                browserSessionPromptUsername = nil
+                Task {
+                    try? await helperClient.openBrowserAccount(username: username)
+                }
+            }
+        } message: { username in
+            Text("检测到 \(username) 的浏览器工具已安装，但还没有初始化 session。是否现在打开 Chrome 完成初始化？")
+        }
         .overlay {
             if lockStore.isLocked {
                 AppLockScreen()
@@ -236,6 +261,12 @@ struct ContentView: View {
                 refreshChromeInstallStatus()
             }
         }
+        .onChange(of: isChromeInstalled) { _, _ in
+            checkForBrowserSessionInitializationPrompt()
+        }
+        .onChange(of: pool.didFinishInitialUserLoad) { _, _ in
+            checkForBrowserSessionInitializationPrompt()
+        }
         .onChange(of: navSelection) { _, newValue in
             let visible = (newValue == .dashboard || newValue == nil)
             pool.setDashboardVisible(visible)
@@ -245,6 +276,46 @@ struct ContentView: View {
     private func refreshChromeInstallStatus() {
         isChromeInstalled = ChromeInstallDetector.isGoogleChromeInstalled()
         chromeInstallCheckCompleted = true
+        checkForBrowserSessionInitializationPrompt()
+    }
+
+    private func checkForBrowserSessionInitializationPrompt() {
+        guard chromeInstallCheckCompleted,
+              isChromeInstalled,
+              !browserSessionPromptSuppressed,
+              browserSessionPromptUsername == nil,
+              !browserSessionPromptCheckInFlight,
+              pool.didFinishInitialUserLoad,
+              !pool.users.isEmpty else {
+            return
+        }
+
+        browserSessionPromptCheckInFlight = true
+        let usernames = pool.users.map(\.username)
+        Task {
+            var candidate: String?
+            for username in usernames {
+                guard !Task.isCancelled else { return }
+                guard let status = await helperClient.getBrowserAccountStatus(username: username) else {
+                    continue
+                }
+                if status.toolInstalled && !status.sessionExists {
+                    candidate = username
+                    break
+                }
+            }
+
+            await MainActor.run {
+                browserSessionPromptCheckInFlight = false
+                guard let candidate,
+                      isChromeInstalled,
+                      !browserSessionPromptSuppressed,
+                      browserSessionPromptUsername == nil else {
+                    return
+                }
+                browserSessionPromptUsername = candidate
+            }
+        }
     }
 
 }

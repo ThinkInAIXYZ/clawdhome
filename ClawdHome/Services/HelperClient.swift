@@ -712,6 +712,9 @@ final class HelperClient {
             }
         }
         guard ok else {
+            if BrowserAccountInstallSkipPolicy.shouldTreatAsOptionalChromeWarmupFailure(payload) {
+                return
+            }
             throw HelperError.operationFailed(payload)
         }
     }
@@ -2539,6 +2542,15 @@ enum HelperHealthState: Equatable {
     var isHealthy: Bool {
         if case .connected = self { return true }
         return false
+    }
+}
+
+private enum BrowserAccountInstallSkipPolicy {
+    static func shouldTreatAsOptionalChromeWarmupFailure(_ message: String) -> Bool {
+        let normalized = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.contains("未找到 Google Chrome")
+            || normalized.localizedCaseInsensitiveContains("Google Chrome")
+                && normalized.localizedCaseInsensitiveContains("not found")
     }
 }
 

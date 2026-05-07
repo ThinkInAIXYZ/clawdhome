@@ -39,6 +39,8 @@ Browser Account 的核心目标：
 | `/Users/<username>/.npm-global/bin/clawdhome-browser` | 目标用户 | `0755` | OpenClaw/npm 环境入口 |
 | `/Users/<username>/.local/bin/open` 等 | 目标用户 | `0755` | 常见浏览器命令 wrapper |
 | `/Users/<username>/.npm-global/bin/open` 等 | 目标用户 | `0755` | OpenClaw 维护命令中的浏览器命令 wrapper |
+| `/Users/<username>/.local/bin/open-cli` | 目标用户 | `0755` | npm `open-cli` URL opener wrapper |
+| `/Users/<username>/.npm-global/bin/open-cli` | 目标用户 | `0755` | npm 全局环境中的 `open-cli` wrapper |
 | `/Library/Application Support/ClawdHome/BrowserLaunchers/<username>/clawdhome-browser-launcher` | `root:wheel` | `4755` | 从目标用户命令借助 console GUI session 拉起 Chrome |
 | `/Users/<username>/.clawdhome/TOOLS.md` | 目标用户 | 用户可读 | 工具说明，给 agent/runtime 使用 |
 
@@ -119,7 +121,8 @@ flowchart TD
     B --> F["写 ~/.npm-global/bin/clawdhome-browser"]
     B --> G["写 open / chrome / chromium / xdg-open wrappers"]
     B --> H["如存在 opencli, 保存真实入口并安装 opencli wrapper"]
-    B --> I["追加 ~/.clawdhome/TOOLS.md"]
+    B --> I["写 open-cli URL opener wrapper"]
+    B --> J["追加 ~/.clawdhome/TOOLS.md"]
 ```
 
 安装位置分两类：
@@ -127,7 +130,7 @@ flowchart TD
 - `~/.local/bin`：runtime 无关入口，Hermes、Python、shell 工具优先使用。
 - `~/.npm-global/bin`：OpenClaw/npm 生态入口，覆盖 OpenCLI 这类 npm 全局命令。
 
-wrapper 写日志时使用 `|| true`，日志目录权限异常不会导致 `open` 或 `opencli` 命令直接失败。
+wrapper 写日志时使用 `|| true`，日志目录权限异常不会导致 `open`、`opencli` 或 `open-cli` 命令直接失败。
 
 ## 8. `clawdhome-browser` 命令
 
@@ -208,6 +211,13 @@ OpenCLI 的 Browser Bridge extension 必须在 Chrome 打开后才会连接。Br
 5. 再执行 `opencli.clawdhome-real <原参数>`。
 
 这样 `opencli xiaohongshu search AI` 不需要用户先手动打开浏览器。
+
+同时会生成 `open-cli` wrapper。它只处理 `http(s)` URL 参数：
+
+- `open-cli https://example.com` 会直接转为 `clawdhome-browser open https://example.com`。
+- 非 URL 参数会返回 ClawdHome 接管提示，避免继续落到系统默认浏览器。
+
+注意：如果模型显式执行 `node /usr/local/lib/node_modules/open-cli/cli.js <url>` 这种绝对路径调用，PATH wrapper 无法从系统层拦截。V1 不替换系统全局 `/usr/local/lib/node_modules/open-cli/cli.js`。
 
 ## 12. OpenClaw 集成
 
@@ -306,6 +316,7 @@ profile 不直接删除，而是改名为 `.backup-<yyyyMMdd-HHmmss>`。
 | `open` 打开 Arc/Safari | PATH 没有命中 wrapper，或被 `path_helper` 重排 | `which open`，检查是否为 `~/.local/bin/open` 或 `~/.npm-global/bin/open` |
 | Hermes Google OAuth 报 `application "chrome"` / `-10810` | Hermes 未继承 `BROWSER`，Python `webbrowser` 绕过 wrapper | `launchctl print system/ai.clawdhome.hermes.<user>` 检查 `BROWSER` |
 | OpenCLI 报 Browser Bridge 未连接 | Chrome 未预打开，extension 未连接 | 看 `~/.clawdhome/browser/debug.log` 是否有 `opencli wrapper` 和 `clawdhome.ai` |
+| Hermes 生成 `node /usr/local/lib/node_modules/open-cli/cli.js` | 模型绕过 PATH wrapper，直接执行绝对路径 | PATH wrapper 无法拦截绝对路径；需要改调用方策略或全局 open-cli |
 | `permission denied: ~/.clawdhome/browser/debug.log` | browser 目录归 root 或不可写 | `ls -ld ~/.clawdhome/browser`，应归目标用户 |
 | 初始化卡在浏览器预热附近 | Chrome 打开后关闭失败或 launcher 无法进入 console session | 查 `debug.log`、`ps -axo pid,user,command | grep BrowserProfiles/<user>` |
 | `clawdhome-browser status` 不可达 | session 旧端口失效或 Chrome 已关闭 | 运行 `clawdhome-browser open https://clawdhome.ai` 触发重启 |
@@ -323,6 +334,7 @@ profile 不直接删除，而是改名为 `.backup-<yyyyMMdd-HHmmss>`。
    - `~/.clawdhome/TOOLS.md`
 6. 检查 wrapper：
    - `which open`
+   - `which open-cli`
    - `open https://clawdhome.ai`
    - `chrome https://clawdhome.ai`
 7. OpenClaw OAuth：维护窗口点击授权链接，不打开 Arc/Safari。

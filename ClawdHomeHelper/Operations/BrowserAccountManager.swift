@@ -43,6 +43,11 @@ enum BrowserAccountManager {
             return
         }
 
+        guard isChromeInstalled() else {
+            appendInstallLog("⚠ 未检测到 Google Chrome，已跳过浏览器预热。浏览器工具已安装，安装 Chrome 后可直接使用。\n", logURL: logURL)
+            return
+        }
+
         appendInstallLog("→ 首次打开用户级 Chrome 浏览器账号并写入 session\n", logURL: logURL)
         let context = try resolveContext(username: username)
         var openedProfilePath = context.paths.profileDirectory.path
@@ -62,7 +67,7 @@ enum BrowserAccountManager {
 
     static func open(username: String) throws -> BrowserAccountSession {
         let context = try resolveContext(username: username)
-        guard FileManager.default.fileExists(atPath: chromeAppPath) else {
+        guard isChromeInstalled() else {
             throw BrowserAccountError.chromeNotFound
         }
 
@@ -98,6 +103,10 @@ enum BrowserAccountManager {
         )
         try writeSession(session, username: username)
         return session
+    }
+
+    private static func isChromeInstalled() -> Bool {
+        FileManager.default.fileExists(atPath: chromeAppPath)
     }
 
     static func openURL(username: String, url: String) throws {
@@ -169,6 +178,14 @@ enum BrowserAccountManager {
         )
     }
 
+    static func reachableCDPEndpoint(username: String) -> String? {
+        guard let session = readSession(username: username),
+              isReachable(httpEndpoint: session.httpEndpoint) else {
+            return nil
+        }
+        return session.httpEndpoint
+    }
+
     static func reset(username: String) throws -> BrowserAccountStatus {
         let context = try resolveContext(username: username)
         let fm = FileManager.default
@@ -178,6 +195,7 @@ enum BrowserAccountManager {
         for session in sessionPaths(username: username) where fm.fileExists(atPath: session) {
             try fm.removeItem(atPath: session)
         }
+        HermesConfigWriter.syncBrowserCDPEndpoint(username: username, endpoint: nil)
         let marker = installWarmupMarkerPath(username: username)
         if fm.fileExists(atPath: marker) {
             try fm.removeItem(atPath: marker)
@@ -213,8 +231,21 @@ enum BrowserAccountManager {
             try FilePermissionHelper.chownRecursive((binDir as NSString).deletingLastPathComponent, owner: username)
             try installBrowserShim(username: username, binDir: binDir, toolPath: toolPath)
             try installBrowserCommandWrappers(username: username, binDir: binDir, toolPath: toolPath)
+            try installOpenCLIWrapperIfPresent(
+                username: username,
+                binDir: binDir,
+                executableName: "opencli",
+                realExecutableName: BrowserAccountPaths.openCLIRealExecutableName,
+                toolPath: toolPath
+            )
+            try installOpenURLCLIWrapper(
+                username: username,
+                binDir: binDir,
+                executableName: BrowserAccountPaths.openCLINPMExecutableName,
+                toolPath: toolPath
+            )
         }
-        try installOpenCLIWrapperIfPresent(username: username, binDir: npmGlobalBinDirectory(username: username), toolPath: toolPath)
+        try ensureBrowserShellEnvironment(username: username, toolPath: toolPath)
 
         try appendToolsGuidanceIfNeeded(username: username)
         return status(username: username)
@@ -229,6 +260,32 @@ enum BrowserAccountManager {
 
     private static func npmGlobalBinDirectory(username: String) -> String {
         "/Users/\(username)/\(BrowserAccountPaths.npmGlobalBinRelativePath)"
+    }
+
+    private static func ensureBrowserShellEnvironment(username: String, toolPath: String) throws {
+        let browserCommand = "\(toolPath) open %s"
+        let block = """
+
+        # ClawdHome browser account
+        export PATH="$HOME/.local/bin:$PATH"
+        export BROWSER="\(browserCommand)"
+        # End ClawdHome browser account
+        """
+        for path in ["/Users/\(username)/.zprofile", "/Users/\(username)/.zshrc"] {
+            var existing = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+            if let start = existing.range(of: "# ClawdHome browser account"),
+               let end = existing.range(of: "# End ClawdHome browser account", range: start.lowerBound..<existing.endIndex) {
+                existing.replaceSubrange(start.lowerBound..<end.upperBound, with: block.trimmingCharacters(in: .whitespacesAndNewlines))
+            } else {
+                if !existing.isEmpty, !existing.hasSuffix("\n") {
+                    existing += "\n"
+                }
+                existing += block + "\n"
+            }
+            try Data(existing.utf8).write(to: URL(fileURLWithPath: path))
+            try FilePermissionHelper.chown(path, owner: username)
+            try FilePermissionHelper.chmod(path, mode: "644")
+        }
     }
 
     private static func installBrowserShim(username: String, binDir: String, toolPath: String) throws {
@@ -335,9 +392,15 @@ enum BrowserAccountManager {
         """
     }
 
-    private static func installOpenCLIWrapperIfPresent(username: String, binDir: String, toolPath: String) throws {
-        let opencliPath = "\(binDir)/opencli"
-        let realPath = "\(binDir)/\(BrowserAccountPaths.openCLIRealExecutableName)"
+    private static func installOpenCLIWrapperIfPresent(
+        username: String,
+        binDir: String,
+        executableName: String,
+        realExecutableName: String,
+        toolPath: String
+    ) throws {
+        let opencliPath = "\(binDir)/\(executableName)"
+        let realPath = "\(binDir)/\(realExecutableName)"
         let fm = FileManager.default
         guard fm.fileExists(atPath: opencliPath) || fm.fileExists(atPath: realPath) else {
             return
@@ -361,6 +424,19 @@ enum BrowserAccountManager {
         try wrapper.write(toFile: opencliPath, atomically: true, encoding: .utf8)
         try FilePermissionHelper.chown(opencliPath, owner: username)
         try FilePermissionHelper.chmod(opencliPath, mode: "755")
+    }
+
+    private static func installOpenURLCLIWrapper(
+        username: String,
+        binDir: String,
+        executableName: String,
+        toolPath: String
+    ) throws {
+        let wrapperPath = "\(binDir)/\(executableName)"
+        let wrapper = openURLCLIWrapperScript(commandName: executableName, toolPath: toolPath)
+        try wrapper.write(toFile: wrapperPath, atomically: true, encoding: .utf8)
+        try FilePermissionHelper.chown(wrapperPath, owner: username)
+        try FilePermissionHelper.chmod(wrapperPath, mode: "755")
     }
 
     private static func openCLIWrapperScript(toolPath: String, realPath: String, daemonPath: String) -> String {
@@ -404,6 +480,35 @@ enum BrowserAccountManager {
 
         echo "opencli-wrapper=exec-real" >> "$LOG" 2>&1 || true
         exec "\(realPath)" "$@"
+        """
+    }
+
+    private static func openURLCLIWrapperScript(commandName: String, toolPath: String) -> String {
+        """
+        #!/bin/zsh
+        # CLAWDHOME_OPEN_URL_CLI_WRAPPER
+        set -e
+        LOG="$HOME/\(BrowserAccountPaths.debugLogRelativePath)"
+        mkdir -p "$HOME/\(BrowserAccountPaths.browserDirectoryRelativePath)"
+        {
+          echo "--- $(/bin/date '+%Y-%m-%d %H:%M:%S') \(commandName)-wrapper"
+          echo "argv=$*"
+          echo "pwd=$PWD"
+          echo "PATH=$PATH"
+          echo "which-clawdhome-browser=$(command -v clawdhome-browser 2>/dev/null || true)"
+        } >> "$LOG" 2>&1 || true
+
+        for arg in "$@"; do
+          case "$arg" in
+            http://*|https://*)
+              echo "\(commandName)-route=clawdhome-browser-open url=$arg" >> "$LOG" 2>&1 || true
+              exec /usr/bin/env python3 "\(toolPath)" open "$arg"
+              ;;
+          esac
+        done
+
+        echo "\(commandName): ClawdHome 已接管 URL 打开操作；请传入 http(s) URL。" >&2
+        exit 1
         """
     }
 
@@ -475,6 +580,7 @@ enum BrowserAccountManager {
         try data.write(to: URL(fileURLWithPath: path), options: .atomic)
         try FilePermissionHelper.chown(path, owner: username)
         try FilePermissionHelper.chmod(path, mode: "600")
+        HermesConfigWriter.syncBrowserCDPEndpoint(username: username, endpoint: session.httpEndpoint)
     }
 
     private static func readSession(username: String) -> BrowserAccountSession? {
