@@ -1,20 +1,21 @@
 # ClawdHome
 
+[![macOS](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white)](https://clawdhome.app)
+[![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)](https://developer.apple.com/swift/)
+[![License](https://img.shields.io/github/license/ThinkInAIXYZ/clawdhome)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/ThinkInAIXYZ/clawdhome)](https://github.com/ThinkInAIXYZ/clawdhome/releases)
+
 English | [中文](README.zh.md)
 
-**ClawdHome securely isolates and operates multiple OpenClaw gateway instances on a single Mac.**
+> Native macOS control plane for securely running and managing multiple isolated OpenClaw gateway instances on a single Mac.
 
-ClawdHome is built for \"raising Shrimps\" on your Mac: each Shrimp should live in a safe, reliable house with clear boundaries.
+ClawdHome is built for people who want one machine to host multiple OpenClaw "Shrimps" without mixing identities, data, permissions, or operational risk. It combines a SwiftUI admin app, a privileged XPC helper daemon, and macOS multi-user isolation into a single workflow for setup, monitoring, cloning, maintenance, and recovery.
 
-## Website & Download
+Website: [clawdhome.app](https://clawdhome.app)  
+Downloads: [GitHub Releases](https://github.com/ThinkInAIXYZ/clawdhome/releases)  
+Changelog: [English](CHANGELOG.en.md) | [中文](CHANGELOG.zh.md)
 
-- [https://clawdhome.app](https://clawdhome.app)
-
-## Who It Is For
-
-ClawdHome is designed for makers and operators who want to run multiple OpenClaw gateways on one Mac without mixing identities, data, and permissions. It is especially useful when you need production/staging isolation, low-risk clone-and-test workflows, and a single operations UI for day-to-day maintenance.
-
-## Visual Overview
+## Screenshots
 
 <table>
   <tr>
@@ -27,41 +28,43 @@ ClawdHome is designed for makers and operators who want to run multiple OpenClaw
   </tr>
 </table>
 
-ClawdHome provides a single control plane to monitor, isolate, and operate multiple OpenClaw gateway instances for different people and roles.
+## Why ClawdHome
 
-## What ClawdHome Is
+- Real isolation: each Shrimp maps to its own macOS user account, runtime context, data, and permission boundary.
+- Safer privilege model: system-level actions are routed through an explicit XPC helper instead of ad-hoc shell flows inside the UI app.
+- Faster iteration: clone an existing Shrimp for experiments, rehearsal, or regression checks, then promote what works.
+- Native Mac fit: uses macOS user and process primitives instead of heavier VM or container workflows for this class of desktop automation.
+- Unified operations: manage onboarding, gateway lifecycle, files, logs, processes, config, and diagnostics from one place.
 
-ClawdHome is a macOS control-plane app for securely isolating and operating multiple OpenClaw gateway instances, with a privileged helper daemon for system-level operations. It focuses on one thing: safely running and managing multiple isolated OpenClaw gateway instances on one machine. Each "Shrimp" runs in its own boundary with separate runtime context, data, and policy.
+## Highlights
 
-## Why It Exists
+- Run multiple OpenClaw gateway instances on one Mac with clear per-instance boundaries.
+- Guided onboarding for new Shrimps, including channel-specific setup flows such as WeChat pairing.
+- Clone an existing Shrimp into a new isolated account for low-risk testing and rollout rehearsal.
+- Gateway lifecycle management with health visibility and watchdog-based recovery.
+- Built-in tools for files, sessions, processes, logs, and maintenance operations.
+- Model and provider configuration from the app, including direct model setup and Role Market-based presets.
+- Local AI operations support, including integration hooks for local model services where configured.
+- English and Chinese localization based on `Stable.xcstrings`.
 
-- OpenClaw is not a one-time setup; it needs continuous \"raising\" (learning, growth, iteration). That requires each Shrimp to have its own house: account isolation and permission boundaries.
-- Raising also needs low-risk iteration: you should be able to quickly clone a Shrimp for experiments, rehearsals, and regression checks, then shape a stable, maintainable digital twin.
-- A primary MacBook should also run Shrimps safely with low overhead: humans on admin accounts, Shrimps on standard accounts, each Shrimp in its own boundary.
-- Virtual machines and Docker are often too heavy for this use case; macOS multi-user primitives provide a more native path (system UI and browser automation).
-- Raising Shrimps is not only about chat; Shrimps should connect to smart-home workflows and leverage Mac neural/GPU acceleration for lower-latency, lower-cost local capabilities.
-- OpenClaw instances can fail in real-world use, so centralized operations plus backup, maintenance, and recovery workflows are essential.
+## Architecture
 
-## How It Works
-
+```text
+ClawdHome.app (SwiftUI admin UI)
+  -> XPC -> ClawdHomeHelper (privileged LaunchDaemon)
+      -> per-user OpenClaw gateway instances
 ```
-ClawdHome.app (admin UI)
-  -> XPC -> ClawdHomeHelper (privileged daemon)
-      -> user-level OpenClaw gateway instances (isolated per Shrimp)
-```
 
-- `ClawdHome.app` provides UI for operations, status, and configuration.
-- `ClawdHomeHelper` performs privileged system actions via controlled interfaces.
-- Each Shrimp maps to an isolated OpenClaw gateway runtime.
-- Gateway lifecycle is managed per instance (start/stop/restart/health checks).
-- Per-instance config and data are handled with explicit ownership and permission logic.
+- `ClawdHome.app` is the operator-facing control plane for status, setup, and day-to-day maintenance.
+- `ClawdHomeHelper` is the privileged boundary for user management, process control, file operations, installs, and system automation.
+- Each Shrimp runs as a separate macOS user with its own OpenClaw runtime and data.
 
 ## Security Model
 
-- Privileged operations are isolated in the helper daemon boundary.
-- User-scoped runtime resources are separated per Shrimp/gateway instance.
-- Sensitive operations are routed through explicit XPC methods, not ad-hoc shell paths.
-- Ownership and permission repair is built into key lifecycle workflows.
+- Privileged operations stay inside the helper boundary.
+- Sensitive actions use explicit XPC methods rather than arbitrary shell paths.
+- Ownership and permission repair are built into important lifecycle workflows.
+- Runtime resources are separated per Shrimp to reduce blast radius and accidental cross-contamination.
 
 ## Quick Start
 
@@ -71,20 +74,20 @@ ClawdHome.app (admin UI)
 - Xcode 15+
 - Optional: [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 
-### Build and run
+### Build From Source
 
 ```bash
 open ClawdHome.xcodeproj
 ```
 
-Or regenerate first:
+If you prefer to regenerate the Xcode project first:
 
 ```bash
 xcodegen generate
 open ClawdHome.xcodeproj
 ```
 
-### Install helper (development)
+### Install Helper For Local Development
 
 ```bash
 make install-helper
@@ -96,21 +99,42 @@ Equivalent direct command:
 sudo bash scripts/install-helper-dev.sh install
 ```
 
-### Troubleshooting npm install on macOS
+## Common Commands
 
-If OpenClaw installation fails during `npm install -g`, check Xcode CLI prerequisites first:
+| Purpose | Command |
+| --- | --- |
+| Build app (Debug) | `make build` |
+| Build helper only | `make build-helper` |
+| Build release archive | `make build-release` |
+| Build unsigned local package | `make pkg` |
+| Build signed package for local validation | `make pkg-signed` |
+| Build signed and notarized package | `make notarize-pkg` |
+| Run full release flow | `make release NOTARIZE=true` |
+| Run exported Release app directly | `make run-release` |
+| Install latest generated package | `make install-pkg` |
+| Uninstall development helper | `make uninstall-helper` |
+| Tail helper logs | `make log-helper` |
+| Tail app logs | `make log-app` |
+| Run localization checks | `make i18n-check` |
+| Clean build artifacts | `make clean` |
+
+## Troubleshooting
+
+### `npm install -g` fails on macOS
+
+Check whether Xcode Command Line Tools are available:
 
 ```bash
 xcode-select -p
 ```
 
-If the command fails, install Command Line Tools:
+If the command fails, install them:
 
 ```bash
 xcode-select --install
 ```
 
-If you see a license-related error, accept it as admin:
+If you hit an Xcode license error, accept it as an admin user:
 
 ```bash
 sudo xcodebuild -license
@@ -118,101 +142,59 @@ sudo xcodebuild -license
 sudo xcodebuild -license accept
 ```
 
-## Key Capabilities
+### Where to look for logs
 
-- Multi-Shrimp OpenClaw gateway isolation on one Mac.
-- Per-instance lifecycle control and health visibility.
-- Managed user operations and bootstrap workflows.
-- Config editing and diagnostics tooling in one UI.
-- File, session, memory, and log management surfaces.
-- Local AI operational integration (where configured).
+- Helper log: `/tmp/clawdhome-helper.log`
+- App log stream: `make log-app`
 
 ## Repository Layout
 
 ```text
-ClawdHome/
-  UI app (SwiftUI), models, services, views
-ClawdHomeHelper/
-  privileged helper daemon and operations
-Shared/
-  shared protocol/models between app and helper
-scripts/
-  build, install, packaging, release-note utilities
-Resources/
-  helper launch daemon plist and packaging resources
+ClawdHome/          SwiftUI app, views, models, services
+ClawdHomeHelper/    privileged helper daemon and operations
+Shared/             protocols and shared models for app/helper
+Resources/          launch daemon plist and packaging resources
+scripts/            build, install, packaging, release, and i18n utilities
+docs/               project documentation and README assets
+release-notes/      generated release-note drafts
 ```
 
-## Development Workflow
+## Localization
 
-- Build app debug:
-
-```bash
-make build
-```
-
-- Build helper debug:
-
-```bash
-make build-helper
-```
-
-- Run the Release app bundle directly without installing a pkg:
-
-```bash
-make run-release
-```
-
-- Build a fast local development pkg (unsigned):
-
-```bash
-make pkg
-```
-
-- Build a signed installer pkg for pre-release local validation:
-
-```bash
-make pkg-signed
-```
-
-- Run the full release flow (signed pkg, optional notarization, GitHub Release):
-
-```bash
-make release NOTARIZE=true
-```
-
-- Show helper logs:
-
-```bash
-make log-helper
-```
-
-## Internationalization
-
-- Localization guide: [docs/i18n.md](docs/i18n.md)
-- Run i18n checks:
-
-```bash
-make i18n-check
-```
+- Languages: English and Chinese
+- String system: `Stable.xcstrings`
+- Checks: `make i18n-check`
+- Guide: [docs/i18n.md](docs/i18n.md)
 
 ## Roadmap
 
-- [ ] External key management (Exec-based secrets provider).
-- [ ] Fine-grained network access control management.
-- [ ] Simplified configuration for more model providers and IM channels.
-- [ ] Local small-model integrated runtime, scenario skills, and OpenClaw integration.
-- [ ] Rescue and diagnostics capabilities.
-- [ ] Improved gateway probing and historical health tracking.
-- [ ] Production-grade signed/notarized distribution pipeline.
+- [ ] External key management with an exec-based secrets provider
+- [ ] Finer-grained network access control management
+- [ ] Simpler setup for more model providers and IM channels
+- [ ] Better local small-model workflows and OpenClaw integration
+- [ ] Stronger rescue and diagnostics capabilities
+- [ ] Better gateway probing and historical health tracking
+- [ ] More production-ready signed and notarized distribution workflows
 
 ## Contributing
 
-- Open an issue first for major changes.
-- Keep PRs scoped and atomic.
+- Open an issue before large or structural changes.
+- Keep pull requests small, focused, and easy to review.
 - Include validation evidence for behavior changes.
-- Avoid committing local/private environment artifacts.
-- Follow existing Swift style and project structure.
+- Avoid committing local or private environment artifacts.
+- Follow the existing Swift and project structure conventions.
+- The repository currently does not ship automated unit tests, so manual verification notes are especially important in PRs.
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=ThinkInAIXYZ%2Fclawdhome&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=ThinkInAIXYZ/clawdhome&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=ThinkInAIXYZ/clawdhome&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=ThinkInAIXYZ/clawdhome&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## License
 
-Licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE).
