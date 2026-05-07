@@ -487,6 +487,7 @@ extension ClawdHomeHelperImpl {
                 "HOME": home,
                 "USER": username,
                 "PATH": HermesInstaller.buildPath(for: username),
+                "BROWSER": "\(home)/.clawdhome/tools/clawdhome-browser/clawdhome-browser open %s",
                 "HERMES_HOME": hermesHome,
             ]
             if let actual = hermesGatewayPlistEnvironment(username: username) {

@@ -16,6 +16,13 @@ extension ClawdHomeHelperImpl {
         helperLog("安装 hermes @\(username) v\(version ?? "latest")")
         let logURL = hermesInitLogURL(username: username)
         do {
+            helperLog("[browser-account] Hermes 安装前准备 Node 与浏览器工具 @\(username)")
+            try NodeDownloader.install(
+                username: username,
+                distBaseURL: NodeDistOption.defaultForInitialization.rawValue,
+                logURL: logURL
+            )
+            try BrowserAccountManager.prepareForRuntimeInstall(username: username, logURL: logURL)
             try HermesInstaller.install(username: username, version: version, logURL: logURL)
             let uid = try UserManager.uid(for: username)
             try HermesGatewayManager.startGateway(username: username, profileID: "main", uid: uid)
