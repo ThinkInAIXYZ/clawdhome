@@ -6,9 +6,27 @@ import SwiftUI
 // MARK: - 主视图（Overview）
 
 struct ModelConfigWizard: View {
+    /// 呈现模式 — 决定标题栏 / 底部按钮 / 宽度等差异
+    enum Presentation {
+        case standalone     // 独立窗口（详情页打开）：titleBar + 480 固定宽 + 无下一步
+        case wizardStep     // 向导嵌入步骤：embeddedHeader + 自适应宽 + 下一步/跳过
+        case settingsPane   // 设置面板 tab 嵌入：embeddedHeader + 自适应宽 + 无下一步
+    }
+
     let user: ManagedUser
-    var embedded: Bool = false
+    var presentation: Presentation = .standalone
     var onDone: (() -> Void)? = nil
+
+    /// 标题栏（标题+完成按钮）— 仅独立窗口
+    private var showsTitleBar: Bool { presentation == .standalone }
+    /// 嵌入式 header（subheading + hint）— 向导和设置面板都用
+    private var showsEmbeddedHeader: Bool { presentation != .standalone }
+    /// 底部"下一步/跳过"— 仅向导步骤
+    private var showsWizardFooter: Bool { presentation == .wizardStep }
+    /// 固定宽度（独立窗口需要 480 等比；其他模式自适应父容器）
+    private var fixedWidth: CGFloat? { presentation == .standalone ? 480 : nil }
+    /// "添加模型"用主按钮（独立窗口/设置面板里这是主操作；向导里要让位给"下一步"）
+    private var addButtonIsProminent: Bool { presentation != .wizardStep }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(HelperClient.self) private var helperClient
@@ -35,10 +53,10 @@ struct ModelConfigWizard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !embedded { titleBar }
+            if showsTitleBar { titleBar }
 
-            if embedded {
-                // ── Embedded 模式：固定 header + 内容区 + 固定 footer ──
+            if showsEmbeddedHeader {
+                // ── 嵌入式 header（向导 / 设置面板共用） ──
                 embeddedHeader
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -83,10 +101,12 @@ struct ModelConfigWizard: View {
                     }
                 }
 
-                Divider()
-                embeddedFooter
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 14)
+                if showsWizardFooter {
+                    Divider()
+                    embeddedFooter
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 14)
+                }
             } else {
                 // ── 独立窗口模式（从详情页打开） ──
                 ScrollView {
@@ -98,7 +118,7 @@ struct ModelConfigWizard: View {
                 }
             }
         }
-        .frame(width: embedded ? nil : 480)
+        .frame(width: fixedWidth)
         .task { await loadStatus() }
         .sheet(isPresented: $showAddModel) {
             VStack(spacing: 0) {
@@ -269,20 +289,20 @@ struct ModelConfigWizard: View {
     @ViewBuilder
     private var actionButtons: some View {
         HStack(spacing: 10) {
-            if embedded {
-                Button {
-                    showAddModel = true
-                } label: {
-                    Label(L10n.k("model.config.add_model", fallback: "添加模型"), systemImage: "plus.circle")
-                }
-                .buttonStyle(.bordered)
-            } else {
+            if addButtonIsProminent {
                 Button {
                     showAddModel = true
                 } label: {
                     Label(L10n.k("model.config.add_model", fallback: "添加模型"), systemImage: "plus.circle")
                 }
                 .buttonStyle(.borderedProminent)
+            } else {
+                Button {
+                    showAddModel = true
+                } label: {
+                    Label(L10n.k("model.config.add_model", fallback: "添加模型"), systemImage: "plus.circle")
+                }
+                .buttonStyle(.bordered)
             }
 
             Spacer()

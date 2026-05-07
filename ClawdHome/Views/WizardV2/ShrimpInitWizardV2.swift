@@ -899,7 +899,7 @@ struct ShrimpInitWizardV2: View {
 
     private var configModelView: some View {
         ScrollView {
-            ModelConfigWizard(user: user, embedded: true) {
+            ModelConfigWizard(user: user, presentation: .wizardStep) {
                 advance()
             }
             .padding(20)

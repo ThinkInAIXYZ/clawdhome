@@ -277,17 +277,12 @@ struct ShrimpSettingsV2View: View {
         .padding(.vertical, 4)
     }
 
-    // MARK: - Tab 4: Model (placeholder)
+    // MARK: - Tab 4: Model
 
+    /// 模型池管理 — 复用 ModelConfigWizard，让向导 / 详情页 / 设置三处共享同一套交互。
     private var modelTab: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "cpu")
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
-            Text(L10n.k("settings_v2.model.hint", fallback: "模型配置请在「概览」Tab 中进行"))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ModelConfigWizard(user: user, presentation: .settingsPane)
+            .padding(.horizontal, 20)
     }
 
     // MARK: - Tab 5: Advanced
