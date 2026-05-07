@@ -23,6 +23,17 @@ struct ContentView: View {
     @Environment(AppLockStore.self) private var lockStore
     @State private var daemonInstaller = DaemonInstaller()
     @State private var navSelection: NavDestination? = .clawPool
+    // 0 = 跟随系统, 1 = 浅色, 2 = 深色
+    @AppStorage("colorSchemePreference") private var colorSchemePreference: Int = 0
+
+    private var preferredColorScheme: ColorScheme? {
+        switch colorSchemePreference {
+        case 1: return .light
+        case 2: return .dark
+        default: return nil
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if let err = pool.loadError {
@@ -88,6 +99,16 @@ struct ContentView: View {
                                     )
                                 )
                                 .clipShape(Capsule())
+                            Spacer()
+                            Button {
+                                colorSchemePreference = (colorSchemePreference + 1) % 3
+                            } label: {
+                                Image(systemName: colorSchemePreference == 1 ? "sun.max.fill" : colorSchemePreference == 2 ? "moon.fill" : "circle.lefthalf.filled")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help(colorSchemePreference == 1 ? "浅色模式" : colorSchemePreference == 2 ? "深色模式" : "跟随系统")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
@@ -173,6 +194,7 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.15), value: lockStore.isLocked)
+        .preferredColorScheme(preferredColorScheme)
         .onAppear {
             let visible = (navSelection == .dashboard || navSelection == nil)
             pool.setDashboardVisible(visible)

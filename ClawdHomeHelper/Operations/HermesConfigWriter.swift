@@ -47,8 +47,8 @@ struct HermesConfigWriter {
                 ("agent", agentUpdates),
             ])
             try patched.write(toFile: configPath, atomically: true, encoding: .utf8)
-            try? FilePermissionHelper.chown(configPath, owner: username)
-            try? FilePermissionHelper.chmod(configPath, mode: "600")
+            _ = try? FilePermissionHelper.chown(configPath, owner: username)
+            _ = try? FilePermissionHelper.chmod(configPath, mode: "600")
         }
 
         // 合并 .env
@@ -189,7 +189,7 @@ struct HermesConfigWriter {
                 attributes: [.posixPermissions: 0o700]
             )
         }
-        try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
+        _ = try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
     }
 
     /// 逐行修补 YAML 的指定顶层 section（保留注释、空行、未管理的 section）
@@ -318,8 +318,8 @@ struct HermesConfigWriter {
 
         let out = lines.joined(separator: "\n")
         try out.write(toFile: envPath, atomically: true, encoding: .utf8)
-        try? FilePermissionHelper.chown(envPath, owner: username)
-        try? FilePermissionHelper.chmod(envPath, mode: "600")
+        _ = try? FilePermissionHelper.chown(envPath, owner: username)
+        _ = try? FilePermissionHelper.chmod(envPath, mode: "600")
     }
 
     private static func renderEnvValue(_ value: String) -> String {
@@ -577,7 +577,7 @@ struct HermesProfileManager {
         if profile.isDefault {
             try setActiveProfile(username: username, profileID: id)
         } else {
-            try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
+            _ = try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
         }
     }
 
@@ -605,7 +605,7 @@ struct HermesProfileManager {
             if FileManager.default.fileExists(atPath: activePath) {
                 try FileManager.default.removeItem(atPath: activePath)
             }
-            try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
+            _ = try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
             return
         }
 
@@ -615,9 +615,9 @@ struct HermesProfileManager {
         }
 
         try atomicWrite(profileID + "\n", to: activePath)
-        try? FilePermissionHelper.chown(activePath, owner: username)
-        try? FilePermissionHelper.chmod(activePath, mode: "600")
-        try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
+        _ = try? FilePermissionHelper.chown(activePath, owner: username)
+        _ = try? FilePermissionHelper.chmod(activePath, mode: "600")
+        _ = try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
     }
 
     static func removeProfile(username: String, profileID: String) throws {
@@ -642,8 +642,8 @@ struct HermesProfileManager {
         metas.removeValue(forKey: profileID)
         try saveMetaMap(metas, hermesHome: hermesHome, username: username)
         // 删除 profile 时同步从自启白名单剔除（D12 联动）
-        try? HermesAutostartList.remove(username: username, profileID: profileID)
-        try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
+        _ = try? HermesAutostartList.remove(username: username, profileID: profileID)
+        _ = try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
     }
 
     private static func validateProfileID(_ id: String) throws {
@@ -696,8 +696,8 @@ struct HermesProfileManager {
         let path = metaPath(hermesHome: hermesHome)
         let data = try JSONEncoder().encode(map)
         try data.write(to: URL(fileURLWithPath: path), options: .atomic)
-        try? FilePermissionHelper.chown(path, owner: username)
-        try? FilePermissionHelper.chmod(path, mode: "600")
+        _ = try? FilePermissionHelper.chown(path, owner: username)
+        _ = try? FilePermissionHelper.chmod(path, mode: "600")
     }
 
     private static func cloneDefaultProfileConfigIfNeeded(
@@ -722,7 +722,7 @@ struct HermesProfileManager {
                 try FileManager.default.copyItem(atPath: src, toPath: dst)
             }
         }
-        try? FilePermissionHelper.chownRecursive(dstRoot, owner: username)
+        _ = try? FilePermissionHelper.chownRecursive(dstRoot, owner: username)
     }
 
     private static func atomicWrite(_ text: String, to path: String) throws {
@@ -746,7 +746,7 @@ struct HermesProfileManager {
                 attributes: [.posixPermissions: 0o700]
             )
         }
-        try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
+        _ = try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
     }
 
     private static func parseModelSection(configPath: String) -> [String: String] {

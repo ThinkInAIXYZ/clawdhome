@@ -387,8 +387,8 @@ struct UserFilesView: View {
     let users: [ManagedUser]
     /// 嵌入单用户 Tab 时传入，自动选中并隐藏用户选择器
     var preselectedUser: ManagedUser? = nil
-    /// Hermes 运行时品牌开关（用于替换 Home 入口图标）
-    var prefersHermesBrand: Bool = false
+    /// 浏览作用域：用户 Home 或某个运行时目录
+    var scope: UserFilesScope = .home
     /// 仅用于详情页预选用户模式：按天记忆每个用户在文件页的最后目录
     private static var preselectedDailyPathByUser: [String: (dayKey: String, path: String)] = [:]
 
@@ -422,10 +422,10 @@ struct UserFilesView: View {
     @State private var renameTarget: FileEntry?
     @State private var renameText = ""          // 不含后缀的编辑值
     @State private var renameExt = ""           // 原始后缀（含点），若目录则为空
-    /// 仅在“默认自动进入 .openclaw”场景启用不存在时回退到 home
-    @State private var shouldFallbackMissingOpenClaw = false
+    /// 仅在“默认自动进入运行时 home”场景启用不存在时回退到用户 home
+    @State private var shouldFallbackMissingRuntimeHome = false
 
-    // 显示隐藏文件（默认开启，.openclaw 等隐藏目录是主要管理对象）
+    // 显示隐藏文件（默认开启，隐藏运行时目录是主要管理对象）
     @State private var showHidden = true
 
     // 上传进度
@@ -460,12 +460,34 @@ struct UserFilesView: View {
 
     // 快速入口（相对于 home 的路径）—— 用户 Home 单独渲染为头像按钮
     private var quickAccessItems: [(title: String, icon: String, path: String)] {
-        [("Home", "externaldrive", prefersHermesBrand ? ".hermes" : ".openclaw")]
+        guard UserFilesRuntimePolicy.shouldShowRuntimeHomeShortcut(scope: scope),
+              let title = scope.shortcutTitle,
+              let runtime = scope.runtime else {
+            return []
+        }
+        return [(title, "externaldrive", runtime.relativeHomePath)]
+    }
+
+    private var defaultRelativePath: String {
+        scope.rootRelativePath
+    }
+
+    private var runtimeHome: ManagedHomeRuntime? {
+        scope.runtime
+    }
+
+    private var displayedPath: String {
+        guard let runtimeHome else { return currentPath }
+        guard currentPath == runtimeHome.relativeHomePath || currentPath.hasPrefix(runtimeHome.relativeHomePath + "/") else {
+            return currentPath
+        }
+        let suffix = String(currentPath.dropFirst(runtimeHome.relativeHomePath.count))
+        return suffix.hasPrefix("/") ? String(suffix.dropFirst()) : suffix
     }
 
     // 面包屑：路径组件
     private var breadcrumbs: [String] {
-        currentPath.isEmpty ? [] : currentPath.components(separatedBy: "/")
+        displayedPath.isEmpty ? [] : displayedPath.components(separatedBy: "/")
     }
 
     // 从 ID 反查选中条目
@@ -480,7 +502,9 @@ struct UserFilesView: View {
     }
 
     private var sortedEntries: [FileEntry] {
-        entries.sorted(by: shouldComeBefore)
+        entries
+            .filter(shouldDisplayEntry)
+            .sorted(by: shouldComeBefore)
     }
 
     var body: some View {
@@ -622,15 +646,15 @@ struct UserFilesView: View {
         .onChange(of: selectedUser) { _, user in
             guard preselectedUser == nil else { return }
             if user != nil {
-                currentPath = ".openclaw"
-                shouldFallbackMissingOpenClaw = true
+                currentPath = defaultRelativePath
+                shouldFallbackMissingRuntimeHome = !defaultRelativePath.isEmpty
                 selectedEntryIDs = []
                 showHidden = true
                 Task { await loadDirectory() }
             }
         }
         .onAppear {
-            // 嵌入详情 Tab 时：仅首次进入该用户文件页自动跳到 .openclaw
+            // 嵌入详情 Tab 时：仅首次进入该用户文件页自动跳到显式指定的运行时目录
             if let pre = preselectedUser {
                 activatePreselectedUser(pre)
             }
@@ -781,12 +805,12 @@ struct UserFilesView: View {
                 ForEach(quickAccessItems, id: \.path) { item in
                     Button {
                         currentPath = item.path
-                        shouldFallbackMissingOpenClaw = false
+                        shouldFallbackMissingRuntimeHome = false
                         selectedEntryIDs = []
                         Task { await loadDirectory() }
                     } label: {
                         HStack(spacing: 5) {
-                            if prefersHermesBrand {
+                            if runtimeHome == .hermes {
                                 HermesLogoMark()
                                     .frame(width: 12, height: 12)
                             } else {
@@ -814,17 +838,20 @@ struct UserFilesView: View {
     private var breadcrumbBar: some View {
         HStack(spacing: 4) {
             Button {
-                currentPath = ""
+                currentPath = defaultRelativePath
                 Task { await loadDirectory() }
             } label: {
                 HStack(spacing: 4) {
-                    if prefersHermesBrand {
+                    if runtimeHome == .hermes {
                         HermesLogoMark()
+                            .frame(width: 12, height: 12)
+                    } else if runtimeHome == .openclaw {
+                        OpenClawLogoMark()
                             .frame(width: 12, height: 12)
                     } else {
                         Text("🏠")
                     }
-                    Text("Home")
+                    Text(scope.shortcutTitle ?? "Home")
                 }
             }
             .buttonStyle(.plain)
@@ -835,7 +862,7 @@ struct UserFilesView: View {
                     .foregroundStyle(.secondary)
                 Button(crumb) {
                     // 跳到面包屑某一层
-                    currentPath = breadcrumbs[0...idx].joined(separator: "/")
+                    currentPath = actualPath(forDisplayedPath: breadcrumbs[0...idx].joined(separator: "/"))
                     Task { await loadDirectory() }
                 }
                 .buttonStyle(.plain)
@@ -1140,15 +1167,43 @@ struct UserFilesView: View {
         Task { await loadDirectory() }
     }
 
+    private func shouldDisplayEntry(_ entry: FileEntry) -> Bool {
+        !UserFilesRuntimePolicy.shouldHideEntryFromRootHomeList(
+            name: entry.name,
+            isDirectory: entry.isDirectory,
+            scope: scope,
+            currentPath: currentPath
+        )
+    }
+
+    private func actualPath(forDisplayedPath displayedPath: String) -> String {
+        guard let runtimeHome else {
+            return displayedPath
+        }
+        guard !displayedPath.isEmpty else {
+            return runtimeHome.relativeHomePath
+        }
+        return "\(runtimeHome.relativeHomePath)/\(displayedPath)"
+    }
+
     private static func dayKey(for date: Date = Date()) -> String {
         let cal = Calendar.current
         let c = cal.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 
+    private func preselectedPathStorageKey(for username: String) -> String {
+        switch scope {
+        case .home:
+            return "\(username)|home"
+        case .runtime(let runtime):
+            return "\(username)|\(runtime.rawValue)"
+        }
+    }
+
     private func recordCurrentPathForToday(_ path: String) {
         guard let user = selectedUser, preselectedUser != nil else { return }
-        Self.preselectedDailyPathByUser[user.username] = (Self.dayKey(), path)
+        Self.preselectedDailyPathByUser[preselectedPathStorageKey(for: user.username)] = (Self.dayKey(), path)
     }
 
     private func activatePreselectedUser(_ pre: ManagedUser) {
@@ -1157,13 +1212,14 @@ struct UserFilesView: View {
         showHidden = true
 
         let today = Self.dayKey()
-        if let saved = Self.preselectedDailyPathByUser[pre.username], saved.dayKey == today {
+        let storageKey = preselectedPathStorageKey(for: pre.username)
+        if let saved = Self.preselectedDailyPathByUser[storageKey], saved.dayKey == today {
             currentPath = saved.path
-            shouldFallbackMissingOpenClaw = false
+            shouldFallbackMissingRuntimeHome = false
         } else {
-            currentPath = ".openclaw"
-            shouldFallbackMissingOpenClaw = true
-            Self.preselectedDailyPathByUser[pre.username] = (today, ".openclaw")
+            currentPath = defaultRelativePath
+            shouldFallbackMissingRuntimeHome = !defaultRelativePath.isEmpty
+            Self.preselectedDailyPathByUser[storageKey] = (today, defaultRelativePath)
         }
         Task { await loadDirectory() }
     }
@@ -1182,14 +1238,14 @@ struct UserFilesView: View {
                 relativePath: requestedPath,
                 showHidden: showHidden
             )
-            if requestedPath == ".openclaw" {
-                shouldFallbackMissingOpenClaw = false
+            if requestedPath == runtimeHome?.relativeHomePath {
+                shouldFallbackMissingRuntimeHome = false
             }
             recordCurrentPathForToday(requestedPath)
         } catch {
-            // .openclaw 不存在时，自动回退到用户 home 目录
-            if requestedPath == ".openclaw" && shouldFallbackMissingOpenClaw {
-                shouldFallbackMissingOpenClaw = false
+            // 默认运行时目录不存在时，自动回退到用户 home 目录
+            if requestedPath == runtimeHome?.relativeHomePath && shouldFallbackMissingRuntimeHome {
+                shouldFallbackMissingRuntimeHome = false
                 currentPath = ""
                 do {
                     entries = try await helperClient.listDirectory(
@@ -1473,7 +1529,8 @@ struct UserFilesView: View {
         let payload = maintenanceWindowRegistry.makePayload(
             username: user.username,
             title: L10n.k("auto.user_files_view.file", fallback: "文件管理终端"),
-            command: ["zsh", "-lc", "cd '\(escaped)' && exec /bin/zsh -l"]
+            command: ["zsh", "-lc", "cd '\(escaped)' && exec /bin/zsh -l"],
+            engine: user.prefersHermesRuntime ? .hermes : .openclaw
         )
         openWindow(id: "maintenance-terminal", value: payload)
     }

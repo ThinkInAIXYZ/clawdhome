@@ -175,7 +175,7 @@ struct PersonaGitManager {
 
         // 修正文件所有权（checkout 由 root 通过 sudo 执行，owner 已是 shrimp，但以防万一）
         let filePath = workdir + "/" + filename
-        try? run("/usr/sbin/chown", args: ["\(username):staff", filePath])
+        _ = try? run("/usr/sbin/chown", args: ["\(username):staff", filePath])
 
         // git add + commit
         try gitRun(username: username, workdir: workdir, args: ["add", filename])

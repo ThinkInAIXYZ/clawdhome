@@ -17,6 +17,8 @@ extension ClawdHomeHelperImpl {
         let logURL = hermesInitLogURL(username: username)
         do {
             try HermesInstaller.install(username: username, version: version, logURL: logURL)
+            let uid = try UserManager.uid(for: username)
+            try HermesGatewayManager.startGateway(username: username, profileID: "main", uid: uid)
             reply(true, nil)
         } catch {
             helperLog("安装 hermes 失败 @\(username): \(error.localizedDescription)", level: .error)

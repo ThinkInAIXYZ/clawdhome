@@ -112,6 +112,16 @@ struct ModelGroup: Identifiable {
 /// 格式：provider/model-id，与 openclaw config 写入格式一致
 /// ⚠️ 这是模型 (id, label, config) 的唯一源，其他文件应引用此数组而非重复定义
 let builtInModelGroups: [ModelGroup] = [
+    ModelGroup(id: "moonshot", provider: "Moonshot（Kimi）", models: [
+        ModelEntry(id: "moonshot/kimi-k2.6", label: "Kimi K2.6",
+                   inputTypes: ["text", "image"],
+                   contextWindow: 256_000, maxTokens: 32_768,
+                   cost: ModelCost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0)),
+        ModelEntry(id: "moonshot/kimi-k2.5", label: "Kimi K2.5",
+                   inputTypes: ["text", "image"],
+                   contextWindow: 256_000, maxTokens: 32_768,
+                   cost: ModelCost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0)),
+    ]),
     ModelGroup(id: "kimi-coding", provider: "Kimi Code", models: [
         ModelEntry(id: "kimi-coding/k2p5", label: "Kimi K2.5",
                    inputTypes: ["text", "image"],
@@ -148,6 +158,9 @@ let builtInModelGroups: [ModelGroup] = [
                    compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false)),
         ModelEntry(id: "qiniu/z-ai/glm-5", label: "GLM 5",
                    reasoning: false,
+                   compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false)),
+        ModelEntry(id: "qiniu/moonshotai/kimi-k2.6", label: "Kimi K2.6",
+                   reasoning: false, contextWindow: 256_000,
                    compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false)),
         ModelEntry(id: "qiniu/moonshotai/kimi-k2.5", label: "Kimi K2.5",
                    reasoning: false, contextWindow: 256_000,

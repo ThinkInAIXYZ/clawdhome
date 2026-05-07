@@ -97,6 +97,44 @@ struct HermesInstaller {
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
+    // MARK: - .clawdhome 运行时配置
+
+    /// ~/.clawdhome/ 目录（per-shrimp ClawdHome 配置根目录）
+    static func clawdhomeDir(for username: String) -> String {
+        "/Users/\(username)/.clawdhome"
+    }
+
+    static func runtimeConfigPath(for username: String) -> String {
+        "\(clawdhomeDir(for: username))/runtime.json"
+    }
+
+    static func readRuntimeConfig(username: String) -> ShrimpRuntimeConfig? {
+        guard let data = FileManager.default.contents(atPath: runtimeConfigPath(for: username)) else { return nil }
+        return try? JSONDecoder().decode(ShrimpRuntimeConfig.self, from: data)
+    }
+
+    /// 写入运行时声明（best-effort，失败仅记日志不抛出）
+    static func writeRuntimeConfig(runtime: String, username: String) {
+        let dir = clawdhomeDir(for: username)
+        do {
+            if !FileManager.default.fileExists(atPath: dir) {
+                try FileManager.default.createDirectory(
+                    atPath: dir, withIntermediateDirectories: true, attributes: nil
+                )
+            }
+            let config = ShrimpRuntimeConfig(runtime: runtime)
+            let data = try JSONEncoder().encode(config)
+            let path = runtimeConfigPath(for: username)
+            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            _ = try? FilePermissionHelper.chown(dir, owner: username)
+            _ = try? FilePermissionHelper.chown(path, owner: username)
+        } catch {
+            helperLog("[ClawdhomeConfig] 写入运行时配置失败 runtime=\(runtime) @\(username): \(error.localizedDescription)", level: .warn)
+        }
+    }
+
+    // MARK: - PATH
+
     /// Hermes 独立的 PATH（不含 npm/node 路径，与 OpenClaw 环境隔离）
     static func buildPath(for username: String) -> String {
         let home = "/Users/\(username)"
@@ -153,6 +191,8 @@ struct HermesInstaller {
         // 0. 前置检查：目标用户可用的 Python 3.11+
         _ = try findPython(for: username)
 
+        try cleanupAccidentalOpenClawDraftIfNeeded(username: username)
+
         let home = hermesHome(for: username)
 
         // 1. 确保 HERMES_HOME 存在且归属用户
@@ -161,7 +201,7 @@ struct HermesInstaller {
                 atPath: home, withIntermediateDirectories: true, attributes: nil
             )
         }
-        try? FilePermissionHelper.chown(home, owner: username)
+        _ = try? FilePermissionHelper.chown(home, owner: username)
 
         // 2. 使用官方 install.sh（非交互），并保持目标用户环境隔离
         helperLog("[HermesInstaller] 使用官方脚本安装 @\(username)")
@@ -178,11 +218,13 @@ struct HermesInstaller {
 
         // 3. 修正所有权（脚本内若触发 sudo/install 产生 root-owned 文件，做一次兜底）
         let venv = venvDir(for: username)
-        try? FilePermissionHelper.chownRecursive(installDir(for: username), owner: username)
-        try? FilePermissionHelper.chownRecursive(home, owner: username)
-        try? FilePermissionHelper.chownRecursive(venv, owner: username)
+        _ = try? FilePermissionHelper.chownRecursive(installDir(for: username), owner: username)
+        _ = try? FilePermissionHelper.chownRecursive(home, owner: username)
+        _ = try? FilePermissionHelper.chownRecursive(venv, owner: username)
 
         helperLog("[HermesInstaller] INSTALL_OK @\(username)")
+        // 写入运行时声明，固定识别引擎（防止 hermes --version 并发失败导致实例识别抖动）
+        writeRuntimeConfig(runtime: "hermes", username: username)
         return output
     }
 
@@ -207,26 +249,47 @@ struct HermesInstaller {
         return try run(exe, args: args)
     }
 
+    private static func cleanupAccidentalOpenClawDraftIfNeeded(username: String) throws {
+        let openclawDir = "/Users/\(username)/.openclaw"
+        guard FileManager.default.fileExists(atPath: openclawDir) else { return }
+
+        let hasOpenClawBinary = (try? ConfigWriter.findOpenclawBinary(for: username)) != nil
+        let topLevelEntries = (try? FileManager.default.contentsOfDirectory(atPath: openclawDir)) ?? []
+        guard AccidentalOpenClawDraftDetector.shouldDelete(
+            topLevelEntries: topLevelEntries,
+            hasOpenClawBinary: hasOpenClawBinary
+        ) else { return }
+
+        helperLog("[HermesInstaller] 检测到误生成的 .openclaw 草稿目录，安装前清理 @\(username)")
+        try FileManager.default.removeItem(atPath: openclawDir)
+    }
+
     // MARK: - 版本查询
 
     /// 查询已安装的 Hermes 版本（未安装返回 nil）
-    /// 为避免启动 Python 解释器带来 ~1s 延迟，优先读取 venv 内 dist-info 里的 METADATA
+    /// 识别依据：先查 ~/.clawdhome/runtime.json，确认是 hermes 实例后再读 dist-info 版本号。
+    /// 不再 fallback 到 hermes --version 子进程，防止并发执行时输出为空导致识别抖动。
     static func installedVersion(username: String) -> String? {
+        // 1. 有运行时配置且明确声明为非 hermes → 快速返回 nil，防止误识别
+        if let config = readRuntimeConfig(username: username), config.runtime != "hermes" {
+            return nil
+        }
+
+        // 2. 可执行文件必须存在（向下兼容：无配置文件时也走此检查）
         let hermesBin = hermesExecutable(for: username)
         guard FileManager.default.isExecutableFile(atPath: hermesBin) else { return nil }
 
-        // 快速路径：扫 venv 下的 site-packages 找 hermes_agent-*.dist-info
+        // 3. 从 venv dist-info 读取版本（纯文件读取，无子进程）
         if let fastVersion = readVersionFromDistInfo(username: username) {
             return fastVersion
         }
 
-        // fallback：调用 hermes --version（慢但准）
-        let args = ["-u", username, "-H", "env", "-i"]
-            + sudoRuntimeArgs(for: username)
-            + [hermesBin, "--version"]
-        let raw = (try? run("/usr/bin/sudo", args: args)) ?? ""
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        // 4. dist-info 暂时不可读（如安装中途）→ 有配置文件时返回占位版本避免识别翻转
+        if readRuntimeConfig(username: username) != nil {
+            return "unknown"
+        }
+
+        return nil
     }
 
     /// 从 venv/lib/pythonX.Y/site-packages/hermes_agent-*.dist-info/METADATA 解析版本

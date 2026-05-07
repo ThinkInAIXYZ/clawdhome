@@ -801,6 +801,27 @@ extension ClawdHomeHelperImpl {
             ))
         }
 
+        let globalAutostart = gatewayAutostartGloballyEnabled()
+        let userAutostart = userGatewayAutostartEnabled(username: username)
+        let autostartProfiles = HermesAutostartList.load(username: username)
+        let profileIDs = hermesDiagnosticProfileIDs(username: username, autostartProfiles: autostartProfiles)
+        for profileID in profileIDs {
+            let status = HermesGatewayManager.status(username: username, profileID: profileID)
+            let plistStatus = launchDaemonFlags(
+                path: HermesGatewayManager.launchDaemonPath(username: username, profileID: profileID)
+            )
+            items.append(DiagnosticsGatewayAutostartPolicy.hermesItem(
+                profileID: profileID,
+                globalAutostartEnabled: globalAutostart,
+                userAutostartEnabled: userAutostart,
+                profileAutostartEnabled: autostartProfiles.contains(profileID),
+                plistExists: plistStatus.exists,
+                runAtLoad: plistStatus.runAtLoad,
+                keepAlive: plistStatus.keepAlive,
+                running: status.running
+            ))
+        }
+
         let plistPath = HermesGatewayManager.launchDaemonPath(username: username)
         if FileManager.default.fileExists(atPath: plistPath) {
             items.append(DiagnosticItem(
@@ -819,6 +840,24 @@ extension ClawdHomeHelperImpl {
         }
 
         return items
+    }
+
+    private func hermesDiagnosticProfileIDs(username: String, autostartProfiles: Set<String>) -> [String] {
+        var profileIDs = Set(["main"])
+        profileIDs.formUnion(autostartProfiles)
+        if let data = try? HermesProfileManager.listProfiles(username: username).data(using: .utf8),
+           let rawList = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            for raw in rawList {
+                if let id = raw["id"] as? String, !id.isEmpty {
+                    profileIDs.insert(id)
+                }
+            }
+        }
+        return profileIDs.sorted { lhs, rhs in
+            if lhs == "main" { return true }
+            if rhs == "main" { return false }
+            return lhs < rhs
+        }
     }
 
     private func hermesGatewayPlistEnvironment(username: String) -> [String: String]? {
@@ -1501,6 +1540,17 @@ extension ClawdHomeHelperImpl {
                 fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
         }
 
+        let plistStatus = launchDaemonFlags(path: "/Library/LaunchDaemons/ai.clawdhome.gateway.\(username).plist")
+        items.append(DiagnosticsGatewayAutostartPolicy.openClawItem(
+            globalAutostartEnabled: gatewayAutostartGloballyEnabled(),
+            userAutostartEnabled: userGatewayAutostartEnabled(username: username),
+            intentionalStopActive: GatewayIntentionalStopStore.activeRecord(username: username) != nil,
+            plistExists: plistStatus.exists,
+            runAtLoad: plistStatus.runAtLoad,
+            keepAlive: plistStatus.keepAlive,
+            running: running
+        ))
+
         let configPath = "/Users/\(username)/.openclaw/openclaw.json"
         if let data = FileManager.default.contents(atPath: configPath),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -1514,6 +1564,25 @@ extension ClawdHomeHelperImpl {
         }
 
         return items
+    }
+
+    private func launchDaemonFlags(path: String) -> (exists: Bool, runAtLoad: Bool, keepAlive: Bool) {
+        guard FileManager.default.fileExists(atPath: path) else {
+            return (false, false, false)
+        }
+        guard let data = FileManager.default.contents(atPath: path),
+              let obj = try? PropertyListSerialization.propertyList(
+                from: data,
+                options: [],
+                format: nil
+              ) as? [String: Any] else {
+            return (true, false, false)
+        }
+        return (
+            true,
+            (obj["RunAtLoad"] as? Bool) == true,
+            (obj["KeepAlive"] as? Bool) == true
+        )
     }
 
     // MARK: 诊断 - 网络连通

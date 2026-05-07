@@ -603,7 +603,8 @@ struct HermesSetupSheet: View {
         let payload = maintenanceWindowRegistry.makePayload(
             username: user.username,
             title: "Hermes · @\(user.username)",
-            command: command
+            command: command,
+            engine: .hermes
         )
         openWindow(id: "maintenance-terminal", value: payload)
     }

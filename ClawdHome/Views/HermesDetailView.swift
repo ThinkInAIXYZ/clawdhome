@@ -71,6 +71,10 @@ struct HermesDetailView: View {
     @State private var showOnlySelectedProfileTabs = false
     @State private var hermesLogSearchText = ""
 
+    private var showMultiAgentEntrypoints: Bool {
+        HermesFeaturePolicy.shouldShowMultiAgentEntrypoints
+    }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             // chatBody / configBody 始终保留在视图层级，仅通过 opacity 控制可见性。
@@ -91,10 +95,10 @@ struct HermesDetailView: View {
                     .opacity(mode == .terminal ? 1 : 0)
                     .allowsHitTesting(mode == .terminal)
 
-                if mode == .profiles {
+                if mode == .profiles && showMultiAgentEntrypoints {
                     profilesBody
                 } else if mode == .files {
-                    UserFilesView(users: [user], preselectedUser: user, prefersHermesBrand: true)
+                    UserFilesView(users: [user], preselectedUser: user, scope: .runtime(.hermes))
                 } else if mode == .processes {
                     ProcessTabView(username: user.username)
                 } else if mode == .logs {
@@ -106,7 +110,7 @@ struct HermesDetailView: View {
 
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 6) {
-                    if mode == .profiles {
+                    if mode == .profiles && showMultiAgentEntrypoints {
                         Button {
                             showNewProfilePopover = true
                         } label: {
@@ -246,12 +250,12 @@ struct HermesDetailView: View {
     }
 
     private var configBody: some View {
-        HermesTerminalConsole(username: user.username, tabManager: configTabManager)
+        HermesTerminalConsole(username: user.username, tabManager: configTabManager, isActive: mode == .config)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var shellBody: some View {
-        HermesTerminalConsole(username: user.username, tabManager: shellTabManager)
+        HermesTerminalConsole(username: user.username, tabManager: shellTabManager, isActive: mode == .terminal)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -1366,6 +1370,7 @@ final class HermesTerminalTabManager: ObservableObject {
 struct HermesTerminalConsole: View {
     let username: String
     @ObservedObject var tabManager: HermesTerminalTabManager
+    var isActive: Bool = true
 
     @Environment(HelperClient.self) private var helperClient
     @State private var pendingCloseTabID: UUID?
@@ -1427,6 +1432,13 @@ struct HermesTerminalConsole: View {
             }
         }
         .onAppear {
+            tabManager.configureIfNeeded(username: username, helperClient: helperClient)
+            if isActive && tabManager.tabs.isEmpty {
+                tabManager.addTab()
+            }
+        }
+        .onChange(of: isActive) { _, newActive in
+            guard newActive else { return }
             tabManager.configureIfNeeded(username: username, helperClient: helperClient)
             if tabManager.tabs.isEmpty {
                 tabManager.addTab()
@@ -1533,6 +1545,7 @@ struct HermesDetailContainer: View {
     @State private var showPendingBindings = false
     @State private var pendingBindingItems: [PendingBindingItem] = []
     @State private var hasPendingDeferred: Bool = false
+    @State private var profilesLoaded = false
     // T6.1 – per-profile 运行状态缓存
     @State private var profileStatuses: [String: (running: Bool, pid: Int32)] = [:]
     // T6.3 – 自启白名单（profile ID 集合）
@@ -1690,7 +1703,12 @@ struct HermesDetailContainer: View {
             await loadAutostartWhitelist()
         }
         .onAppear { pool.addLiveSnapshotConsumer() }
-        .onDisappear { pool.removeLiveSnapshotConsumer() }
+        .onDisappear {
+            pool.removeLiveSnapshotConsumer()
+            chatTabManager.closeAllTabs()
+            configTabManager.closeAllTabs()
+            shellTabManager.closeAllTabs()
+        }
     }
 
     // MARK: - 侧边栏
@@ -1772,7 +1790,9 @@ struct HermesDetailContainer: View {
                     .padding(.top, 2)
             }
             hermesSidebarButton(.chat, label: "会话", icon: "bubble.left.and.text.bubble.right")
-            hermesSidebarButton(.profiles, label: "角色", icon: "theatermasks")
+            if HermesFeaturePolicy.shouldShowMultiAgentEntrypoints {
+                hermesSidebarButton(.profiles, label: "角色", icon: "theatermasks")
+            }
             hermesSidebarButton(.config, label: "配置", icon: "gearshape")
 
             Divider()
@@ -1800,20 +1820,22 @@ struct HermesDetailContainer: View {
                     .padding(.horizontal, 10)
                     .padding(.bottom, 4)
 
-                // 团队初始化向导入口（PR-4，≤3次点击：打开 Hermes 详情 → 点此按钮）
-                Button {
-                    showTeamWizard = true
-                } label: {
-                    Label("团队初始化", systemImage: "wand.and.stars")
-                        .font(.system(size: 12))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+                if HermesFeaturePolicy.shouldShowMultiAgentEntrypoints {
+                    // 团队初始化向导入口（PR-4，≤3次点击：打开 Hermes 详情 → 点此按钮）
+                    Button {
+                        showTeamWizard = true
+                    } label: {
+                        Label("团队初始化", systemImage: "wand.and.stars")
+                            .font(.system(size: 12))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
-                // PR-5 T5.3：继续绑定入口（仅在有 deferred 平台时显示）
-                if hasPendingDeferred {
+                // PR-5 T5.3：继续绑定入口（Hermes 多 Agent 二期再开放）
+                if hasPendingDeferred && HermesFeaturePolicy.shouldShowMultiAgentEntrypoints {
                     Button {
                         showPendingBindings = true
                     } label: {
@@ -1855,10 +1877,24 @@ struct HermesDetailContainer: View {
     // MARK: T6.2 – 聚合徽章 + 批量按钮
 
     private var runningProfileCount: Int {
-        profiles.filter { profileStatuses[$0.id]?.running == true }.count
+        HermesProfileRuntimeSummary.runningCount(
+            profileIDs: profiles.map(\.id),
+            runningProfileIDs: Set(profileStatuses.compactMap { $0.value.running ? $0.key : nil }),
+            mainRuntimeRunning: user.isRunning
+        )
+    }
+
+    private var hermesBadgeText: String {
+        HermesProfileRuntimeSummary.badgeText(
+            profileIDs: profiles.map(\.id),
+            runningProfileIDs: Set(profileStatuses.compactMap { $0.value.running ? $0.key : nil }),
+            mainRuntimeRunning: user.isRunning,
+            profilesLoaded: profilesLoaded
+        )
     }
 
     private var hermesBadgeColor: SwiftUI.Color {
+        guard profilesLoaded else { return .secondary.opacity(0.6) }
         let running = runningProfileCount
         let total = profiles.count
         if total == 0 { return .gray }
@@ -1872,10 +1908,16 @@ struct HermesDetailContainer: View {
         VStack(spacing: 6) {
             // 聚合徽章
             HStack(spacing: 6) {
-                Circle()
-                    .fill(hermesBadgeColor)
-                    .frame(width: 8, height: 8)
-                Text("Hermes · \(runningProfileCount)/\(profiles.count) 运行中")
+                if profilesLoaded {
+                    Circle()
+                        .fill(hermesBadgeColor)
+                        .frame(width: 8, height: 8)
+                } else {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .frame(width: 8, height: 8)
+                }
+                Text(hermesBadgeText)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -1905,7 +1947,7 @@ struct HermesDetailContainer: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.mini)
-                    .disabled(profiles.filter { autostartWhitelist.contains($0.id) && !(profileStatuses[$0.id]?.running ?? false) }.isEmpty)
+                    .disabled(!profilesLoaded || profiles.filter { autostartWhitelist.contains($0.id) && !(profileStatuses[$0.id]?.running ?? false) }.isEmpty)
 
                     Button {
                         Task { await batchStopAll() }
@@ -1916,7 +1958,7 @@ struct HermesDetailContainer: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.mini)
-                    .disabled(profiles.filter { profileStatuses[$0.id]?.running == true }.isEmpty)
+                    .disabled(!profilesLoaded || profiles.filter { profileStatuses[$0.id]?.running == true }.isEmpty)
 
                     Spacer(minLength: 0)
                 }
@@ -2104,13 +2146,37 @@ struct HermesDetailContainer: View {
     private func refreshAll() async {
         await refreshStatus()
         await loadProfiles()
+        await refreshAllProfileStatuses()
     }
 
     private func refreshStatus() async {
         let status = await helperClient.getHermesGatewayStatus(username: user.username)
         user.isRunning = status.running
         user.pid = status.pid > 0 ? status.pid : nil
+        profileStatuses["main"] = status
         user.hermesVersion = await helperClient.getHermesVersion(username: user.username)
+    }
+
+    private func refreshAllProfileStatuses() async {
+        guard !profiles.isEmpty else { return }
+        await withTaskGroup(of: (String, (running: Bool, pid: Int32)).self) { group in
+            for profile in profiles {
+                group.addTask {
+                    let status = await helperClient.getHermesGatewayStatus(
+                        username: user.username,
+                        profileID: profile.id
+                    )
+                    return (profile.id, status)
+                }
+            }
+            for await (profileID, status) in group {
+                profileStatuses[profileID] = status
+                if profileID == "main" {
+                    user.isRunning = status.running
+                    user.pid = status.pid > 0 ? status.pid : nil
+                }
+            }
+        }
     }
 
     private func loadProfiles() async {
@@ -2126,6 +2192,7 @@ struct HermesDetailContainer: View {
         if selectedProfileID == nil || !profiles.contains(where: { $0.id == selectedProfileID }) {
             selectedProfileID = await helperClient.getHermesActiveProfile(username: user.username)
         }
+        profilesLoaded = true
     }
 
     private func selectProfile(_ id: String) async {
@@ -2225,7 +2292,8 @@ struct HermesDetailContainer: View {
         let payload = maintenanceWindowRegistry.makePayload(
             username: user.username,
             title: "命令行维护 · @\(user.username)",
-            command: ["zsh", "-l"]
+            command: ["zsh", "-l"],
+            engine: .hermes
         )
         openWindow(id: "maintenance-terminal", value: payload)
     }

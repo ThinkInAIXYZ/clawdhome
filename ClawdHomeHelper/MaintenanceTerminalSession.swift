@@ -89,7 +89,16 @@ final class MaintenanceTerminalSession {
             resolvedExecutable = argv0
         }
 
-        let bootstrapScript = "stty cols 120 rows 40 >/dev/null 2>&1 || true; exec \"$0\" \"$@\""
+        // hermes 命令：login shell (-l) 的初始化脚本可能通过 path_helper 覆盖 PATH，
+        // 在 bootstrap 脚本里强制重新 export，确保 ~/.local/bin 始终可见。
+        let bootstrapScript: String
+        if isHermesCommand || isHermesShellCommand {
+            let hermesPATH = HermesInstaller.buildPath(for: username)
+                .replacingOccurrences(of: "'", with: "'\"'\"'")
+            bootstrapScript = "export PATH='\(hermesPATH)'; stty cols 120 rows 40 >/dev/null 2>&1 || true; exec \"$0\" \"$@\""
+        } else {
+            bootstrapScript = "stty cols 120 rows 40 >/dev/null 2>&1 || true; exec \"$0\" \"$@\""
+        }
 
         // Hermes / OpenClaw 使用完全独立的环境变量（PATH、HOME 等互不混用）
         let runtimeEnv: [(String, String)]
