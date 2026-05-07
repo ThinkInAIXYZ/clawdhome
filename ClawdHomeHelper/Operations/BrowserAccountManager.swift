@@ -301,10 +301,7 @@ enum BrowserAccountManager {
 
     static func openCLIVersion(username: String) -> String? {
         guard BrowserAccountPaths.isValidUsername(username) else { return nil }
-        let opencliBin = "\(InstallManager.npmGlobalBin(for: username))/opencli"
-        let opencliRealBin = "\(InstallManager.npmGlobalBin(for: username))/\(BrowserAccountPaths.openCLIRealExecutableName)"
-        let target = FileManager.default.isExecutableFile(atPath: opencliRealBin) ? opencliRealBin : opencliBin
-        guard FileManager.default.isExecutableFile(atPath: target) else { return nil }
+        guard let target = resolveOpenCLIExecutable(username: username) else { return nil }
         let nodePath = ConfigWriter.buildNodePath(username: username)
         let envArgs = UserEnvContract.orderedRuntimeEnvironment(username: username, nodePath: nodePath)
             .map { "\($0.0)=\($0.1)" }
@@ -322,10 +319,7 @@ enum BrowserAccountManager {
         guard BrowserAccountPaths.isValidUsername(username) else {
             throw BrowserAccountError.invalidUsername
         }
-        let opencliBin = "\(InstallManager.npmGlobalBin(for: username))/opencli"
-        let opencliRealBin = "\(InstallManager.npmGlobalBin(for: username))/\(BrowserAccountPaths.openCLIRealExecutableName)"
-        let target = FileManager.default.isExecutableFile(atPath: opencliRealBin) ? opencliRealBin : opencliBin
-        guard FileManager.default.isExecutableFile(atPath: target) else {
+        guard let target = resolveOpenCLIExecutable(username: username) else {
             throw BrowserAccountError.commandFailed("OpenCLI 未安装")
         }
         let nodePath = ConfigWriter.buildNodePath(username: username)
@@ -333,6 +327,33 @@ enum BrowserAccountManager {
             .map { "\($0.0)=\($0.1)" }
         let args = ["-n", "-u", username, "-H", "/usr/bin/env"] + envArgs + [target, "doctor"]
         return try run("/usr/bin/sudo", args: args)
+    }
+
+    private static func resolveOpenCLIExecutable(username: String) -> String? {
+        let npmGlobalBin = InstallManager.npmGlobalBin(for: username)
+        let candidates = [
+            "\(npmGlobalBin)/\(BrowserAccountPaths.openCLIRealExecutableName)",
+            "\(npmGlobalBin)/opencli",
+            "/Users/\(username)/\(BrowserAccountPaths.userLocalBinRelativePath)/opencli",
+        ]
+        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
+            return path
+        }
+
+        let nodePath = ConfigWriter.buildNodePath(username: username)
+        let envArgs = UserEnvContract.orderedRuntimeEnvironment(username: username, nodePath: nodePath)
+            .map { "\($0.0)=\($0.1)" }
+        let lookupArgs = ["-n", "-u", username, "-H", "/usr/bin/env"] + envArgs + ["/bin/zsh", "-lc", "command -v opencli"]
+        guard let output = try? run("/usr/bin/sudo", args: lookupArgs) else { return nil }
+        let resolved = output
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: "\n")
+            .first
+            .map(String.init)
+        guard let resolved, !resolved.isEmpty, FileManager.default.isExecutableFile(atPath: resolved) else {
+            return nil
+        }
+        return resolved
     }
 
     private static func browserBinDirectories(username: String) -> [String] {

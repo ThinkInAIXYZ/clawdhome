@@ -621,7 +621,7 @@ final class HelperClient {
 
     func openBrowserAccount(username: String) async throws -> BrowserAccountSession {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
-        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: .seconds(45)) { done in
             proxy.openBrowserAccount(username: username) { ok, payload in
                 done((ok, payload))
             }
@@ -638,7 +638,7 @@ final class HelperClient {
 
     func openBrowserAccountURL(username: String, url: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
-        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: .seconds(45)) { done in
             proxy.openBrowserAccountURL(username: username, url: url) { ok, payload in
                 done((ok, payload))
             }
