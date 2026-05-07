@@ -403,6 +403,8 @@ struct UserFilesView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?      // 目录加载失败
     @State private var operationError: String?    // 上传/删除等操作失败（独立 banner）
+    @State private var sortField: FileSortField = .name
+    @State private var sortAscending = true
 
     // 文本编辑器（用 item 模式保证状态原子性）
     @State private var textEditState: TextEditState?
@@ -466,8 +468,17 @@ struct UserFilesView: View {
 
     // 从 ID 反查选中条目
     private var selectedEntry: FileEntry? {
+        guard selectedEntryIDs.count == 1 else { return nil }
         guard let id = selectedEntryIDs.first else { return nil }
-        return entries.first { $0.id == id }
+        return sortedEntries.first { $0.id == id }
+    }
+
+    private var selectedEntries: [FileEntry] {
+        sortedEntries.filter { selectedEntryIDs.contains($0.id) }
+    }
+
+    private var sortedEntries: [FileEntry] {
+        entries.sorted(by: shouldComeBefore)
     }
 
     var body: some View {
@@ -570,11 +581,21 @@ struct UserFilesView: View {
                 textEditState = nil
             }
         }
-        .alert(L10n.k("auto.user_files_view.delete", fallback: "确认删除"), isPresented: $showDeleteConfirm, presenting: selectedEntry) { entry in
+        .alert(L10n.k("auto.user_files_view.delete", fallback: "确认删除"), isPresented: $showDeleteConfirm) {
             Button(L10n.k("auto.user_files_view.delete", fallback: "删除"), role: .destructive) { Task { await deleteSelected() } }
             Button(L10n.k("auto.user_files_view.cancel", fallback: "取消"), role: .cancel) {}
-        } message: { entry in
-            Text(L10n.f("views.user_files_view.text_f797a8c4", fallback: "删除「%@」？此操作不可撤销。", String(describing: entry.name)))
+        } message: {
+            if selectedEntries.count <= 1, let entry = selectedEntries.first {
+                Text(L10n.f("views.user_files_view.text_f797a8c4", fallback: "删除「%@」？此操作不可撤销。", String(describing: entry.name)))
+            } else {
+                Text(
+                    L10n.f(
+                        "views.user_files_view.confirm_delete_multiple",
+                        fallback: "删除已选中的 %d 项？此操作不可撤销。",
+                        selectedEntries.count
+                    )
+                )
+            }
         }
         .alert(L10n.k("auto.user_files_view.folder", fallback: "新建文件夹"), isPresented: $showNewFolderAlert) {
             TextField(L10n.k("auto.user_files_view.foldername", fallback: "文件夹名称"), text: $newFolderName)
@@ -663,6 +684,28 @@ struct UserFilesView: View {
             }
             .disabled(selectedUser == nil)
 
+            Menu {
+                Picker(L10n.k("views.user_files_view.sort_by", fallback: "排序方式"), selection: $sortField) {
+                    Text(L10n.k("auto.user_files_view.name", fallback: "名称")).tag(FileSortField.name)
+                    Text(L10n.k("auto.user_files_view.size", fallback: "大小")).tag(FileSortField.size)
+                    Text(L10n.k("auto.user_files_view.modified_at", fallback: "修改时间")).tag(FileSortField.modifiedAt)
+                }
+                Divider()
+                Button {
+                    sortAscending.toggle()
+                } label: {
+                    Label(
+                        sortAscending
+                            ? L10n.k("views.user_files_view.ascending", fallback: "升序")
+                            : L10n.k("views.user_files_view.descending", fallback: "降序"),
+                        systemImage: sortAscending ? "arrow.up" : "arrow.down"
+                    )
+                }
+            } label: {
+                Label(L10n.k("views.user_files_view.sort", fallback: "排序"), systemImage: "arrow.up.arrow.down")
+            }
+            .disabled(selectedUser == nil)
+
             // 下载（选中文件时激活）
             Button {
                 Task { await downloadSelected() }
@@ -692,10 +735,19 @@ struct UserFilesView: View {
             Button {
                 showDeleteConfirm = true
             } label: {
-                Label(L10n.k("auto.user_files_view.delete", fallback: "删除"), systemImage: "trash")
-                    .foregroundStyle(selectedEntry != nil ? .red : .secondary)
+                Label(
+                    selectedEntries.count > 1
+                        ? L10n.f(
+                            "views.user_files_view.delete_count",
+                            fallback: "删除（%d）",
+                            selectedEntries.count
+                        )
+                        : L10n.k("auto.user_files_view.delete", fallback: "删除"),
+                    systemImage: "trash"
+                )
+                .foregroundStyle(!selectedEntries.isEmpty ? .red : .secondary)
             }
-            .disabled(selectedEntry == nil)
+            .disabled(selectedEntries.isEmpty)
         }
     }
 
@@ -800,7 +852,7 @@ struct UserFilesView: View {
     }
 
     private var fileList: some View {
-        Table(entries, selection: $selectedEntryIDs) {
+        Table(sortedEntries, selection: $selectedEntryIDs) {
             TableColumn(L10n.k("auto.user_files_view.name", fallback: "名称")) { entry in
                 HStack(spacing: 6) {
                     Image(systemName: entry.isDirectory ? "folder.fill" : fileIcon(for: entry.name))
@@ -945,9 +997,9 @@ struct UserFilesView: View {
         }
         // AppKit 桥接：自动获焦 + 原生双击进目录（不干扰 Table 选中）
         .background(
-            TableSetup { [entries] row in
-                guard row < entries.count else { return }
-                let entry = entries[row]
+            TableSetup { [sortedEntries] row in
+                guard row < sortedEntries.count else { return }
+                let entry = sortedEntries[row]
                 if entry.isDirectory {
                     navigateInto(entry)
                 } else {
@@ -1016,6 +1068,49 @@ struct UserFilesView: View {
 
     private func formatSize(_ bytes: Int64) -> String {
         byteFormatter.string(fromByteCount: bytes)
+    }
+
+    private enum FileSortField: String, CaseIterable {
+        case name
+        case size
+        case modifiedAt
+    }
+
+    private func shouldComeBefore(_ lhs: FileEntry, _ rhs: FileEntry) -> Bool {
+        if lhs.isDirectory != rhs.isDirectory {
+            return lhs.isDirectory
+        }
+
+        let ordering: ComparisonResult
+        switch sortField {
+        case .name:
+            ordering = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+        case .size:
+            if lhs.size != rhs.size {
+                ordering = lhs.size < rhs.size ? .orderedAscending : .orderedDescending
+            } else {
+                ordering = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            }
+        case .modifiedAt:
+            let lDate = lhs.modifiedAt ?? .distantPast
+            let rDate = rhs.modifiedAt ?? .distantPast
+            if lDate != rDate {
+                ordering = lDate < rDate ? .orderedAscending : .orderedDescending
+            } else {
+                ordering = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            }
+        }
+
+        let primaryAscending: Bool
+        switch ordering {
+        case .orderedAscending:
+            primaryAscending = true
+        case .orderedDescending:
+            primaryAscending = false
+        case .orderedSame:
+            primaryAscending = lhs.path < rhs.path
+        }
+        return sortAscending ? primaryAscending : !primaryAscending
     }
 
     private func navigateInto(_ entry: FileEntry) {
@@ -1237,14 +1332,53 @@ struct UserFilesView: View {
     }
 
     private func deleteSelected() async {
-        guard let user = selectedUser, let entry = selectedEntry else { return }
-        do {
-            try await helperClient.deleteItem(username: user.username, relativePath: entry.path)
-            selectedEntryIDs = []
-            await loadDirectory()
-        } catch {
-            operationError = error.localizedDescription
+        guard let user = selectedUser, !selectedEntries.isEmpty else { return }
+
+        let targets = topLevelDeleteTargets(from: selectedEntries)
+        var failures: [String] = []
+
+        for entry in targets {
+            do {
+                try await helperClient.deleteItem(username: user.username, relativePath: entry.path)
+            } catch {
+                failures.append("\(entry.name): \(error.localizedDescription)")
+            }
         }
+
+        selectedEntryIDs = []
+        await loadDirectory()
+
+        if !failures.isEmpty {
+            let head = failures.prefix(2).joined(separator: "；")
+            operationError = failures.count > 2
+                ? L10n.f(
+                    "views.user_files_view.delete_partial_failed_count",
+                    fallback: "%@；等 %@ 项删除失败",
+                    String(describing: head),
+                    String(describing: failures.count)
+                )
+                : head
+        }
+    }
+
+    private func topLevelDeleteTargets(from candidates: [FileEntry]) -> [FileEntry] {
+        let sorted = candidates.sorted { lhs, rhs in
+            let lCount = lhs.path.split(separator: "/").count
+            let rCount = rhs.path.split(separator: "/").count
+            if lCount != rCount { return lCount < rCount }
+            return lhs.path < rhs.path
+        }
+
+        var chosen: [FileEntry] = []
+        for entry in sorted {
+            let shouldSkip = chosen.contains { parent in
+                entry.path != parent.path && entry.path.hasPrefix(parent.path + "/")
+            }
+            if !shouldSkip {
+                chosen.append(entry)
+            }
+        }
+        return chosen
     }
 
     private func openTextEditor() async {
