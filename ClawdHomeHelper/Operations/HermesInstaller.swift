@@ -2,9 +2,9 @@
 // 以目标用户身份安装 Hermes Agent（https://github.com/NousResearch/hermes-agent）
 //
 // 安装策略：
-//   1. 在用户目录创建独立 venv：~/.hermes-venv（隔离不同用户依赖）
-//   2. 优先使用 uv pip install（快 10~100 倍），没有 uv 时 fallback 到标准 pip
-//   3. 同时初始化 HERMES_HOME：~/.hermes
+//   1. 以目标用户身份执行官方 install.sh（非交互模式）
+//   2. 官方脚本默认安装到 ~/.hermes/hermes-agent，并创建 ~/.local/bin/hermes
+//   3. 同时兼容历史路径 ~/.hermes-venv（平滑升级）
 //
 // 运行时前置：目标用户可访问的 Python 3.11+ 解释器。
 // 本阶段不负责自动安装 Python —— 前置条件不满足时直接报错，由用户通过 Homebrew
@@ -16,9 +16,18 @@ struct HermesInstaller {
 
     // MARK: - 路径契约
 
-    /// Hermes 独立 venv 目录（每用户隔离）
+    /// 官方脚本默认安装目录：~/.hermes/hermes-agent
+    static func installDir(for username: String) -> String {
+        "\(hermesHome(for: username))/hermes-agent"
+    }
+
+    /// Hermes venv 目录（优先官方脚本路径；兼容旧版 ~/.hermes-venv）
     static func venvDir(for username: String) -> String {
-        "/Users/\(username)/.hermes-venv"
+        let preferred = "\(installDir(for: username))/venv"
+        if FileManager.default.fileExists(atPath: "\(preferred)/pyvenv.cfg") {
+            return preferred
+        }
+        return "/Users/\(username)/.hermes-venv"
     }
 
     /// venv 中的可执行文件目录
@@ -28,7 +37,16 @@ struct HermesInstaller {
 
     /// hermes 可执行文件完整路径
     static func hermesExecutable(for username: String) -> String {
-        "\(venvBin(for: username))/hermes"
+        let home = "/Users/\(username)"
+        let candidates = [
+            "\(home)/.local/bin/hermes",
+            "\(installDir(for: username))/venv/bin/hermes",
+            "\(home)/.hermes-venv/bin/hermes", // 兼容历史安装
+        ]
+        if let hit = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return hit
+        }
+        return candidates[0]
     }
 
     /// HERMES_HOME —— Hermes 的配置/会话/日志根目录
@@ -36,7 +54,7 @@ struct HermesInstaller {
         "/Users/\(username)/.hermes"
     }
 
-    // MARK: - Python / uv 定位
+    // MARK: - 兼容工具定位（历史路径）
 
     /// 按优先级查找目标用户可用的 Python 3.11+ 解释器
     /// 用户级 Homebrew 优先，再到系统级 Homebrew，再到系统 Python
@@ -97,12 +115,16 @@ struct HermesInstaller {
     /// 与 UserEnvContract.orderedRuntimeEnvironment 对称但完全独立，不含 npm/node 相关变量。
     static func orderedRuntimeEnvironment(username: String) -> [(String, String)] {
         let home = "/Users/\(username)"
+        let brew = "\(home)/.brew"
         return [
             ("HOME", home),
             ("USER", username),
             ("PATH", buildPath(for: username)),
             ("HERMES_HOME", hermesHome(for: username)),
             ("VIRTUAL_ENV", venvDir(for: username)),
+            ("HOMEBREW_PREFIX", brew),
+            ("HOMEBREW_CELLAR", "\(brew)/Cellar"),
+            ("HOMEBREW_REPOSITORY", brew),
         ]
     }
 
@@ -120,11 +142,18 @@ struct HermesInstaller {
     ///   - version: nil 表示最新版，否则安装指定版本（如 "0.1.0"）
     @discardableResult
     static func install(username: String, version: String?, logURL: URL? = nil) throws -> String {
-        let python = try findPython(for: username)
-        let venv = venvDir(for: username)
+        // 与 openclaw 安装流程对齐：先做用户级 Homebrew 修复（best-effort）。
+        // 该步骤失败不阻断后续 Hermes 官方安装流程。
+        do {
+            try HomebrewRepairManager.repair(username: username, logURL: logURL)
+        } catch {
+            helperLog("Hermes 前置 Homebrew 修复失败（忽略继续） @\(username): \(error.localizedDescription)", level: .warn)
+        }
+
+        // 0. 前置检查：目标用户可用的 Python 3.11+
+        _ = try findPython(for: username)
+
         let home = hermesHome(for: username)
-        // hermes-agent 的 [all] extras 启用 messaging/voice/cli 等全部可选依赖
-        let hermesSpec = version.map { "hermes-agent[all]==\($0)" } ?? "hermes-agent[all]"
 
         // 1. 确保 HERMES_HOME 存在且归属用户
         if !FileManager.default.fileExists(atPath: home) {
@@ -134,39 +163,40 @@ struct HermesInstaller {
         }
         try? FilePermissionHelper.chown(home, owner: username)
 
-        // 2. 创建 venv（若已存在 pyvenv.cfg 就跳过，实现幂等升级）
-        let venvCfg = "\(venv)/pyvenv.cfg"
-        if !FileManager.default.fileExists(atPath: venvCfg) {
-            helperLog("[HermesInstaller] 创建 venv python=\(python) dir=\(venv) @\(username)")
-            let venvArgs = ["-u", username, "-H", "env"]
-                + sudoRuntimeArgs(for: username)
-                + [python, "-m", "venv", venv]
-            try runInstallStep("/usr/bin/sudo", args: venvArgs, logURL: logURL)
+        // 2. 使用官方 install.sh（非交互），并保持目标用户环境隔离
+        helperLog("[HermesInstaller] 使用官方脚本安装 @\(username)")
+        let installScriptURL = "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh"
+        var scriptCmd = "curl -fsSL \(installScriptURL) | /bin/bash -s -- --skip-setup --hermes-home \"$HERMES_HOME\""
+        if let branch = sanitizeBranch(version) {
+            scriptCmd += " --branch \(branch)"
         }
 
-        // 3. 安装 hermes-agent（优先 uv）
-        let args: [String]
-        if let uv = findUV(for: username) {
-            helperLog("[HermesInstaller] 使用 uv 安装 \(hermesSpec) @\(username)")
-            args = ["-u", username, "-H", "env"]
-                + sudoRuntimeArgs(for: username)
-                + ["VIRTUAL_ENV=\(venv)"]
-                + [uv, "pip", "install", "--python", "\(venv)/bin/python", "--upgrade", hermesSpec]
-        } else {
-            helperLog("[HermesInstaller] 未找到 uv，fallback 到 pip 安装 \(hermesSpec) @\(username)")
-            let pip = "\(venv)/bin/pip"
-            args = ["-u", username, "-H", "env"]
-                + sudoRuntimeArgs(for: username)
-                + [pip, "install", "--upgrade", hermesSpec]
-        }
+        let args = ["-u", username, "-H", "env", "-i"]
+            + sudoRuntimeArgs(for: username)
+            + ["/bin/bash", "-c", scriptCmd]
         let output = try runInstallStep("/usr/bin/sudo", args: args, logURL: logURL)
 
-        // 4. 修正所有权（pip/uv 在 sudo 下可能产生 root-owned 文件）
-        try? FilePermissionHelper.chownRecursive(venv, owner: username)
+        // 3. 修正所有权（脚本内若触发 sudo/install 产生 root-owned 文件，做一次兜底）
+        let venv = venvDir(for: username)
+        try? FilePermissionHelper.chownRecursive(installDir(for: username), owner: username)
         try? FilePermissionHelper.chownRecursive(home, owner: username)
+        try? FilePermissionHelper.chownRecursive(venv, owner: username)
 
         helperLog("[HermesInstaller] INSTALL_OK @\(username)")
         return output
+    }
+
+    /// 官方脚本的 --branch 参数只接受安全字符，避免注入
+    private static func sanitizeBranch(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/-")
+        guard trimmed.unicodeScalars.allSatisfy({ allowed.contains($0) }),
+              !trimmed.contains("..") else {
+            return nil
+        }
+        return trimmed
     }
 
     @discardableResult
@@ -191,7 +221,7 @@ struct HermesInstaller {
         }
 
         // fallback：调用 hermes --version（慢但准）
-        let args = ["-u", username, "-H", "env"]
+        let args = ["-u", username, "-H", "env", "-i"]
             + sudoRuntimeArgs(for: username)
             + [hermesBin, "--version"]
         let raw = (try? run("/usr/bin/sudo", args: args)) ?? ""

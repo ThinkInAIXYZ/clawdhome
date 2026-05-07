@@ -387,6 +387,8 @@ struct UserFilesView: View {
     let users: [ManagedUser]
     /// 嵌入单用户 Tab 时传入，自动选中并隐藏用户选择器
     var preselectedUser: ManagedUser? = nil
+    /// Hermes 运行时品牌开关（用于替换 Home 入口图标）
+    var prefersHermesBrand: Bool = false
     /// 仅用于详情页预选用户模式：按天记忆每个用户在文件页的最后目录
     private static var preselectedDailyPathByUser: [String: (dayKey: String, path: String)] = [:]
 
@@ -457,9 +459,9 @@ struct UserFilesView: View {
     }
 
     // 快速入口（相对于 home 的路径）—— 用户 Home 单独渲染为头像按钮
-    private let quickAccessItems: [(label: String, icon: String, path: String)] = [
-        ("🦞 Home", "externaldrive",  ".openclaw"),
-    ]
+    private var quickAccessItems: [(title: String, icon: String, path: String)] {
+        [("Home", "externaldrive", prefersHermesBrand ? ".hermes" : ".openclaw")]
+    }
 
     // 面包屑：路径组件
     private var breadcrumbs: [String] {
@@ -783,11 +785,20 @@ struct UserFilesView: View {
                         selectedEntryIDs = []
                         Task { await loadDirectory() }
                     } label: {
-                        Label(item.label, systemImage: item.icon)
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.quaternary, in: Capsule())
+                        HStack(spacing: 5) {
+                            if prefersHermesBrand {
+                                HermesLogoMark()
+                                    .frame(width: 12, height: 12)
+                            } else {
+                                OpenClawLogoMark()
+                                    .frame(width: 12, height: 12)
+                            }
+                            Label(item.title, systemImage: item.icon)
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary, in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(selectedUser == nil)
@@ -802,9 +813,19 @@ struct UserFilesView: View {
 
     private var breadcrumbBar: some View {
         HStack(spacing: 4) {
-            Button("🏠 Home") {
+            Button {
                 currentPath = ""
                 Task { await loadDirectory() }
+            } label: {
+                HStack(spacing: 4) {
+                    if prefersHermesBrand {
+                        HermesLogoMark()
+                            .frame(width: 12, height: 12)
+                    } else {
+                        Text("🏠")
+                    }
+                    Text("Home")
+                }
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
