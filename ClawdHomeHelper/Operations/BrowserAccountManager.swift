@@ -1,5 +1,5 @@
 // ClawdHomeHelper/Operations/BrowserAccountManager.swift
-// Manages per-shrimp Chrome profiles and the local CDP bridge session.
+// Manages per-user Chrome profiles and the local CDP bridge session.
 
 import Foundation
 import SystemConfiguration
@@ -10,6 +10,7 @@ enum BrowserAccountError: LocalizedError {
     case noConsoleSession
     case devToolsPortUnavailable
     case sessionMissing
+    case commandFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -23,12 +24,41 @@ enum BrowserAccountError: LocalizedError {
             return "Chrome 已启动，但未能获取 DevTools 调试端口"
         case .sessionMissing:
             return "浏览器账号尚未打开，请先在 ClawdHome 中打开浏览器账号"
+        case .commandFailed(let message):
+            return message
         }
     }
 }
 
 enum BrowserAccountManager {
     private static let chromeAppPath = "/Applications/Google Chrome.app"
+
+    static func prepareForRuntimeInstall(username: String, logURL: URL? = nil) throws {
+        appendInstallLog("→ 安装 ClawdHome 用户级浏览器工具\n", logURL: logURL)
+        _ = try installTool(username: username)
+        appendInstallLog("✓ ClawdHome 用户级浏览器工具已安装\n", logURL: logURL)
+
+        if installWarmupCompleted(username: username) {
+            appendInstallLog("✓ 浏览器安装预热已完成，本次跳过重复打开\n", logURL: logURL)
+            return
+        }
+
+        appendInstallLog("→ 首次打开用户级 Chrome 浏览器账号并写入 session\n", logURL: logURL)
+        let context = try resolveContext(username: username)
+        var openedProfilePath = context.paths.profileDirectory.path
+        do {
+            let session = try open(username: username)
+            openedProfilePath = session.profilePath
+            Thread.sleep(forTimeInterval: 0.8)
+            try closeWarmupBrowser(profilePath: openedProfilePath, logURL: logURL)
+        } catch {
+            appendInstallLog("⚠ 浏览器预热失败，先关闭已打开的 Chrome profile\n", logURL: logURL)
+            try? closeWarmupBrowser(profilePath: openedProfilePath, logURL: logURL)
+            throw error
+        }
+        try writeInstallWarmupMarker(username: username)
+        appendInstallLog("✓ 浏览器账号已预热并关闭\n", logURL: logURL)
+    }
 
     static func open(username: String) throws -> BrowserAccountSession {
         let context = try resolveContext(username: username)
@@ -70,6 +100,35 @@ enum BrowserAccountManager {
         return session
     }
 
+    static func openURL(username: String, url: String) throws {
+        guard BrowserAccountPaths.isValidUsername(username) else {
+            throw BrowserAccountError.invalidUsername
+        }
+        guard let parsed = URL(string: url),
+              let scheme = parsed.scheme?.lowercased(),
+              ["http", "https"].contains(scheme) else {
+            throw BrowserAccountError.commandFailed("只支持 http(s) 授权链接")
+        }
+
+        let toolPath = "/Users/\(username)/\(BrowserAccountPaths.toolExecutableRelativePath)"
+        if !FileManager.default.isExecutableFile(atPath: toolPath) {
+            _ = try installTool(username: username)
+        }
+
+        let currentStatus = status(username: username)
+        if !currentStatus.browserReachable {
+            _ = try open(username: username)
+        }
+
+        let nodePath = ConfigWriter.buildNodePath(username: username)
+        let envArgs = UserEnvContract.orderedRuntimeEnvironment(username: username, nodePath: nodePath)
+            .map { "\($0.0)=\($0.1)" }
+        try run(
+            "/usr/bin/sudo",
+            args: ["-n", "-u", username, "-H", "/usr/bin/env"] + envArgs + [toolPath, "open", url]
+        )
+    }
+
     static func status(username: String) -> BrowserAccountStatus {
         guard let context = try? resolveContext(username: username) else {
             return BrowserAccountStatus(
@@ -103,7 +162,7 @@ enum BrowserAccountManager {
             sessionPath: sessionPath,
             toolPath: toolPath,
             toolInstalled: FileManager.default.isExecutableFile(atPath: toolPath),
-            sessionExists: FileManager.default.fileExists(atPath: sessionPath),
+            sessionExists: sessionFileExists(username: username),
             browserReachable: reachable,
             httpEndpoint: session?.httpEndpoint,
             message: message
@@ -115,9 +174,13 @@ enum BrowserAccountManager {
         let fm = FileManager.default
         try backupAndRemoveProfileIfNeeded(context.paths.profileDirectory.path, fileManager: fm)
         try backupAndRemoveProfileIfNeeded("/Users/\(username)/\(BrowserAccountPaths.toolBrowserProfileRelativePath)", fileManager: fm)
-        let session = sessionPath(username: username)
-        if fm.fileExists(atPath: session) {
+        try backupAndRemoveProfileIfNeeded("/Users/\(username)/\(BrowserAccountPaths.legacyToolBrowserProfileRelativePath)", fileManager: fm)
+        for session in sessionPaths(username: username) where fm.fileExists(atPath: session) {
             try fm.removeItem(atPath: session)
+        }
+        let marker = installWarmupMarkerPath(username: username)
+        if fm.fileExists(atPath: marker) {
+            try fm.removeItem(atPath: marker)
         }
         return status(username: username)
     }
@@ -136,41 +199,90 @@ enum BrowserAccountManager {
         }
         let toolDir = "/Users/\(username)/\(BrowserAccountPaths.toolDirectoryRelativePath)"
         let toolPath = "/Users/\(username)/\(BrowserAccountPaths.toolExecutableRelativePath)"
-        let binDir = "/Users/\(username)/.npm-global/bin"
-        let binPath = "\(binDir)/clawdhome-browser"
+        let binDirs = browserBinDirectories(username: username)
 
         try FileManager.default.createDirectory(atPath: toolDir, withIntermediateDirectories: true)
-        try FilePermissionHelper.chownRecursive("/Users/\(username)/.openclaw/tools", owner: username)
+        try FilePermissionHelper.chownRecursive("/Users/\(username)/.clawdhome", owner: username)
         try browserToolScript.write(toFile: toolPath, atomically: true, encoding: .utf8)
         try FilePermissionHelper.chownRecursive(toolDir, owner: username)
         try FilePermissionHelper.chmod(toolPath, mode: "755")
         try installPrivilegedBrowserLauncher(username: username, toolDir: toolDir)
 
-        try FileManager.default.createDirectory(atPath: binDir, withIntermediateDirectories: true)
-        try FilePermissionHelper.chownRecursive("/Users/\(username)/.npm-global", owner: username)
-        let wrapper = """
-        #!/bin/zsh
-        exec /usr/bin/env python3 "\(toolPath)" "$@"
-        """
-        try wrapper.write(toFile: binPath, atomically: true, encoding: .utf8)
-        try FilePermissionHelper.chown(binPath, owner: username)
-        try FilePermissionHelper.chmod(binPath, mode: "755")
-        try installBrowserCommandWrappers(username: username, binDir: binDir, toolPath: toolPath)
-        try installOpenCLIWrapperIfPresent(username: username, binDir: binDir, toolPath: toolPath)
+        for binDir in binDirs {
+            try FileManager.default.createDirectory(atPath: binDir, withIntermediateDirectories: true)
+            try FilePermissionHelper.chownRecursive((binDir as NSString).deletingLastPathComponent, owner: username)
+            try installBrowserShim(username: username, binDir: binDir, toolPath: toolPath)
+            try installBrowserCommandWrappers(username: username, binDir: binDir, toolPath: toolPath)
+        }
+        try installOpenCLIWrapperIfPresent(username: username, binDir: npmGlobalBinDirectory(username: username), toolPath: toolPath)
 
         try appendToolsGuidanceIfNeeded(username: username)
         return status(username: username)
     }
 
+    private static func browserBinDirectories(username: String) -> [String] {
+        [
+            "/Users/\(username)/\(BrowserAccountPaths.userLocalBinRelativePath)",
+            npmGlobalBinDirectory(username: username),
+        ]
+    }
+
+    private static func npmGlobalBinDirectory(username: String) -> String {
+        "/Users/\(username)/\(BrowserAccountPaths.npmGlobalBinRelativePath)"
+    }
+
+    private static func installBrowserShim(username: String, binDir: String, toolPath: String) throws {
+        let binPath = "\(binDir)/clawdhome-browser"
+        let wrapper = """
+        #!/bin/zsh
+        LOG="$HOME/\(BrowserAccountPaths.debugLogRelativePath)"
+        mkdir -p "$HOME/\(BrowserAccountPaths.browserDirectoryRelativePath)"
+        {
+          echo "--- $(/bin/date '+%Y-%m-%d %H:%M:%S') clawdhome-browser shim"
+          echo "argv=$*"
+          echo "pwd=$PWD"
+          echo "PATH=$PATH"
+          echo "which-open=$(command -v open 2>/dev/null || true)"
+          echo "which-clawdhome-browser=$(command -v clawdhome-browser 2>/dev/null || true)"
+        } >> "$LOG" 2>&1 || true
+        exec /usr/bin/env python3 "\(toolPath)" "$@"
+        """
+        try wrapper.write(toFile: binPath, atomically: true, encoding: .utf8)
+        try FilePermissionHelper.chown(binPath, owner: username)
+        try FilePermissionHelper.chmod(binPath, mode: "755")
+    }
+
     private static func installPrivilegedBrowserLauncher(username: String, toolDir: String) throws {
         let sourcePath = "\(toolDir)/clawdhome-browser-launcher.c"
-        let launcherPath = "/Users/\(username)/\(BrowserAccountPaths.toolLauncherRelativePath)"
+        let launcherDirectory = "/Library/Application Support/ClawdHome/BrowserLaunchers/\(username)"
+        let launcherPath = "\(launcherDirectory)/clawdhome-browser-launcher"
         try browserLauncherSource.write(toFile: sourcePath, atomically: true, encoding: .utf8)
         try FilePermissionHelper.chown(sourcePath, owner: username)
         try FilePermissionHelper.chmod(sourcePath, mode: "600")
+        try FileManager.default.createDirectory(
+            atPath: launcherDirectory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o755]
+        )
+        try FilePermissionHelper.chown(launcherDirectory, owner: "root", group: "wheel")
+        try FilePermissionHelper.chmod(launcherDirectory, mode: "755")
         try run("/usr/bin/clang", args: [sourcePath, "-o", launcherPath])
         try FilePermissionHelper.chown(launcherPath, owner: "root", group: "wheel")
+        try? FilePermissionHelper.clearACL(launcherPath)
         try FilePermissionHelper.chmod(launcherPath, mode: "4755")
+        try verifyPrivilegedBrowserLauncher(launcherPath)
+    }
+
+    private static func verifyPrivilegedBrowserLauncher(_ launcherPath: String) throws {
+        let attrs = try FileManager.default.attributesOfItem(atPath: launcherPath)
+        let owner = attrs[.ownerAccountName] as? String
+        let group = attrs[.groupOwnerAccountName] as? String
+        let mode = (attrs[.posixPermissions] as? NSNumber)?.uint16Value ?? 0
+        guard owner == "root", group == "wheel", (mode & 0o4000) != 0, (mode & 0o755) == 0o755 else {
+            throw BrowserAccountError.commandFailed(
+                "clawdhome-browser-launcher 权限异常：\(launcherPath) owner=\(owner ?? "?") group=\(group ?? "?") mode=\(String(mode, radix: 8))"
+            )
+        }
     }
 
     private static func installBrowserCommandWrappers(username: String, binDir: String, toolPath: String) throws {
@@ -193,19 +305,32 @@ enum BrowserAccountManager {
         return """
         #!/bin/zsh
         set -e
+        LOG="$HOME/\(BrowserAccountPaths.debugLogRelativePath)"
+        mkdir -p "$HOME/\(BrowserAccountPaths.browserDirectoryRelativePath)"
+        {
+          echo "--- $(/bin/date '+%Y-%m-%d %H:%M:%S') browser-command \(commandName)"
+          echo "argv=$*"
+          echo "pwd=$PWD"
+          echo "PATH=$PATH"
+          echo "which-open=$(command -v open 2>/dev/null || true)"
+          echo "which-clawdhome-browser=$(command -v clawdhome-browser 2>/dev/null || true)"
+        } >> "$LOG" 2>&1 || true
 
         for arg in "$@"; do
           case "$arg" in
             http://*|https://*)
+              echo "route=clawdhome-browser-open url=$arg" >> "$LOG" 2>&1 || true
               exec /usr/bin/env python3 "\(toolPath)" open "$arg"
               ;;
           esac
         done
 
         if [ "$#" -eq 0 ]; then
+          echo "route=clawdhome-browser-open-default url=https://clawdhome.ai" >> "$LOG" 2>&1 || true
           exec /usr/bin/env python3 "\(toolPath)" open "https://clawdhome.ai"
         fi
 
+        echo "route=system-fallback command=\(commandName) argv=$*" >> "$LOG" 2>&1 || true
         \(systemOpenFallback)
         """
     }
@@ -243,13 +368,26 @@ enum BrowserAccountManager {
         #!/bin/zsh
         # CLAWDHOME_OPENCLI_WRAPPER
         set -e
+        LOG="$HOME/\(BrowserAccountPaths.debugLogRelativePath)"
+        mkdir -p "$HOME/\(BrowserAccountPaths.browserDirectoryRelativePath)"
+        {
+          echo "--- $(/bin/date '+%Y-%m-%d %H:%M:%S') opencli-wrapper"
+          echo "argv=$*"
+          echo "pwd=$PWD"
+          echo "PATH=$PATH"
+          echo "which-open=$(command -v open 2>/dev/null || true)"
+          echo "which-opencli-real=\(realPath)"
+        } >> "$LOG" 2>&1 || true
 
         CLAWDHOME_BROWSER_HIDE=1 /usr/bin/env python3 "\(toolPath)" open "https://clawdhome.ai" >/dev/null 2>&1 || {
-          echo "ClawdHome: 已尝试自动打开该虾专属 Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
+          echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
+          echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
         }
+        echo "opencli-prelaunch=done" >> "$LOG" 2>&1 || true
 
         port="${OPENCLI_DAEMON_PORT:-19825}"
         if ! /usr/bin/nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
+          echo "opencli-daemon=start port=$port" >> "$LOG" 2>&1 || true
           mkdir -p "$HOME/.opencli"
           /usr/bin/nohup /usr/bin/env node "\(daemonPath)" >> "$HOME/.opencli/clawdhome-daemon.log" 2>&1 &
           for _ in 1 2 3 4 5 6 7 8 9 10; do
@@ -264,6 +402,7 @@ enum BrowserAccountManager {
           sleep 0.5
         done
 
+        echo "opencli-wrapper=exec-real" >> "$LOG" 2>&1 || true
         exec "\(realPath)" "$@"
         """
     }
@@ -331,7 +470,7 @@ enum BrowserAccountManager {
     private static func writeSession(_ session: BrowserAccountSession, username: String) throws {
         let path = sessionPath(username: username)
         let dir = (path as NSString).deletingLastPathComponent
-        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try prepareUserWritableBrowserDirectory(dir, username: username)
         let data = try JSONEncoder().encode(session)
         try data.write(to: URL(fileURLWithPath: path), options: .atomic)
         try FilePermissionHelper.chown(path, owner: username)
@@ -339,13 +478,112 @@ enum BrowserAccountManager {
     }
 
     private static func readSession(username: String) -> BrowserAccountSession? {
-        let path = sessionPath(username: username)
-        guard let data = FileManager.default.contents(atPath: path) else { return nil }
-        return try? JSONDecoder().decode(BrowserAccountSession.self, from: data)
+        for path in sessionPaths(username: username) {
+            guard let data = FileManager.default.contents(atPath: path),
+                  let session = try? JSONDecoder().decode(BrowserAccountSession.self, from: data) else {
+                continue
+            }
+            if path == legacySessionPath(username: username) {
+                try? writeSession(session, username: username)
+            }
+            return session
+        }
+        return nil
     }
 
     private static func sessionPath(username: String) -> String {
         "/Users/\(username)/\(BrowserAccountPaths.sessionRelativePath)"
+    }
+
+    private static func legacySessionPath(username: String) -> String {
+        "/Users/\(username)/\(BrowserAccountPaths.legacySessionRelativePath)"
+    }
+
+    private static func sessionPaths(username: String) -> [String] {
+        [sessionPath(username: username), legacySessionPath(username: username)]
+    }
+
+    private static func sessionFileExists(username: String) -> Bool {
+        sessionPaths(username: username).contains { FileManager.default.fileExists(atPath: $0) }
+    }
+
+    private static func installWarmupMarkerPath(username: String) -> String {
+        "/Users/\(username)/\(BrowserAccountPaths.installWarmupMarkerRelativePath)"
+    }
+
+    private static func installWarmupCompleted(username: String) -> Bool {
+        FileManager.default.fileExists(atPath: installWarmupMarkerPath(username: username))
+    }
+
+    private static func writeInstallWarmupMarker(username: String) throws {
+        let path = installWarmupMarkerPath(username: username)
+        let dir = (path as NSString).deletingLastPathComponent
+        try prepareUserWritableBrowserDirectory(dir, username: username)
+        let payload: [String: Any] = [
+            "username": username,
+            "completedAt": Date().timeIntervalSince1970,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+        try FilePermissionHelper.chown(path, owner: username)
+        try FilePermissionHelper.chmod(path, mode: "600")
+    }
+
+    private static func prepareUserWritableBrowserDirectory(_ path: String, username: String) throws {
+        try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        try FilePermissionHelper.chown(path, owner: username)
+        try FilePermissionHelper.chmod(path, mode: "755")
+    }
+
+    private static func closeWarmupBrowser(profilePath: String, logURL: URL?) throws {
+        var matchedPIDs = browserProcessIDs(profilePath: profilePath)
+        guard !matchedPIDs.isEmpty else {
+            appendInstallLog("ℹ 未找到需要关闭的 Chrome profile 进程，视为已关闭\n", logURL: logURL)
+            return
+        }
+
+        appendInstallLog("→ 关闭 Chrome profile 进程：\(matchedPIDs.joined(separator: ", "))\n", logURL: logURL)
+        for pid in matchedPIDs {
+            _ = try? run("/bin/kill", args: ["-TERM", pid])
+        }
+
+        let deadline = Date().addingTimeInterval(4)
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.25)
+            matchedPIDs = browserProcessIDs(profilePath: profilePath)
+            if matchedPIDs.isEmpty {
+                appendInstallLog("✓ Chrome profile 进程已正常退出\n", logURL: logURL)
+                return
+            }
+        }
+
+        appendInstallLog("⚠ Chrome profile 未及时退出，强制关闭：\(matchedPIDs.joined(separator: ", "))\n", logURL: logURL)
+        for pid in matchedPIDs {
+            _ = try? run("/bin/kill", args: ["-KILL", pid])
+        }
+
+        Thread.sleep(forTimeInterval: 0.5)
+        let remaining = browserProcessIDs(profilePath: profilePath)
+        guard remaining.isEmpty else {
+            throw BrowserAccountError.commandFailed("初始化浏览器已打开，但未能关闭 Chrome profile 进程：\(remaining.joined(separator: ", "))")
+        }
+        appendInstallLog("✓ Chrome profile 进程已强制关闭\n", logURL: logURL)
+    }
+
+    private static func browserProcessIDs(profilePath: String) -> [String] {
+        guard let raw = try? run("/bin/ps", args: ["-ax", "-o", "pid=,command="]) else {
+            return []
+        }
+        return raw
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line -> String? in
+                let text = String(line)
+                guard text.contains("Google Chrome"),
+                      text.contains("--user-data-dir=\(profilePath)") || text.contains(profilePath) else {
+                    return nil
+                }
+                return text.split(separator: " ", maxSplits: 1).first.map(String.init)
+            }
     }
 
     private static func isReachable(httpEndpoint: String) -> Bool {
@@ -354,8 +592,8 @@ enum BrowserAccountManager {
     }
 
     private static func appendToolsGuidanceIfNeeded(username: String) throws {
-        let relativePath = ".openclaw/workspace/TOOLS.md"
-        try UserFileManager.createDirectory(username: username, relativePath: ".openclaw/workspace")
+        let relativePath = BrowserAccountPaths.toolsGuideRelativePath
+        try UserFileManager.createDirectory(username: username, relativePath: ".clawdhome")
 
         let marker = "clawdhome_browser_account"
         let guidance = """
@@ -364,10 +602,10 @@ enum BrowserAccountManager {
 
         <!-- clawdhome_browser_account -->
 
-        你可以使用 `clawdhome-browser` 操作该虾专属的已登录 Chrome 浏览器账号。
+        你可以使用 `clawdhome-browser` 操作该 macOS 用户级的已登录 Chrome 浏览器账号。
 
         - `clawdhome-browser status`：检查浏览器账号是否已打开。
-        - `clawdhome-browser open <url>`：启动/复用该虾专属 Chrome，并打开网页。
+        - `clawdhome-browser open <url>`：启动/复用该用户的 ClawdHome Chrome，并打开网页。
         - `clawdhome-browser launch [url]`：底层启动命令，通常无需直接使用。
         - `clawdhome-browser title`：读取当前页面标题。
         - `clawdhome-browser extract-text`：提取当前页面正文。
@@ -375,9 +613,9 @@ enum BrowserAccountManager {
 
         常见浏览器打开命令已被接管：`open <url>`、`google-chrome <url>`、`chrome <url>`、`chromium <url>`、`xdg-open <url>` 会自动跳到 `clawdhome-browser open <url>`；无 URL 时默认打开 `https://clawdhome.ai`。
 
-        如果该虾已安装 `opencli`，ClawdHome 会把真实入口保存在 `opencli.clawdhome-real`，并用 wrapper 接管 `opencli`：每次运行 OpenCLI 前会先自动执行 `clawdhome-browser open https://clawdhome.ai`，确保 Browser Bridge 有机会连接到该虾专属 Chrome。
+        如果该用户已安装 `opencli`，ClawdHome 会把真实入口保存在 `opencli.clawdhome-real`，并用 wrapper 接管 `opencli`：每次运行 OpenCLI 前会先自动执行 `clawdhome-browser open https://clawdhome.ai`，确保 Browser Bridge 有机会连接到该用户的 ClawdHome Chrome。
 
-        如果虾用户没有 macOS 图形会话，`launch` 可能会被系统拒绝；此时请让用户在 ClawdHome 中点击“打开浏览器账号”完成 fallback。
+        如果当前命令行用户没有 macOS 图形会话，`launch` 可能会被系统拒绝；此时请让用户在 ClawdHome 中点击“打开浏览器账号”完成初始化。
         """
         let existing = (try? UserFileManager.readFile(username: username, relativePath: relativePath))
             .flatMap { String(data: $0, encoding: .utf8) } ?? ""
@@ -391,12 +629,23 @@ enum BrowserAccountManager {
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         return formatter.string(from: Date())
     }
+
+    private static func appendInstallLog(_ message: String, logURL: URL?) {
+        guard let logURL,
+              let handle = FileHandle(forWritingAtPath: logURL.path) else {
+            return
+        }
+        handle.seekToEndOfFile()
+        handle.write(Data(message.utf8))
+        handle.closeFile()
+    }
 }
 
 private let browserToolScript = #"""
 #!/usr/bin/env python3
 import base64
 import datetime
+import getpass
 import hashlib
 import json
 import os
@@ -408,30 +657,59 @@ import time
 import urllib.parse
 import urllib.request
 
-SESSION_PATH = os.path.expanduser("~/.openclaw/clawdhome-browser-session.json")
-PROFILE_PATH = os.path.expanduser("~/.openclaw/browser-profile")
+SESSION_PATH = os.path.expanduser("~/.clawdhome/browser/session.json")
+LEGACY_SESSION_PATH = os.path.expanduser("~/.openclaw/clawdhome-browser-session.json")
+PROFILE_PATH = os.path.expanduser("~/.clawdhome/browser/profile")
+LEGACY_PROFILE_PATH = os.path.expanduser("~/.openclaw/browser-profile")
 ACTIVE_PORT_PATH = os.path.join(PROFILE_PATH, "DevToolsActivePort")
-LAUNCHER_PATH = os.path.expanduser("~/.openclaw/tools/clawdhome-browser/clawdhome-browser-launcher")
+LAUNCHER_PATH = os.path.expanduser("~/.clawdhome/tools/clawdhome-browser/clawdhome-browser-launcher")
+LEGACY_LAUNCHER_PATH = os.path.expanduser("~/.openclaw/tools/clawdhome-browser/clawdhome-browser-launcher")
 CHROME_APP = "/Applications/Google Chrome.app"
+DEBUG_LOG_PATH = os.path.expanduser("~/.clawdhome/browser/debug.log")
+
+def debug_log(message):
+    try:
+        os.makedirs(os.path.dirname(DEBUG_LOG_PATH), exist_ok=True)
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} pid={os.getpid()} {message}\n")
+    except Exception:
+        pass
 
 def fail(message, code=1):
+    debug_log(f"fail code={code} message={message!r} argv={sys.argv!r}")
     print(message, file=sys.stderr)
     sys.exit(code)
 
 def load_session():
-    if not os.path.exists(SESSION_PATH):
+    session = load_session_if_present()
+    if not session:
         fail("浏览器账号尚未打开。请先运行 clawdhome-browser launch，或在 ClawdHome 中点击“打开浏览器账号”。")
-    with open(SESSION_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    return session
+
+def session_paths():
+    return [SESSION_PATH, LEGACY_SESSION_PATH]
+
+def write_session_dict(session):
+    os.makedirs(os.path.dirname(SESSION_PATH), exist_ok=True)
+    with open(SESSION_PATH, "w", encoding="utf-8") as f:
+        json.dump(session, f, ensure_ascii=False, indent=2)
+    os.chmod(SESSION_PATH, 0o600)
 
 def load_session_if_present():
-    if not os.path.exists(SESSION_PATH):
-        return None
-    try:
-        with open(SESSION_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
+    for path in session_paths():
+        if not os.path.exists(path):
+            debug_log(f"load_session missing path={path!r}")
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                session = json.load(f)
+                debug_log(f"load_session ok path={path!r} endpoint={session.get('httpEndpoint')!r} profile={session.get('profilePath')!r} port={session.get('cdpPort')!r}")
+                if path == LEGACY_SESSION_PATH and not os.path.exists(SESSION_PATH):
+                    write_session_dict(session)
+                return session
+        except Exception as exc:
+            debug_log(f"load_session fail path={path!r} error={exc!r}")
+    return None
 
 def request_json(url, method="GET"):
     req = urllib.request.Request(url, method=method)
@@ -441,16 +719,37 @@ def request_json(url, method="GET"):
 def endpoint_reachable(endpoint):
     try:
         request_json(endpoint.rstrip("/") + "/json/version")
+        debug_log(f"endpoint_reachable ok endpoint={endpoint!r}")
         return True
-    except Exception:
+    except Exception as exc:
+        debug_log(f"endpoint_reachable fail endpoint={endpoint!r} error={exc!r}")
         return False
 
 def should_hide_browser():
     return os.environ.get("CLAWDHOME_BROWSER_HIDE") == "1"
 
+def launcher_candidates():
+    username = os.environ.get("USER") or getpass.getuser()
+    candidates = []
+    if username:
+        candidates.append(f"/Library/Application Support/ClawdHome/BrowserLaunchers/{username}/clawdhome-browser-launcher")
+    candidates.append(LAUNCHER_PATH)
+    candidates.append(LEGACY_LAUNCHER_PATH)
+    return candidates
+
+def resolve_launcher_path():
+    debug_log(f"resolve_launcher_path candidates={launcher_candidates()!r}")
+    for path in launcher_candidates():
+        if os.path.exists(path) and os.access(path, os.X_OK):
+            debug_log(f"resolve_launcher_path selected={path!r}")
+            return path
+        debug_log(f"resolve_launcher_path skip path={path!r} exists={os.path.exists(path)} executable={os.access(path, os.X_OK)}")
+    return None
+
 def hide_browser_if_requested():
     if not should_hide_browser():
         return
+    debug_log("hide_browser_if_requested")
     subprocess.run(
         ["/usr/bin/osascript", "-e", 'tell application "Google Chrome" to hide'],
         stdout=subprocess.DEVNULL,
@@ -629,6 +928,7 @@ def page_client():
     return CDP(ws)
 
 def command_status():
+    debug_log(f"command_status argv={sys.argv!r} user={os.environ.get('USER')!r} path={os.environ.get('PATH')!r}")
     session = load_session()
     try:
         version = request_json(session["httpEndpoint"].rstrip("/") + "/json/version")
@@ -648,8 +948,10 @@ def command_status():
     }, ensure_ascii=False, indent=2))
 
 def command_launch(url=None):
+    debug_log(f"command_launch start url={url!r} argv={sys.argv!r} user={os.environ.get('USER')!r} path={os.environ.get('PATH')!r} hide={should_hide_browser()}")
     session = current_session_reachable()
     if session:
+        debug_log(f"command_launch existing_session_reachable endpoint={session.get('httpEndpoint')!r}")
         if url:
             command_open(url)
         else:
@@ -662,6 +964,7 @@ def command_launch(url=None):
         return
 
     existing_session = load_session_if_present()
+    debug_log(f"command_launch existing_session={bool(existing_session)}")
     launch_profile_path = (existing_session or {}).get("profilePath", PROFILE_PATH)
     launch_active_port_path = (existing_session or {}).get(
         "devToolsActivePortPath",
@@ -670,7 +973,7 @@ def command_launch(url=None):
     launch_port = int((existing_session or {}).get("cdpPort", 0) or 0)
 
     if not existing_session and launch_profile_path == PROFILE_PATH:
-        fail("浏览器账号尚未初始化。请先在 ClawdHome 中点击一次“打开浏览器账号”，之后虾内命令会自动复用并拉起它。")
+        fail("浏览器账号尚未初始化。请先在 ClawdHome 中点击一次“打开浏览器账号”，之后该用户命令会自动复用并拉起它。")
 
     if not os.path.exists(CHROME_APP):
         fail("未找到 Google Chrome，请先安装 Chrome。")
@@ -685,10 +988,12 @@ def command_launch(url=None):
 
     target = url or "about:blank"
     port_arg = str(launch_port) if launch_port > 0 else "0"
-    if existing_session and os.path.exists(LAUNCHER_PATH) and os.access(LAUNCHER_PATH, os.X_OK):
-        args = [LAUNCHER_PATH, target]
+    launcher_path = resolve_launcher_path() if existing_session else None
+    if existing_session and launcher_path:
+        args = [launcher_path, target]
         if should_hide_browser():
             args.append("--hidden")
+        debug_log(f"command_launch route=privileged-launcher args={args!r} profile={launch_profile_path!r} port={launch_port}")
     else:
         args = [
         "/usr/bin/open", "-na", "Google Chrome",
@@ -704,11 +1009,14 @@ def command_launch(url=None):
         "--new-window",
         target,
         ]
+        debug_log(f"command_launch route=direct-open-fallback args={args!r} profile={launch_profile_path!r} port={launch_port}")
     try:
-        subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        result = subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        debug_log(f"command_launch subprocess ok stdout={result.stdout.strip()!r} stderr={result.stderr.strip()!r}")
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip()
-        fail("虾用户直接启动 GUI Chrome 失败。该虾可能没有 macOS 图形会话。" + (f"\n{detail}" if detail else ""))
+        debug_log(f"command_launch subprocess fail returncode={exc.returncode} stdout={(exc.stdout or '').strip()!r} stderr={(exc.stderr or '').strip()!r}")
+        fail("当前用户直接启动 GUI Chrome 失败。该用户可能没有 macOS 图形会话。" + (f"\n{detail}" if detail else ""))
 
     deadline = time.time() + 8
     while time.time() < deadline:
@@ -732,6 +1040,7 @@ def command_launch(url=None):
         if active_port and endpoint_reachable(active_port["httpEndpoint"]):
             session = save_session(active_port, launch_profile_path, launch_active_port_path, existing_session)
             hide_browser_if_requested()
+            debug_log(f"command_launch success endpoint={session['httpEndpoint']!r} profile={session['profilePath']!r}")
             print(json.dumps({
                 "ok": True,
                 "endpoint": session["httpEndpoint"],
@@ -741,22 +1050,26 @@ def command_launch(url=None):
             return
         time.sleep(0.2)
 
-    fail("Chrome 已尝试启动，但未能读取 DevToolsActivePort。该虾可能没有可用 GUI 会话，或 Chrome 启动被 macOS 拒绝。")
+    fail("Chrome 已尝试启动，但未能读取 DevToolsActivePort。该用户可能没有可用 GUI 会话，或 Chrome 启动被 macOS 拒绝。")
 
 def command_open(url):
+    debug_log(f"command_open start url={url!r} argv={sys.argv!r} user={os.environ.get('USER')!r} path={os.environ.get('PATH')!r}")
     if not url:
         fail("用法: clawdhome-browser open <url>")
-    if not os.path.exists(SESSION_PATH) or not current_session_reachable():
+    if not current_session_reachable():
+        debug_log("command_open route=launch because session missing/unreachable")
         command_launch(url)
         return
     existing_page = find_open_page(url)
     if existing_page:
+        debug_log(f"command_open route=activate existing_page={existing_page.get('id')!r} url={existing_page.get('url')!r}")
         activate_page(existing_page)
         hide_browser_if_requested()
         print(url)
         return
     encoded = urllib.parse.quote(url, safe="")
     request_json(http_endpoint() + "/json/new?" + encoded, method="PUT")
+    debug_log(f"command_open route=new_tab url={url!r}")
     hide_browser_if_requested()
     print(url)
 
@@ -783,6 +1096,7 @@ def command_screenshot():
 
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
+    debug_log(f"main cmd={cmd!r} argv={sys.argv!r} cwd={os.getcwd()!r} uid={os.getuid()} euid={os.geteuid()} user={os.environ.get('USER')!r}")
     if cmd == "status":
         command_status()
     elif cmd == "launch":
@@ -809,6 +1123,7 @@ private let browserLauncherSource = #"""
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 static int read_file(const char *path, char *buf, size_t cap) {
@@ -852,45 +1167,77 @@ static int json_int(const char *json, const char *key) {
     return atoi(p);
 }
 
+static void append_log(const char *home, const char *message) {
+    if (!home || !message) return;
+    char dir[4096];
+    snprintf(dir, sizeof(dir), "%s/.clawdhome", home);
+    mkdir(dir, 0700);
+    snprintf(dir, sizeof(dir), "%s/.clawdhome/browser", home);
+    mkdir(dir, 0700);
+    char path[4096];
+    snprintf(path, sizeof(path), "%s/.clawdhome/browser/debug.log", home);
+    FILE *f = fopen(path, "a");
+    if (!f) return;
+    time_t now = time(NULL);
+    struct tm tmv;
+    localtime_r(&now, &tmv);
+    char stamp[64];
+    strftime(stamp, sizeof(stamp), "%Y-%m-%dT%H:%M:%S", &tmv);
+    fprintf(f, "%s launcher pid=%d uid=%d euid=%d %s\n", stamp, getpid(), getuid(), geteuid(), message);
+    fclose(f);
+}
+
 int main(int argc, char **argv) {
     uid_t original_uid = getuid();
+    struct passwd *pw = getpwuid(original_uid);
+    const char *caller_home = (pw && pw->pw_dir) ? pw->pw_dir : NULL;
+    append_log(caller_home, "start");
     if (setreuid(0, 0) != 0) {
+        append_log(caller_home, "setreuid failed");
         perror("setreuid");
         return 69;
     }
+    append_log(caller_home, "setreuid ok");
 
-    struct passwd *pw = getpwuid(original_uid);
     if (!pw || !pw->pw_dir) {
         fprintf(stderr, "cannot resolve caller home\n");
         return 70;
     }
 
     char session_path[4096];
-    snprintf(session_path, sizeof(session_path), "%s/.openclaw/clawdhome-browser-session.json", pw->pw_dir);
+    snprintf(session_path, sizeof(session_path), "%s/.clawdhome/browser/session.json", pw->pw_dir);
     char json[65536];
     if (read_file(session_path, json, sizeof(json)) != 0) {
-        fprintf(stderr, "browser session missing: %s\n", session_path);
-        return 71;
+        snprintf(session_path, sizeof(session_path), "%s/.openclaw/clawdhome-browser-session.json", pw->pw_dir);
+        if (read_file(session_path, json, sizeof(json)) != 0) {
+            append_log(pw->pw_dir, "session missing");
+            fprintf(stderr, "browser session missing: %s\n", session_path);
+            return 71;
+        }
     }
 
     char profile[4096];
     if (json_string(json, "profilePath", profile, sizeof(profile)) != 0) {
+        append_log(pw->pw_dir, "profilePath missing");
         fprintf(stderr, "profilePath missing in session\n");
         return 72;
     }
     int port = json_int(json, "cdpPort");
     if (port <= 0 || port > 65535) {
+        append_log(pw->pw_dir, "invalid cdpPort");
         fprintf(stderr, "invalid cdpPort in session\n");
         return 73;
     }
 
     struct stat st;
     if (stat("/dev/console", &st) != 0) {
+        append_log(pw->pw_dir, "stat console failed");
         perror("stat /dev/console");
         return 74;
     }
     struct passwd *console = getpwuid(st.st_uid);
     if (!console || !console->pw_name) {
+        append_log(pw->pw_dir, "resolve console user failed");
         fprintf(stderr, "cannot resolve console user\n");
         return 75;
     }
@@ -932,7 +1279,11 @@ int main(int argc, char **argv) {
     args[i++] = "--new-window";
     args[i++] = (char *)target;
     args[i] = NULL;
+    char msg[4096];
+    snprintf(msg, sizeof(msg), "exec launchctl console=%s target=%s profile=%s port=%d hidden=%d", console->pw_name, target, profile, port, hidden);
+    append_log(pw->pw_dir, msg);
     execv(args[0], args);
+    append_log(pw->pw_dir, "exec launchctl failed");
     perror("exec launchctl");
     return 76;
 }

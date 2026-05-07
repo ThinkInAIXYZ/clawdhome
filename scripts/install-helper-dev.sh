@@ -17,10 +17,12 @@ PLIST_PATH="/Library/LaunchDaemons/$LABEL.plist"
 RELEASE_PLIST_PATH="/Library/LaunchDaemons/$RELEASE_LABEL.plist"
 
 ACTION="${1:-install}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# ── 查找 DerivedData 中最新构建的 ClawdHomeHelper ─────────────────────────────
+# ── 查找当前仓库优先、其次 Xcode 全局 DerivedData 中最新构建的 ClawdHomeHelper ──
 find_built_binary() {
-    find "$HOME/Library/Developer/Xcode/DerivedData" \
+    find "$REPO_ROOT/build/DerivedData" "$HOME/Library/Developer/Xcode/DerivedData" \
         -name "ClawdHomeHelper" -type f \
         ! -path "*.dSYM/*" \
         2>/dev/null \

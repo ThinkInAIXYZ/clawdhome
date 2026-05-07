@@ -1,5 +1,5 @@
 // ClawdHomeHelper/HelperImpl+BrowserAccount.swift
-// XPC surface for per-shrimp browser accounts.
+// XPC surface for per-user browser accounts.
 
 import Foundation
 
@@ -12,6 +12,17 @@ extension ClawdHomeHelperImpl {
             reply(true, String(data: data, encoding: .utf8) ?? "{}")
         } catch {
             helperLog("[browser-account] open failed @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func openBrowserAccountURL(username: String, url: String, withReply reply: @escaping (Bool, String) -> Void) {
+        helperLog("[browser-account] open url request @\(username) url=\(url)")
+        do {
+            try BrowserAccountManager.openURL(username: username, url: url)
+            reply(true, "")
+        } catch {
+            helperLog("[browser-account] open url failed @\(username): \(error.localizedDescription)", level: .error)
             reply(false, error.localizedDescription)
         }
     }
@@ -42,6 +53,17 @@ extension ClawdHomeHelperImpl {
             reply(true, String(data: data, encoding: .utf8) ?? "{}")
         } catch {
             helperLog("[browser-account] install tool failed @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func prepareBrowserAccountForRuntimeInstall(username: String, withReply reply: @escaping (Bool, String) -> Void) {
+        helperLog("[browser-account] prepare runtime install request @\(username)")
+        do {
+            try BrowserAccountManager.prepareForRuntimeInstall(username: username)
+            reply(true, "")
+        } catch {
+            helperLog("[browser-account] prepare runtime install failed @\(username): \(error.localizedDescription)", level: .error)
             reply(false, error.localizedDescription)
         }
     }

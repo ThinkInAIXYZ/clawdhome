@@ -3,6 +3,7 @@
 import AppKit
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 final class ClawdHomeAppDelegate: NSObject, NSApplicationDelegate {
     func application(_ app: NSApplication, shouldSaveApplicationState coder: NSCoder) -> Bool {
@@ -492,6 +493,7 @@ private struct MaintenanceTerminalWindowContent: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
     @Environment(ShrimpPool.self) private var pool
+    @Environment(HelperClient.self) private var helperClient
     @Environment(MaintenanceWindowRegistry.self) private var maintenanceWindowRegistry
     @StateObject private var terminalControl = LocalTerminalControl()
     @State private var terminalRunID = 0
@@ -504,6 +506,7 @@ private struct MaintenanceTerminalWindowContent: View {
     @State private var didStart = false
     @State private var didPostCloseNotification = false
     @State private var didAutoCloseOnConfigureComplete = false
+    @State private var isOpeningAuthorizeURL = false
     @State private var terminalTheme: MaintenanceTerminalTheme = .system
     @State private var searchText = ""
     @State private var searchMatches: [OutputSearchMatch] = []
@@ -881,9 +884,12 @@ private struct MaintenanceTerminalWindowContent: View {
                     .foregroundStyle(.secondary)
 
                 if let url = latestAuthorizeURL {
-                    Button(L10n.k("clawd_home_app.open_auth_page", fallback: "打开授权页")) { _ = NSWorkspace.shared.open(url) }
+                    Button(L10n.k("clawd_home_app.open_auth_page", fallback: "打开授权页")) {
+                        openAuthorizeURLInUserBrowser(url)
+                    }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .disabled(isOpeningAuthorizeURL || !helperClient.isConnected)
                     Text(url.absoluteString)
                         .font(.system(.caption2, design: .monospaced))
                         .foregroundStyle(.secondary)
@@ -907,6 +913,33 @@ private struct MaintenanceTerminalWindowContent: View {
             .padding(.vertical, 6)
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
             .clipShape(RoundedRectangle(cornerRadius: 7))
+        }
+    }
+
+    private func openAuthorizeURLInUserBrowser(_ url: URL) {
+        isOpeningAuthorizeURL = true
+        let username = request.username
+        let rawURL = url.absoluteString
+        Task {
+            defer {
+                Task { @MainActor in
+                    isOpeningAuthorizeURL = false
+                }
+            }
+            do {
+                try await helperClient.openBrowserAccountURL(username: username, url: rawURL)
+                await MainActor.run {
+                    statusText = L10n.k("clawd_home_app.auth_page_opened_in_user_browser", fallback: "已在该用户浏览器账号打开授权页。")
+                }
+            } catch {
+                await MainActor.run {
+                    statusText = L10n.f(
+                        "clawd_home_app.auth_page_open_failed",
+                        fallback: "打开授权页失败：%@",
+                        error.localizedDescription
+                    )
+                }
+            }
         }
     }
 
@@ -1067,7 +1100,10 @@ private struct MaintenanceTerminalWindowContent: View {
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = "maintenance-\(request.username)-\(timestampString()).log"
-        panel.allowedFileTypes = ["log", "txt"]
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "log") ?? .plainText,
+            .plainText
+        ]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)

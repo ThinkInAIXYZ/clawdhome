@@ -94,6 +94,7 @@ private enum WizardV2BasicEnvPhase: Int, CaseIterable {
     case installNode
     case setupNpmEnv
     case setNpmRegistry
+    case installBrowserTool
     case installOpenclaw
     case startGateway
 
@@ -107,6 +108,8 @@ private enum WizardV2BasicEnvPhase: Int, CaseIterable {
             return L10n.k("wizard.base_env.setup_npm_env", fallback: "配置 npm 目录")
         case .setNpmRegistry:
             return L10n.k("wizard.base_env.set_npm_registry", fallback: "设置 npm 安装源")
+        case .installBrowserTool:
+            return "安装浏览器工具并打开 Chrome"
         case .installOpenclaw:
             return L10n.k("wizard.base_env.install_openclaw", fallback: "安装 openclaw")
         case .startGateway:
@@ -121,6 +124,8 @@ private enum WizardV2BasicEnvPhase: Int, CaseIterable {
 
 private enum WizardV2HermesEnvPhase: Int, CaseIterable {
     case repairHomebrew = 1
+    case installNode
+    case installBrowserTool
     case installHermes
     case verifyInstall
     case startGateway
@@ -129,6 +134,10 @@ private enum WizardV2HermesEnvPhase: Int, CaseIterable {
         switch self {
         case .repairHomebrew:
             return "修复 Homebrew 权限"
+        case .installNode:
+            return "安装 Node.js"
+        case .installBrowserTool:
+            return "安装浏览器工具并打开 Chrome"
         case .installHermes:
             return "安装 Hermes"
         case .verifyInstall:
@@ -1389,10 +1398,26 @@ struct ShrimpInitWizardV2: View {
         FileManager.default.createFile(atPath: logPath, contents: nil, attributes: [.posixPermissions: 0o666])
         if engine == .hermes {
             Task { @MainActor in
-                // best-effort：失败不阻断
-                try? await helperClient.repairHomebrewPermission(username: user.username)
-                hermesEnvInstallingPhase = .installHermes
-                hermesInstallTerminalRunToken = UUID()
+                do {
+                    // best-effort：失败不阻断
+                    try? await helperClient.repairHomebrewPermission(username: user.username)
+
+                    hermesEnvInstallingPhase = .installNode
+                    try await helperClient.installNode(username: user.username, nodeDistURL: nodeDistURL)
+
+                    hermesEnvInstallingPhase = .installBrowserTool
+                    try await helperClient.prepareBrowserAccountForRuntimeInstall(username: user.username)
+
+                    hermesEnvInstallingPhase = .installHermes
+                    hermesInstallTerminalRunToken = UUID()
+                } catch {
+                    let phaseTitle = hermesEnvInstallingPhase?.title
+                        ?? L10n.k("wizard_v2.basic_env.heading", fallback: "安装基础运行环境")
+                    isInstallingEnv = false
+                    envInstallingPhase = nil
+                    hermesEnvInstallingPhase = nil
+                    envError = "\(phaseTitle)失败：\(error.localizedDescription)"
+                }
             }
             return
         }
@@ -1413,6 +1438,9 @@ struct ShrimpInitWizardV2: View {
                     username: user.username,
                     registry: NpmRegistryOption.defaultForInitialization.rawValue
                 )
+
+                envInstallingPhase = .installBrowserTool
+                try await helperClient.prepareBrowserAccountForRuntimeInstall(username: user.username)
 
                 envInstallingPhase = .installOpenclaw
                 try await helperClient.installOpenclaw(username: user.username, version: nil)

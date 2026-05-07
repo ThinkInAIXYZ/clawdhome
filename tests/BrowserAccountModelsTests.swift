@@ -11,19 +11,19 @@ struct BrowserAccountModelsTests {
 
     static func main() {
         let base = URL(fileURLWithPath: "/Users/admin/Library/Application Support/ClawdHome")
-        let paths = BrowserAccountPaths(username: "shrimp.one", appSupportDirectory: base)
+        let paths = BrowserAccountPaths(username: "agent.one", appSupportDirectory: base)
 
         expect(
-            paths.profileDirectory.path == "/Users/admin/Library/Application Support/ClawdHome/BrowserProfiles/shrimp.one",
+            paths.profileDirectory.path == "/Users/admin/Library/Application Support/ClawdHome/BrowserProfiles/agent.one",
             "profile directory should be scoped by username"
         )
         expect(
-            paths.sessionRelativePath == ".openclaw/clawdhome-browser-session.json",
-            "session file should live under the shrimp openclaw directory"
+            paths.sessionRelativePath == ".clawdhome/browser/session.json",
+            "session file should live under the user clawdhome browser directory"
         )
         expect(
-            BrowserAccountPaths.toolBrowserProfileRelativePath == ".openclaw/browser-profile",
-            "tool-launched Chrome should use the shrimp home browser profile"
+            BrowserAccountPaths.toolBrowserProfileRelativePath == ".clawdhome/browser/profile",
+            "tool-launched Chrome should use the user home browser profile"
         )
         expect(
             BrowserAccountPaths.browserCommandWrapperNames.contains("open")
@@ -52,7 +52,7 @@ struct BrowserAccountModelsTests {
         )
 
         expect(
-            BrowserAccountPaths.isValidUsername("shrimp-01.alpha"),
+            BrowserAccountPaths.isValidUsername("agent-01.alpha"),
             "valid macOS-style usernames should be accepted"
         )
         expect(

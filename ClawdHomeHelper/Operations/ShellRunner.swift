@@ -110,11 +110,42 @@ func run(_ executable: String, args: [String] = []) throws -> String {
     proc.standardOutput = stdout
     proc.standardError = stderr
 
+    let stdoutData = NSMutableData()
+    let stderrData = NSMutableData()
+    let outputLock = NSLock()
+
+    stdout.fileHandleForReading.readabilityHandler = { fh in
+        let chunk = fh.availableData
+        guard !chunk.isEmpty else { return }
+        outputLock.lock()
+        stdoutData.append(chunk)
+        outputLock.unlock()
+    }
+    stderr.fileHandleForReading.readabilityHandler = { fh in
+        let chunk = fh.availableData
+        guard !chunk.isEmpty else { return }
+        outputLock.lock()
+        stderrData.append(chunk)
+        outputLock.unlock()
+    }
+
     try proc.run()
     proc.waitUntilExit()
 
-    let out = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-    let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    stdout.fileHandleForReading.readabilityHandler = nil
+    stderr.fileHandleForReading.readabilityHandler = nil
+
+    let stdoutTail = stdout.fileHandleForReading.readDataToEndOfFile()
+    let stderrTail = stderr.fileHandleForReading.readDataToEndOfFile()
+    outputLock.lock()
+    stdoutData.append(stdoutTail)
+    stderrData.append(stderrTail)
+    let outData = stdoutData as Data
+    let errData = stderrData as Data
+    outputLock.unlock()
+
+    let out = String(data: outData, encoding: .utf8) ?? ""
+    let err = String(data: errData, encoding: .utf8) ?? ""
 
     guard proc.terminationStatus == 0 else {
         throw ShellError.nonZeroExit(
