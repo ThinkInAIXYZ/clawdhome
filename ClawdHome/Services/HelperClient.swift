@@ -735,7 +735,6 @@ final class HelperClient {
     }
 
     /// 应用 Hermes 初始化配置（profile-aware）
-    /// TODO(PR-3): profileID 路径分发待 HermesConfigWriter 支持后生效
     func applyHermesInitConfig(username: String, profileID: String, payloadJSON: String) async -> (Bool, String?) {
         guard let proxy = controlProxy else {
             return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
@@ -755,7 +754,6 @@ final class HelperClient {
     }
 
     /// 读取 Hermes 初始化摘要（profile-aware）
-    /// TODO(PR-3): profileID 路径分发待 HermesConfigWriter 支持后生效
     func getHermesInitSummary(username: String, profileID: String) async -> String? {
         guard let proxy = controlProxy else { return nil }
         do {
@@ -773,7 +771,6 @@ final class HelperClient {
     }
 
     /// 校验 Hermes 初始化配置（profile-aware），Bool 仅表示 RPC 是否成功执行
-    /// TODO(PR-3): profileID 路径分发待 HermesConfigWriter 支持后生效
     func validateHermesInitConfig(username: String, profileID: String) async -> (Bool, String)? {
         guard let proxy = controlProxy else { return nil }
         do {
@@ -873,6 +870,72 @@ final class HelperClient {
             }
         }
         if !ok { throw HelperError.operationFailed(err ?? "设置 Hermes 自启失败") }
+    }
+
+    // MARK: - Hermes IM 绑定（PR-3）
+
+    /// 写入 IM 平台 token 到 profile 的 .env；失败返回 (false, errorMessage)
+    func applyHermesIMBinding(username: String, profileID: String, payloadJSON: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else {
+            return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
+        }
+        do {
+            return try await xpcCall { done in
+                proxy.applyHermesIMBinding(username: username, profileID: profileID, payloadJSON: payloadJSON) { ok, err in
+                    done((ok, err))
+                }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 执行 hermes doctor，返回结构化 JSON 字符串（{ok, platforms, raw}）
+    func runHermesDoctor(username: String, profileID: String) async -> String {
+        guard let proxy = controlProxy else {
+            return #"{"ok":false,"platforms":{},"raw":"not_connected"}"#
+        }
+        do {
+            return try await xpcCall(timeout: HelperClient.xpcDefaultTimeout) { done in
+                proxy.runHermesDoctor(username: username, profileID: profileID) { json in done(json) }
+            }
+        } catch {
+            return #"{"ok":false,"platforms":{},"raw":"xpc_timeout"}"#
+        }
+    }
+
+    // MARK: - Hermes 向导进度位图（PR-3）
+
+    /// 读取进度位图 JSON；文件不存在时返回默认骨架
+    func getHermesWizardState(username: String, profileID: String) async -> String? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            return try await xpcCall { done in
+                proxy.getHermesWizardState(username: username, profileID: profileID) { json in done(json) }
+            }
+        } catch { return nil }
+    }
+
+    /// 以 deep-merge 方式更新进度位图
+    func updateHermesWizardState(username: String, profileID: String, patchJSON: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else {
+            return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
+        }
+        do {
+            return try await xpcCall { done in
+                proxy.updateHermesWizardState(username: username, profileID: profileID, patchJSON: patchJSON) { ok, err in
+                    done((ok, err))
+                }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 清空进度位图（重置为骨架）
+    func clearHermesWizardState(username: String, profileID: String) async -> Bool {
+        guard let proxy = controlProxy else { return false }
+        do {
+            return try await xpcCall { done in
+                proxy.clearHermesWizardState(username: username, profileID: profileID) { ok in done(ok) }
+            }
+        } catch { return false }
     }
 
     // MARK: - 用户环境初始化

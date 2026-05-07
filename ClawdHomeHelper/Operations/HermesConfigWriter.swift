@@ -19,9 +19,9 @@ struct HermesConfigWriter {
         var gateway_timeout_warning: Int?
     }
 
-    static func apply(username: String, payloadJSON: String) throws {
+    static func apply(username: String, profileID: String, payloadJSON: String) throws {
         let payload = try decodePayload(payloadJSON)
-        let hermesHome = HermesInstaller.hermesHome(for: username)
+        let hermesHome = HermesGatewayManager.hermesHomeForProfile(username: username, profileID: profileID)
         try ensureHermesHome(username: username, hermesHome: hermesHome)
 
         // 收集 model / agent section 更新
@@ -61,8 +61,13 @@ struct HermesConfigWriter {
         }
     }
 
-    static func initSummaryJSON(username: String) -> String {
-        let hermesHome = HermesInstaller.hermesHome(for: username)
+    /// 向后兼容重载：profileID 默认为 "main"
+    static func apply(username: String, payloadJSON: String) throws {
+        try apply(username: username, profileID: "main", payloadJSON: payloadJSON)
+    }
+
+    static func initSummaryJSON(username: String, profileID: String) -> String {
+        let hermesHome = HermesGatewayManager.hermesHomeForProfile(username: username, profileID: profileID)
         let configPath = "\(hermesHome)/config.yaml"
         let envPath = "\(hermesHome)/.env"
         let model = parseModelSection(configPath: configPath)
@@ -78,12 +83,18 @@ struct HermesConfigWriter {
             "configPath": configPath,
             "envPath": envPath,
             "gatewayStatePath": "\(hermesHome)/gateway_state.json",
+            "profileID": profileID,
         ]
         return toJSONString(summary, fallback: "{}")
     }
 
-    static func validateJSON(username: String) -> String {
-        let hermesHome = HermesInstaller.hermesHome(for: username)
+    /// 向后兼容重载：profileID 默认为 "main"
+    static func initSummaryJSON(username: String) -> String {
+        initSummaryJSON(username: username, profileID: "main")
+    }
+
+    static func validateJSON(username: String, profileID: String) -> String {
+        let hermesHome = HermesGatewayManager.hermesHomeForProfile(username: username, profileID: profileID)
         let configPath = "\(hermesHome)/config.yaml"
         let envPath = "\(hermesHome)/.env"
         let installed = HermesInstaller.installedVersion(username: username) != nil
@@ -139,6 +150,24 @@ struct HermesConfigWriter {
             ],
         ]
         return toJSONString(report, fallback: #"{"valid":false,"issues":[{"code":"serialize_failed","level":"error","message":"JSON 序列化失败"}]}"#)
+    }
+
+    /// 向后兼容重载：profileID 默认为 "main"
+    static func validateJSON(username: String) -> String {
+        validateJSON(username: username, profileID: "main")
+    }
+
+    /// IM 绑定专用写入入口（供 applyHermesIMBinding 使用，不暴露底层 mergeEnv）
+    /// 将给定 env 字典原子合并写入 profile 的 .env 文件
+    static func writeIMBindingEnv(
+        username: String,
+        profileID: String,
+        platform: String,
+        env: [String: String]
+    ) throws {
+        let hermesHome = HermesGatewayManager.hermesHomeForProfile(username: username, profileID: profileID)
+        let envPath = "\(hermesHome)/.env"
+        try mergeEnv(username: username, envPath: envPath, updates: env)
     }
 
     private static func decodePayload(_ payloadJSON: String) throws -> InitPayload {

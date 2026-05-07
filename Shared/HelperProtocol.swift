@@ -848,7 +848,6 @@ import Foundation
 
     /// 应用 Hermes 初始化配置（profile-aware；payloadJSON 由 App 侧序列化）
     /// - profileID="main" 写入 ~/.hermes/；named 写入 ~/.hermes/profiles/<profileID>/
-    /// - TODO(PR-3): HermesConfigWriter.apply 尚未 profile-aware，当前 profileID 参数接收但忽略
     func applyHermesInitConfig(
         username: String,
         profileID: String,
@@ -864,7 +863,6 @@ import Foundation
     )
 
     /// 读取指定 profile 的 Hermes 初始化摘要（JSON 编码字符串，失败返回 "{}"）
-    /// - TODO(PR-3): HermesConfigWriter.initSummaryJSON 尚未 profile-aware，当前 profileID 忽略
     func getHermesInitSummary(
         username: String,
         profileID: String,
@@ -879,7 +877,6 @@ import Foundation
 
     /// 校验指定 profile 的 Hermes 初始化配置完整性（返回 JSON 编码报告）
     /// withReply 第一个 Bool 仅表示 RPC 是否成功执行，配置是否通过请看返回 JSON 的 valid 字段。
-    /// - TODO(PR-3): HermesConfigWriter.validateJSON 尚未 profile-aware，当前 profileID 忽略
     func validateHermesInitConfig(
         username: String,
         profileID: String,
@@ -933,6 +930,51 @@ import Foundation
         username: String,
         profileID: String,
         withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    // MARK: - Hermes IM 绑定（PR-3）
+
+    /// 将 IM 平台 token 写入指定 profile 的 .env（纯 token 模式）
+    /// payloadJSON: { "platform": "telegram", "env": {"TELEGRAM_BOT_TOKEN": "xxx", ...} }
+    /// 返回 (success, errorMessage?)；必填 key 缺失时返回 (false, "im_token_missing:<key>")
+    func applyHermesIMBinding(
+        username: String,
+        profileID: String,
+        payloadJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 以 shrimp 用户身份执行 `hermes -p <profileID> doctor`，返回结构化 JSON
+    /// 返回 JSON: {"ok": Bool, "platforms": {"telegram": "ready"|"missing_token"|"unknown_error", ...}, "raw": "..."}
+    func runHermesDoctor(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    // MARK: - Hermes 向导进度位图（PR-3）
+
+    /// 读取指定 profile 的向导进度位图 JSON；文件不存在时返回默认骨架
+    func getHermesWizardState(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 以 deep-merge 语义将 patchJSON 合并到向导进度位图
+    /// 返回 (success, errorMessage?)
+    func updateHermesWizardState(
+        username: String,
+        profileID: String,
+        patchJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 清空向导进度位图（重置为默认骨架）
+    func clearHermesWizardState(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool) -> Void
     )
 
     // MARK: - Hermes 自启白名单（F2）
