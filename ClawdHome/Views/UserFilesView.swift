@@ -171,7 +171,12 @@ private struct TextEditSheetView: View {
             CodeEditorView(text: $content, showFind: $showFind)
                 .clipped()
         }
-        .frame(width: 750, height: 500)
+        .frame(
+            minWidth: 750,
+            idealWidth: 920,
+            minHeight: 500,
+            idealHeight: 680
+        )
         .onChange(of: content) { _, newValue in
             validateJSON(newValue)
         }
