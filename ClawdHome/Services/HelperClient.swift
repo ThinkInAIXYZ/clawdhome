@@ -435,8 +435,24 @@ final class HelperClient {
     func scanCloneClaw(username: String) async throws -> CloneScanResult {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
         let (json, err): (String, String?) = await withCheckedContinuation { cont in
+            let lock = NSLock()
+            var resolved = false
+
+            func resolve(_ value: (String, String?)) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !resolved else { return }
+                resolved = true
+                cont.resume(returning: value)
+            }
+
             proxy.scanCloneClaw(username: username) { json, err in
-                cont.resume(returning: (json, err))
+                resolve((json, err))
+            }
+
+            // 兜底：避免 helper 回调丢失时界面一直停在“扫描中”
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 20) {
+                resolve(("", L10n.k("services.helper_client.clone_scan_timeout", fallback: "克隆扫描超时，请重试")))
             }
         }
         if let err { throw HelperError.operationFailed(err) }
@@ -455,8 +471,24 @@ final class HelperClient {
             throw HelperError.operationFailed(L10n.k("services.helper_client.clone_request_serialization_failed", fallback: "克隆请求序列化失败"))
         }
         let (ok, resultJSON, err): (Bool, String, String?) = await withCheckedContinuation { cont in
+            let lock = NSLock()
+            var resolved = false
+
+            func resolve(_ value: (Bool, String, String?)) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !resolved else { return }
+                resolved = true
+                cont.resume(returning: value)
+            }
+
             proxy.cloneClaw(requestJSON: reqJSON) { ok, json, err in
-                cont.resume(returning: (ok, json, err))
+                resolve((ok, json, err))
+            }
+
+            // 兜底：避免 helper 回调丢失时界面一直停在“克隆中”
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 240) {
+                resolve((false, "", L10n.k("services.helper_client.clone_timeout", fallback: "克隆超时，请重试并检查 helper 日志")))
             }
         }
         if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.clone_failed", fallback: "克隆失败")) }
@@ -465,6 +497,37 @@ final class HelperClient {
             throw HelperError.operationFailed(L10n.k("services.helper_client.clone_result_parse_failed", fallback: "克隆结果解析失败"))
         }
         return result
+    }
+
+    /// 终止正在进行的克隆任务（按目标用户名）
+    func cancelCloneClaw(targetUsername: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let trimmed = targetUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw HelperError.operationFailed(L10n.k("services.helper_client.clone_cancel_username_required", fallback: "终止克隆失败：目标用户名为空"))
+        }
+        let (ok, err): (Bool, String?) = await withCheckedContinuation { cont in
+            proxy.cancelCloneClaw(targetUsername: trimmed) { ok, err in
+                cont.resume(returning: (ok, err))
+            }
+        }
+        if !ok {
+            throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.clone_cancel_failed", fallback: "终止克隆失败"))
+        }
+    }
+
+    /// 查询克隆当前阶段状态（按目标用户名）
+    func getCloneClawStatus(targetUsername: String) async -> String? {
+        guard let proxy = controlProxy else { return nil }
+        let trimmed = targetUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let status: String? = await withCheckedContinuation { cont in
+            proxy.getCloneClawStatus(targetUsername: trimmed) { status in
+                cont.resume(returning: status)
+            }
+        }
+        let normalized = status?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return normalized.isEmpty ? nil : normalized
     }
 
     /// 返回用户 gateway 的访问 URL

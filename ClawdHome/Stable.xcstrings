@@ -11340,6 +11340,24 @@
         }
       }
     },
+    "user.detail.auto.start_action": {
+      "comment": "",
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动"
+          }
+        }
+      }
+    },
     "user.detail.auto.start_gateway_close": {
       "comment": "",
       "extractionState": "stale",
@@ -19158,13 +19176,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Example: 0.5.2 / next / beta"
+            "value": "Example: 2026.3.12"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "例如：0.5.2 / next / beta"
+            "value": "例如：2026.3.12"
           }
         }
       }

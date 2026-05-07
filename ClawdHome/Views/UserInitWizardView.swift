@@ -11,6 +11,24 @@ private struct ModelConfigTerminalCloseState: Identifiable {
     let detectedModel: String?
 }
 
+private struct WizardInputSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
+            )
+    }
+}
+
+private extension View {
+    func wizardInputSurface() -> some View {
+        modifier(WizardInputSurfaceModifier())
+    }
+}
+
 // MARK: - 枚举定义
 
 enum InitStep: Int, CaseIterable {
@@ -442,6 +460,7 @@ struct UserInitWizardView: View {
     // Step 4: 频道配置
     @State private var selectedChannel: WizardChannelType = .feishu
     @State private var hoveredChannelBinding: WizardChannelType? = nil
+    @State private var autoChannelFinishInFlight = false
 
     // Step 5: 完成
     @State private var isStartingOpenclaw = false
@@ -572,6 +591,12 @@ struct UserInitWizardView: View {
             isModelConfigTerminalOpen = false
             Task { await handleModelConfigTerminalClosed(userInfo: userInfo) }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .channelOnboardingAutoDetected)) { notification in
+            guard let userInfo = notification.userInfo,
+                  let username = userInfo["username"] as? String,
+                  username == user.username else { return }
+            Task { await handleAutoDetectedChannelPairing() }
+        }
         .alert(item: $pendingModelConfigTerminalClose) { state in
             Alert(
                 title: Text(modelConfigTerminalAlertTitle(for: state)),
@@ -660,7 +685,7 @@ struct UserInitWizardView: View {
                     .labelsHidden()
 
                     if selectedOpenclawVersionPreset == .custom {
-                        TextField(L10n.k("wizard.openclaw_version.custom_placeholder", fallback: "例如：0.5.2 / next / beta"), text: $customOpenclawVersion)
+                        TextField(L10n.k("wizard.openclaw_version.custom_placeholder", fallback: "例如：2026.3.12"), text: $customOpenclawVersion)
                             .textFieldStyle(.roundedBorder)
                     }
 
@@ -701,8 +726,8 @@ struct UserInitWizardView: View {
                        : L10n.k("wizard.action.terminate", fallback: "终止初始化")) {
                     isCancelling = true
                     Task {
-                        await helperClient.cancelInit(username: user.username)
                         await markRunningStepsAsCancelledAndPersist()
+                        requestCancelInit()
                         isCancelling = false
                     }
                 }
@@ -799,12 +824,7 @@ struct UserInitWizardView: View {
                     }
                 }
                 .padding(.horizontal, 10).padding(.vertical, 8)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
-                )
+                .wizardInputSurface()
 
                 // 供选择的列表，限制高度默认展示3个，支持内滚
                 ScrollView {
@@ -959,16 +979,21 @@ struct UserInitWizardView: View {
                             SecureField(provider.apiKeyPlaceholder, text: $wizardApiKey)
                         }
                     }
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
 
                     Button {
                         isShowingApiKey.toggle()
                     } label: {
                         Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                     .help(isShowingApiKey ? L10n.k("views.user_init_wizard_view.hide", fallback: "隐藏") : L10n.k("views.user_init_wizard_view.show", fallback: "显示"))
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .wizardInputSurface()
             }
 
             if provider == .minimax {
@@ -1019,7 +1044,7 @@ struct UserInitWizardView: View {
                         .labelsHidden()
                         .pickerStyle(.menu)
                         .frame(minWidth: 160)
-                        
+
                         Text(selectedZAIModel.rawValue)
                             .font(.system(.caption, design: .monospaced))
                             .foregroundStyle(.secondary)
@@ -1327,7 +1352,7 @@ struct UserInitWizardView: View {
                 Button(L10n.k("views.user_init_wizard_view.re_initialize", fallback: "重新初始化")) {
                     isCancelling = true
                     Task {
-                        await helperClient.cancelInit(username: user.username)
+                        requestCancelInit()
                         isCancelling = false
                         resetWizard()
                     }
@@ -1555,7 +1580,7 @@ struct UserInitWizardView: View {
     private func saveRoleAndContinue() async {
         isSavingRole = true
         defer { isSavingRole = false }
-        
+
         do {
             let workspaceDir = ".openclaw/workspace"
             try await helperClient.createDirectory(username: user.username, relativePath: workspaceDir)
@@ -1568,7 +1593,7 @@ struct UserInitWizardView: View {
             if !roleUser.isEmpty {
                 try await helperClient.writeFile(username: user.username, relativePath: "\(workspaceDir)/USER.md", data: roleUser.data(using: .utf8) ?? Data())
             }
-            
+
             // Try init git repo silently, won't block if fails
             try? await helperClient.initPersonaGitRepo(username: user.username)
             if !roleSoul.isEmpty { try? await helperClient.commitPersonaFile(username: user.username, filename: "SOUL.md", message: "Initial commit") }
@@ -2102,6 +2127,17 @@ struct UserInitWizardView: View {
         }
     }
 
+    private func handleAutoDetectedChannelPairing() async {
+        guard initiated,
+              currentStep == .configureChannel,
+              !autoChannelFinishInFlight,
+              !isStartingOpenclaw else { return }
+        autoChannelFinishInFlight = true
+        defer { autoChannelFinishInFlight = false }
+        await markChannelStepDone()
+        await finishAndStartOpenclaw()
+    }
+
     private func syncGatewayStateAfterStart(
         maxAttempts: Int = 12,
         retryDelayNanoseconds: UInt64 = 500_000_000
@@ -2400,6 +2436,16 @@ struct UserInitWizardView: View {
             user.initStep = failedStep.title
             // 终止后保持向导会话活跃，确保稳定停留在失败面板，避免界面闪回 pre-start。
             await persistState(activeOverride: true)
+        }
+    }
+
+    /// 非阻塞地请求 Helper 终止初始化流程，避免 UI 因回调延迟而卡住。
+    private func requestCancelInit() {
+        let username = user.username
+        let conn = wizardConn
+        Task {
+            await conn?.cancelInit(username: username)
+            await helperClient.cancelInit(username: username)
         }
     }
 

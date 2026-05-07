@@ -11,6 +11,7 @@ enum CloneClawManagerError: LocalizedError {
     case ownershipFixFailed(String, String)
     case invalidRequestJSON
     case invalidConfigFormat
+    case cloneCancelled(String)
     case scanEncodeFailed
     case resultEncodeFailed
 
@@ -26,6 +27,7 @@ enum CloneClawManagerError: LocalizedError {
         case .ownershipFixFailed(let path, let detail): return "权限修复失败：\(path)（\(detail)）"
         case .invalidRequestJSON: return "克隆请求 JSON 无效"
         case .invalidConfigFormat: return "openclaw.json 不是合法对象"
+        case .cloneCancelled(let username): return "克隆已终止：\(username)"
         case .scanEncodeFailed: return "克隆扫描结果序列化失败"
         case .resultEncodeFailed: return "克隆结果序列化失败"
         }
@@ -36,15 +38,14 @@ struct CloneClawManager {
     static let envItemID = "env"
     static let shellProfilesItemID = "shellProfiles"
     static let configItemID = "config"
-    static let secretsItemID = "secrets"
-    static let authProfilesItemID = "authProfiles"
+    static let roleDataItemID = "roleData"
 
     static func scanCloneItems(sourceUsername: String) throws -> CloneScanResult {
         let home = try homeDirectory(for: sourceUsername)
         let entries: [(id: String, kind: CloneDataItemKind, title: String, relativePath: String, isDirectory: Bool)] = [
-            (envItemID, .envDirectory, "环境（~/.npm-global）", ".npm-global", true),
-            (configItemID, .openclawConfig, "openclaw.json", ".openclaw/openclaw.json", false),
-            (secretsItemID, .secrets, "secrets.json", ".openclaw/secrets.json", false)
+            (envItemID, .envDirectory, "基础环境", ".npm-global", true),
+            (configItemID, .openclawConfig, "openclaw.json 配置", ".openclaw/openclaw.json", false),
+            (roleDataItemID, .roleData, "agent 数据（auth等）", ".openclaw/agents/main/agent", true)
         ]
 
         var warnings: [String] = []
@@ -100,30 +101,6 @@ struct CloneClawManager {
             )
         )
 
-        let rootAuthRelativePath = ".openclaw/auth-profiles.json"
-        let rootAuthPath = "\(home)/\(rootAuthRelativePath)"
-        let rootAuthExists = FileManager.default.fileExists(atPath: rootAuthPath)
-        let rootSize = rootAuthExists ? fileSize(rootAuthPath) : 0
-        let agentAuthPaths = discoverAgentAuthProfileRelativePaths(sourceHome: home)
-        let agentSize = agentAuthPaths.reduce(Int64(0)) { partial, relativePath in
-            partial + fileSize("\(home)/\(relativePath)")
-        }
-        let authSelectable = rootAuthExists || !agentAuthPaths.isEmpty
-        if !authSelectable {
-            warnings.append("auth-profiles.json 不存在，已自动禁用")
-        }
-        items.append(
-            CloneScanItem(
-                id: authProfilesItemID,
-                kind: .authProfiles,
-                title: "auth-profiles.json",
-                sourceRelativePath: rootAuthRelativePath,
-                sizeBytes: rootSize + agentSize,
-                selectable: authSelectable,
-                selectedByDefault: authSelectable,
-                disabledReason: authSelectable ? nil : "文件不存在"
-            )
-        )
         return CloneScanResult(items: items, warnings: warnings)
     }
 
@@ -165,42 +142,6 @@ struct CloneClawManager {
             remove(path: path, from: &root)
         }
         return normalizeConfigPaths(root)
-    }
-
-    static func discoverAgentAuthProfileRelativePaths(sourceHome: String) -> [String] {
-        let normalizedHome = URL(fileURLWithPath: sourceHome).standardizedFileURL.path
-        let agentsRootPath = "\(normalizedHome)/.openclaw/agents"
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: agentsRootPath, isDirectory: &isDir), isDir.boolValue else {
-            return []
-        }
-
-        let rootURL = URL(fileURLWithPath: agentsRootPath)
-        let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey]
-        guard let enumerator = FileManager.default.enumerator(
-            at: rootURL,
-            includingPropertiesForKeys: Array(keys),
-            options: [.skipsPackageDescendants]
-        ) else {
-            return []
-        }
-
-        var paths = Set<String>()
-        let prefix = normalizedHome.hasSuffix("/") ? normalizedHome : "\(normalizedHome)/"
-        for case let fileURL as URL in enumerator {
-            guard let values = try? fileURL.resourceValues(forKeys: keys) else { continue }
-            if values.isSymbolicLink == true {
-                enumerator.skipDescendants()
-                continue
-            }
-            guard values.isRegularFile == true else { continue }
-            guard fileURL.lastPathComponent == "auth-profiles.json" else { continue }
-            guard fileURL.deletingLastPathComponent().lastPathComponent == "agent" else { continue }
-            let path = fileURL.standardizedFileURL.path
-            guard path.hasPrefix(prefix) else { continue }
-            paths.insert(String(path.dropFirst(prefix.count)))
-        }
-        return paths.sorted()
     }
 
     private static func normalizeConfigPaths(_ raw: [String: Any]) -> [String: Any] {

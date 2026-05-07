@@ -13,7 +13,7 @@ BUILD_COUNTER_SCRIPT := scripts/build_counter.sh
 APPLE_TEAM_ID ?= Y7P5QLKLYG
 APP_SIGN_IDENTITY ?= Developer ID Application: Mengjun Xie (Y7P5QLKLYG)
 PKG_SIGN_IDENTITY ?= Developer ID Installer: Mengjun Xie (Y7P5QLKLYG)
-NOTARY_PROFILE ?= $(CLAWDHOME_NOTARY_PROFILE)
+NOTARY_PROFILE ?= clawdhome-release
 SIGN_APP ?= false
 SIGN_PKG ?= false
 NOTARIZE ?= false
@@ -96,6 +96,8 @@ build: bump-build
 		-scheme $(SCHEME_APP) \
 		-destination "platform=macOS" \
 		-configuration Debug \
+		CLAWDHOME_MARKETING_VERSION_OVERRIDE="$$MARKETING_VERSION" \
+		CLAWDHOME_BUILD_NUMBER_OVERRIDE="$$BUILD_NO" \
 		MARKETING_VERSION="$$MARKETING_VERSION" \
 		CURRENT_PROJECT_VERSION="$$BUILD_NO" \
 		INFOPLIST_KEY_CFBundleShortVersionString="$$MARKETING_VERSION" \
@@ -119,6 +121,8 @@ build-release: bump-build
 		-configuration Release \
 		-destination "generic/platform=macOS" \
 		-archivePath build/ClawdHome.xcarchive \
+		CLAWDHOME_MARKETING_VERSION_OVERRIDE="$$MARKETING_VERSION" \
+		CLAWDHOME_BUILD_NUMBER_OVERRIDE="$$BUILD_NO" \
 		MARKETING_VERSION="$$MARKETING_VERSION" \
 		CURRENT_PROJECT_VERSION="$$BUILD_NO" \
 		INFOPLIST_KEY_CFBundleShortVersionString="$$MARKETING_VERSION" \

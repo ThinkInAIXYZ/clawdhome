@@ -95,11 +95,9 @@ struct GatewayLogViewer: View {
                     .toggleStyle(.checkbox)
                     .controlSize(.small)
                     .disabled(isPaused)
-                if externalSearchQuery == nil {
-                    TextField(L10n.k("auto.log_viewer_sheet.search_space_separated_terms", fallback: "搜索（空格分词）"), text: searchQueryBinding)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 220)
-                }
+                TextField(L10n.k("auto.log_viewer_sheet.search_space_separated_terms", fallback: "搜索（空格分词）"), text: searchQueryBinding)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
                 Button(L10n.k("auto.log_viewer_sheet.copy_filtered", fallback: "复制筛选")) { copyFilteredLogs() }
                     .controlSize(.small)
             }

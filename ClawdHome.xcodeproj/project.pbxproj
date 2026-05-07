@@ -3,13 +3,14 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		004AA5F807B38BEA53CA863F /* GlobalSecretsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EFDF0452F0C6492C04DDB63 /* GlobalSecretsStore.swift */; };
 		01E2EB52392A730451E7F61D /* AwakeningWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5251FBFE31D537EBF8F2C581 /* AwakeningWizardView.swift */; };
 		0473E31023503AFC1874A775 /* PortAllocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D143389A65EDC5DC54EAADDA /* PortAllocator.swift */; };
+		07B6092C2C29BC1A19385B32 /* UserAdoptionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */; };
 		0B88F32EFCC07BC3B59A465E /* GatewayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA77A80C488C3D16C1BD4243 /* GatewayClient.swift */; };
 		0E07E58A241BA58310F6443A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 38A912F0A5514717350027B5 /* Assets.xcassets */; };
 		0E9D058F70E41C9D8D9E2FBB /* FileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71156CAD7673A87034AF0D8 /* FileModels.swift */; };
@@ -73,6 +74,7 @@
 		8880D4FA5302740F6CD8F7B2 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B9025469C59B7EE328F10ED /* main.swift */; };
 		8DA5C8174C08A39388CA8388 /* PersonaDefView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77787365CF9FCFC1BABE9B81 /* PersonaDefView.swift */; };
 		8DF359DE93EFFFFA2E49695F /* Charts.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2BD15AFBF24DE05D57194904 /* Charts.framework */; };
+		8E9250B96F709346BC0A1158 /* UserAdoptionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */; };
 		925380A57BBAA972A1078DF0 /* ProviderKeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABBB28C4048F9B2A39AE099C /* ProviderKeychainStore.swift */; };
 		9685174F8F965C6D07F8FBCB /* LocalAITab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956F579AD39B5454F51944DB /* LocalAITab.swift */; };
 		96C93E87A53551D90828E5D1 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = C825A0B24BA99AE396353C83 /* SwiftTerm */; };
@@ -97,6 +99,7 @@
 		C72DF5FEB4906D0AA459139E /* UserDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46E3226FB170F1C35BB73B5 /* UserDetailView.swift */; };
 		C745EB73F505520BE75D6E88 /* GeneratedVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */; };
 		CA51DA2CCAB88BC95CF91EC4 /* SecurityAuditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BCB213B1B4677F1FBAC5433 /* SecurityAuditView.swift */; };
+		CF0D3BE0D8896AAEA25843F1 /* onboard.html in Resources */ = {isa = PBXBuildFile; fileRef = 451BD17BA16A789AB35460D1 /* onboard.html */; };
 		CF7382CBC9959C1D07911D7D /* DashboardCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442171CEA410BEA9920973CC /* DashboardCollector.swift */; };
 		CF9F809B95CDA2464FC36087 /* VoiceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = C587B0EBFC1DB0062C0195FF /* VoiceProfile.swift */; };
 		D52DD786FA8DF4AF93FB00ED /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43A99B25B70AE3C7A8C23AB /* SettingsView.swift */; };
@@ -159,7 +162,9 @@
 		41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderKeyConfig.swift; sourceTree = "<group>"; };
 		41E6E607472BCCB5C61A50EA /* BackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupView.swift; sourceTree = "<group>"; };
 		442171CEA410BEA9920973CC /* DashboardCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCollector.swift; sourceTree = "<group>"; };
+		451BD17BA16A789AB35460D1 /* onboard.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = onboard.html; sourceTree = "<group>"; };
 		467287AC8BE705E07CE3C366 /* HelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperProtocol.swift; sourceTree = "<group>"; };
+		48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserAdoptionFlow.swift; sourceTree = "<group>"; };
 		4A1CD2C5DBEEFC059991B495 /* GatewayHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayHub.swift; sourceTree = "<group>"; };
 		4A4D0168443D77B00A4092E7 /* AddUserSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddUserSheet.swift; sourceTree = "<group>"; };
 		4B639FCB2D3020F3E95F7EFC /* AppLockStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockStore.swift; sourceTree = "<group>"; };
@@ -215,7 +220,7 @@
 		C1EAFFDC5338D0ACC3A06CDD /* CloneClawManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneClawManager.swift; sourceTree = "<group>"; };
 		C409AF7F1CC045A211F7F27E /* WizardConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardConnection.swift; sourceTree = "<group>"; };
 		C587B0EBFC1DB0062C0195FF /* VoiceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceProfile.swift; sourceTree = "<group>"; };
-		C5A39CB77EAD5FD2A03768D4 /* ClawdHomeHelper */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "compiled.mach-o.executable"; path = ClawdHomeHelper; sourceTree = BUILT_PRODUCTS_DIR; };
+		C5A39CB77EAD5FD2A03768D4 /* ClawdHomeHelper */ = {isa = PBXFileReference; includeInIndex = 0; path = ClawdHomeHelper; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8CA7E043030EBA6AECA81CC /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = SystemConfiguration.framework; sourceTree = "<group>"; };
 		CAA3C56D1FE192B7799A3FDC /* GatewayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayManager.swift; sourceTree = "<group>"; };
 		CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedVersion.swift; sourceTree = "<group>"; };
@@ -380,6 +385,7 @@
 				EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */,
 				6474BB5EEF5B87B65666E978 /* NetworkModels.swift */,
 				F76A73EBA6C37473C494E20D /* ProcessModels.swift */,
+				48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -438,6 +444,7 @@
 		E6E948EC72CBB25E63E580A2 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				451BD17BA16A789AB35460D1 /* onboard.html */,
 				3F177240AE99ADC3F3D2AD8F /* roles.html */,
 			);
 			path = Resources;
@@ -564,6 +571,7 @@
 			packageReferences = (
 				74F355130984997690AD4FDF /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -581,6 +589,7 @@
 				FEEE2C606A086D0D191F1200 /* AppIcon.icns in Resources */,
 				0E07E58A241BA58310F6443A /* Assets.xcassets in Resources */,
 				14F81C6AACC151937FD46137 /* Stable.xcstrings in Resources */,
+				CF0D3BE0D8896AAEA25843F1 /* onboard.html in Resources */,
 				A98586898710F4A55154C94A /* roles.html in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -605,7 +614,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "APP_BUILD=\"${CURRENT_PROJECT_VERSION:-}\"\nAPP_VERSION=\"${MARKETING_VERSION:-}\"\nif [ -n \"$APP_BUILD\" ]; then\n  /usr/libexec/PlistBuddy -c \"Set :CFBundleVersion ${APP_BUILD}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\nfi\nif [ -n \"$APP_VERSION\" ]; then\n  /usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString ${APP_VERSION}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\nfi\n";
+			shellScript = "SCRIPT_DIR=\"${SRCROOT}/scripts\"\nBUILD_FILE=\"${SRCROOT}/.build-version\"\nINITIAL_BUILD=500\n\nAPP_BUILD=\"${CLAWDHOME_BUILD_NUMBER_OVERRIDE:-}\"\nif [ -z \"$APP_BUILD\" ]; then\n  APP_BUILD=$(BUILD_COUNTER_FILE=\"$BUILD_FILE\" INITIAL_BUILD_NUMBER=\"$INITIAL_BUILD\" bash \"$SCRIPT_DIR/build_counter.sh\" reserve 2>/dev/null || echo \"\")\nfi\n\nAPP_VERSION=\"${CLAWDHOME_MARKETING_VERSION_OVERRIDE:-}\"\nif [ -z \"$APP_VERSION\" ]; then\n  APP_VERSION=$(bash \"$SCRIPT_DIR/semver.sh\" 2>/dev/null || /usr/libexec/PlistBuddy -c \"Print :CFBundleShortVersionString\" \"${SRCROOT}/ClawdHome/Info.plist\" 2>/dev/null || echo \"0.0.0\")\nfi\n\nif [ -n \"$APP_BUILD\" ]; then\n  /usr/libexec/PlistBuddy -c \"Set :CFBundleVersion ${APP_BUILD}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\nfi\nif [ -n \"$APP_VERSION\" ]; then\n  /usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString ${APP_VERSION}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\nfi\n";
 		};
 		217CF341688DD108EF049819 /* Embed Helper into App Bundle */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -644,7 +653,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "APP_VERSION=\"${MARKETING_VERSION:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \"${SRCROOT}/ClawdHome/Info.plist\" 2>/dev/null || echo 0.0.0)}\"\nAPP_BUILD=\"${CURRENT_PROJECT_VERSION:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \"${SRCROOT}/ClawdHome/Info.plist\" 2>/dev/null || echo 0)}\"\nOUT=\"${SRCROOT}/ClawdHomeHelper/GeneratedVersion.swift\"\necho \"// Auto-generated — do not edit\" > \"$OUT\"\necho \"let kHelperVersion = \\\"${APP_VERSION} (${APP_BUILD})\\\"\" >> \"$OUT\"\n";
+			shellScript = "SCRIPT_DIR=\"${SRCROOT}/scripts\"\nBUILD_FILE=\"${SRCROOT}/.build-version\"\nINITIAL_BUILD=500\n\nAPP_VERSION=\"${CLAWDHOME_MARKETING_VERSION_OVERRIDE:-$(bash \"$SCRIPT_DIR/semver.sh\" 2>/dev/null || /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \"${SRCROOT}/ClawdHome/Info.plist\" 2>/dev/null || echo 0.0.0)}\"\nAPP_BUILD=\"${CLAWDHOME_BUILD_NUMBER_OVERRIDE:-$(BUILD_COUNTER_FILE=\"$BUILD_FILE\" INITIAL_BUILD_NUMBER=\"$INITIAL_BUILD\" bash \"$SCRIPT_DIR/build_counter.sh\" current 2>/dev/null || echo 0)}\"\nOUT=\"${SRCROOT}/ClawdHomeHelper/GeneratedVersion.swift\"\necho \"// Auto-generated — do not edit\" > \"$OUT\"\necho \"let kHelperVersion = \\\"${APP_VERSION} (${APP_BUILD})\\\"\" >> \"$OUT\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -721,6 +730,7 @@
 				2372A09285FD2D12851D0C62 /* TerminalLogView.swift in Sources */,
 				4853C793D4CFACBA2205144A /* UpdateChecker.swift in Sources */,
 				BD523BF37E409AB6FA1D6D27 /* UpgradeConfirmSheet.swift in Sources */,
+				8E9250B96F709346BC0A1158 /* UserAdoptionFlow.swift in Sources */,
 				C72DF5FEB4906D0AA459139E /* UserDetailView.swift in Sources */,
 				BC5CEE02450C97178238E88A /* UserDirectoryService.swift in Sources */,
 				A19DC0FB0FB2383088C47E80 /* UserFilesView.swift in Sources */,
@@ -759,6 +769,7 @@
 				33377A070BA5CD38AF3D570D /* ProcessManager.swift in Sources */,
 				6F9101485DF1A9C40CE39C65 /* ProcessModels.swift in Sources */,
 				7F1931508A7DA6D48319500F /* ShellRunner.swift in Sources */,
+				07B6092C2C29BC1A19385B32 /* UserAdoptionFlow.swift in Sources */,
 				C11B2113E212A1BBC279EC49 /* UserFileManager.swift in Sources */,
 				52DC4DCC5F6553B9DA7AE563 /* UserManager.swift in Sources */,
 				8880D4FA5302740F6CD8F7B2 /* main.swift in Sources */,
@@ -829,7 +840,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ClawdHome/ClawdHome.entitlements;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = "";
@@ -911,7 +921,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ClawdHome/ClawdHome.entitlements;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = "";

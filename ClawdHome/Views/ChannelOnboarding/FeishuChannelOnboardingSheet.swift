@@ -26,6 +26,7 @@ enum ChannelOnboardingFlow: String, Identifiable, CaseIterable {
 
 struct FeishuChannelOnboardingSheet: View {
     let flow: ChannelOnboardingFlow
+    let displayName: String
     let username: String
 
     @Environment(\.dismiss) private var dismiss
@@ -53,12 +54,22 @@ struct FeishuChannelOnboardingSheet: View {
     }
 
     private var completionMarkers: [String] {
-        [
-            "success! bot configured",
-            "bot configured",
-            "机器人配置成功",
-            "openclaw is all set"
-        ]
+        switch flow {
+        case .feishu:
+            return [
+                "success! bot configured",
+                "bot configured",
+                "机器人配置成功",
+                "openclaw is all set"
+            ]
+        case .weixin:
+            return [
+                "与微信连接成功",
+                "微信连接成功",
+                "config overwrite:",
+                "正在重启 openclaw gateway"
+            ]
+        }
     }
 
     private var isRunning: Bool {
@@ -133,8 +144,16 @@ struct FeishuChannelOnboardingSheet: View {
         return String(format: "%02d:%02d", min, sec)
     }
 
+    private var shrimpIdentityTitle: String {
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed == username {
+            return "@\(username)"
+        }
+        return "\(trimmed) - @\(username)"
+    }
+
     private var windowTitle: String {
-        L10n.f("channel.window.title", fallback: "ClawdHome 正在生产 %@ 虾 · %@ 通道配置 · %@", username, flow.title, stageTitle)
+        "\(shrimpIdentityTitle) · \(flow.title) 通道配置 · \(stageTitle)"
     }
 
     var body: some View {
@@ -303,7 +322,7 @@ struct FeishuChannelOnboardingSheet: View {
 
     private func evaluatePairingCompletion(from text: String) {
         guard !didDetectPairingDone else { return }
-        let normalized = text.lowercased()
+        let normalized = normalizedOutput(text)
         let matched = completionMarkers.contains { marker in
             normalized.contains(marker.lowercased())
         }
@@ -311,8 +330,23 @@ struct FeishuChannelOnboardingSheet: View {
 
         didDetectPairingDone = true
         statusText = L10n.k("channel.runtime.pairing.detected_autoclose", fallback: "已检测到“配置成功/完成”提示，窗口将在 2 秒后自动关闭。")
+        NotificationCenter.default.post(
+            name: .channelOnboardingAutoDetected,
+            object: nil,
+            userInfo: [
+                "username": username,
+                "flow": flow.rawValue
+            ]
+        )
         appLog("[\(logPrefix)] completion marker detected; schedule auto close @\(username)")
         scheduleAutoCloseIfNeeded()
+    }
+
+    private func normalizedOutput(_ text: String) -> String {
+        // 终端输出可能带 ANSI 控制符，先清理再做关键词匹配，避免漏判。
+        let ansiPattern = #"\u{001B}\[[0-9;?]*[ -/]*[@-~]"#
+        let stripped = text.replacingOccurrences(of: ansiPattern, with: "", options: .regularExpression)
+        return stripped.lowercased()
     }
 
     private func scheduleAutoCloseIfNeeded() {
