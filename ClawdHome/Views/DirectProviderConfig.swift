@@ -1080,19 +1080,6 @@ struct ProviderModelConfigCore: View {
         return result
     }
 
-    private func isGatewayConnectivityError(_ error: Error) -> Bool {
-        if let gatewayError = error as? GatewayClientError {
-            switch gatewayError {
-            case .notConnected, .connectFailed:
-                return true
-            case .requestFailed, .encodingError:
-                return false
-            }
-        }
-        let message = error.localizedDescription
-        return message.contains("Gateway 未连接") || message.contains("连接失败")
-    }
-
     /// Qiniu 配置必须保持 v1.6.0 的 legacy 直写方式（setConfigDirect）。
     /// 背景：OpenClaw 没有内置 Qiniu 模型；统一 patch 流程可能在后续 schema/迁移中覆盖掉这类外部模型配置。
     /// 维护要求：请勿替换为 gatewayHub.configPatch。

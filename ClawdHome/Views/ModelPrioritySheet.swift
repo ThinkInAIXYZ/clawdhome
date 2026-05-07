@@ -580,19 +580,6 @@ struct ModelPrioritySheet: View {
         return result
     }
 
-    private func isGatewayConnectivityError(_ error: Error) -> Bool {
-        if let gatewayError = error as? GatewayClientError {
-            switch gatewayError {
-            case .notConnected, .connectFailed:
-                return true
-            case .requestFailed, .encodingError:
-                return false
-            }
-        }
-        let message = error.localizedDescription
-        return message.contains("Gateway 未连接") || message.contains("连接失败")
-    }
-
     /// 将 PendingProviderConfig 转为 patch 所需的字典
     private func buildProviderPatch(_ config: PendingProviderConfig) -> (id: String, provider: [String: Any], auth: [String: Any]?) {
         let provider = config.provider

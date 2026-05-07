@@ -5,6 +5,7 @@
 // 参考 openclaw/apps/shared/OpenClawKit/Sources/OpenClawKit/GatewayChannel.swift
 
 import CryptoKit
+import Darwin
 import Foundation
 import OSLog
 
@@ -135,7 +136,10 @@ actor GatewayClient {
             sock.cancel(with: .goingAway, reason: nil)
             self.socket = nil
             self.session = nil
-            throw error
+            if error is GatewayClientError {
+                throw error
+            }
+            throw GatewayClientError.connectFailed(error.localizedDescription)
         }
 
         isConnected = true
@@ -193,7 +197,12 @@ actor GatewayClient {
                     }
                     try await sock.send(.data(data))
                 } catch {
-                    await self.resumePending(id: id, throwing: error)
+                    // send 失败 = socket 已失效：先把错误交回本次请求，
+                    // 再标记断开并清理其余 pending，下次 request 会重新 connect()。
+                    let wrapped: GatewayClientError = (error as? GatewayClientError)
+                        ?? .connectFailed(error.localizedDescription)
+                    await self.resumePending(id: id, throwing: wrapped)
+                    await self.markDisconnected(dueTo: wrapped)
                 }
             }
         }
@@ -384,6 +393,19 @@ actor GatewayClient {
         for (_, cont) in waiters { cont.resume(throwing: error) }
     }
 
+    /// socket 异常 / send 失败时调用：回退到未连接态，让下一次 request 触发重连。
+    /// 注意：当前请求已经通过 resumePending 单独 resume，这里只处理剩余 pending。
+    private func markDisconnected(dueTo error: Error) {
+        guard isConnected || socket != nil else { return }
+        isConnected = false
+        listenTask?.cancel()
+        listenTask = nil
+        socket?.cancel(with: .goingAway, reason: nil)
+        socket = nil
+        session = nil
+        failAllPending(error)
+    }
+
     private static func decodeMessage(_ msg: URLSessionWebSocketTask.Message) -> [String: Any]? {
         let data: Data?
         switch msg {
@@ -514,4 +536,53 @@ actor GatewayClient {
             return false
         }
     }
+}
+
+// MARK: - 连接类错误判定（共享）
+
+/// 判断错误是否属于 Gateway 连接层问题，用于决定是否走 helper XPC 回退。
+///
+/// 识别范围：
+/// - `GatewayClientError.notConnected` / `.connectFailed`
+/// - `NSPOSIXErrorDomain` 下 ENOTCONN / EPIPE / ECONNRESET / ECONNREFUSED /
+///   ECONNABORTED / ETIMEDOUT / ENETDOWN / ENETUNREACH / EHOSTUNREACH
+/// - `URLError` 下 notConnectedToInternet / networkConnectionLost /
+///   cannotConnectToHost / cannotFindHost / timedOut / resourceUnavailable
+/// - localizedDescription 子串 "Gateway 未连接" / "连接失败" / "Socket" /
+///   "socket is not connected"（语言兜底）
+func isGatewayConnectivityError(_ error: Error) -> Bool {
+    if let gatewayError = error as? GatewayClientError {
+        switch gatewayError {
+        case .notConnected, .connectFailed:
+            return true
+        case .requestFailed, .encodingError:
+            return false
+        }
+    }
+    let nsError = error as NSError
+    if nsError.domain == NSPOSIXErrorDomain {
+        switch nsError.code {
+        case Int(ENOTCONN), Int(EPIPE), Int(ECONNRESET), Int(ECONNREFUSED),
+             Int(ECONNABORTED), Int(ETIMEDOUT), Int(ENETDOWN),
+             Int(ENETUNREACH), Int(EHOSTUNREACH):
+            return true
+        default:
+            break
+        }
+    }
+    if let urlError = error as? URLError {
+        switch urlError.code {
+        case .notConnectedToInternet, .networkConnectionLost,
+             .cannotConnectToHost, .cannotFindHost, .timedOut,
+             .resourceUnavailable:
+            return true
+        default:
+            break
+        }
+    }
+    let message = error.localizedDescription
+    return message.contains("Gateway 未连接")
+        || message.contains("连接失败")
+        || message.contains("Socket")
+        || message.lowercased().contains("socket is not connected")
 }

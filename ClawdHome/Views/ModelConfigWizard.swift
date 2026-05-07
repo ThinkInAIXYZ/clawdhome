@@ -78,13 +78,15 @@ struct ModelConfigWizard: View {
                             modelListView
                             actionButtons
                         }
+                        .padding(.top, 12)
+                        .padding(.bottom, 16)
                     }
                 }
 
                 Divider()
                 embeddedFooter
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 14)
             } else {
                 // ── 独立窗口模式（从详情页打开） ──
                 ScrollView {
@@ -1306,19 +1308,6 @@ struct ModelAddSheet: View {
             }
         }
         return result
-    }
-
-    private func isGatewayConnectivityError(_ error: Error) -> Bool {
-        if let gatewayError = error as? GatewayClientError {
-            switch gatewayError {
-            case .notConnected, .connectFailed:
-                return true
-            case .requestFailed, .encodingError:
-                return false
-            }
-        }
-        let message = error.localizedDescription
-        return message.contains("Gateway 未连接") || message.contains("连接失败")
     }
 
     // MARK: - Helpers
