@@ -116,6 +116,30 @@ struct AgentManager {
         var agents = root["agents"] as? [String: Any] ?? [:]
         var list = agents["list"] as? [[String: Any]] ?? []
 
+        // 如果 list 为空，先把隐式的 main agent 加进去（使用默认 workspace）
+        if list.isEmpty {
+            // 读取用户 fullName（通过 dscl）
+            let mainName: String = {
+                if let output = try? run("/usr/bin/dscl", args: [".", "-read", "/Users/\(username)", "RealName"]),
+                   let line = output.components(separatedBy: "\n").dropFirst().first?.trimmingCharacters(in: .whitespaces),
+                   !line.isEmpty {
+                    return line
+                }
+                return username
+            }()
+            var mainEntry: [String: Any] = [
+                "id": "main",
+                "name": mainName,
+                "workspace": "/Users/\(username)/.openclaw/workspace",
+            ]
+            mainEntry["identity"] = ["name": mainName]
+            list.append(mainEntry)
+            if agents["defaultId"] == nil {
+                agents["defaultId"] = "main"
+            }
+            helperLog("[agent] 自动将隐式 main agent 显式加入 agents.list")
+        }
+
         // 检查 id 是否已存在
         if list.contains(where: { ($0["id"] as? String) == profile.id }) {
             throw AgentManagerError.agentAlreadyExists(profile.id)
