@@ -24,6 +24,7 @@ enum UserEnvContract {
         "NPM_CONFIG_USERCONFIG",
         "npm_config_userconfig",
         "OPENCLAW_PATH_BOOTSTRAPPED",
+        "OPENCLI_PROFILE",
     ]
 
     static func home(username: String) -> String {
@@ -93,6 +94,9 @@ enum UserEnvContract {
             // ClawdHome 已经构造了虾用户隔离 PATH，这里阻止它把宿主工具链混回来。
             "OPENCLAW_PATH_BOOTSTRAPPED": "1",
         ]
+        if let profile = BrowserAccountManager.readOpenCLIProfile(username: username) {
+            env["OPENCLI_PROFILE"] = profile
+        }
 
         let proxy = normalizedProxyEnvironment(username: username)
         for (key, value) in proxy {

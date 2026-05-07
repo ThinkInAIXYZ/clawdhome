@@ -72,7 +72,8 @@ extension ClawdHomeHelperImpl {
     func installBrowserAccountTool(username: String, withReply reply: @escaping (Bool, String) -> Void) {
         helperLog("[browser-account] install tool request @\(username)")
         do {
-            let status = try BrowserAccountManager.installTool(username: username)
+            try BrowserAccountManager.prepareForRuntimeInstall(username: username)
+            let status = BrowserAccountManager.status(username: username)
             let data = try JSONEncoder().encode(status)
             reply(true, String(data: data, encoding: .utf8) ?? "{}")
         } catch {

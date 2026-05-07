@@ -153,8 +153,54 @@ final class LocalTerminalControl: ObservableObject {
     }
 }
 
+class UndoSafeTerminalView: TerminalView {
+    @objc(undo:)
+    func ignoreUndo(_ sender: Any?) {}
+
+    @objc(redo:)
+    func ignoreRedo(_ sender: Any?) {}
+
+    @objc(_undoRedoTextOperation:)
+    func ignoreUndoRedoTextOperation(_ sender: Any?) {}
+
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        guard let action = item.action else {
+            return super.validateUserInterfaceItem(item)
+        }
+        let selectorName = NSStringFromSelector(action)
+        if selectorName == "undo:"
+            || selectorName == "redo:"
+            || selectorName == "_undoRedoTextOperation:" {
+            return false
+        }
+        return super.validateUserInterfaceItem(item)
+    }
+}
+
 final class OutputObservingLocalProcessTerminalView: LocalProcessTerminalView {
     var onOutputBytes: ((ArraySlice<UInt8>) -> Void)?
+
+    @objc(undo:)
+    func ignoreUndo(_ sender: Any?) {}
+
+    @objc(redo:)
+    func ignoreRedo(_ sender: Any?) {}
+
+    @objc(_undoRedoTextOperation:)
+    func ignoreUndoRedoTextOperation(_ sender: Any?) {}
+
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        guard let action = item.action else {
+            return super.validateUserInterfaceItem(item)
+        }
+        let selectorName = NSStringFromSelector(action)
+        if selectorName == "undo:"
+            || selectorName == "redo:"
+            || selectorName == "_undoRedoTextOperation:" {
+            return false
+        }
+        return super.validateUserInterfaceItem(item)
+    }
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
         onOutputBytes?(slice)
@@ -699,7 +745,7 @@ private struct HelperMaintenanceTerminalNSView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> TerminalView {
-        let tv = TerminalView(frame: .zero)
+        let tv = UndoSafeTerminalView(frame: .zero)
         tv.terminalDelegate = context.coordinator
         // Keep text selection stable while output is streaming.
         tv.allowMouseReporting = false

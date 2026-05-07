@@ -175,6 +175,9 @@ struct HermesInstaller {
         if let cdpEndpoint = BrowserAccountManager.reachableCDPEndpoint(username: username) {
             env.append(("BROWSER_CDP_URL", cdpEndpoint))
         }
+        if let profile = BrowserAccountManager.readOpenCLIProfile(username: username) {
+            env.append(("OPENCLI_PROFILE", profile))
+        }
         return env
     }
 
