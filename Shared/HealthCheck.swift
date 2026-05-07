@@ -53,6 +53,10 @@ enum NodeDistOption: String, CaseIterable, Codable {
     func tarGzURL(version: String, archSuffix: String) -> String {
         "\(rawValue)/\(version)/node-\(version)-\(archSuffix).tar.gz"
     }
+
+    func shasumsURL(version: String) -> String {
+        "\(rawValue)/\(version)/SHASUMS256.txt"
+    }
 }
 
 // MARK: - npm 安装源

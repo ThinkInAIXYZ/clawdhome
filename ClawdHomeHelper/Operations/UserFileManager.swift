@@ -167,7 +167,37 @@ struct UserFileManager {
 
     // MARK: - 解压
 
+    /// 检查归档条目列表是否包含路径穿越（绝对路径或 .. 分量）
+    private static func validateArchiveEntries(_ listing: String) throws {
+        for line in listing.split(separator: "\n") {
+            let entry = line.trimmingCharacters(in: .whitespaces)
+            if entry.isEmpty { continue }
+            // 拒绝绝对路径
+            if entry.hasPrefix("/") {
+                throw UserFileError.pathTraversal
+            }
+            // 拒绝包含 .. 路径分量（防 Zip Slip）
+            let components = entry.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+            if components.contains("..") {
+                throw UserFileError.pathTraversal
+            }
+        }
+    }
+
+    /// 列出 tar 归档内容用于安全校验
+    private static func tarListArgs(for name: String, archivePath: String) -> [String]? {
+        if name.hasSuffix(".tar.gz") || name.hasSuffix(".tgz") {
+            return ["-tzf", archivePath]
+        } else if name.hasSuffix(".tar.bz2") || name.hasSuffix(".tbz2") {
+            return ["-tjf", archivePath]
+        } else if name.hasSuffix(".tar.xz") || name.hasSuffix(".txz") {
+            return ["-tJf", archivePath]
+        }
+        return nil
+    }
+
     /// 解压压缩包到其所在目录，支持 .zip / .tar.gz / .tgz / .tar.bz2 / .tar.xz
+    /// 解压前校验条目路径，防止 Zip Slip 路径穿越攻击
     static func extractArchive(username: String, relativePath: String) throws {
         let url = try resolvedPath(username: username, relativePath: relativePath)
         var isDir: ObjCBool = false
@@ -178,13 +208,32 @@ struct UserFileManager {
         let name = url.lastPathComponent.lowercased()
 
         if name.hasSuffix(".zip") {
+            // 先列出条目校验路径安全性
+            let listing = try ClawdHomeHelper.run("/usr/bin/unzip", args: ["-l", url.path])
+            // unzip -l 输出格式：每行末尾为文件名，跳过表头/表尾
+            // 解析实际文件名列（第4列起），逐条校验
+            let zipEntries = listing.split(separator: "\n").compactMap { line -> String? in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                // unzip -l 的数据行格式: "  Length      Date    Time    Name"
+                // 数据行以数字开头，取最后一个字段作为文件名
+                guard let first = trimmed.first, first.isNumber else { return nil }
+                let parts = trimmed.split(separator: " ", maxSplits: 3)
+                guard parts.count >= 4 else { return nil }
+                return String(parts[3])
+            }.joined(separator: "\n")
+            try validateArchiveEntries(zipEntries)
             try ClawdHomeHelper.run("/usr/bin/unzip", args: ["-o", url.path, "-d", destDir])
-        } else if name.hasSuffix(".tar.gz") || name.hasSuffix(".tgz") {
-            try ClawdHomeHelper.run("/usr/bin/tar", args: ["-xzf", url.path, "-C", destDir])
-        } else if name.hasSuffix(".tar.bz2") || name.hasSuffix(".tbz2") {
-            try ClawdHomeHelper.run("/usr/bin/tar", args: ["-xjf", url.path, "-C", destDir])
-        } else if name.hasSuffix(".tar.xz") || name.hasSuffix(".txz") {
-            try ClawdHomeHelper.run("/usr/bin/tar", args: ["-xJf", url.path, "-C", destDir])
+        } else if let listArgs = tarListArgs(for: name, archivePath: url.path) {
+            // tar 归档：先列出条目校验
+            let listing = try ClawdHomeHelper.run("/usr/bin/tar", args: listArgs)
+            try validateArchiveEntries(listing)
+            // 构造解压参数：将 -t 替换为 -x，追加 -C destDir
+            var extractArgs = listArgs
+            if let idx = extractArgs.firstIndex(where: { $0.contains("t") }) {
+                extractArgs[idx] = extractArgs[idx].replacingOccurrences(of: "t", with: "x")
+            }
+            extractArgs += ["-C", destDir]
+            try ClawdHomeHelper.run("/usr/bin/tar", args: extractArgs)
         } else {
             throw NSError(domain: "UserFileManager", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "不支持的压缩格式"])

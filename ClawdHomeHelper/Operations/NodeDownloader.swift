@@ -4,12 +4,13 @@
 // 符号链接：/Users/<username>/.brew/bin/node|npm|npx
 
 import Foundation
+import CryptoKit
 
 struct NodeDownloader {
 
     static let nodeVersion = "v24.9.0"
 
-    /// 持久缓存目录（避免每次初始化重复下载）
+    /// 持久缓存目录（root:wheel 0700，防止非 root 用户投毒）
     private static let cacheDir = "/Users/Shared/ClawdHome/cache/nodejs"
 
     // MARK: - 公共接口
@@ -54,21 +55,41 @@ struct NodeDownloader {
         let expectedExtractedDir = "\(libDir)/node-\(nodeVersion)-\(archSuffix)"
 
         // 2. 下载（优先复用持久缓存）
+        // 缓存目录设为 root:wheel 0700，防止低权限用户预植恶意 tarball
         try FileManager.default.createDirectory(
             atPath: cacheDir,
             withIntermediateDirectories: true,
-            attributes: nil
+            attributes: [.posixPermissions: 0o700, .ownerAccountName: "root", .groupOwnerAccountName: "wheel"]
+        )
+        // 修正已有目录权限（升级场景）
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o700, .ownerAccountName: "root", .groupOwnerAccountName: "wheel"],
+            ofItemAtPath: cacheDir
         )
         pruneCachedTarballs(keeping: tarName)
 
+        // 获取 SHASUMS256.txt 用于完整性校验
+        let shasumsURL = distOption.shasumsURL(version: nodeVersion)
+        log("⬇ 获取 SHASUMS256.txt\n")
+        let expectedHash = try fetchExpectedSHA256(shasumsURL: shasumsURL, tarName: tarName, log: log)
+        log("✓ 期望 SHA-256：\(expectedHash.prefix(16))…\n")
+
         if FileManager.default.fileExists(atPath: cachePath) {
+            // 缓存命中：重新校验哈希，防止篡改
             log("✓ 使用本地缓存：\(cachePath)\n")
+            log("🔒 校验缓存文件完整性…\n")
+            try verifySHA256(filePath: cachePath, expectedHash: expectedHash)
+            log("✓ SHA-256 校验通过\n")
         } else {
             let partPath = "\(cachePath).part.\(username).\(ProcessInfo.processInfo.processIdentifier)"
             try? FileManager.default.removeItem(atPath: partPath)
             log("⬇ 下载 Node.js \(nodeVersion)（\(archSuffix)）\n")
             log("  \(downloadURL)\n")
             try downloadWithProgress(from: downloadURL, to: partPath, logURL: logURL, log: log)
+            // 校验下载文件完整性后再移入缓存
+            log("🔒 校验下载文件完整性…\n")
+            try verifySHA256(filePath: partPath, expectedHash: expectedHash)
+            log("✓ SHA-256 校验通过\n")
             try? FileManager.default.removeItem(atPath: cachePath)
             try FileManager.default.moveItem(atPath: partPath, toPath: cachePath)
             log("✓ 下载完成\n")
@@ -211,6 +232,73 @@ struct NodeDownloader {
         return String(repeating: "█", count: filled) + String(repeating: "░", count: 20 - filled)
     }
 
+    // MARK: - SHA-256 完整性校验
+
+    /// 从 SHASUMS256.txt 获取指定 tarball 的期望哈希
+    private static func fetchExpectedSHA256(shasumsURL: String, tarName: String, log: (String) -> Void) throws -> String {
+        guard let url = URL(string: shasumsURL) else {
+            throw NodeDownloadError.integrityCheckFailed("非法 SHASUMS256 URL：\(shasumsURL)")
+        }
+        var result: Result<String, Error>?
+        let sema = DispatchSemaphore(value: 0)
+        let session = URLSession(configuration: .default)
+        let task = session.dataTask(with: url) { data, response, error in
+            defer { sema.signal() }
+            if let error { result = .failure(error); return }
+            guard let data, let text = String(data: data, encoding: .utf8) else {
+                result = .failure(NodeDownloadError.integrityCheckFailed("无法读取 SHASUMS256.txt"))
+                return
+            }
+            result = .success(text)
+        }
+        task.resume()
+        sema.wait()
+
+        let text: String
+        switch result {
+        case .success(let t): text = t
+        case .failure(let e): throw e
+        case .none: throw NodeDownloadError.integrityCheckFailed("SHASUMS256.txt 下载无响应")
+        }
+
+        // 格式：<sha256hex>  <filename>
+        for line in text.split(separator: "\n") {
+            let parts = line.split(separator: " ", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 2 else { continue }
+            if parts[1] == tarName {
+                let hash = parts[0].lowercased()
+                // 校验格式：64 位十六进制
+                guard hash.count == 64, hash.allSatisfy({ $0.isHexDigit }) else { continue }
+                return hash
+            }
+        }
+        throw NodeDownloadError.integrityCheckFailed("SHASUMS256.txt 中未找到 \(tarName) 的哈希")
+    }
+
+    /// 校验文件 SHA-256 哈希
+    private static func verifySHA256(filePath: String, expectedHash: String) throws {
+        guard let fh = FileHandle(forReadingAtPath: filePath) else {
+            throw NodeDownloadError.integrityCheckFailed("无法打开文件：\(filePath)")
+        }
+        defer { try? fh.close() }
+
+        var hasher = SHA256()
+        while autoreleasepool(invoking: {
+            let chunk = fh.readData(ofLength: 1_048_576) // 1MB 分块读取
+            if chunk.isEmpty { return false }
+            hasher.update(data: chunk)
+            return true
+        }) {}
+
+        let digest = hasher.finalize()
+        let actualHash = digest.map { String(format: "%02x", $0) }.joined()
+        guard actualHash == expectedHash else {
+            throw NodeDownloadError.integrityCheckFailed(
+                "SHA-256 不匹配：期望 \(expectedHash.prefix(16))…，实际 \(actualHash.prefix(16))…"
+            )
+        }
+    }
+
     /// 仅保留当前版本安装包，避免缓存目录无限增长。
     private static func pruneCachedTarballs(keeping tarName: String) {
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: cacheDir) else { return }
@@ -268,6 +356,7 @@ struct NodeDownloader {
 enum NodeDownloadError: LocalizedError {
     case invalidURL(String)
     case cancelled
+    case integrityCheckFailed(String)
     case extractedDirNotFound(expectedPaths: [String], existingNodeDirs: [String], searchRoot: String)
     case binaryMissing(binary: String, path: String)
     case symlinkCreateFailed(binary: String, source: String, destination: String, underlying: String)
@@ -275,6 +364,7 @@ enum NodeDownloadError: LocalizedError {
         switch self {
         case .invalidURL(let s): return "非法下载 URL：\(s)"
         case .cancelled:         return "已终止"
+        case .integrityCheckFailed(let s): return "完整性校验失败：\(s)"
         case .extractedDirNotFound(let expectedPaths, let existingNodeDirs, let searchRoot):
             let expected = expectedPaths.joined(separator: ", ")
             let existing = existingNodeDirs.isEmpty ? "(empty)" : existingNodeDirs.joined(separator: ", ")

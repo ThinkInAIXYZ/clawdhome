@@ -47,8 +47,17 @@ private let helperLogMaxBytes = 2_000_000
 private let helperLogRotateKeep = 3
 private let helperLogPath = "/tmp/clawdhome-helper.log"
 private let helperLogQueue = DispatchQueue(label: "ai.clawdhome.helper.log", qos: .utility)
+
+/// 创建日志文件并设置权限为 root:admin 0640（仅 admin 组用户可读）
+private func createHelperLogFile(atPath path: String) {
+    FileManager.default.createFile(atPath: path, contents: nil,
+        attributes: [.posixPermissions: 0o640])
+    // 设置 group 为 admin (gid 80)，确保运行 app 的管理员用户可读
+    chown(path, 0, 80)
+}
+
 private var helperLogHandle: FileHandle? = {
-    FileManager.default.createFile(atPath: helperLogPath, contents: nil)
+    createHelperLogFile(atPath: helperLogPath)
     let fh = FileHandle(forWritingAtPath: helperLogPath)
     fh?.seekToEndOfFile()
     return fh
@@ -145,7 +154,7 @@ func helperLog(_ message: String, level: LogLevel = .info, channel: LogChannel =
 
     helperLogQueue.async {
         if helperLogHandle == nil {
-            FileManager.default.createFile(atPath: helperLogPath, contents: nil)
+            createHelperLogFile(atPath: helperLogPath)
             helperLogHandle = FileHandle(forWritingAtPath: helperLogPath)
             helperLogHandle?.seekToEndOfFile()
         }
@@ -362,7 +371,7 @@ private func rotateHelperLogIfNeeded() {
         try? fm.moveItem(atPath: src, toPath: dst)
     }
 
-    fm.createFile(atPath: helperLogPath, contents: nil)
+    createHelperLogFile(atPath: helperLogPath)
     helperLogHandle = FileHandle(forWritingAtPath: helperLogPath)
     helperLogHandle?.seekToEndOfFile()
 }
@@ -1183,6 +1192,14 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
 
     func setNpmRegistry(username: String, registry: String,
                         withReply reply: @escaping (Bool, String?) -> Void) {
+        // 早期验证：拒绝含换行符或非 https 的 registry URL，防止 .npmrc 注入
+        let trimmed = registry.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.contains("\n") || trimmed.contains("\r")
+            || !trimmed.lowercased().hasPrefix("https://") {
+            helperLog("设置 npm 源拒绝 @\(username): 非法 URL", level: .warn)
+            reply(false, "npm registry URL 必须为 https 协议且不含换行符")
+            return
+        }
         helperLog("设置 npm 源 @\(username): \(registry)")
         if !NodeDownloader.isInstalled(for: username) {
             let message = "Node.js 未安装就绪，暂不允许切换 npm 源"
