@@ -4146,17 +4146,32 @@ private struct CronRunEntryRow: View {
 
 // MARK: - Skills Tab
 
+// MARK: - Skills Tab
+
 private struct SkillsTabView: View {
     let username: String
-    @State private var runId = 0
+    @Environment(GatewayHub.self) private var hub
+
+    var body: some View {
+        SkillsTabContent(store: hub.skillsStore(for: username))
+    }
+}
+
+private struct SkillsTabContent: View {
+    let store: GatewaySkillsStore
 
     var body: some View {
         VStack(spacing: 0) {
+            // 顶栏
             HStack {
-                Text(L10n.k("user.detail.auto.skills_title", fallback: "技能"))
-                    .font(.headline)
+                Text("Skills").font(.headline)
                 Spacer()
-                Button { runId += 1 } label: {
+                if store.isLoading {
+                    ProgressView().scaleEffect(0.7).frame(width: 20, height: 20)
+                }
+                Button {
+                    Task { await store.refresh() }
+                } label: {
                     Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
@@ -4166,19 +4181,93 @@ private struct SkillsTabView: View {
 
             Divider()
 
-            CommandOutputPanel(username: username, args: ["skills", "list"])
-                .id(runId)
-
-            Divider()
-
-            HStack(spacing: 8) {
-                Image(systemName: "info.circle").foregroundStyle(.secondary).font(.caption)
-                Text(L10n.k("user.detail.auto.u_2018_openclaw_skills_install_name_u_2019", fallback: "使用 \u{2018}openclaw skills install <name>\u{2019} 安装，\u{2018}openclaw skills remove <name>\u{2019} 卸载"))
-                    .font(.caption).foregroundStyle(.secondary)
+            if let err = store.error {
+                ContentUnavailableView(err, systemImage: "exclamationmark.triangle")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if store.skills.isEmpty && !store.isLoading {
+                ContentUnavailableView(
+                    L10n.k("user.detail.skills.no_skills", fallback: "暂无 Skills"),
+                    systemImage: "star.leadinghalf.filled"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(store.skills) { skill in
+                    SkillItemRow(skill: skill, store: store)
+                }
+                .listStyle(.plain)
             }
-            .padding(.horizontal, 16).padding(.vertical, 10)
         }
-        .onAppear { runId += 1 }
+        .task { await store.refresh() }
+    }
+}
+
+private struct SkillItemRow: View {
+    let skill: GatewaySkillStatus
+    let store: GatewaySkillsStore
+    @State private var showRemoveConfirm = false
+
+    private var isPending: Bool { store.pendingOps[skill.skillKey] != nil }
+    private var pendingLabel: String { store.pendingOps[skill.skillKey] ?? "" }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // 状态指示
+            Circle()
+                .fill(skill.eligible ? Color.green : Color.orange)
+                .frame(width: 8, height: 8)
+
+            // 名称 + 描述
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    if let emoji = skill.emoji {
+                        Text(emoji)
+                    }
+                    Text(skill.name)
+                        .font(.subheadline).fontWeight(.medium)
+                    if skill.always {
+                        CronTagBadge("always-on")
+                    }
+                    if !skill.missing.isEmpty {
+                        CronTagBadge("⚠️ missing")
+                    }
+                }
+                Text(skill.description)
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+
+            Spacer()
+
+            // 操作按钮区
+            if isPending {
+                HStack(spacing: 4) {
+                    ProgressView().scaleEffect(0.7)
+                    Text(pendingLabel).font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                HStack(spacing: 6) {
+                    if !skill.disabled {
+                        Button(L10n.k("user.detail.skills.update", fallback: "更新")) {
+                            Task { try? await store.update(skillKey: skill.skillKey) }
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                    }
+                    Button(L10n.k("user.detail.skills.remove", fallback: "卸载")) {
+                        showRemoveConfirm = true
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                    .confirmationDialog(
+                        "卸载 \(skill.name)？",
+                        isPresented: $showRemoveConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button(L10n.k("user.detail.skills.remove", fallback: "卸载"), role: .destructive) {
+                            Task { try? await store.remove(skillKey: skill.skillKey) }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
