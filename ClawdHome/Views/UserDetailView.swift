@@ -306,7 +306,6 @@ struct UserDetailView: View {
     @StateObject private var embeddedOverviewConsoleStore = EmbeddedGatewayConsoleStore()
     @State private var promptMemoryCurrentInput = ""
     @State private var promptMemoryRequestedQuery: String?
-    @State private var promptMemoryOpenNonce = 0
     private var shouldPinWindowTopmost: Bool {
         !user.isAdmin
         && user.clawType == .macosUser
@@ -538,35 +537,13 @@ struct UserDetailView: View {
                 PromptMemoryOverlay(
                     username: user.username,
                     currentInput: promptMemoryCurrentInput,
-                    requestedQuery: promptMemoryRequestedQuery ?? "__manual_open__#\(promptMemoryOpenNonce)",
+                    requestedQuery: promptMemoryRequestedQuery,
                     onConsumeRequest: { promptMemoryRequestedQuery = nil },
                     onInsert: { text, mode in
                         embeddedOverviewConsoleStore.insertPromptText(text, mode: mode)
                     }
                 )
                 .zIndex(4000)
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            if shouldEmbedOverviewConsole, embeddedOverviewConsoleURL != nil {
-                Button {
-                    promptMemoryRequestedQuery = promptMemoryCurrentInput
-                    promptMemoryOpenNonce += 1
-                } label: {
-                    Image(systemName: "text.bubble")
-                        .font(.system(size: 14, weight: .semibold))
-                        .padding(10)
-                }
-                .buttonStyle(.plain)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(nsColor: .windowBackgroundColor).opacity(0.94))
-                        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
-                )
-                .help("打开 Prompt 记忆")
-                .padding(.top, 14)
-                .padding(.trailing, 14)
-                .zIndex(4100)
             }
         }
         .task { await refreshStatus() }

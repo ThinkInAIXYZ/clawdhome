@@ -50,6 +50,32 @@ private struct PromptLibrarySnapshot: Codable {
     var groups: [PromptGroup]
     var usage: [PromptUsageEvent]
     var settings: PromptLibrarySettings
+    var quickNoteText: String
+
+    private enum CodingKeys: String, CodingKey {
+        case prompts
+        case groups
+        case usage
+        case settings
+        case quickNoteText
+    }
+
+    init(prompts: [PromptItem], groups: [PromptGroup], usage: [PromptUsageEvent], settings: PromptLibrarySettings, quickNoteText: String) {
+        self.prompts = prompts
+        self.groups = groups
+        self.usage = usage
+        self.settings = settings
+        self.quickNoteText = quickNoteText
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        prompts = try container.decodeIfPresent([PromptItem].self, forKey: .prompts) ?? []
+        groups = try container.decodeIfPresent([PromptGroup].self, forKey: .groups) ?? []
+        usage = try container.decodeIfPresent([PromptUsageEvent].self, forKey: .usage) ?? []
+        settings = try container.decodeIfPresent(PromptLibrarySettings.self, forKey: .settings) ?? PromptLibrarySettings()
+        quickNoteText = try container.decodeIfPresent(String.self, forKey: .quickNoteText) ?? ""
+    }
 }
 
 private struct PromptIgnoredSuggestion: Codable {
@@ -74,6 +100,7 @@ final class PromptLibraryStore {
     private(set) var isLoaded = false
     var settings = PromptLibrarySettings()
     var searchText = ""
+    var quickNoteText = ""
 
     private var indexes: [UUID: PromptSearchIndex] = [:]
     private var ignoredSuggestions: [String: PromptIgnoredSuggestion] = [:]
@@ -111,6 +138,7 @@ final class PromptLibraryStore {
                 groups = snapshot.groups
                 usage = snapshot.usage
                 settings = snapshot.settings
+                quickNoteText = snapshot.quickNoteText
             }
             if fileManager.fileExists(atPath: ignoredURL.path) {
                 let data = try Data(contentsOf: ignoredURL)
@@ -268,6 +296,13 @@ final class PromptLibraryStore {
         save()
     }
 
+    func updateQuickNote(_ text: String) {
+        loadIfNeeded()
+        guard quickNoteText != text else { return }
+        quickNoteText = text
+        save()
+    }
+
     func exportPublicPrompts() {
         loadIfNeeded()
         let exportable = prompts.filter { !$0.sensitive && $0.enabled }
@@ -315,7 +350,13 @@ final class PromptLibraryStore {
     private func save() {
         do {
             try fileManager.createDirectory(at: libraryDirectory, withIntermediateDirectories: true)
-            let snapshot = PromptLibrarySnapshot(prompts: prompts, groups: groups, usage: usage, settings: settings)
+            let snapshot = PromptLibrarySnapshot(
+                prompts: prompts,
+                groups: groups,
+                usage: usage,
+                settings: settings,
+                quickNoteText: quickNoteText
+            )
             try encoder.encode(snapshot).write(to: promptsURL, options: [.atomic])
             try encoder.encode(Array(indexes.values)).write(to: indexURL, options: [.atomic])
             saveIgnored()
