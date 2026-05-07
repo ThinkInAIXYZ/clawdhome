@@ -747,6 +747,14 @@ enum LlmWikiManager {
           : `# ${title}\\n\\n${trimmedBody}`;
         const content = `${frontmatter}${body}\\n`;
         await fs.writeFile(filePath, content, "utf8");
+        await fs.mkdir(path.dirname(projectSourcePath), { recursive: true });
+        try {
+          await fs.access(projectSourcePath);
+        } catch {
+          if (path.resolve(filePath) !== path.resolve(projectSourcePath)) {
+            await fs.copyFile(filePath, projectSourcePath);
+          }
+        }
         const ingestTrigger = await request("/knowledge-base/ingest", "POST", {
           projectPath: "\(LLMWikiPaths.projectRoot)",
           sourcePath: projectSourcePath,
