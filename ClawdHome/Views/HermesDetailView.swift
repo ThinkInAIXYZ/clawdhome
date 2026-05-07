@@ -36,7 +36,6 @@ struct HermesDetailView: View {
     let onStartOrRestart: () -> Void
     let onStop: () -> Void
     let onOpenHealthCheck: () -> Void
-    let onShowSetup: () -> Void
     let onRefresh: () -> Void
     let onSelectProfile: (String) -> Void
     let onCreateProfile: (String, String) -> Void
@@ -654,8 +653,6 @@ struct HermesDetailView: View {
 
                     HStack(spacing: 8) {
                         Button(L10n.k("hermes.action.health_check", fallback: "体检"), action: onOpenHealthCheck)
-                            .buttonStyle(.bordered)
-                        Button(L10n.k("hermes.action.settings", fallback: "Hermes 设置"), action: onShowSetup)
                             .buttonStyle(.bordered)
                     }
 
@@ -1540,7 +1537,6 @@ struct HermesDetailContainer: View {
     @State private var isLoading = false
     @State private var actionError: String? = nil
     @State private var showHealthCheck = false
-    @State private var showHermesSetup = false
     @State private var showTeamWizard = false
     @State private var showPendingBindings = false
     @State private var pendingBindingItems: [PendingBindingItem] = []
@@ -1611,7 +1607,6 @@ struct HermesDetailContainer: View {
                         }
                     },
                     onOpenHealthCheck: { showHealthCheck = true },
-                    onShowSetup: { showHermesSetup = true },
                     onRefresh: { Task { await refreshAll() } },
                     onSelectProfile: { id in Task { await selectProfile(id) } },
                     onCreateProfile: { name, emoji in Task { await createProfile(name: name, emoji: emoji) } },
@@ -1637,9 +1632,6 @@ struct HermesDetailContainer: View {
             .navigationSubtitle("@\(user.username)")
             .background(UserDetailWindowTitleBinder(title: detailWindowTitle, subtitle: "@\(user.username)"))
             .background(UserDetailWindowWidthBinder(shouldApplyHermesPreset: true))
-        }
-        .sheet(isPresented: $showHermesSetup) {
-            HermesSetupSheet(user: user)
         }
         .sheet(isPresented: $showTeamWizard) {
             HermesTeamWizard(username: user.username)
