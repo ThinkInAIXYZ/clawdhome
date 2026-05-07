@@ -223,6 +223,47 @@ extension ClawdHomeHelperImpl {
         }
     }
 
+    // MARK: - Hermes 自启白名单（F2）
+
+    func getHermesAutostartWhitelist(username: String, withReply reply: @escaping (String) -> Void) {
+        helperLog("Hermes get autostart whitelist @\(username)")
+        let profiles = HermesAutostartList.load(username: username)
+        let obj: [String: Any] = [
+            "schemaVersion": 1,
+            "profiles": profiles.sorted(),
+        ]
+        guard JSONSerialization.isValidJSONObject(obj),
+              let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
+              let json = String(data: data, encoding: .utf8) else {
+            reply(#"{"schemaVersion":1,"profiles":["main"]}"#)
+            return
+        }
+        reply(json)
+    }
+
+    func setHermesAutostartProfile(
+        username: String,
+        profileID: String,
+        enabled: Bool,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        helperLog("Hermes set autostart profile=\(profileID) enabled=\(enabled) @\(username)")
+        do {
+            if enabled {
+                try HermesAutostartList.add(username: username, profileID: profileID)
+            } else {
+                // 显式禁用（包括 main）：从白名单移除
+                // 当 main 被禁用时，remove 会将文件持久化为 profiles=[]，
+                // 确保下次 load 看到文件且 profiles 为空，不再 fallback 到 ["main"]
+                try HermesAutostartList.remove(username: username, profileID: profileID)
+            }
+            reply(true, nil)
+        } catch {
+            helperLog("Hermes set autostart 失败 profile=\(profileID) @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
     // MARK: - 辅助
 
     /// Hermes 安装日志路径（world-readable，供 App/CLI 实时读取）

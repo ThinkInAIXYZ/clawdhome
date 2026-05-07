@@ -539,6 +539,9 @@ struct HermesProfileManager {
                 }
                 try cloneDefaultProfileConfigIfNeeded(username: username, hermesHome: hermesHome, profileID: id)
             }
+            // 新建或已存在的命名 profile 默认加入自启白名单（D12：新 profile 默认进白名单）
+            // id="main" 不显式追加：由 HermesAutostartList.load 的兜底语义（缺失文件 → ["main"]）覆盖
+            try? HermesAutostartList.add(username: username, profileID: id)
         }
 
         try saveMetaMap(metas, hermesHome: hermesHome, username: username)
@@ -609,6 +612,8 @@ struct HermesProfileManager {
         var metas = loadMetaMap(hermesHome: hermesHome)
         metas.removeValue(forKey: profileID)
         try saveMetaMap(metas, hermesHome: hermesHome, username: username)
+        // 删除 profile 时同步从自启白名单剔除（D12 联动）
+        try? HermesAutostartList.remove(username: username, profileID: profileID)
         try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
     }
 

@@ -934,6 +934,26 @@ import Foundation
         profileID: String,
         withReply reply: @escaping (Bool, String?) -> Void
     )
+
+    // MARK: - Hermes 自启白名单（F2）
+
+    /// 读取指定用户的 Hermes profile 自启白名单
+    /// 返回 JSON 字符串：{"schemaVersion":1,"profiles":["main","coder"]}
+    /// 文件不存在时返回 {"schemaVersion":1,"profiles":["main"]}（向后兼容）
+    func getHermesAutostartWhitelist(
+        username: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 设置指定 profile 的开机自启开关
+    /// enabled=true  → 将 profileID 加入白名单
+    /// enabled=false → 将 profileID 从白名单移除（对 main 也生效）
+    func setHermesAutostartProfile(
+        username: String,
+        profileID: String,
+        enabled: Bool,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
 }
 
 /// XPC Mach Service 名称（App 与 Helper 均引用此常量）
