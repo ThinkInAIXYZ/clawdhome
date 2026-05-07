@@ -129,6 +129,7 @@ struct ClawPoolView: View {
     @State private var lastWindowOpenAtByUsername: [String: Date] = [:]
     // MARK: Gateway 分组 — Agent 卡片
     @State private var agentsByUser: [String: [AgentProfile]] = [:]
+    @State private var expandedUsername: String?  // 当前展开角色面板的卡片
     private var currentUsername: String { NSUserName() }
     /// 默认仅展示标准用户；可在设置中显式开启当前管理员展示。
     private var displayedUsers: [ManagedUser] {
@@ -789,13 +790,16 @@ struct ClawPoolView: View {
         }
     }
 
-    // MARK: - 卡片视图（FlowLayout 自适应宽度卡片）
+    // MARK: - 卡片视图（LazyVGrid 固定宽度网格）
 
     private var cardContent: some View {
         ScrollView {
-            FlowLayout(spacing: 12) {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 12)],
+                spacing: 12
+            ) {
                 ForEach(displayedUsers) { claw in
-                    clawCardView(for: claw)
+                    expandableClawCard(for: claw)
                         .contextMenu { clawContextMenu(for: claw) }
                 }
                 // 领养虾苗按钮
@@ -806,17 +810,20 @@ struct ClawPoolView: View {
         .task { await loadAllAgents() }
     }
 
-    // MARK: - 卡片（使用 ClawCard，多 agent 时显示 pill 标签）
+    // MARK: - 卡片（使用 ClawCard，多 agent 时右侧展开角色面板）
 
     @ViewBuilder
-    private func clawCardView(for claw: ManagedUser) -> some View {
+    private func expandableClawCard(for claw: ManagedUser) -> some View {
         let userAgents = agentsByUser[claw.username] ?? []
+        let isExpanded = expandedUsername == claw.username
         let isOpeningWebUI = webUIOpenInFlightUsernames.contains(claw.username.lowercased())
+
         ClawCard(
             claw: claw,
             isSelected: selectedClaw == claw.id,
             isOpeningWebUI: isOpeningWebUI,
             agents: userAgents,
+            isAgentExpanded: isExpanded,
             onTap: { openPreferredWindow(for: claw) },
             onDoubleClick: { openPreferredWindow(for: claw) },
             onUpgrade: { NotificationCenter.default.post(name: .openUpgradeSheet, object: nil) },
@@ -824,10 +831,74 @@ struct ClawPoolView: View {
                 pool.pendingAgentSelection[claw.username] = agent.id
                 openPreferredWindow(for: claw)
             },
+            onAgentExpand: userAgents.count > 1 ? {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    expandedUsername = isExpanded ? nil : claw.username
+                }
+            } : nil,
             onOpenWebUI: { Task { await openWebUI(for: claw) } },
             onTerminal: { openTerminal(for: claw) },
             onOpenVault: { openVault(for: claw) },
             onDropFiles: { urls in handleQuickTransferDrop(for: claw, droppedURLs: urls) }
+        )
+        .overlay(alignment: .topTrailing) {
+            if isExpanded && userAgents.count > 1 {
+                agentExpandPanel(user: claw, agents: userAgents)
+                    .offset(x: 165)
+                    .zIndex(100)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .topLeading)))
+            }
+        }
+        .zIndex(isExpanded ? 10 : 0)
+    }
+
+    // MARK: - 角色展开面板（浮动在卡片右侧）
+
+    @ViewBuilder
+    private func agentExpandPanel(user: ManagedUser, agents: [AgentProfile]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(agents) { agent in
+                Button {
+                    pool.pendingAgentSelection[user.username] = agent.id
+                    openPreferredWindow(for: user)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(agent.emoji.isEmpty ? "\u{1F916}" : agent.emoji)
+                            .font(.system(size: 14))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(agent.name)
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                            if let model = agent.modelPrimary {
+                                Text(model.components(separatedBy: "/").last ?? model)
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.primary.opacity(0.03))
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(10)
+        .frame(width: 160)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.3), lineWidth: 0.5)
         )
     }
 
@@ -1443,10 +1514,12 @@ private struct ClawCard: View {
     let isSelected: Bool
     var isOpeningWebUI: Bool = false
     var agents: [AgentProfile] = []
+    var isAgentExpanded: Bool = false
     let onTap: () -> Void
     var onDoubleClick: (() -> Void)? = nil
     var onUpgrade: (() -> Void)? = nil
     var onAgentTap: ((AgentProfile) -> Void)? = nil
+    var onAgentExpand: (() -> Void)? = nil
     let onOpenWebUI: () -> Void
     let onTerminal: () -> Void
     let onOpenVault: () -> Void
@@ -1454,14 +1527,6 @@ private struct ClawCard: View {
 
     @Environment(UpdateChecker.self) private var updater
     @State private var isDropTargeted = false
-
-    /// 多 agent 时稍微加宽卡片
-    private var cardMinWidth: CGFloat {
-        agents.count > 1 ? 180 : 140
-    }
-    private var cardMaxWidth: CGFloat {
-        agents.count > 1 ? 280 : 180
-    }
 
     var body: some View {
         Button(action: onTap) {
@@ -1532,8 +1597,8 @@ private struct ClawCard: View {
                 .font(.caption2)
                 .lineLimit(1)
 
-                // 角色标签区域（始终显示，单 agent 时显示角色名称）
-                agentPillsSection
+                // 角色摘要（单 agent 显示名称，多 agent 显示数量 + 展开入口）
+                agentSummarySection
 
                 // 操作按钮行
                 HStack(spacing: 8) {
@@ -1571,7 +1636,7 @@ private struct ClawCard: View {
                 Spacer(minLength: 0)
             }
             .padding(14)
-            .frame(minWidth: cardMinWidth, maxWidth: cardMaxWidth, minHeight: 160)
+            .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160)
             .background(
                 isSelected
                     ? Color.accentColor.opacity(0.08)
@@ -1661,53 +1726,41 @@ private struct ClawCard: View {
         }
     }
 
-    // MARK: Agent pill 标签区域
+    // MARK: 角色摘要（单 agent 显示名称，多 agent 显示数量 + 展开入口）
 
     @ViewBuilder
-    private var agentPillsSection: some View {
-        let displayAgents: [AgentProfile] = {
+    private var agentSummarySection: some View {
+        let displayName: String = {
             if agents.isEmpty {
-                // 无 agent 数据时，用 fullName 作为默认角色名
-                let name = claw.fullName.isEmpty ? claw.username : claw.fullName
-                return [AgentProfile(id: "main", name: name, emoji: "", modelPrimary: nil, workspacePath: nil, isDefault: true)]
+                return claw.fullName.isEmpty ? claw.username : claw.fullName
             }
-            return agents
+            if agents.count == 1, let first = agents.first {
+                return first.emoji.isEmpty ? first.name : "\(first.emoji) \(first.name)"
+            }
+            return ""
         }()
-        let maxVisible = 4
-        let visible = Array(displayAgents.prefix(maxVisible))
-        let overflow = displayAgents.count - maxVisible
 
-        FlowLayout(spacing: 4) {
-            ForEach(visible) { agent in
-                Button {
-                    onAgentTap?(agent)
-                } label: {
-                    HStack(spacing: 3) {
-                        if !agent.emoji.isEmpty {
-                            Text(agent.emoji).font(.system(size: 10))
-                        }
-                        Text(agent.name)
-                            .font(.system(size: 10, weight: .medium))
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule().fill(Color.primary.opacity(0.06))
-                    )
+        if agents.count > 1 {
+            // 多 agent：显示 "N个角色" + 展开按钮
+            Button {
+                onAgentExpand?()
+            } label: {
+                HStack(spacing: 4) {
+                    Text("\(agents.count)\(L10n.k("views.user_list_view.agent_count_suffix", fallback: "个角色"))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: isAgentExpanded ? "chevron.left" : "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
             }
-            if overflow > 0 {
-                Text("+\(overflow)")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule().fill(Color.primary.opacity(0.04))
-                    )
-            }
+            .buttonStyle(.plain)
+        } else {
+            // 单 agent 或无 agent：显示角色名
+            Text(displayName)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 
