@@ -226,6 +226,7 @@ struct ShrimpInitWizardV2: View {
     @State private var hermesSetupExitCode: Int32?
     @State private var hermesSetupDone = false
     @State private var showHermesSetupSkipConfirm = false
+    @State private var didAttemptHermesOpenClawDraftCleanup = false
 
     // Step 4: agents
     @State private var agents: [AgentDef] = []
@@ -421,6 +422,8 @@ struct ShrimpInitWizardV2: View {
                         }
                         if engine == .openclaw {
                             ensureOpenclawRolesSeeded()
+                        } else if engine == .hermes {
+                            Task { await cleanupAccidentalOpenClawDraftForHermesIfNeeded() }
                         }
                     } label: {
                         VStack(alignment: .leading, spacing: 8) {
@@ -694,7 +697,7 @@ struct ShrimpInitWizardV2: View {
             .padding(24)
             .onAppear {
                 clearInitialEnvLogIfNeeded()
-                checkEnvReady()
+                checkEnvReady(autoInstallIfNeeded: true)
             }
         } else {
             VStack(alignment: .leading, spacing: 0) {
@@ -767,7 +770,7 @@ struct ShrimpInitWizardV2: View {
             .padding(24)
             .onAppear {
                 clearInitialEnvLogIfNeeded()
-                checkEnvReady()
+                checkEnvReady(autoInstallIfNeeded: true)
             }
         }
     }
@@ -1297,20 +1300,27 @@ struct ShrimpInitWizardV2: View {
         didClearInitialEnvLog = false
     }
 
-    private func checkEnvReady() {
+    private func checkEnvReady(autoInstallIfNeeded: Bool = false) {
         Task {
             let engine = selectedEngine ?? .openclaw
             if engine == .hermes {
+                await cleanupAccidentalOpenClawDraftForHermesIfNeeded()
                 let version = await helperClient.getHermesVersion(username: user.username)
                 let gatewayStatus = await helperClient.getHermesGatewayStatus(username: user.username)
                 await MainActor.run {
                     envReady = version != nil && gatewayStatus.running
+                    if autoInstallIfNeeded && !envReady && !isInstallingEnv {
+                        runEnvInstall()
+                    }
                 }
             } else {
                 let version = await helperClient.getOpenclawVersion(username: user.username)
                 let gatewayStatus = try? await helperClient.getGatewayStatus(username: user.username)
                 await MainActor.run {
                     envReady = version != nil && (gatewayStatus?.running == true)
+                    if autoInstallIfNeeded && !envReady && !isInstallingEnv {
+                        runEnvInstall()
+                    }
                 }
             }
         }
@@ -1322,6 +1332,43 @@ struct ShrimpInitWizardV2: View {
         let logPath = envLogPath(for: selectedEngine ?? .openclaw)
         FileManager.default.createFile(atPath: logPath, contents: nil, attributes: [.posixPermissions: 0o666])
         didClearInitialEnvLog = true
+    }
+
+    private func cleanupAccidentalOpenClawDraftForHermesIfNeeded() async {
+        guard selectedEngine == .hermes else { return }
+        guard !didAttemptHermesOpenClawDraftCleanup else { return }
+
+        await MainActor.run {
+            didAttemptHermesOpenClawDraftCleanup = true
+        }
+
+        let hasOpenClawBinary = await helperClient.getOpenclawVersion(username: user.username) != nil
+        let topLevelNames: [String]
+        do {
+            let entries = try await helperClient.listDirectory(
+                username: user.username,
+                relativePath: ".openclaw",
+                showHidden: true
+            )
+            topLevelNames = entries.map(\.name)
+        } catch {
+            // .openclaw 不存在或不可读：无需清理
+            return
+        }
+
+        guard AccidentalOpenClawDraftDetector.shouldDelete(
+            topLevelEntries: topLevelNames,
+            hasOpenClawBinary: hasOpenClawBinary
+        ) else {
+            return
+        }
+
+        do {
+            try await helperClient.deleteItem(username: user.username, relativePath: ".openclaw")
+            appLog("[WizardV2] Hermes 路径清理误建 .openclaw 成功 @\(user.username)", level: .info)
+        } catch {
+            appLog("[WizardV2] Hermes 路径清理误建 .openclaw 失败 @\(user.username): \(error.localizedDescription)", level: .warn)
+        }
     }
 
     private func runEnvInstall() {
@@ -1506,6 +1553,13 @@ struct ShrimpInitWizardV2: View {
             hermesEnvInstallingPhase = nil
             envError = "Hermes Gateway 启动失败：\(error.localizedDescription)"
             return
+        }
+
+        // 轮询 gateway 实际运行状态，避免进入下一步时仍在启动中
+        for _ in 0..<20 {
+            let status = await helperClient.getHermesGatewayStatus(username: user.username)
+            if status.running { break }
+            try? await Task.sleep(for: .milliseconds(500))
         }
 
         isInstallingEnv = false

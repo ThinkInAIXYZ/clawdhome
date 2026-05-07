@@ -183,14 +183,26 @@ struct ClawPoolView: View {
         return description
     }
 
+    private var agentReloadKey: String {
+        pool.users
+            .filter { !$0.isAdmin }
+            .map { "\($0.username):\($0.isRunning):\($0.prefersHermesRuntime)" }
+            .joined(separator: "|")
+    }
+
     private func loadAllAgents() async {
         for user in pool.users where !user.isAdmin {
-            let hermesInstalled = await helperClient.getHermesVersion(username: user.username) != nil
-            if hermesInstalled {
+            if user.prefersHermesRuntime {
                 if let profiles = try? await helperClient.listHermesProfiles(username: user.username) {
                     agentsByUser[user.username] = profiles
+                    continue
                 }
-                continue
+            } else {
+                let hermesInstalled = await helperClient.getHermesVersion(username: user.username) != nil
+                if hermesInstalled, let profiles = try? await helperClient.listHermesProfiles(username: user.username) {
+                    agentsByUser[user.username] = profiles
+                    continue
+                }
             }
 
             if user.isRunning, let rpcAgents = await gatewayHub.agentsList(username: user.username) {
@@ -871,7 +883,7 @@ struct ClawPoolView: View {
             }
             .padding(16)
         }
-        .task { await loadAllAgents() }
+        .task(id: agentReloadKey) { await loadAllAgents() }
     }
 
     // MARK: - 卡片（使用 ClawCard，多 agent 时右侧展开角色面板）
