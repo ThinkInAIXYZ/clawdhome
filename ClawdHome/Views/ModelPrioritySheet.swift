@@ -553,16 +553,23 @@ struct ModelPrioritySheet: View {
 
             guard !patch.isEmpty else { return }
 
-            // 通过 WebSocket config.patch 一次性写入（带 schema 校验 + 自动热重启）
-            let (noop, _) = try await gatewayHub.configPatch(
-                username: user.username,
-                patch: patch,
-                baseHash: configBaseHash,
-                note: "ClawdHome: model priority update"
-            )
-
-            if !noop {
+            // 优先走 WebSocket config.patch；Gateway 未连接时回退到本地直写
+            do {
+                let (noop, _) = try await gatewayHub.configPatch(
+                    username: user.username,
+                    patch: patch,
+                    baseHash: configBaseHash,
+                    note: "ClawdHome: model priority update"
+                )
+                if !noop {
+                    gatewayHub.markPendingStart(username: user.username)
+                }
+            } catch {
+                guard isGatewayConnectivityError(error) else { throw error }
+                let cfg = await helperClient.getConfigJSON(username: user.username)
+                try await applyPatchDirect(patch, existingConfig: cfg)
                 gatewayHub.markPendingStart(username: user.username)
+                try await helperClient.restartGateway(username: user.username)
             }
 
             hasChanges = false
@@ -571,6 +578,45 @@ struct ModelPrioritySheet: View {
         } catch {
             saveError = error.localizedDescription
         }
+    }
+
+    /// Gateway 掉线时，按 merge-patch 语义在本地合成并直写变更的顶层键
+    private func applyPatchDirect(_ patch: [String: Any], existingConfig: [String: Any]) async throws {
+        let merged = mergeJSON(base: existingConfig, patch: patch)
+        for key in patch.keys.sorted() {
+            guard let value = merged[key] else { continue }
+            try await helperClient.setConfigDirect(username: user.username, path: key, value: value)
+        }
+    }
+
+    private func mergeJSON(base: [String: Any], patch: [String: Any]) -> [String: Any] {
+        var result = base
+        for (key, patchValue) in patch {
+            if patchValue is NSNull {
+                result.removeValue(forKey: key)
+                continue
+            }
+            if let patchObject = patchValue as? [String: Any] {
+                let baseObject = result[key] as? [String: Any] ?? [:]
+                result[key] = mergeJSON(base: baseObject, patch: patchObject)
+            } else {
+                result[key] = patchValue
+            }
+        }
+        return result
+    }
+
+    private func isGatewayConnectivityError(_ error: Error) -> Bool {
+        if let gatewayError = error as? GatewayClientError {
+            switch gatewayError {
+            case .notConnected, .connectFailed:
+                return true
+            case .requestFailed, .encodingError:
+                return false
+            }
+        }
+        let message = error.localizedDescription
+        return message.contains("Gateway 未连接") || message.contains("连接失败")
     }
 
     /// 将 PendingProviderConfig 转为 patch 所需的字典
