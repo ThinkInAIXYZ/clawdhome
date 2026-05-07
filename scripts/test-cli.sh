@@ -1,13 +1,13 @@
 #!/bin/bash
 # scripts/test-cli.sh — ClawdHome CLI 自动化集成测试
 # 用法: ./scripts/test-cli.sh [CLI路径]
-# 需要 Helper 正在运行，且至少有一只现存虾
+# 需要 Helper 正在运行，且至少有一个现存实例
 
 set -euo pipefail
 
 # ── 配置 ──────────────────────────────────────────────────
 CLI="${1:-$(find ~/Library/Developer/Xcode/DerivedData/ClawdHome-*/Build/Products/Debug/ClawdHomeCLI -maxdepth 0 2>/dev/null | head -1)}"
-TEST_SHRIMP="cli_test_shrimp_$$"   # 用 PID 避免冲突
+TEST_INSTANCE="cli_test_instance_$$"   # 用 PID 避免冲突
 PASS=0
 FAIL=0
 SKIP=0
@@ -94,9 +94,9 @@ section() {
 cleanup() {
     echo ""
     section "清理"
-    if "$CLI" shrimp list --json 2>/dev/null | python3 -c "import sys,json; names=[s['name'] for s in json.load(sys.stdin)]; sys.exit(0 if '$TEST_SHRIMP' in names else 1)" 2>/dev/null; then
-        echo "  删除测试虾 $TEST_SHRIMP..."
-        "$CLI" shrimp delete "$TEST_SHRIMP" --admin-user "$(whoami)" --admin-password "${ADMIN_PW:-}" 2>/dev/null || true
+    if "$CLI" ps --json 2>/dev/null | python3 -c "import sys,json; names=[s['name'] for s in json.load(sys.stdin)]; sys.exit(0 if '$TEST_INSTANCE' in names else 1)" 2>/dev/null; then
+        echo "  删除测试实例 $TEST_INSTANCE..."
+        "$CLI" rm "$TEST_INSTANCE" --admin-user "$(whoami)" --admin-password "${ADMIN_PW:-}" 2>/dev/null || true
     fi
 }
 
@@ -110,7 +110,7 @@ fi
 
 echo -e "${CYAN}ClawdHome CLI 集成测试${NC}"
 echo "CLI: $CLI"
-echo "测试虾: $TEST_SHRIMP"
+echo "测试实例: $TEST_INSTANCE"
 echo ""
 
 # ── 1. 基础命令 ───────────────────────────────────────────
@@ -124,92 +124,92 @@ assert_ok "version 子命令连接 Helper" "$CLI" version
 # JSON 模式
 assert_json_field "version --json 输出 JSON" "cli" "$CLI" version --json
 
-# ── 2. shrimp list ────────────────────────────────────────
+# ── 2. ps ─────────────────────────────────────────────────
 
-section "2. shrimp list"
+section "2. ps"
 
-assert_ok "shrimp list 成功" "$CLI" shrimp list
-assert_contains "shrimp list 包含表头" "NAME" "$CLI" shrimp list
-assert_json_field "shrimp list --json 返回数组" "name" "$CLI" shrimp list --json
+assert_ok "ps 成功" "$CLI" ps
+assert_contains "ps 包含表头" "NAME" "$CLI" ps
+assert_json_field "ps --json 返回数组" "name" "$CLI" ps --json
 
-# 获取一只现存虾用于后续测试
-EXISTING_SHRIMP=$("$CLI" shrimp list --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['name'])" 2>/dev/null || echo "")
-if [ -n "$EXISTING_SHRIMP" ]; then
-    echo -e "  ${CYAN}→${NC} 使用现存虾: $EXISTING_SHRIMP"
+# 获取一个现存实例用于后续测试
+EXISTING_INSTANCE=$("$CLI" ps --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['name'])" 2>/dev/null || echo "")
+if [ -n "$EXISTING_INSTANCE" ]; then
+    echo -e "  ${CYAN}→${NC} 使用现存实例: $EXISTING_INSTANCE"
 else
-    echo -e "  ${YELLOW}⚠${NC} 未找到现存虾，部分测试将跳过"
+    echo -e "  ${YELLOW}⚠${NC} 未找到现存实例，部分测试将跳过"
 fi
 
-# ── 3. shrimp status ──────────────────────────────────────
+# ── 3. inspect ────────────────────────────────────────────
 
-section "3. shrimp status"
+section "3. inspect"
 
-if [ -n "$EXISTING_SHRIMP" ]; then
-    assert_contains "status 显示 Name" "Name:" "$CLI" shrimp status "$EXISTING_SHRIMP"
-    assert_contains "status 显示 Version" "Version:" "$CLI" shrimp status "$EXISTING_SHRIMP"
-    assert_json_field "status --json 包含 status 字段" "status" "$CLI" shrimp status "$EXISTING_SHRIMP" --json
+if [ -n "$EXISTING_INSTANCE" ]; then
+    assert_contains "inspect 显示 Name" "Name:" "$CLI" inspect "$EXISTING_INSTANCE"
+    assert_contains "inspect 显示 Version" "Version:" "$CLI" inspect "$EXISTING_INSTANCE"
+    assert_json_field "inspect --json 包含 status 字段" "status" "$CLI" inspect "$EXISTING_INSTANCE" --json
 else
-    skip "status（无现存虾）"
+    skip "inspect（无现存实例）"
 fi
 
-assert_fail "status 不存在的虾应失败" "$CLI" shrimp status "nonexistent_shrimp_xyz"
+assert_fail "inspect 不存在的实例应失败" "$CLI" inspect "nonexistent_instance_xyz"
 
-# ── 4. shrimp start/stop/restart ──────────────────────────
+# ── 4. start/stop/restart ────────────────────────────────
 
 section "4. Gateway 控制"
 
-if [ -n "$EXISTING_SHRIMP" ]; then
+if [ -n "$EXISTING_INSTANCE" ]; then
     # 获取当前状态
-    RUNNING=$("$CLI" shrimp status "$EXISTING_SHRIMP" --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" 2>/dev/null || echo "unknown")
+    RUNNING=$("$CLI" inspect "$EXISTING_INSTANCE" --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" 2>/dev/null || echo "unknown")
 
     if [ "$RUNNING" = "running" ]; then
-        assert_ok "restart 重启运行中的虾" "$CLI" shrimp restart "$EXISTING_SHRIMP"
+        assert_ok "restart 重启运行中的实例" "$CLI" restart "$EXISTING_INSTANCE"
         # 等待重启完成
         sleep 2
-        assert_ok "restart 后仍在运行" "$CLI" shrimp status "$EXISTING_SHRIMP"
+        assert_ok "restart 后仍在运行" "$CLI" inspect "$EXISTING_INSTANCE"
     else
-        assert_ok "start 启动停止的虾" "$CLI" shrimp start "$EXISTING_SHRIMP"
+        assert_ok "start 启动停止的实例" "$CLI" start "$EXISTING_INSTANCE"
         sleep 2
     fi
 else
-    skip "Gateway 控制（无现存虾）"
+    skip "Gateway 控制（无现存实例）"
 fi
 
 # ── 5. config get/set ─────────────────────────────────────
 
 section "5. 配置读写"
 
-if [ -n "$EXISTING_SHRIMP" ]; then
-    assert_ok "config get 读取配置" "$CLI" config get "$EXISTING_SHRIMP" "agents.defaults.model.primary"
-    assert_json_field "config get --json" "key" "$CLI" config get "$EXISTING_SHRIMP" "agents.defaults.model.primary" --json
+if [ -n "$EXISTING_INSTANCE" ]; then
+    assert_ok "config get 读取配置" "$CLI" config get "$EXISTING_INSTANCE" "agents.defaults.model.primary"
+    assert_json_field "config get --json" "key" "$CLI" config get "$EXISTING_INSTANCE" "agents.defaults.model.primary" --json
 else
-    skip "config（无现存虾）"
+    skip "config（无现存实例）"
 fi
 
-assert_fail "config get 不存在的虾" "$CLI" config get "nonexistent_xyz" "some.key"
+assert_fail "config get 不存在的实例" "$CLI" config get "nonexistent_xyz" "some.key"
 
-# ── 6. shrimp doctor ─────────────────────────────────────
+# ── 6. doctor ─────────────────────────────────────────────
 
 section "6. 诊断"
 
-if [ -n "$EXISTING_SHRIMP" ]; then
-    assert_contains "doctor 输出诊断分组" "环境检测" "$CLI" shrimp doctor "$EXISTING_SHRIMP"
-    assert_ok "doctor --json 输出 JSON" "$CLI" shrimp doctor "$EXISTING_SHRIMP" --json
+if [ -n "$EXISTING_INSTANCE" ]; then
+    assert_contains "doctor 输出诊断分组" "环境检测" "$CLI" doctor "$EXISTING_INSTANCE"
+    assert_ok "doctor --json 输出 JSON" "$CLI" doctor "$EXISTING_INSTANCE" --json
 else
-    skip "doctor（无现存虾）"
+    skip "doctor（无现存实例）"
 fi
 
 # ── 7. chat（需要 chatCompletions 已启用） ──────────────────
 
 section "7. 聊天 API"
 
-if [ -n "$EXISTING_SHRIMP" ]; then
+if [ -n "$EXISTING_INSTANCE" ]; then
     # 先检查 gateway 是否运行
-    GW_STATUS=$("$CLI" shrimp status "$EXISTING_SHRIMP" --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" 2>/dev/null || echo "stopped")
+    GW_STATUS=$("$CLI" inspect "$EXISTING_INSTANCE" --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" 2>/dev/null || echo "stopped")
 
     if [ "$GW_STATUS" = "running" ]; then
         # 尝试发送消息（可能因为 chatCompletions 未启用而失败）
-        CHAT_OUTPUT=$("$CLI" chat "$EXISTING_SHRIMP" "回复 ok" --timeout 30 2>&1) || true
+        CHAT_OUTPUT=$("$CLI" chat "$EXISTING_INSTANCE" "回复 ok" --timeout 30 2>&1) || true
 
         if echo "$CHAT_OUTPUT" | grep -qi "ok\|你好\|hello\|hi"; then
             echo -e "  ${GREEN}✓${NC} chat 发消息并收到回复"
@@ -226,7 +226,7 @@ if [ -n "$EXISTING_SHRIMP" ]; then
         fi
 
         # JSON 模式
-        CHAT_JSON=$("$CLI" chat "$EXISTING_SHRIMP" "回复 ok" --json --timeout 30 2>&1) || true
+        CHAT_JSON=$("$CLI" chat "$EXISTING_INSTANCE" "回复 ok" --json --timeout 30 2>&1) || true
         if echo "$CHAT_JSON" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
             echo -e "  ${GREEN}✓${NC} chat --json 返回有效 JSON"
             PASS=$((PASS + 1))
@@ -240,47 +240,47 @@ if [ -n "$EXISTING_SHRIMP" ]; then
         skip "chat（Gateway 未运行）"
     fi
 else
-    skip "chat（无现存虾）"
+    skip "chat（无现存实例）"
 fi
 
-# ── 8. 虾生命周期（创建 → 状态 → 删除） ──────────────────
+# ── 8. 实例生命周期（创建 → 状态 → 删除） ──────────────────
 
-section "8. 虾生命周期"
+section "8. 实例生命周期"
 
 if [ -n "${ADMIN_PW:-}" ]; then
-    echo "  创建测试虾 $TEST_SHRIMP..."
-    if "$CLI" shrimp create "$TEST_SHRIMP" --password "Test1234!" 2>&1 | tee /dev/stderr | grep -q "创建完成"; then
-        echo -e "  ${GREEN}✓${NC} create 创建虾"
+    echo "  创建测试实例 $TEST_INSTANCE..."
+    if "$CLI" run "$TEST_INSTANCE" --password "Test1234!" 2>&1 | tee /dev/stderr | grep -q "创建完成"; then
+        echo -e "  ${GREEN}✓${NC} run 创建实例"
         PASS=$((PASS + 1))
 
         # 验证出现在列表中
-        assert_contains "新虾出现在 list 中" "$TEST_SHRIMP" "$CLI" shrimp list
+        assert_contains "新实例出现在 ps 中" "$TEST_INSTANCE" "$CLI" ps
 
-        # 状态查询
-        assert_contains "新虾 status 可查" "Name:" "$CLI" shrimp status "$TEST_SHRIMP"
+        # 详情查询
+        assert_contains "新实例 inspect 可查" "Name:" "$CLI" inspect "$TEST_INSTANCE"
 
         # 停止
-        assert_ok "stop 停止新虾" "$CLI" shrimp stop "$TEST_SHRIMP"
+        assert_ok "stop 停止新实例" "$CLI" stop "$TEST_INSTANCE"
         sleep 1
 
         # 删除
-        echo "  删除测试虾..."
-        if "$CLI" shrimp delete "$TEST_SHRIMP" --admin-user "$(whoami)" --admin-password "$ADMIN_PW" 2>&1 | grep -q "已删除"; then
-            echo -e "  ${GREEN}✓${NC} delete 删除虾"
+        echo "  删除测试实例..."
+        if "$CLI" rm "$TEST_INSTANCE" --admin-user "$(whoami)" --admin-password "$ADMIN_PW" 2>&1 | grep -q "已删除"; then
+            echo -e "  ${GREEN}✓${NC} rm 删除实例"
             PASS=$((PASS + 1))
         else
-            echo -e "  ${RED}✗${NC} delete 删除虾失败"
-            FAILURES+=("delete 删除虾")
+            echo -e "  ${RED}✗${NC} rm 删除实例失败"
+            FAILURES+=("rm 删除实例")
             FAIL=$((FAIL + 1))
         fi
     else
-        echo -e "  ${RED}✗${NC} create 创建虾失败"
-        FAILURES+=("create 创建虾")
+        echo -e "  ${RED}✗${NC} run 创建实例失败"
+        FAILURES+=("run 创建实例")
         FAIL=$((FAIL + 1))
         cleanup
     fi
 else
-    skip "虾生命周期（未设置 ADMIN_PW 环境变量）"
+    skip "实例生命周期（未设置 ADMIN_PW 环境变量）"
     echo -e "  ${YELLOW}→${NC} 运行完整测试: ADMIN_PW=<密码> $0"
 fi
 
@@ -289,10 +289,9 @@ fi
 section "9. 错误处理"
 
 assert_fail "未知命令应失败" "$CLI" nonexistent_command
-assert_fail "shrimp 无子命令应失败" "$CLI" shrimp
 assert_fail "config 无子命令应失败" "$CLI" config
 assert_fail "chat 无参数应失败" "$CLI" chat
-assert_fail "shell 无参数应失败" "$CLI" shell
+assert_fail "exec 无参数应失败" "$CLI" exec
 
 # ── 结果汇总 ─────────────────────────────────────────────
 

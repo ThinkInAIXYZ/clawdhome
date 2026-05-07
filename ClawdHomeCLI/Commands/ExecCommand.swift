@@ -1,19 +1,18 @@
-// ClawdHomeCLI/Commands/ShellCommand.swift
-// clawdhome shell <name> — 以虾用户身份进入交互式终端
+// ClawdHomeCLI/Commands/ExecCommand.swift
+// clawdhome exec <name> — 以实例用户身份进入交互式终端
 
 import Foundation
 
-enum ShellCommand {
+enum ExecCommand {
     static func run(_ args: [String], client: CLIHelperClient) throws {
         guard let username = args.first else {
-            Output.printError("用法: clawdhome shell <name>")
+            Output.printError("用法: clawdhome exec <name>")
             exit(1)
         }
 
         // 1. 验证用户存在并获取环境信息
         let proxy = try client.proxy()
 
-        // 检查用户是否存在（通过 getGatewayStatus 间接验证）
         let group = DispatchGroup()
         var nodeInstalled = false
         var gatewayURL = ""
@@ -38,11 +37,9 @@ enum ShellCommand {
 
         // 构建 PATH（与 ConfigWriter.buildNodePath 一致的逻辑）
         var pathComponents = [npmGlobalBin, brewBin]
-        // 追加 node 版本回退路径
         for version in ["node", "node@24", "node@22", "node@20", "node@18"] {
             pathComponents.append("\(home)/.brew/opt/\(version)/bin")
         }
-        // 检查 ~/.brew/lib/nodejs/ 下的直接安装
         let libNodeRoot = "\(home)/.brew/lib/nodejs"
         if let entries = try? FileManager.default.contentsOfDirectory(atPath: libNodeRoot).sorted(by: >) {
             for entry in entries where entry.hasPrefix("node-") {
