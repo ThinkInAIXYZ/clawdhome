@@ -37,7 +37,11 @@ struct InstallManager {
         // 安装前预修正 .openclaw 所有权，避免存量 root-owned 文件阻断新版本启动
         let openclawDirPre = "/Users/\(username)/.openclaw"
         if FileManager.default.fileExists(atPath: openclawDirPre) {
-            _ = try? FilePermissionHelper.chownRecursive(openclawDirPre, owner: username)
+            do {
+                try FilePermissionHelper.chownRecursive(openclawDirPre, owner: username)
+            } catch {
+                helperLog("chownRecursive pre-install \(openclawDirPre) failed for @\(username): \(error.localizedDescription)", level: .warn)
+            }
         }
         let args = ["-u", username, "-H",
                     "env", sudoNodePath(for: username),
@@ -55,10 +59,18 @@ struct InstallManager {
         // 可能以 root 身份写入配置文件，导致 gateway 进程无法读取
         let openclawDir = "/Users/\(username)/.openclaw"
         if FileManager.default.fileExists(atPath: openclawDir) {
-            _ = try? FilePermissionHelper.chownRecursive(openclawDir, owner: username)
+            do {
+                try FilePermissionHelper.chownRecursive(openclawDir, owner: username)
+            } catch {
+                helperLog("chownRecursive post-install \(openclawDir) failed for @\(username): \(error.localizedDescription)", level: .warn)
+            }
         }
         // 修正 npm-global 归属，确保用户可执行
-        _ = try? FilePermissionHelper.chownRecursive(prefix, owner: username)
+        do {
+            try FilePermissionHelper.chownRecursive(prefix, owner: username)
+        } catch {
+            helperLog("chownRecursive npm prefix \(prefix) failed for @\(username): \(error.localizedDescription)", level: .warn)
+        }
         return output
     }
 

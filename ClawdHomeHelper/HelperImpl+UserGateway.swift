@@ -42,10 +42,18 @@ extension ClawdHomeHelperImpl {
             if let uid = try? UserManager.uid(for: username) {
                 // 删除前先彻底退出目标用户域，避免 dscl 因活跃会话/进程拒绝删除。
                 GatewayIntentionalStopStore.mark(username: username, reason: "delete-user")
-                _ = try? GatewayManager.stopGateway(username: username, uid: uid)
-                _ = try? ClawdHomeHelper.run("/bin/launchctl", args: ["bootout", "user/\(uid)"])
+                do {
+                    try GatewayManager.stopGateway(username: username, uid: uid)
+                } catch {
+                    helperLog("stopGateway failed during deleteUser @\(username): \(error.localizedDescription)", level: .warn)
+                }
+                if (try? ClawdHomeHelper.run("/bin/launchctl", args: ["bootout", "user/\(uid)"])) == nil {
+                    helperLog("launchctl bootout user/\(uid) failed during deleteUser @\(username)", level: .warn)
+                }
                 Thread.sleep(forTimeInterval: 0.5)
-                _ = try? ClawdHomeHelper.run("/usr/bin/pkill", args: ["-9", "-U", "\(uid)"])
+                if (try? ClawdHomeHelper.run("/usr/bin/pkill", args: ["-9", "-U", "\(uid)"])) == nil {
+                    helperLog("pkill -9 -U \(uid) failed during deleteUser @\(username)", level: .warn)
+                }
             }
             let trimmedAdminUser = adminUser.trimmingCharacters(in: .whitespacesAndNewlines)
             let trimmedAdminPassword = adminPassword.trimmingCharacters(in: .whitespacesAndNewlines)

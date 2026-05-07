@@ -327,7 +327,11 @@ func bootAutostartGatewaysIfNeeded() {
     for user in managedGatewayUsers() {
         guard userGatewayAutostartEnabled(username: user.username) else { continue }
         guard GatewayIntentionalStopStore.activeRecord(username: user.username) == nil else { continue }
-        try? GatewayManager.startGateway(username: user.username, uid: user.uid)
+        do {
+            try GatewayManager.startGateway(username: user.username, uid: user.uid)
+        } catch {
+            helperLog("autostart gateway failed for @\(user.username): \(error.localizedDescription)", level: .warn)
+        }
     }
 }
 
