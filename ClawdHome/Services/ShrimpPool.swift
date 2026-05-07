@@ -26,6 +26,8 @@ final class ShrimpPool {
     private(set) var netRateHistory: [(inBps: Double, outBps: Double)] = []
     /// 新创建用户的一次性”强制进入初始化向导”标记（按用户名小写保存）
     private var forceOnboardingUsernames: Set<String> = []
+    /// 团队领养入口暂存的 TeamDNA（一次性消费），用于在 v2 初始化向导中预填团队配置
+    private var pendingInitTeams: [String: TeamDNA] = [:]
     /// 虾塘点击 agent 卡片时临时存储待选 agentId，详情页打开后消费并清除
     var pendingAgentSelection: [String: String] = [:]
 
@@ -171,6 +173,19 @@ final class ShrimpPool {
         guard forceOnboardingUsernames.contains(key) else { return false }
         forceOnboardingUsernames.remove(key)
         return true
+    }
+
+    /// 暂存团队领养草稿，供 user-init-wizard（v2）按用户名读取一次。
+    func stageInitTeam(_ team: TeamDNA, for username: String) {
+        pendingInitTeams[username.lowercased()] = team
+    }
+
+    /// 消费一次性团队领养草稿；读取后立即移除，避免重复注入。
+    func consumeInitTeam(for username: String) -> TeamDNA? {
+        let key = username.lowercased()
+        guard let team = pendingInitTeams[key] else { return nil }
+        pendingInitTeams.removeValue(forKey: key)
+        return team
     }
 
     /// 控制仪表盘可见状态：

@@ -1,5 +1,7 @@
 // ClawdHome/Views/UserInitWizardView.swift
 // 生存空间初始化向导：基础环境初始化 → 模型配置 → 频道配置 → 完成
+// ⚠️ DEPRECATED (v2): 入口已切换到 ShrimpInitWizardV2，本文件保留在 git 历史中，不删除。
+// 新功能请到 ClawdHome/Views/WizardV2/ 目录下修改。
 
 import SwiftUI
 
@@ -36,6 +38,12 @@ struct UserInitWizardView: View {
     @State private var roleIdentity = ""
     @State private var roleUser = ""
     @State private var isSavingRole = false
+    // Step 2 团队模式：逐一激活 agent
+    @State private var teamAgentsDNA: [AgentDNA] = []          // 从 pending 文件读取
+    @State private var teamAgentStatuses: [String: TeamAgentActivationStatus] = [:]  // id → status
+    @State private var teamAgentActivationOrder: [String] = [] // 保持顺序
+    @State private var isActivatingTeamAgents = false
+    @State private var teamActivationDone = false
 
     // Step 3: 模型配置
     @State private var selectedWizardProvider: WizardProvider = .kimiCoding
@@ -53,9 +61,9 @@ struct UserInitWizardView: View {
     @State private var customModelFetchError: String? = nil
     @State private var isShowingApiKey = false
     @State private var minimaxApiKey = ""  // 保留用于持久化反序列化兼容
-    @State private var selectedMinimaxModel: MinimaxModel = .m27
-    @State private var selectedQiniuModel: QiniuModel = .deepseekV32
-    @State private var selectedZAIModel: ZAIModel = .glm5
+    @State private var selectedMinimaxModelId: String = "minimax/MiniMax-M2.7"
+    @State private var selectedQiniuModelId: String = "qiniu/deepseek-v3.2-251201"
+    @State private var selectedZAIModelId: String = "zai/glm-5"
     @State private var isApplyingModel = false
     @State private var modelConfigError = ""
     @State private var modelValidationState: ModelValidationState = .idle
@@ -98,6 +106,10 @@ struct UserInitWizardView: View {
     @State private var finishAutoStartTriggered = false
     @State private var activationProgress: Double = 0.08
     @State private var activationShrimpLifted = false
+    // 后台提前启动 gateway（basicEnvironment 完成后即触发）
+    @State private var backgroundGatewayStartTask: Task<Void, Never>? = nil
+    @State private var backgroundGatewayStarted = false   // 后台启动成功完成
+    @State private var backgroundGatewayError: String? = nil
     @State private var waitingSceneLifted = false
     @State private var waitingToolRaised = false
     @State private var waitingGlowActive = false
@@ -121,7 +133,7 @@ struct UserInitWizardView: View {
         L10n.f(
             "wizard.title",
             fallback: "初始化 · %@",
-            formatManagedUserDisplayName(fullName: user.fullName, username: user.username)
+            "@\(user.username)"
         )
     }
 
@@ -176,9 +188,9 @@ struct UserInitWizardView: View {
             customModelAlias: customModelAlias,
             customBaseURL: customBaseURL,
             customCompatibility: customCompatibility,
-            selectedMinimaxModel: selectedMinimaxModel,
-            selectedQiniuModel: selectedQiniuModel,
-            selectedZAIModel: selectedZAIModel
+            selectedMinimaxModelId: selectedMinimaxModelId,
+            selectedQiniuModelId: selectedQiniuModelId,
+            selectedZAIModelId: selectedZAIModelId
         )
     }
 
@@ -194,9 +206,9 @@ struct UserInitWizardView: View {
         customModelAlias = draft.customModelAlias
         customBaseURL = draft.customBaseURL
         customCompatibility = draft.customCompatibility
-        selectedMinimaxModel = draft.selectedMinimaxModel
-        selectedQiniuModel = draft.selectedQiniuModel
-        selectedZAIModel = draft.selectedZAIModel
+        selectedMinimaxModelId = draft.selectedMinimaxModelId
+        selectedQiniuModelId = draft.selectedQiniuModelId
+        selectedZAIModelId = draft.selectedZAIModelId
     }
 
     private func storedSelection() -> ShrimpModelConfigSelection? {
@@ -237,9 +249,9 @@ struct UserInitWizardView: View {
         var customModelAlias: String
         var customBaseURL: String
         var customCompatibility: CustomCompatibility
-        var selectedMinimaxModel: MinimaxModel
-        var selectedQiniuModel: QiniuModel
-        var selectedZAIModel: ZAIModel
+        var selectedMinimaxModelId: String
+        var selectedQiniuModelId: String
+        var selectedZAIModelId: String
     }
 
     private var wizardSectionTitleFont: Font {
@@ -699,6 +711,20 @@ struct UserInitWizardView: View {
     }
 
     private var injectRolePanel: some View {
+        Group {
+            if !teamAgentsDNA.isEmpty {
+                teamActivationPanel
+            } else {
+                soloRolePanel
+            }
+        }
+        .task {
+            await loadInjectRoleData()
+        }
+    }
+
+    // MARK: 单人模式：原来的文件编辑表单
+    private var soloRolePanel: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.k("wizard.inject_role.title", fallback: "注入角色"))
@@ -741,11 +767,272 @@ struct UserInitWizardView: View {
                 .disabled(isSavingRole)
             }
         }
-        .task {
+    }
+
+    // MARK: 团队模式：逐一激活 agent 卡片
+    private var teamActivationPanel: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.k("wizard.inject_role.team_title", fallback: "团队集结"))
+                    .font(wizardSectionTitleFont)
+                Text(teamActivationSubtitle)
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+
+            // Agent 卡片列表
+            VStack(spacing: 10) {
+                ForEach(teamAgentActivationOrder, id: \.self) { agentId in
+                    if let dna = teamAgentsDNA.first(where: { ($0.suggestedAgentID ?? $0.id) == agentId }) {
+                        TeamAgentActivationCard(
+                            dna: dna,
+                            status: teamAgentStatuses[agentId] ?? .waiting
+                        )
+                    }
+                }
+            }
+
+            // 底部操作区
+            if teamActivationDone {
+                HStack(spacing: 10) {
+                    // 有失败项时显示重试按钮
+                    if teamHasFailures {
+                        Button {
+                            Task { await retryFailedTeamAgents() }
+                        } label: {
+                            Label("重试失败项", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isActivatingTeamAgents)
+                    }
+                    Button(L10n.k("wizard.inject_role.team_continue", fallback: "继续配置模型")) {
+                        Task { await saveRoleAndContinue() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isActivatingTeamAgents)
+                }
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            } else if !isActivatingTeamAgents {
+                // 等待 gateway 就绪时显示等待状态
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(L10n.k("wizard.inject_role.team_waiting_gateway", fallback: "等待 Gateway 就绪…"))
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: teamActivationDone)
+    }
+
+    private var teamHasFailures: Bool {
+        teamAgentStatuses.values.contains {
+            if case .failed = $0 { return true }
+            return false
+        }
+    }
+
+    private var teamActivationSubtitle: String {
+        if isActivatingTeamAgents {
+            return L10n.k("wizard.inject_role.team_activating", fallback: "正在逐一唤醒团队成员，请稍候…")
+        }
+        if !teamActivationDone {
+            return L10n.k("wizard.inject_role.team_waiting", fallback: "即将开始注入成员身份…")
+        }
+        let failCount = teamAgentStatuses.values.filter {
+            if case .failed = $0 { return true }; return false
+        }.count
+        let doneCount = teamAgentStatuses.values.filter { $0 == .done }.count
+        if failCount == 0 {
+            return L10n.k("wizard.inject_role.team_done", fallback: "全员就位，团队已准备就绪。")
+        } else if doneCount == 0 {
+            return "全部 \(failCount) 名成员注入失败，请重试或跳过。"
+        } else {
+            return "\(doneCount) 名成员就位，\(failCount) 名失败，可重试或直接继续。"
+        }
+    }
+
+    private func loadInjectRoleData() async {
+        // 先尝试读取 pending_team_agents.json，判断是否团队模式
+        let pendingPath = ".openclaw/workspace/pending_team_agents.json"
+        if let data = try? await helperClient.readFile(username: user.username, relativePath: pendingPath),
+           let members = try? JSONDecoder().decode([AgentDNA].self, from: data),
+           !members.isEmpty {
+            // 团队模式：初始化激活状态
+            teamAgentsDNA = members
+            teamAgentActivationOrder = members.map { $0.suggestedAgentID ?? $0.id }
+            var statuses: [String: TeamAgentActivationStatus] = [:]
+            for dna in members { statuses[dna.suggestedAgentID ?? dna.id] = .waiting }
+            teamAgentStatuses = statuses
+            // 等待后台 gateway 就绪后开始激活
+            await waitForGatewayThenActivate()
+        } else {
+            // 单人模式：加载角色文件
             if roleSoul.isEmpty && roleIdentity.isEmpty && roleUser.isEmpty {
                 await loadRoleFilesIfExist()
             }
         }
+    }
+
+    /// 轮询等待后台 gateway 就绪，然后逐一激活 agent
+    private func waitForGatewayThenActivate() async {
+        // RPC 依赖 WebSocket 连接（connectedUsernames），而不仅仅是进程启动
+        let isRPCReady = { [self] in
+            gatewayHub.connectedUsernames.contains(user.username)
+        }
+
+        // 已经连上了，直接激活
+        if isRPCReady() {
+            await activateTeamAgents()
+            return
+        }
+
+        // 二次进入且 gateway 未运行：在后台启动它
+        if backgroundGatewayStartTask == nil || backgroundGatewayStartTask?.isCancelled == true {
+            appendLog("[team] 二次进入，主动触发 Gateway 启动\n")
+            backgroundGatewayStarted = false
+            backgroundGatewayError = nil
+            let capturedUsername = user.username
+            backgroundGatewayStartTask = Task {
+                gatewayHub.markPendingStart(username: capturedUsername)
+                do {
+                    let result = try await helperClient.startGatewayDiagnoseNodeToolchain(username: capturedUsername)
+                    if case .needsNodeRepair(let reason) = result {
+                        gatewayHub.markPendingStopped(username: capturedUsername)
+                        backgroundGatewayError = reason
+                        return
+                    }
+                    backgroundGatewayStarted = true
+                } catch {
+                    gatewayHub.markPendingStopped(username: capturedUsername)
+                    backgroundGatewayError = error.localizedDescription
+                }
+            }
+        }
+
+        // 轮询等待 WebSocket 连接就绪（最多 90s）
+        // 进程启动后，UserDetailView 的 probe 循环会调用 connect()；
+        // 但向导中没有 UserDetailView，需要在这里主动触发连接
+        for attempt in 0..<180 {
+            if isRPCReady() {
+                await activateTeamAgents()
+                return
+            }
+            if let err = backgroundGatewayError {
+                appendLog("[team] Gateway 启动失败，跳过自动激活，将在 finish 步骤重试：\(err)\n")
+                return
+            }
+            // 进程已启动但 WebSocket 还未连上：主动拉取 URL 并尝试连接
+            if backgroundGatewayStarted && attempt % 4 == 0 {
+                let url = await helperClient.getGatewayURL(username: user.username)
+                if !url.isEmpty {
+                    await gatewayHub.connect(username: user.username, gatewayURL: url)
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        appendLog("[team] 等待 Gateway WebSocket 连接超时，跳过自动激活\n")
+    }
+
+    /// 逐一通过 RPC 激活团队 agent，实时更新卡片状态
+    private func activateTeamAgents() async {
+        guard !isActivatingTeamAgents, !teamActivationDone else { return }
+        isActivatingTeamAgents = true
+
+        // 先将 pending 文件标记为已消费，防止 UserDetailView 重复导入
+        let pendingPath = ".openclaw/workspace/pending_team_agents.json"
+        try? await helperClient.writeFile(username: user.username, relativePath: pendingPath, data: Data("[]".utf8))
+
+        for dna in teamAgentsDNA {
+            let agentId = dna.suggestedAgentID ?? dna.id
+            teamAgentStatuses[agentId] = .activating
+
+            do {
+                // 创建 agent
+                var profile = try await gatewayHub.agentsCreate(
+                    username: user.username,
+                    name: agentId,
+                    workspace: "~/.openclaw/workspace-\(agentId)",
+                    emoji: dna.emoji.isEmpty ? nil : dna.emoji
+                )
+                // 设置真实名字
+                if !dna.name.isEmpty && dna.name != agentId {
+                    try? await gatewayHub.agentsUpdate(username: user.username, agentId: profile.id, name: dna.name)
+                    profile.name = dna.name
+                }
+                // 写入身份文件
+                if let soul = dna.fileSoul, !soul.isEmpty {
+                    try? await gatewayHub.agentsFileSet(username: user.username, agentId: profile.id, fileName: "SOUL.md", content: soul)
+                }
+                if let identity = dna.fileIdentity, !identity.isEmpty {
+                    try? await gatewayHub.agentsFileSet(username: user.username, agentId: profile.id, fileName: "IDENTITY.md", content: identity)
+                }
+                if let userFile = dna.fileUser, !userFile.isEmpty {
+                    try? await gatewayHub.agentsFileSet(username: user.username, agentId: profile.id, fileName: "USER.md", content: userFile)
+                }
+
+                teamAgentStatuses[agentId] = .done
+                appendLog("[team] ✅ \(dna.name) (\(agentId)) 已就位\n")
+
+                // 激活动画停顿感
+                try? await Task.sleep(for: .milliseconds(350))
+            } catch {
+                teamAgentStatuses[agentId] = .failed(error.localizedDescription)
+                appendLog("[team] ❌ \(dna.name) (\(agentId)) 失败：\(error.localizedDescription)\n")
+            }
+        }
+
+        isActivatingTeamAgents = false
+        teamActivationDone = true
+        appendLog("[team] 全员就位完成\n")
+    }
+
+    /// 重试失败的 agent（不重复创建已成功的）
+    private func retryFailedTeamAgents() async {
+        guard !isActivatingTeamAgents else { return }
+        // 把失败的重置为 waiting
+        for id in teamAgentActivationOrder {
+            if case .failed = teamAgentStatuses[id] ?? .waiting {
+                teamAgentStatuses[id] = .waiting
+            }
+        }
+        teamActivationDone = false
+        isActivatingTeamAgents = true
+
+        for dna in teamAgentsDNA {
+            let agentId = dna.suggestedAgentID ?? dna.id
+            // 跳过已成功的
+            guard teamAgentStatuses[agentId] == .waiting else { continue }
+            teamAgentStatuses[agentId] = .activating
+            do {
+                var profile = try await gatewayHub.agentsCreate(
+                    username: user.username,
+                    name: agentId,
+                    workspace: "~/.openclaw/workspace-\(agentId)",
+                    emoji: dna.emoji.isEmpty ? nil : dna.emoji
+                )
+                if !dna.name.isEmpty && dna.name != agentId {
+                    try? await gatewayHub.agentsUpdate(username: user.username, agentId: profile.id, name: dna.name)
+                    profile.name = dna.name
+                }
+                if let soul = dna.fileSoul, !soul.isEmpty {
+                    try? await gatewayHub.agentsFileSet(username: user.username, agentId: profile.id, fileName: "SOUL.md", content: soul)
+                }
+                if let identity = dna.fileIdentity, !identity.isEmpty {
+                    try? await gatewayHub.agentsFileSet(username: user.username, agentId: profile.id, fileName: "IDENTITY.md", content: identity)
+                }
+                if let userFile = dna.fileUser, !userFile.isEmpty {
+                    try? await gatewayHub.agentsFileSet(username: user.username, agentId: profile.id, fileName: "USER.md", content: userFile)
+                }
+                teamAgentStatuses[agentId] = .done
+                appendLog("[team] ✅ 重试成功：\(dna.name) (\(agentId))\n")
+                try? await Task.sleep(for: .milliseconds(350))
+            } catch {
+                teamAgentStatuses[agentId] = .failed(error.localizedDescription)
+                appendLog("[team] ❌ 重试仍失败：\(dna.name)：\(error.localizedDescription)\n")
+            }
+        }
+
+        isActivatingTeamAgents = false
+        teamActivationDone = true
     }
 
     private func loadRoleFilesIfExist() async {
@@ -765,92 +1052,22 @@ struct UserInitWizardView: View {
     }
 
     private var modelConfigPanel: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.k("views.user_init_wizard_view.select_ai_provider", fallback: "选择 AI Provider"))
                     .font(wizardSectionTitleFont)
-                Text(L10n.k("wizard.model_config.validation.subtitle", fallback: "选择模型提供商并填写认证信息。验证成功后才会进入下一步。"))
+                Text(L10n.k("wizard.model_config.validation.subtitle_simple", fallback: "选择模型提供商、填写 API Key、保存并应用后自动进入下一步。"))
                     .font(.callout).foregroundStyle(.secondary)
             }
 
-            Picker("配置来源", selection: $templateConfigMode) {
-                ForEach(TemplateConfigMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            HStack(alignment: .bottom, spacing: 12) {
-                if templateConfigMode == .new {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L10n.k("wizard.provider.label", fallback: "模型提供商"))
-                            .font(.subheadline).fontWeight(.medium)
-                        Picker(L10n.k("wizard.provider.label", fallback: "模型提供商"), selection: $selectedWizardProvider) {
-                            ForEach(WizardProvider.allCases) { provider in
-                                Text(provider.displayName).tag(provider)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .wizardInputSurface()
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-
-                if templateConfigMode == .new {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L10n.k("wizard.auth_method.label", fallback: "认证方式"))
-                            .font(.subheadline).fontWeight(.medium)
-                        Picker(L10n.k("wizard.auth_method.label", fallback: "认证方式"), selection: $selectedWizardAuthMethod) {
-                            ForEach(availableWizardAuthMethods) { method in
-                                Text(method.title).tag(method)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .wizardInputSurface()
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-
-                if templateConfigMode == .new {
-                    providerMoreModelsRow()
-                }
-            }
-            .padding(.bottom, 2)
-
-            if templateConfigMode == .existing {
-                globalTemplateSection
-            } else {
-                Divider()
-                providerDetailForm
-                    .padding(.top, 2)
+            ProviderModelConfigCore(user: user) { _ in
+                Task { await markModelStepDone() }
             }
 
-            modelValidationStatusView
-
-            modelConfigTestSection
-
-            if !modelConfigError.isEmpty, !isValidationFailureState {
-                Label(modelConfigError, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(.red)
+            Button(L10n.k("wizard.model_config.skip", fallback: "稍后配置")) {
+                Task { await skipModelStep() }
             }
-
-            HStack(spacing: 12) {
-                Button(isApplyingModel ? L10n.k("wizard.model_config.validating", fallback: "验证中…") : L10n.k("wizard.model_config.validate_continue", fallback: "验证并继续")) {
-                    Task { await applyModelConfig() }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(modelApplyDisabled)
-                Button(L10n.k("wizard.model_config.skip", fallback: "稍后配置")) {
-                    Task { await skipModelStep() }
-                }
-                .buttonStyle(.bordered)
-            }
+            .buttonStyle(.bordered)
         }
     }
 
@@ -1000,19 +1217,19 @@ struct UserInitWizardView: View {
     }
 
     private func applyModelSelectionFromPrimary(_ primary: String) {
-        if let model = MinimaxModel(rawValue: primary) {
+        if primary.hasPrefix("minimax/"), builtInModel(for: primary) != nil {
             setWizardProviderProgrammatically(.minimax)
-            selectedMinimaxModel = model
+            selectedMinimaxModelId = primary
             return
         }
-        if let model = QiniuModel(rawValue: primary) {
+        if primary.hasPrefix("qiniu/"), builtInModel(for: primary) != nil {
             setWizardProviderProgrammatically(.qiniu)
-            selectedQiniuModel = model
+            selectedQiniuModelId = primary
             return
         }
-        if let model = ZAIModel(rawValue: primary) {
+        if primary.hasPrefix("zai/"), builtInModel(for: primary) != nil {
             setWizardProviderProgrammatically(.zai)
-            selectedZAIModel = model
+            selectedZAIModelId = primary
             return
         }
         if primary.hasPrefix("kimi-coding/") {
@@ -1270,57 +1487,33 @@ struct UserInitWizardView: View {
             }
 
             if provider == .minimax {
-                HStack(spacing: 10) {
-                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型"))
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedMinimaxModel) {
-                        ForEach(MinimaxModel.allCases, id: \.self) { model in
-                            Text(model.providerName).tag(model)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .fixedSize()
-                    Text(selectedMinimaxModel.rawValue)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
+                builtInModelPicker(providerId: "minimax", selection: $selectedMinimaxModelId)
             } else if provider == .qiniu {
-                HStack(spacing: 10) {
-                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型"))
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedQiniuModel) {
-                        ForEach(QiniuModel.allCases, id: \.self) { model in
-                            Text(model.alias).tag(model)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .fixedSize()
-                    Text(selectedQiniuModel.rawValue)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
+                builtInModelPicker(providerId: "qiniu", selection: $selectedQiniuModelId)
             } else if provider == .zai {
-                HStack(spacing: 10) {
-                    Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型"))
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: $selectedZAIModel) {
-                        ForEach(ZAIModel.allCases, id: \.self) { model in
-                            Text(model.alias).tag(model)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .fixedSize()
-                    Text(selectedZAIModel.rawValue)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                builtInModelPicker(providerId: "zai", selection: $selectedZAIModelId)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func builtInModelPicker(providerId: String, selection: Binding<String>) -> some View {
+        let models = builtInModels(for: providerId)
+        HStack(spacing: 10) {
+            Text(L10n.k("views.user_init_wizard_view.models", fallback: "模型"))
+                .font(.subheadline)
+                .fontWeight(.medium)
+            Picker(L10n.k("views.user_init_wizard_view.models", fallback: "模型"), selection: selection) {
+                ForEach(models) { model in
+                    Text(model.label).tag(model.id)
                 }
             }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+            Text(selection.wrappedValue)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -1351,11 +1544,11 @@ struct UserInitWizardView: View {
         case .kimiCoding:
             return "kimi-coding/k2p5"
         case .minimax:
-            return selectedMinimaxModel.rawValue
+            return selectedMinimaxModelId
         case .qiniu:
-            return selectedQiniuModel.rawValue
+            return selectedQiniuModelId
         case .zai:
-            return selectedZAIModel.rawValue
+            return selectedZAIModelId
         case .custom:
             guard !customModelIdTrimmed.isEmpty else { return "" }
             return "\(effectiveCustomProviderId)/\(customModelIdTrimmed)"
@@ -1826,9 +2019,9 @@ struct UserInitWizardView: View {
         isFetchingCustomModels = false
         customModelFetchMessage = nil
         customModelFetchError = nil
-        selectedMinimaxModel = .m27
-        selectedQiniuModel = .deepseekV32
-        selectedZAIModel = .glm5
+        selectedMinimaxModelId = "minimax/MiniMax-M2.7"
+        selectedQiniuModelId = "qiniu/deepseek-v3.2-251201"
+        selectedZAIModelId = "zai/glm-5"
         roleSoul = ""
         roleIdentity = ""
         roleUser = ""
@@ -1856,6 +2049,11 @@ struct UserInitWizardView: View {
         waitingToolRaised = false
         waitingGlowActive = false
         baseEnvProgressPhase = .xcodeCheck
+        // 取消后台预热任务
+        backgroundGatewayStartTask?.cancel()
+        backgroundGatewayStartTask = nil
+        backgroundGatewayStarted = false
+        backgroundGatewayError = nil
         user.initStep = nil
     }
 
@@ -1966,6 +2164,31 @@ struct UserInitWizardView: View {
         statuses[InitStep.injectRole.rawValue] = .running
         user.initStep = InitStep.injectRole.title
         await persistState()
+
+        // 基础环境就绪后立即在后台预热 Gateway，减少 finish 步骤等待时间
+        backgroundGatewayStartTask?.cancel()
+        backgroundGatewayStarted = false
+        backgroundGatewayError = nil
+        let capturedUsername = user.username
+        backgroundGatewayStartTask = Task {
+            appendLog("[bg] \(L10n.k("views.wizard.log.bg_gateway_prefetch", fallback: "Background: pre-starting Gateway..."))\n")
+            gatewayHub.markPendingStart(username: capturedUsername)
+            do {
+                let result = try await helperClient.startGatewayDiagnoseNodeToolchain(username: capturedUsername)
+                if case .needsNodeRepair(let reason) = result {
+                    gatewayHub.markPendingStopped(username: capturedUsername)
+                    backgroundGatewayError = reason
+                    appendLog("[bg] \(L10n.k("views.wizard.log.bg_gateway_node_repair_needed", fallback: "Background: Node.js repair needed, will repair during finish step."))\n")
+                    return
+                }
+                appendLog("[bg] \(L10n.k("views.wizard.log.bg_gateway_started", fallback: "Background: Gateway pre-started successfully."))\n")
+                backgroundGatewayStarted = true
+            } catch {
+                gatewayHub.markPendingStopped(username: capturedUsername)
+                backgroundGatewayError = error.localizedDescription
+                appendLog("[bg] \(L10n.f("views.wizard.log.bg_gateway_failed", fallback: "Background: Gateway pre-start failed: %@", error.localizedDescription))\n")
+            }
+        }
     }
 
     /// 默认 TOOLS.md 内容：告知虾共享文件夹的存在和使用规范
@@ -1976,6 +2199,16 @@ struct UserInitWizardView: View {
     private func saveRoleAndContinue() async {
         isSavingRole = true
         defer { isSavingRole = false }
+
+        // 团队模式：激活已完成，直接推进步骤
+        if !teamAgentsDNA.isEmpty {
+            statuses[InitStep.injectRole.rawValue] = .done
+            currentStep = .configureModel
+            statuses[InitStep.configureModel.rawValue] = .running
+            user.initStep = InitStep.configureModel.title
+            await persistState()
+            return
+        }
 
         do {
             let workspaceDir = ".openclaw/workspace"
@@ -2510,13 +2743,13 @@ struct UserInitWizardView: View {
 
     private func applyMinimaxConfig(apiKey: String) async throws {
         let config = await helperClient.getConfigJSON(username: user.username)
-        let providerModels = MinimaxModel.allCases.map(\.providerModelConfig)
+        let providerModels = builtInModels(for: "minimax").map(\.providerModelConfig)
         var modelAliasMap = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:]
-        var selectedAlias = (modelAliasMap[selectedMinimaxModel.rawValue] as? [String: Any]) ?? [:]
+        var selectedAlias = (modelAliasMap[selectedMinimaxModelId] as? [String: Any]) ?? [:]
         selectedAlias["alias"] = selectedAlias["alias"] ?? "Minimax"
-        modelAliasMap[selectedMinimaxModel.rawValue] = selectedAlias
+        modelAliasMap[selectedMinimaxModelId] = selectedAlias
         let existingModel = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:]
-        var normalizedModelConfig: [String: Any] = ["primary": selectedMinimaxModel.rawValue]
+        var normalizedModelConfig: [String: Any] = ["primary": selectedMinimaxModelId]
         if let arr = existingModel["fallbacks"] as? [String], !arr.isEmpty {
             normalizedModelConfig["fallbacks"] = arr
         } else if let single = existingModel["fallbacks"] as? String, !single.isEmpty {
@@ -2546,15 +2779,16 @@ struct UserInitWizardView: View {
 
     private func applyQiniuConfig(apiKey: String) async throws {
         let config = await helperClient.getConfigJSON(username: user.username)
-        let providerModels = QiniuModel.allCases.map(\.providerModelConfig)
+        let qiniuModels = builtInModels(for: "qiniu")
+        let providerModels = qiniuModels.map(\.providerModelConfig)
         var modelAliasMap = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:]
-        for model in QiniuModel.allCases {
-            var aliasConfig = (modelAliasMap[model.rawValue] as? [String: Any]) ?? [:]
-            aliasConfig["alias"] = model.alias
-            modelAliasMap[model.rawValue] = aliasConfig
+        for model in qiniuModels {
+            var aliasConfig = (modelAliasMap[model.id] as? [String: Any]) ?? [:]
+            aliasConfig["alias"] = model.label
+            modelAliasMap[model.id] = aliasConfig
         }
         let existingModel = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:]
-        var normalizedModelConfig: [String: Any] = ["primary": selectedQiniuModel.rawValue]
+        var normalizedModelConfig: [String: Any] = ["primary": selectedQiniuModelId]
         if let arr = existingModel["fallbacks"] as? [String], !arr.isEmpty {
             normalizedModelConfig["fallbacks"] = arr
         } else if let single = existingModel["fallbacks"] as? String, !single.isEmpty {
@@ -2643,15 +2877,16 @@ struct UserInitWizardView: View {
 
     private func applyZAIConfig(apiKey: String) async throws {
         let config = await helperClient.getConfigJSON(username: user.username)
-        let providerModels = ZAIModel.allCases.map(\.providerModelConfig)
+        let zaiModels = builtInModels(for: "zai")
+        let providerModels = zaiModels.map(\.providerModelConfig)
         var modelAliasMap = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:]
-        for model in ZAIModel.allCases {
-            var aliasConfig = (modelAliasMap[model.rawValue] as? [String: Any]) ?? [:]
-            aliasConfig["alias"] = model.alias
-            modelAliasMap[model.rawValue] = aliasConfig
+        for model in zaiModels {
+            var aliasConfig = (modelAliasMap[model.id] as? [String: Any]) ?? [:]
+            aliasConfig["alias"] = model.label
+            modelAliasMap[model.id] = aliasConfig
         }
         let existingModel = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:]
-        var normalizedModelConfig: [String: Any] = ["primary": selectedZAIModel.rawValue]
+        var normalizedModelConfig: [String: Any] = ["primary": selectedZAIModelId]
         if let arr = existingModel["fallbacks"] as? [String], !arr.isEmpty {
             normalizedModelConfig["fallbacks"] = arr
         } else if let single = existingModel["fallbacks"] as? String, !single.isEmpty {
@@ -2776,8 +3011,66 @@ struct UserInitWizardView: View {
         defer { isStartingOpenclaw = false }
         finishProgressMessages = []
         activationProgress = 0.12
-        appendFinishProgress(L10n.k("views.user_init_wizard_view.done_overview", fallback: "正在启动 OpenClaw Gateway…"))
 
+        // 情况一：后台预启动已成功，无需再次调用 helper
+        if backgroundGatewayStarted {
+            appendFinishProgress(L10n.k("views.wizard.log.gateway_prefetch_ready", fallback: "Gateway 已在后台就绪，正在完成向导…"))
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.k("views.wizard.log.gateway_prefetch_ready", fallback: "Gateway 已在后台就绪，正在完成向导…"))\n")
+            user.isRunning = true
+            user.pid = nil
+            user.startedAt = nil
+            activationProgress = 1
+            await syncGatewayStateAfterStart()
+            try? await Task.sleep(for: .milliseconds(280))
+            await completeWizardOnly()
+            openWindow(id: "claw-detail", value: user.username)
+            try? await Task.sleep(for: .milliseconds(360))
+            dismiss()
+            return
+        }
+
+        // 情况二：后台预启动还在进行中，等待其完成（最多 60s）
+        if let bgTask = backgroundGatewayStartTask, !bgTask.isCancelled {
+            appendFinishProgress(L10n.k("views.wizard.log.gateway_waiting_prefetch", fallback: "等待 Gateway 后台启动完成…"))
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.k("views.wizard.log.gateway_waiting_prefetch", fallback: "等待 Gateway 后台启动完成…"))\n")
+            // 轮询 backgroundGatewayStarted / backgroundGatewayError，最多等 60s
+            for _ in 0..<120 {
+                try? await Task.sleep(for: .milliseconds(500))
+                if backgroundGatewayStarted {
+                    activationProgress = 1
+                    user.isRunning = true
+                    user.pid = nil
+                    user.startedAt = nil
+                    appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.k("views.wizard.log.gateway_started", fallback: "Gateway started successfully."))\n")
+                    await syncGatewayStateAfterStart()
+                    try? await Task.sleep(for: .milliseconds(280))
+                    await completeWizardOnly()
+                    openWindow(id: "claw-detail", value: user.username)
+                    try? await Task.sleep(for: .milliseconds(360))
+                    dismiss()
+                    return
+                }
+                if let err = backgroundGatewayError {
+                    // 后台启动失败：检查是否需要 Node 修复
+                    if err.contains("node") || err.contains("Node") || err.contains("repair") {
+                        gatewayNodeRepairReason = err
+                        gatewayNodeRepairCompletedSteps = 0
+                        gatewayNodeRepairCurrentStep = ""
+                        gatewayNodeRepairError = nil
+                        gatewayNodeRepairReadyToRetryStart = false
+                        showGatewayNodeRepairSheet = true
+                        statuses[InitStep.finish.rawValue] = .pending
+                        return
+                    }
+                    // 其他错误：降级到重新启动
+                    appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.f("views.wizard.log.bg_gateway_failed_retry", fallback: "Background start failed (%@), retrying...", err))\n")
+                    break
+                }
+            }
+        }
+
+        // 情况三：后台未启动或已失败，直接在当前步骤正常启动
+        appendFinishProgress(L10n.k("views.user_init_wizard_view.done_overview", fallback: "正在启动 OpenClaw Gateway…"))
         gatewayHub.markPendingStart(username: user.username)
         appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] \(L10n.k("views.wizard.log.starting_gateway", fallback: "Starting Gateway..."))\n")
 
@@ -3191,15 +3484,15 @@ struct UserInitWizardView: View {
 
         // 仅在首次水合阶段回填模型草稿，避免轮询状态覆盖用户在界面上的实时选择。
         if isHydratingState {
-            if let model = MinimaxModel(rawValue: saved.modelName) {
+            if saved.modelName.hasPrefix("minimax/"), builtInModel(for: saved.modelName) != nil {
                 selectedWizardProvider = .minimax
-                selectedMinimaxModel = model
-            } else if let model = QiniuModel(rawValue: saved.modelName) {
+                selectedMinimaxModelId = saved.modelName
+            } else if saved.modelName.hasPrefix("qiniu/"), builtInModel(for: saved.modelName) != nil {
                 selectedWizardProvider = .qiniu
-                selectedQiniuModel = model
-            } else if let model = ZAIModel(rawValue: saved.modelName) {
+                selectedQiniuModelId = saved.modelName
+            } else if saved.modelName.hasPrefix("zai/"), builtInModel(for: saved.modelName) != nil {
                 selectedWizardProvider = .zai
-                selectedZAIModel = model
+                selectedZAIModelId = saved.modelName
             } else if saved.modelName.hasPrefix("kimi-coding/") {
                 selectedWizardProvider = .kimiCoding
             } else if saved.modelName.contains("/") {
@@ -3420,4 +3713,116 @@ struct UserInitWizardView: View {
         formatter.dateFormat = "HH:mm:ss"
         return formatter
     }()
+}
+
+// MARK: - 团队激活卡片
+
+private struct TeamAgentActivationCard: View {
+    let dna: AgentDNA
+    let status: TeamAgentActivationStatus
+
+    var body: some View {
+        HStack(spacing: 14) {
+            // 左侧：emoji 头像
+            ZStack {
+                Circle()
+                    .fill(cardTint.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Text(dna.emoji.isEmpty ? "🤖" : dna.emoji)
+                    .font(.title2)
+            }
+
+            // 中间：名字 + 角色
+            VStack(alignment: .leading, spacing: 2) {
+                Text(dna.name)
+                    .font(.subheadline).fontWeight(.semibold)
+                    .foregroundStyle(status == .waiting ? .secondary : .primary)
+                Text(dna.category.isEmpty ? dna.id : dna.category)
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            // 右侧：状态指示
+            statusBadge
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(cardBorderColor, lineWidth: 1)
+        )
+        .animation(.easeInOut(duration: 0.25), value: status)
+    }
+
+    @ViewBuilder
+    private var statusBadge: some View {
+        switch status {
+        case .waiting:
+            Text("等待")
+                .font(.caption2).fontWeight(.medium)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(.quaternary, in: Capsule())
+        case .activating:
+            HStack(spacing: 5) {
+                ProgressView().controlSize(.mini)
+                Text("注入中")
+                    .font(.caption2).fontWeight(.medium)
+                    .foregroundStyle(.blue)
+            }
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Color.blue.opacity(0.08), in: Capsule())
+        case .done:
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption).foregroundStyle(.green)
+                Text("已就位")
+                    .font(.caption2).fontWeight(.medium)
+                    .foregroundStyle(.green)
+            }
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Color.green.opacity(0.10), in: Capsule())
+        case .failed(let msg):
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.caption).foregroundStyle(.red)
+                Text("失败")
+                    .font(.caption2).fontWeight(.medium)
+                    .foregroundStyle(.red)
+            }
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Color.red.opacity(0.08), in: Capsule())
+            .help(msg)
+        }
+    }
+
+    private var cardTint: Color {
+        switch status {
+        case .waiting:    return .secondary
+        case .activating: return .blue
+        case .done:       return .green
+        case .failed:     return .red
+        }
+    }
+
+    private var cardBackground: some ShapeStyle {
+        switch status {
+        case .done:       return AnyShapeStyle(Color.green.opacity(0.05))
+        case .activating: return AnyShapeStyle(Color.blue.opacity(0.05))
+        case .failed:     return AnyShapeStyle(Color.red.opacity(0.04))
+        default:          return AnyShapeStyle(Color(.controlBackgroundColor))
+        }
+    }
+
+    private var cardBorderColor: Color {
+        switch status {
+        case .done:       return .green.opacity(0.25)
+        case .activating: return .blue.opacity(0.30)
+        case .failed:     return .red.opacity(0.25)
+        default:          return Color.secondary.opacity(0.15)
+        }
+    }
 }
