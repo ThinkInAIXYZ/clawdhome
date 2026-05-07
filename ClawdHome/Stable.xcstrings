@@ -9926,13 +9926,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Freeze level reference:"
+            "value": "Freeze"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "冻结级别参考："
+            "value": "冻结"
           }
         }
       }
@@ -16372,13 +16372,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Link Channel"
+            "value": "IM Binding"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "绑定频道"
+            "value": "IM 绑定"
           }
         }
       }
@@ -16559,13 +16559,30 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Initialization complete. Entering overview..."
+            "value": "Starting OpenClaw Gateway..."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "初始化已完成，正在进入概览页…"
+            "value": "正在启动 OpenClaw Gateway…"
+          }
+        }
+      }
+    },
+    "views.user_init_wizard_view.gateway_activation_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The first startup may take a little time. Keep this window open."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "首次启动可能需要一点时间，请保持窗口开启。"
           }
         }
       }
@@ -16865,13 +16882,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Initialization Complete"
+            "value": "Setup Complete"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "初始化完成"
+            "value": "配置完成"
           }
         }
       }
@@ -16984,13 +17001,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Base environment, model, and channel setup steps are complete."
+            "value": "Starting OpenClaw Gateway..."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "基础环境、模型、频道配置步骤已完成。"
+            "value": "正在启动 OpenClaw Gateway…"
           }
         }
       }
@@ -19418,13 +19435,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Channel Configuration"
+            "value": "IM Binding"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "频道配置"
+            "value": "IM 绑定"
           }
         }
       }
@@ -20793,13 +20810,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Role Definition"
+            "value": "Role"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "角色定义"
+            "value": "角色"
           }
         }
       }
@@ -22734,13 +22751,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Skip This Step"
+            "value": "Configure Later"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "跳过此步骤"
+            "value": "稍后配置"
           }
         }
       }
@@ -22901,6 +22918,907 @@
           "stringUnit": {
             "state": "translated",
             "value": "删除 %@ 行"
+          }
+        }
+      }
+    },
+    "auto.upgrade_confirm_sheet.wait_and_watch_warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Risk warning: do not upgrade blindly. Wait a few days and upgrade after community feedback is stable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "风险提示：不要盲目升级新版本，建议先观望几天，确认社区反馈稳定后再升级。"
+          }
+        }
+      }
+    },
+    "services.helper_client.gateway_start_timeout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway startup timed out. Check Helper logs and try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动 Gateway 超时，请检查 Helper 日志后重试"
+          }
+        }
+      }
+    },
+    "services.helper_client.gateway_status_timeout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timed out while reading Gateway status."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取 Gateway 状态超时"
+          }
+        }
+      }
+    },
+    "user.detail.auto.core_environment_openclaw": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Core environment (.openclaw)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "核心环境 (.openclaw)"
+          }
+        }
+      }
+    },
+    "user.detail.auto.gateway_status": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway status"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网关状态"
+          }
+        }
+      }
+    },
+    "user.detail.auto.open_openclaw_web_console": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open OpenClaw Web Console"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开 OpenClaw Web 控制台"
+          }
+        }
+      }
+    },
+    "user.detail.auto.openclaw_needs_start_before_console": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start this shrimp's Gateway and the Web console will appear here."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动该虾的 Gateway 后，这里会直接显示 Web 控制台。"
+          }
+        }
+      }
+    },
+    "user.detail.auto.stable_running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stable uptime"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "持续稳定运行"
+          }
+        }
+      }
+    },
+    "user.detail.auto.user_data_partition": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "User data partition capacity"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用户数据区容量"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.os_user_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get OS user password"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "获取 OS 用户密码"
+          }
+        }
+      }
+    },
+    "views.user_list_view.empty.cta": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to Role Market to adopt"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前往角色中心领养"
+          }
+        }
+      }
+    },
+    "views.user_list_view.empty.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Here you can raise and manage digital beings with different skills.\nAdopt your first shrimp and start your automation journey."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在这里，你可以养育并管理拥有不同技能的数字生命。\n立刻领养你的第一只虾，开启自动化之旅。"
+          }
+        }
+      }
+    },
+    "views.user_list_view.empty.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your pond is empty"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "池塘空空如也"
+          }
+        }
+      }
+    },
+    "wizard.auth_method.label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication method"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "认证方式"
+          }
+        }
+      }
+    },
+    "wizard.base_env.running.keep_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep this window open. It will move to the next step automatically when done."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保持窗口开启即可，完成后会自动进入下一步。"
+          }
+        }
+      }
+    },
+    "wizard.base_env.running.status.dependencies": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading dependencies…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载依赖…"
+          }
+        }
+      }
+    },
+    "wizard.base_env.running.status.runtime": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing runtime environment…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备运行环境…"
+          }
+        }
+      }
+    },
+    "wizard.base_env.running.status.system": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking system configuration…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在检查系统配置…"
+          }
+        }
+      }
+    },
+    "wizard.channel.more_im_bindings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More IM channel bindings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更多 IM 频道绑定"
+          }
+        }
+      }
+    },
+    "wizard.channel.more_im_bindings_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use the native openclaw configuration interface."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过 openclaw 原生配置界面进行操作。"
+          }
+        }
+      }
+    },
+    "wizard.channel.native_config.window_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Native IM channel configuration"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IM 频道原生配置"
+          }
+        }
+      }
+    },
+    "wizard.model_config.validate_continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validate and continue"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证并继续"
+          }
+        }
+      }
+    },
+    "wizard.model_config.validating": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validating…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证中…"
+          }
+        }
+      }
+    },
+    "wizard.model_config.validation.empty_key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter an API key before validation."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先输入 API Key，再执行验证。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.validation.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider validation failed. Check your configuration and try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider 验证失败，请检查配置后重试。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.validation.failed_generic": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validation failed: no response from provider."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证失败，未收到 Provider 返回信息。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.validation.idle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not validated yet. Click \"Validate and continue\" to run a real-time connectivity check."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未验证。点击“验证并继续”后会执行实时连通性检查。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.validation.running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validating provider configuration…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在验证 Provider 配置…"
+          }
+        }
+      }
+    },
+    "wizard.model_config.validation.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a model provider and fill in credentials. You can continue only after validation succeeds."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择模型提供商并填写认证信息。验证成功后才会进入下一步。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.validation.success_provider": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ validated successfully. Moving to the next step."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 验证成功，正在进入下一步。"
+          }
+        }
+      }
+    },
+    "wizard.provider.label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model provider"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型提供商"
+          }
+        }
+      }
+    },
+    "wizard.provider.more_models_openclaw_native": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More models (openclaw native configuration)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更多模型（openclaw原生配置）"
+          }
+        }
+      }
+    },
+    "settings.debug.section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debug"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "调试"
+          }
+        }
+      }
+    },
+    "settings.debug.force_empty_pool": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Force empty pond view"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "强制显示空虾塘"
+          }
+        }
+      }
+    },
+    "settings.debug.force_empty_pool_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only affects the pond display in this app for empty-state preview. It does not delete or modify any real shrimp data."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅影响当前 App 的虾塘展示，用于预览空状态，不会删除或修改任何真实虾数据。"
+          }
+        }
+      }
+    },
+    "settings.debug.preview_gateway_activation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview Gateway activation screen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览 Gateway 启动页"
+          }
+        }
+      }
+    },
+    "settings.debug.preview_gateway_activation_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open a separate preview window for the \"Starting OpenClaw Gateway…\" animation without triggering a real startup."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开独立预览窗口查看“正在启动 OpenClaw Gateway…”动画，不会触发真实启动。"
+          }
+        }
+      }
+    },
+    "settings.debug.gateway_preview_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway activation preview"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway 启动页预览"
+          }
+        }
+      }
+    },
+    "settings.debug.replay": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replay"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新播放"
+          }
+        }
+      }
+    },
+    "settings.debug.preview_warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DEBUG preview; this will not start a real Gateway."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DEBUG 预览，不会启动真实 Gateway"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.custom_api_compatibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API compatibility (default: OpenAI)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 兼容（默认 OpenAI）"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.custom_provider_id_optional": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider ID (optional, default: custom)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider ID（可选，默认 custom）"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.custom_model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        }
+      }
+    },
+    "views.user_detail_view.custom_model_id_placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter model ID (for example: gpt-4.1 / claude-3-7-sonnet)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入模型 ID（例如 gpt-4.1 / claude-3-7-sonnet）"
+          }
+        }
+      }
+    },
+    "wizard.custom.api_compatibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API compatibility (default: OpenAI)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 兼容（默认 OpenAI）"
+          }
+        }
+      }
+    },
+    "wizard.custom.model_id": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model ID"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型ID"
+          }
+        }
+      }
+    },
+    "wizard.custom.model_id_placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For example: gpt-4.1 / claude-3-7-sonnet"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例如 gpt-4.1 / claude-3-7-sonnet"
+          }
+        }
+      }
+    },
+    "wizard.custom.model_alias": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model alias"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型ID别名"
+          }
+        }
+      }
+    },
+    "wizard.custom.model_alias_placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For example: Custom GPT-4.1"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例如：自定义 GPT-4.1"
+          }
+        }
+      }
+    },
+    "wizard.model_config.custom_provider_id_placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "providerId (optional: custom-provider-id)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "providerId (可选 custom-provider-id)"
+          }
+        }
+      }
+    },
+    "wizard.model_config.custom_compatibility_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom mode supports `openai` / `anthropic` compatibility; default is `openai`."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义支持 `openai` / `anthropic` 兼容类型；默认 `openai`。"
+          }
+        }
+      }
+    },
+    "wizard.model_config.secret_reference_placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "env:MY_API_KEY or provider:accountName"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "env:MY_API_KEY 或 provider:accountName"
+          }
+        }
+      }
+    },
+    "wizard.model_config.secret_reference_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supports `env:VAR` / `${VAR}` / `provider:accountName`. A pre-check runs before apply."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支持 `env:VAR` / `${VAR}` / `provider:accountName`。应用前会做预检查。"
           }
         }
       }
