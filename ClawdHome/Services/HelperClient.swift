@@ -4,6 +4,11 @@
 import Foundation
 import Observation
 
+enum GatewayStartDiagnosis {
+    case started
+    case needsNodeRepair(reason: String)
+}
+
 @Observable
 final class HelperClient {
     private var controlConnection: NSXPCConnection?
@@ -258,6 +263,19 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
+    func startGatewayDiagnoseNodeToolchain(username: String) async throws -> GatewayStartDiagnosis {
+        do {
+            try await startGateway(username: username)
+            return .started
+        } catch {
+            let message = error.localizedDescription
+            if await shouldSuggestNodeRepair(username: username, startupErrorMessage: message) {
+                return .needsNodeRepair(reason: message)
+            }
+            throw error
+        }
+    }
+
     func stopGateway(username: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
@@ -331,6 +349,28 @@ final class HelperClient {
         return FileManager.default.isExecutableFile(atPath: userNode)
     }
 
+    private func shouldSuggestNodeRepair(username: String, startupErrorMessage: String) async -> Bool {
+        if Self.isLikelyMissingIsolatedNodeToolchain(message: startupErrorMessage) {
+            return true
+        }
+        return !(await isNodeInstalled(username: username))
+    }
+
+    static func isLikelyMissingIsolatedNodeToolchain(message: String) -> Bool {
+        let lowered = message.lowercased()
+        if lowered.contains("env: node: no such file or directory") { return true }
+        if lowered.contains("未找到 npm，请先完成 node.js 安装步骤") { return true }
+        if lowered.contains("node.js 未安装就绪") { return true }
+        if lowered.contains("未找到隔离用户环境 npx") { return true }
+        if lowered.contains("npx is restricted to the isolated user environment") { return true }
+        if lowered.contains("exit 127")
+            && lowered.contains("openclaw")
+            && lowered.contains("gateway.port") {
+            return true
+        }
+        return false
+    }
+
     /// 安装 Node.js（输出实时写入 /tmp/clawdhome-init-<username>.log）
     func installNode(username: String, nodeDistURL: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
@@ -364,6 +404,25 @@ final class HelperClient {
                 resolve(Self.hasLocalNodeBinary(username: username))
             }
         }
+    }
+
+    /// 复用初始化流程中的基础环境修复步骤，用于老环境自愈：
+    /// 1) 修复 ~/.brew 权限（best effort）
+    /// 2) 安装/修复 node/npm/npx 到用户私有目录
+    /// 3) 修复 ~/.npm-global 与 shell 环境
+    /// 4) 运行体检修复（权限归属与应用层审计）
+    func repairBaseEnvironmentForStartup(username: String, nodeDistURL: String) async throws {
+        // 1. 权限修复为 best-effort，不阻断后续核心修复
+        try? await repairHomebrewPermission(username: username)
+
+        // 2. node/npm/npx 是 Gateway 启动硬依赖，失败即抛错
+        try await installNode(username: username, nodeDistURL: nodeDistURL)
+
+        // 3. npm 全局目录与 shell 环境
+        try await setupNpmEnv(username: username)
+
+        // 4. 复用现有体检修复逻辑，修正历史权限/归属问题；失败不阻断启动
+        _ = await runHealthCheck(username: username, fix: true)
     }
 
     /// 读取 Xcode/CLT 环境状态

@@ -154,6 +154,8 @@ struct UserManager {
             helperLog("用户删除预清理 @\(username): 停止 Gateway (uid=\(uid))")
             _ = try? GatewayManager.stopGateway(username: username, uid: uid)
         }
+        // 无论是否能读取到 uid，都按用户名卸载 launchd 服务与 plist，避免启动项残留
+        _ = try? GatewayManager.uninstallGateway(username: username)
         removeFromAllGroups(username: username)
     }
 

@@ -264,6 +264,14 @@ struct UserDetailView: View {
     @State private var isAcceptingXcodeLicense = false
     @State private var isRepairingHomebrewPermission = false
     @State private var xcodeFixMessage: String? = nil
+    @State private var showGatewayNodeRepairSheet = false
+    @State private var gatewayNodeRepairReason = ""
+    @State private var isGatewayNodeRepairing = false
+    @State private var gatewayNodeRepairCompletedSteps = 0
+    @State private var gatewayNodeRepairCurrentStep = ""
+    @State private var gatewayNodeRepairError: String?
+    @State private var gatewayNodeRepairReadyToRetryStart = false
+    @AppStorage("nodeDistURL") private var nodeDistURL = NodeDistOption.defaultForInitialization.rawValue
     @State private var isReopeningInitWizard = false
     @State private var suppressNpmRegistryOnChange = false
     @State private var showHealthCheck = false
@@ -534,7 +542,7 @@ struct UserDetailView: View {
             }
         }
         .onChange(of: gatewayHub.readinessMap[user.username]) { _, newReadiness in
-            if newReadiness == .ready, user.pid == nil {
+            if newReadiness == .ready {
                 Task { await refreshStatus() }
                 embeddedOverviewConsoleStore.reloadCurrent()
             } else if newReadiness == .stopped, !user.isRunning {
@@ -567,7 +575,9 @@ struct UserDetailView: View {
                 username: user.username,
                 currentVersion: user.openclawVersion,
                 targetVersion: pendingUpgradeVersion ?? "",
-                releaseURL: updater.latestReleaseURL
+                releaseURL: updater.latestReleaseURL,
+                isInstalling: isInstalling,
+                installError: installError
             ) { version, _ in
                 Task { await installOpenclaw(version: version) }
             }
@@ -658,6 +668,75 @@ struct UserDetailView: View {
             }
         } message: {
             Text(quickTransferAlertMessage ?? "")
+        }
+        .sheet(isPresented: $showGatewayNodeRepairSheet) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(L10n.k("user.detail.gateway.node_missing.title", fallback: "检测到 Node.js 环境缺失"))
+                    .font(.headline)
+                Text(
+                    L10n.f(
+                        "user.detail.gateway.node_missing.message",
+                        fallback: "启动 Gateway 依赖该用户私有目录中的 node/npm/npx。\n\n将执行基础环境修复，完成后你可以手动再次启动。",
+                        user.username
+                    )
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+                ProgressView(
+                    value: Double(gatewayNodeRepairCompletedSteps),
+                    total: 4
+                ) {
+                    Text(L10n.f("user.detail.gateway.repair.progress", fallback: "修复进度：%d/4", gatewayNodeRepairCompletedSteps))
+                        .font(.subheadline.weight(.medium))
+                } currentValueLabel: {
+                    Text("\(Int((Double(gatewayNodeRepairCompletedSteps) / 4) * 100))%")
+                }
+
+                if !gatewayNodeRepairCurrentStep.isEmpty {
+                    Text(L10n.f("user.detail.gateway.repair.current_step", fallback: "当前步骤：%@", gatewayNodeRepairCurrentStep))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !gatewayNodeRepairReason.isEmpty {
+                    Text(L10n.f("user.detail.gateway.repair.reason", fallback: "触发原因：%@", gatewayNodeRepairReason))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                if let gatewayNodeRepairError, !gatewayNodeRepairError.isEmpty {
+                    Text(gatewayNodeRepairError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                HStack {
+                    if gatewayNodeRepairReadyToRetryStart {
+                        Button(L10n.k("user.detail.gateway.repair.retry_start", fallback: "再次启动 Gateway")) {
+                            Task { await retryGatewayStartAfterRepairFromSheet() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isGatewayNodeRepairing)
+                    } else {
+                        Button(isGatewayNodeRepairing
+                               ? L10n.k("user.detail.gateway.repair.in_progress", fallback: "修复中…")
+                               : L10n.k("user.detail.gateway.repair.start", fallback: "开始修复")) {
+                            Task { await runGatewayNodeRepairFlow() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isGatewayNodeRepairing)
+                    }
+                    Spacer()
+                    Button(L10n.k("user.detail.gateway.repair.close", fallback: "关闭")) {
+                        showGatewayNodeRepairSheet = false
+                    }
+                    .disabled(isGatewayNodeRepairing)
+                }
+            }
+            .padding(18)
+            .frame(minWidth: 520)
         }
         .modifier(MainContentAlertsModifier(user: user,
             showRollbackConfirm: $showRollbackConfirm,
@@ -837,10 +916,23 @@ struct UserDetailView: View {
                         .font(.system(size: 18, weight: .bold))
                         .lineLimit(1)
                 }
-                Text(overviewVersionAndPortLabel)
-                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(overviewVersionAndPortLabel)
+                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if !user.isAdmin,
+                       updater.needsUpdate(user.openclawVersion),
+                       let latest = updater.latestVersion {
+                        Button(L10n.k("user.detail.version.update_badge", fallback: "有新版本")) {
+                            pendingUpgradeVersion = latest
+                            showUpgradeConfirm = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.mini)
+                        .disabled(!helperClient.isConnected || isInstalling || isRollingBack)
+                    }
+                }
             }
 
             Spacer(minLength: 0)
@@ -883,7 +975,7 @@ struct UserDetailView: View {
                             }
                             gatewayHub.markPendingStart(username: user.username)
                             beginGatewayRestartVisualTransition()
-                            try await helperClient.startGateway(username: user.username)
+                            try await startGatewayWithNodeRepairPrompt()
                         }
                     }
                 }
@@ -948,6 +1040,22 @@ struct UserDetailView: View {
 
                     if !user.isAdmin {
                         Divider()
+
+                        if updater.needsUpdate(user.openclawVersion),
+                           let latest = updater.latestVersion {
+                            Button {
+                                pendingUpgradeVersion = latest
+                                showUpgradeConfirm = true
+                            } label: {
+                                Label(
+                                    L10n.f("user.detail.openclaw.upgrade_to", fallback: "Upgrade openclaw (v%@)", latest),
+                                    systemImage: "arrow.up.circle"
+                                )
+                            }
+                            .disabled(isInstalling || isRollingBack || !helperClient.isConnected)
+
+                            Divider()
+                        }
 
                         Button {
                             showLogoutConfirm = true
@@ -1215,12 +1323,7 @@ struct UserDetailView: View {
     }
 
     private var overviewVersionAndPortLabel: String {
-        let version = user.openclawVersionLabel ?? "—"
-        let port = currentShrimpStats?.gatewayPort ?? URL(string: gatewayURL ?? "")?.port
-        if let port {
-            return "\(version) • P:\(port)"
-        }
-        return version
+        user.openclawVersionLabel ?? "—"
     }
 
     private var overviewCpuMemoryLabel: String {
@@ -1842,7 +1945,7 @@ struct UserDetailView: View {
                                 }
                                 gatewayHub.markPendingStart(username: user.username)
                                 beginGatewayRestartVisualTransition()
-                                try await helperClient.startGateway(username: user.username)
+                                try await startGatewayWithNodeRepairPrompt()
                             }
                         }
                         .buttonStyle(.borderedProminent)
@@ -1885,6 +1988,22 @@ struct UserDetailView: View {
 
                         if !user.isAdmin {
                             Divider()
+
+                            if updater.needsUpdate(user.openclawVersion),
+                               let latest = updater.latestVersion {
+                                Button {
+                                    pendingUpgradeVersion = latest
+                                    showUpgradeConfirm = true
+                                } label: {
+                                    Label(
+                                        L10n.f("user.detail.openclaw.upgrade_to", fallback: "Upgrade openclaw (v%@)", latest),
+                                        systemImage: "arrow.up.circle"
+                                    )
+                                }
+                                .disabled(isInstalling || isRollingBack || !helperClient.isConnected)
+
+                                Divider()
+                            }
 
                             Button {
                                 showLogoutConfirm = true
@@ -2019,6 +2138,7 @@ struct UserDetailView: View {
         gatewayURLTokenPollTask?.cancel()
         gatewayURLTokenPollTask = nil
         gatewayURL = nil
+        embeddedOverviewConsoleStore.invalidateLoadedURL()
         refreshGatewayURLUntilTokenReady()
     }
 
@@ -2031,11 +2151,94 @@ struct UserDetailView: View {
             do {
                 try await action()
             } catch {
-                actionError = error.localizedDescription
+                if error is GatewayStartNodeRepairPromptError {
+                    // 已切换到“修复并继续启动”弹窗，不显示通用错误。
+                } else {
+                    actionError = error.localizedDescription
+                }
             }
             await refreshStatus()
             isLoading = false
         }
+    }
+
+    private struct GatewayStartNodeRepairPromptError: Error {}
+
+    private func startGatewayWithNodeRepairPrompt() async throws {
+        let result = try await helperClient.startGatewayDiagnoseNodeToolchain(username: user.username)
+        switch result {
+        case .started:
+            return
+        case .needsNodeRepair(let reason):
+            appLog("[gateway-repair] detected missing base env user=\(user.username) reason=\(reason)", level: .warn)
+            gatewayNodeRepairReason = reason
+            gatewayNodeRepairCompletedSteps = 0
+            gatewayNodeRepairCurrentStep = ""
+            gatewayNodeRepairError = nil
+            gatewayNodeRepairReadyToRetryStart = false
+            showGatewayNodeRepairSheet = true
+            throw GatewayStartNodeRepairPromptError()
+        }
+    }
+
+    private func runGatewayNodeRepairFlow() async {
+        guard !isGatewayNodeRepairing else { return }
+        isGatewayNodeRepairing = true
+        gatewayNodeRepairError = nil
+        gatewayNodeRepairReadyToRetryStart = false
+        gatewayNodeRepairCompletedSteps = 0
+        gatewayNodeRepairCurrentStep = "修复 Homebrew 权限"
+        appLog("[gateway-repair] start user=\(user.username)")
+        defer {
+            isGatewayNodeRepairing = false
+        }
+        do {
+            appLog("[gateway-repair] step 1/4 homebrew-permission user=\(user.username)")
+            try? await helperClient.repairHomebrewPermission(username: user.username)
+            gatewayNodeRepairCompletedSteps = 1
+
+            gatewayNodeRepairCurrentStep = "安装/修复 Node.js"
+            appLog("[gateway-repair] step 2/4 install-node user=\(user.username)")
+            try await helperClient.installNode(username: user.username, nodeDistURL: nodeDistURL)
+            gatewayNodeRepairCompletedSteps = 2
+
+            gatewayNodeRepairCurrentStep = "配置 npm 目录"
+            appLog("[gateway-repair] step 3/4 setup-npm-env user=\(user.username)")
+            try await helperClient.setupNpmEnv(username: user.username)
+            gatewayNodeRepairCompletedSteps = 3
+
+            gatewayNodeRepairCurrentStep = "执行体检修复"
+            appLog("[gateway-repair] step 4/4 health-check-fix user=\(user.username)")
+            _ = await helperClient.runHealthCheck(username: user.username, fix: true)
+            gatewayNodeRepairCompletedSteps = 4
+
+            gatewayNodeRepairCurrentStep = "修复完成，等待再次启动"
+            gatewayNodeRepairReadyToRetryStart = true
+            appLog("[gateway-repair] completed user=\(user.username)")
+        } catch {
+            appLog("[gateway-repair] failed user=\(user.username) error=\(error.localizedDescription)", level: .error)
+            gatewayNodeRepairError = error.localizedDescription
+        }
+    }
+
+    private func retryGatewayStartAfterRepairFromSheet() async {
+        guard !isGatewayNodeRepairing else { return }
+        isGatewayNodeRepairing = true
+        gatewayNodeRepairError = nil
+        gatewayNodeRepairCurrentStep = "正在启动 Gateway"
+        appLog("[gateway-repair] retry-start user=\(user.username)")
+        defer { isGatewayNodeRepairing = false }
+        do {
+            gatewayHub.markPendingStart(username: user.username)
+            beginGatewayRestartVisualTransition()
+            try await helperClient.startGateway(username: user.username)
+            showGatewayNodeRepairSheet = false
+            appLog("[gateway-repair] retry-start success user=\(user.username)")
+        } catch {
+            appLog("[gateway-repair] retry-start failed user=\(user.username) error=\(error.localizedDescription)", level: .error)
+            gatewayNodeRepairError = error.localizedDescription
+        }
+        await refreshStatus()
     }
 
     private func quickTransferPickAndUpload() async {
@@ -5864,6 +6067,13 @@ private final class EmbeddedGatewayConsoleStore: ObservableObject {
         loadState = .loading
         lastRetryAt = Date()
         webView.reload()
+    }
+
+    func invalidateLoadedURL() {
+        loadedURL = nil
+        loadState = .idle
+        lastRetryAt = .distantPast
+        webView?.stopLoading()
     }
 }
 

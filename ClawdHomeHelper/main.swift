@@ -431,14 +431,11 @@ private final class MaintenanceTerminalSession {
         let lcCType = inheritedEnv["LC_CTYPE"] ?? lang
         let argv0 = command.first ?? ""
         let argvRest = Array(command.dropFirst())
-        let shimDir = try Self.ensureNpxShimDirectory(username: username)
-        let effectivePath = "\(shimDir):\(nodePath)"
+        let effectivePath = nodePath
         let resolvedExecutable: String
         switch argv0 {
         case "openclaw":
             resolvedExecutable = "\(home)/.npm-global/bin/openclaw"
-        case "npx":
-            resolvedExecutable = try ConfigWriter.findIsolatedNpxBinary(for: username)
         case "zsh":
             resolvedExecutable = "/bin/zsh"
         case "bash":
@@ -1060,7 +1057,51 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         let nodePath = ConfigWriter.buildNodePath(username: username)
         let home = "/Users/\(username)"
         let profilePath = "\(home)/.zprofile"
-        let installScript = "mkdir -p \"$HOME/.brew\" && curl --fail --show-error -L --connect-timeout 10 --max-time 180 --retry 2 --retry-delay 2 https://github.com/Homebrew/brew/tarball/master | tar xz --strip 1 -C \"$HOME/.brew\""
+        let sharedCacheRoot = "/Users/Shared/ClawdHome/cache"
+        let homebrewCacheDir = "\(sharedCacheRoot)/homebrew"
+        let installScript = """
+        set -e
+        BREW_ROOT="$HOME/.brew"
+        CACHE_DIR="/Users/Shared/ClawdHome/cache/homebrew"
+        CACHE_TAR="$CACHE_DIR/brew-master.tar.gz"
+        PART_TAR="$CACHE_TAR.part.$USER.$$"
+        BREW_TARBALL_URL="https://github.com/Homebrew/brew/tarball/master"
+        CACHE_TTL_SECONDS=$((30 * 24 * 60 * 60))
+        NOW_TS="$(date +%s)"
+
+        mkdir -p "$BREW_ROOT" "$CACHE_DIR"
+
+        extract_cached_tar() {
+          tar -xzf "$CACHE_TAR" --strip 1 -C "$BREW_ROOT"
+        }
+
+        cache_fresh="0"
+        if [ -s "$CACHE_TAR" ]; then
+          CACHE_MTIME="$(stat -f %m "$CACHE_TAR" 2>/dev/null || echo 0)"
+          CACHE_AGE=$((NOW_TS - CACHE_MTIME))
+          if [ "$CACHE_AGE" -le "$CACHE_TTL_SECONDS" ] && [ "$CACHE_MTIME" -gt 0 ]; then
+            cache_fresh="1"
+            echo "✓ 使用 Homebrew 本地缓存（30 天内）：$CACHE_TAR"
+            if ! extract_cached_tar; then
+              echo "⚠ Homebrew 缓存损坏，删除后重新下载"
+              rm -f "$CACHE_TAR"
+              cache_fresh="0"
+            fi
+          else
+            echo "ℹ Homebrew 缓存已过期（>${CACHE_TTL_SECONDS}s），重新下载"
+            rm -f "$CACHE_TAR"
+          fi
+        fi
+
+        if [ "$cache_fresh" != "1" ]; then
+          rm -f "$PART_TAR"
+          echo "⬇ 下载 Homebrew 到缓存..."
+          curl --fail --show-error -L --connect-timeout 10 --max-time 180 --retry 2 --retry-delay 2 "$BREW_TARBALL_URL" -o "$PART_TAR"
+          mv "$PART_TAR" "$CACHE_TAR"
+          echo "✓ Homebrew 缓存写入完成"
+          extract_cached_tar
+        fi
+        """
         let requiredExports = [
             "export PATH=\"$HOME/.brew/bin:$PATH\"",
             "export HOMEBREW_PREFIX=\"$HOME/.brew\"",
@@ -1084,14 +1125,26 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         }
 
         do {
+            // 共享缓存目录给多用户初始化复用：所有用户可写，避免“第一只虾创建后其余用户不可写”。
+            try FileManager.default.createDirectory(
+                atPath: homebrewCacheDir,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+            _ = try? run("/bin/chmod", args: ["1777", sharedCacheRoot])
+            _ = try? run("/bin/chmod", args: ["1777", homebrewCacheDir])
+
             appendLog("\n▶ 修复 Homebrew 权限（普通用户目录安装）\n")
             appendLog("$ \(installScript)\n")
-            _ = try runAsUser(
+            let output = try runAsUser(
                 username: username,
                 nodePath: nodePath,
                 command: "/bin/sh",
                 args: ["-lc", installScript]
             )
+            if !output.isEmpty {
+                appendLog(output.hasSuffix("\n") ? output : "\(output)\n")
+            }
             appendLog("✓ 已完成 ~/.brew 安装/更新\n")
 
             let existing = (try? String(contentsOfFile: profilePath, encoding: .utf8)) ?? ""
@@ -2276,9 +2329,15 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             return
         }
         let nodePath = ConfigWriter.buildNodePath(username: username)
-        let fullArgs = ["-n", "-u", username, "-H", "/usr/bin/env", "PATH=\(nodePath)", openclawPath, "models"] + args
+        let shellArgs = (["models"] + args).map(shellSingleQuoted).joined(separator: " ")
+        let shellCommand = "cd \"$HOME\" && \(shellSingleQuoted(openclawPath)) \(shellArgs)"
         do {
-            let output = try run("/usr/bin/sudo", args: fullArgs)
+            let output = try runAsUser(
+                username: username,
+                nodePath: nodePath,
+                command: "/bin/zsh",
+                args: ["-lc", shellCommand]
+            )
             reply(true, output.trimmingCharacters(in: .whitespacesAndNewlines))
         } catch {
             reply(false, error.localizedDescription)
@@ -2299,10 +2358,15 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         if FileManager.default.fileExists(atPath: openclawDir) {
             _ = try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])
         }
-        // 以目标用户身份运行，确保 Node.js os.homedir() 返回正确路径（插件发现依赖此值）
-        let fullArgs = ["-n", "-u", username, "-H", "/usr/bin/env", "PATH=\(nodePath)", openclawPath] + args
+        let shellArgs = args.map(shellSingleQuoted).joined(separator: " ")
+        let shellCommand = "cd \"$HOME\" && \(shellSingleQuoted(openclawPath))\(shellArgs.isEmpty ? "" : " \(shellArgs)")"
         do {
-            let output = try run("/usr/bin/sudo", args: fullArgs)
+            let output = try runAsUser(
+                username: username,
+                nodePath: nodePath,
+                command: "/bin/zsh",
+                args: ["-lc", shellCommand]
+            )
             reply(true, output.trimmingCharacters(in: .whitespacesAndNewlines))
         } catch {
             reply(false, error.localizedDescription)
@@ -2322,9 +2386,15 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         if FileManager.default.fileExists(atPath: openclawDir) {
             _ = try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])
         }
-        let fullArgs = ["-n", "-u", username, "-H", "/usr/bin/env", "PATH=\(nodePath)", openclawPath, "pairing"] + args
+        let shellArgs = (["pairing"] + args).map(shellSingleQuoted).joined(separator: " ")
+        let shellCommand = "cd \"$HOME\" && \(shellSingleQuoted(openclawPath)) \(shellArgs)"
         do {
-            let output = try run("/usr/bin/sudo", args: fullArgs)
+            let output = try runAsUser(
+                username: username,
+                nodePath: nodePath,
+                command: "/bin/zsh",
+                args: ["-lc", shellCommand]
+            )
             reply(true, output.trimmingCharacters(in: .whitespacesAndNewlines))
         } catch {
             reply(false, error.localizedDescription)
@@ -2338,6 +2408,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             return
         }
         let commandArgs = ["-y", "@larksuite/openclaw-lark-tools", "install"]
+        let shellCommand = "cd \"$HOME\" && npx \(commandArgs.joined(separator: " "))"
         let home = "/Users/\(username)"
         let nodePath = ConfigWriter.buildNodePath(username: username)
         let openclawDir = "\(home)/.openclaw"
@@ -2352,8 +2423,8 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             let output = try runAsUser(
                 username: username,
                 nodePath: nodePath,
-                command: "npx",
-                args: commandArgs
+                command: "/bin/zsh",
+                args: ["-lc", shellCommand]
             )
             helperLog("[feishu] run success @\(username) outputBytes=\(output.utf8.count)")
             reply(true, output.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -2480,13 +2551,6 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
                            args: [String]) throws -> String {
         let home = "/Users/\(username)"
         let npmGlobalDir = "\(home)/.npm-global"
-        let resolvedCommand: String
-        switch command {
-        case "npx":
-            resolvedCommand = try ConfigWriter.findIsolatedNpxBinary(for: username)
-        default:
-            resolvedCommand = command
-        }
         let fullArgs = [
             "-n", "-u", username, "-H",
             "/usr/bin/env",
@@ -2494,7 +2558,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             "PATH=\(nodePath)",
             "NPM_CONFIG_PREFIX=\(npmGlobalDir)",
             "npm_config_prefix=\(npmGlobalDir)",
-            resolvedCommand,
+            command,
         ] + args
         return try run("/usr/bin/sudo", args: fullArgs)
     }

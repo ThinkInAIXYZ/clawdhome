@@ -96,11 +96,32 @@ struct ConfigWriter {
     /// 构建包含 node 的 PATH 环境变量（供 GatewayManager 等模块共用）
     static func buildNodePath(username: String) -> String {
         // 仅包含用户隔离环境（~/.npm-global + ~/.brew）与基础系统命令目录。
-        return [
+        // 兼容场景：当 ~/.brew/bin/node 符号链接丢失时，回退到 ~/.brew/lib/nodejs/<version>/bin。
+        var paths: [String] = [
             InstallManager.npmGlobalBin(for: username),
             "/Users/\(username)/.brew/bin",
-            "/usr/bin", "/bin"
-        ].joined(separator: ":")
+            "/Users/\(username)/.brew/opt/node/bin",
+            "/Users/\(username)/.brew/opt/node@24/bin",
+            "/Users/\(username)/.brew/opt/node@22/bin",
+            "/Users/\(username)/.brew/opt/node@20/bin",
+            "/Users/\(username)/.brew/opt/node@18/bin",
+        ]
+
+        let libNodeRoot = "/Users/\(username)/.brew/lib/nodejs"
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: libNodeRoot).sorted(by: >) {
+            for entry in entries where entry.hasPrefix("node-") {
+                let binPath = "\(libNodeRoot)/\(entry)/bin"
+                if FileManager.default.isExecutableFile(atPath: "\(binPath)/node") {
+                    paths.append(binPath)
+                }
+            }
+        }
+
+        paths.append(contentsOf: ["/usr/bin", "/bin"])
+
+        var seen = Set<String>()
+        let deduped = paths.filter { seen.insert($0).inserted }
+        return deduped.joined(separator: ":")
     }
 }
 

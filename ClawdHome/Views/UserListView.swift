@@ -81,6 +81,15 @@ struct ClawPoolView: View {
 
     // MARK: 右键菜单 — 快速操作
     @State private var quickActionError: String?
+    @State private var showGatewayNodeRepairSheet = false
+    @State private var gatewayNodeRepairUsername: String?
+    @State private var gatewayNodeRepairReason = ""
+    @State private var isGatewayNodeRepairing = false
+    @State private var gatewayNodeRepairCompletedSteps = 0
+    @State private var gatewayNodeRepairCurrentStep = ""
+    @State private var gatewayNodeRepairError: String?
+    @State private var gatewayNodeRepairReadyToRetryStart = false
+    @AppStorage("nodeDistURL") private var nodeDistURL = NodeDistOption.defaultForInitialization.rawValue
 
     // MARK: 右键菜单 — 工具 sheet（枚举合并避免类型检查超时）
     @State private var toolSheet: ToolSheet?
@@ -326,6 +335,64 @@ struct ClawPoolView: View {
         } message: {
             Text(quickTransferAlertMessage ?? "")
         }
+        .sheet(isPresented: $showGatewayNodeRepairSheet) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(L10n.k("user.list.gateway.node_missing.title", fallback: "检测到 Node.js 环境缺失"))
+                    .font(.headline)
+                Text(L10n.k("user.list.gateway.node_missing.message", fallback: "将执行基础环境修复。修复完成后，请手动点击“再次启动 Gateway”。"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                ProgressView(value: Double(gatewayNodeRepairCompletedSteps), total: 4) {
+                    Text(L10n.f("user.list.gateway.repair.progress", fallback: "修复进度：%d/4", gatewayNodeRepairCompletedSteps))
+                        .font(.subheadline.weight(.medium))
+                } currentValueLabel: {
+                    Text("\(Int((Double(gatewayNodeRepairCompletedSteps) / 4) * 100))%")
+                }
+
+                if !gatewayNodeRepairCurrentStep.isEmpty {
+                    Text(L10n.f("user.list.gateway.repair.current_step", fallback: "当前步骤：%@", gatewayNodeRepairCurrentStep))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !gatewayNodeRepairReason.isEmpty {
+                    Text(L10n.f("user.list.gateway.repair.reason", fallback: "触发原因：%@", gatewayNodeRepairReason))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                if let gatewayNodeRepairError, !gatewayNodeRepairError.isEmpty {
+                    Text(gatewayNodeRepairError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                HStack {
+                    if gatewayNodeRepairReadyToRetryStart {
+                        Button(L10n.k("user.list.gateway.repair.retry_start", fallback: "再次启动 Gateway")) {
+                            Task { await retryGatewayStartAfterRepairFromListSheet() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isGatewayNodeRepairing)
+                    } else {
+                        Button(isGatewayNodeRepairing
+                               ? L10n.k("user.list.gateway.repair.in_progress", fallback: "修复中…")
+                               : L10n.k("user.list.gateway.repair.start", fallback: "开始修复")) {
+                            Task { await runGatewayRepairFromListSheet() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isGatewayNodeRepairing)
+                    }
+                    Spacer()
+                    Button(L10n.k("user.list.gateway.repair.close", fallback: "关闭")) { showGatewayNodeRepairSheet = false }
+                        .disabled(isGatewayNodeRepairing)
+                }
+            }
+            .padding(18)
+            .frame(minWidth: 520)
+        }
     }
 
     private var emptyStateContent: some View {
@@ -409,9 +476,23 @@ struct ClawPoolView: View {
                         Task {
                             gatewayHub.markPendingStart(username: claw.username)
                             do {
-                                try await helperClient.startGateway(username: claw.username)
-                                claw.isRunning = true
-                            } catch { quickActionError = String(format: L10n.k("views.user_list_view.start_failed_detail", fallback: "启动失败：%@"), error.localizedDescription) }
+                                let result = try await helperClient.startGatewayDiagnoseNodeToolchain(username: claw.username)
+                                switch result {
+                                case .started:
+                                    claw.isRunning = true
+                                case .needsNodeRepair(let reason):
+                                    appLog("[gateway-repair] detected missing base env user=\(claw.username) reason=\(reason)", level: .warn)
+                                    gatewayNodeRepairUsername = claw.username
+                                    gatewayNodeRepairReason = reason
+                                    gatewayNodeRepairCompletedSteps = 0
+                                    gatewayNodeRepairCurrentStep = ""
+                                    gatewayNodeRepairError = nil
+                                    gatewayNodeRepairReadyToRetryStart = false
+                                    showGatewayNodeRepairSheet = true
+                                }
+                            } catch {
+                                quickActionError = String(format: L10n.k("views.user_list_view.start_failed_detail", fallback: "启动失败：%@"), error.localizedDescription)
+                            }
                         }
                     } label: { Label(L10n.k("views.user_list_view.start_gateway", fallback: "启动 Gateway"), systemImage: "play.fill") }
                 } else {
@@ -999,8 +1080,26 @@ struct ClawPoolView: View {
         }
         if !claw.isRunning {
             gatewayHub.markPendingStart(username: claw.username)
-            try? await helperClient.startGateway(username: claw.username)
-            claw.isRunning = true
+            do {
+                let result = try await helperClient.startGatewayDiagnoseNodeToolchain(username: claw.username)
+                switch result {
+                case .started:
+                    claw.isRunning = true
+                case .needsNodeRepair(let reason):
+                    appLog("[gateway-repair] detected missing base env user=\(claw.username) reason=\(reason)", level: .warn)
+                    gatewayNodeRepairUsername = claw.username
+                    gatewayNodeRepairReason = reason
+                    gatewayNodeRepairCompletedSteps = 0
+                    gatewayNodeRepairCurrentStep = ""
+                    gatewayNodeRepairError = nil
+                    gatewayNodeRepairReadyToRetryStart = false
+                    showGatewayNodeRepairSheet = true
+                    return
+                }
+            } catch {
+                quickActionError = String(format: L10n.k("views.user_list_view.start_failed_detail", fallback: "启动失败：%@"), error.localizedDescription)
+                return
+            }
         }
         let urlString = await helperClient.getGatewayURL(username: claw.username)
         if let url = URL(string: urlString), !urlString.isEmpty {
@@ -1017,6 +1116,63 @@ struct ClawPoolView: View {
             command: ["zsh", "-l"]
         )
         openWindow(id: "maintenance-terminal", value: payload)
+    }
+
+    private func runGatewayRepairFromListSheet() async {
+        guard !isGatewayNodeRepairing, let username = gatewayNodeRepairUsername, !username.isEmpty else { return }
+        quickActionError = nil
+        isGatewayNodeRepairing = true
+        gatewayNodeRepairError = nil
+        gatewayNodeRepairReadyToRetryStart = false
+        gatewayNodeRepairCompletedSteps = 0
+        gatewayNodeRepairCurrentStep = "修复 Homebrew 权限"
+        appLog("[gateway-repair] start user=\(username)")
+        defer { isGatewayNodeRepairing = false }
+        do {
+            appLog("[gateway-repair] step 1/4 homebrew-permission user=\(username)")
+            try? await helperClient.repairHomebrewPermission(username: username)
+            gatewayNodeRepairCompletedSteps = 1
+            gatewayNodeRepairCurrentStep = "安装/修复 Node.js"
+            appLog("[gateway-repair] step 2/4 install-node user=\(username)")
+            try await helperClient.installNode(username: username, nodeDistURL: nodeDistURL)
+            gatewayNodeRepairCompletedSteps = 2
+            gatewayNodeRepairCurrentStep = "配置 npm 目录"
+            appLog("[gateway-repair] step 3/4 setup-npm-env user=\(username)")
+            try await helperClient.setupNpmEnv(username: username)
+            gatewayNodeRepairCompletedSteps = 3
+            gatewayNodeRepairCurrentStep = "执行体检修复"
+            appLog("[gateway-repair] step 4/4 health-check-fix user=\(username)")
+            _ = await helperClient.runHealthCheck(username: username, fix: true)
+            gatewayNodeRepairCompletedSteps = 4
+            gatewayNodeRepairCurrentStep = "修复完成，等待再次启动"
+            gatewayNodeRepairReadyToRetryStart = true
+            appLog("[gateway-repair] completed user=\(username)")
+        } catch {
+            appLog("[gateway-repair] failed user=\(username) error=\(error.localizedDescription)", level: .error)
+            gatewayNodeRepairError = error.localizedDescription
+        }
+    }
+
+    private func retryGatewayStartAfterRepairFromListSheet() async {
+        guard !isGatewayNodeRepairing, let username = gatewayNodeRepairUsername, !username.isEmpty else { return }
+        isGatewayNodeRepairing = true
+        gatewayNodeRepairError = nil
+        gatewayNodeRepairCurrentStep = "正在启动 Gateway"
+        appLog("[gateway-repair] retry-start user=\(username)")
+        defer { isGatewayNodeRepairing = false }
+        do {
+            gatewayHub.markPendingStart(username: username)
+            try await helperClient.startGateway(username: username)
+            if let idx = pool.users.firstIndex(where: { $0.username == username }) {
+                pool.users[idx].isRunning = true
+            }
+            pool.loadUsers()
+            showGatewayNodeRepairSheet = false
+            appLog("[gateway-repair] retry-start success user=\(username)")
+        } catch {
+            gatewayNodeRepairError = error.localizedDescription
+            appLog("[gateway-repair] retry-start failed user=\(username) error=\(error.localizedDescription)", level: .error)
+        }
     }
 
     private func freezeClaw(_ claw: ManagedUser, mode: FreezeMode) async {

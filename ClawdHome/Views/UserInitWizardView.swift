@@ -781,6 +781,13 @@ struct UserInitWizardView: View {
 
     // Step 5: 完成
     @State private var isStartingOpenclaw = false
+    @State private var showGatewayNodeRepairSheet = false
+    @State private var gatewayNodeRepairReason = ""
+    @State private var isGatewayNodeRepairing = false
+    @State private var gatewayNodeRepairCompletedSteps = 0
+    @State private var gatewayNodeRepairCurrentStep = ""
+    @State private var gatewayNodeRepairError: String?
+    @State private var gatewayNodeRepairReadyToRetryStart = false
     @State private var finishProgressMessages: [String] = []
     @State private var xcodeEnvStatus: XcodeEnvStatus? = nil
     @State private var isInstallingXcodeCLT = false
@@ -948,6 +955,62 @@ struct UserInitWizardView: View {
                 },
                 secondaryButton: .cancel(Text(L10n.k("wizard.model_config.command.stay_on_step", fallback: "留在当前步骤")))
             )
+        }
+        .sheet(isPresented: $showGatewayNodeRepairSheet) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(L10n.k("wizard.gateway.node_missing.title", fallback: "检测到 Node.js 环境缺失"))
+                    .font(.headline)
+                Text(L10n.k("wizard.gateway.node_missing.message", fallback: "将执行基础环境修复。修复完成后，请手动点击“再次启动 Gateway”。"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                ProgressView(value: Double(gatewayNodeRepairCompletedSteps), total: 4) {
+                    Text(L10n.f("wizard.gateway.repair.progress", fallback: "修复进度：%d/4", gatewayNodeRepairCompletedSteps))
+                        .font(.subheadline.weight(.medium))
+                } currentValueLabel: {
+                    Text("\(Int((Double(gatewayNodeRepairCompletedSteps) / 4) * 100))%")
+                }
+
+                if !gatewayNodeRepairCurrentStep.isEmpty {
+                    Text(L10n.f("wizard.gateway.repair.current_step", fallback: "当前步骤：%@", gatewayNodeRepairCurrentStep))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !gatewayNodeRepairReason.isEmpty {
+                    Text(L10n.f("wizard.gateway.repair.reason", fallback: "触发原因：%@", gatewayNodeRepairReason))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                if let gatewayNodeRepairError, !gatewayNodeRepairError.isEmpty {
+                    Text(gatewayNodeRepairError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                HStack {
+                    if gatewayNodeRepairReadyToRetryStart {
+                        Button(L10n.k("wizard.gateway.repair.retry_start", fallback: "再次启动 Gateway")) {
+                            Task { await retryGatewayStartAfterRepairFromWizardSheet() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isGatewayNodeRepairing)
+                    } else {
+                        Button(isGatewayNodeRepairing ? L10n.k("wizard.gateway.repair.in_progress", fallback: "修复中…") : L10n.k("wizard.gateway.repair.start", fallback: "开始修复")) {
+                            Task { await runGatewayRepairFromWizardSheet() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isGatewayNodeRepairing)
+                    }
+                    Spacer()
+                    Button(L10n.k("wizard.gateway.repair.close", fallback: "关闭")) { showGatewayNodeRepairSheet = false }
+                        .disabled(isGatewayNodeRepairing)
+                }
+            }
+            .padding(18)
+            .frame(minWidth: 520)
         }
         .onChange(of: user.username) { _, _ in
             resetWizardStateOnly()
@@ -1144,7 +1207,7 @@ struct UserInitWizardView: View {
                 .buttonStyle(.bordered).foregroundStyle(.red)
                 .disabled(isCancelling)
 
-                Text(L10n.k("wizard.base_env.running.keep_open", fallback: "保持窗口开启即可，完成后会自动进入下一步。"))
+                Text(L10n.k("wizard.base_env.running.keep_open", fallback: "一般安装过程在 1～3 分钟，完成后会自动进入下一步。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -2876,7 +2939,22 @@ struct UserInitWizardView: View {
         appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_starting_gateway", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在启动 Gateway…\n"))
 
         do {
-            try await helperClient.startGateway(username: user.username)
+            let startResult = try await helperClient.startGatewayDiagnoseNodeToolchain(username: user.username)
+            switch startResult {
+            case .started:
+                break
+            case .needsNodeRepair(let reason):
+                gatewayNodeRepairReason = reason
+                gatewayNodeRepairCompletedSteps = 0
+                gatewayNodeRepairCurrentStep = ""
+                gatewayNodeRepairError = nil
+                gatewayNodeRepairReadyToRetryStart = false
+                showGatewayNodeRepairSheet = true
+                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 检测到 Node.js 环境缺失，等待修复确认。\n")
+                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 缺失原因：\(reason)\n")
+                statuses[InitStep.finish.rawValue] = .pending
+                return
+            }
             user.isRunning = true
             user.pid = nil
             user.startedAt = nil
@@ -2896,6 +2974,52 @@ struct UserInitWizardView: View {
             activationProgress = 0.12
             statuses[InitStep.finish.rawValue] = .failed(error.localizedDescription)
             appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_start_failed", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动失败：\(error.localizedDescription)\n"))
+        }
+    }
+
+    private func runGatewayRepairFromWizardSheet() async {
+        guard !isGatewayNodeRepairing else { return }
+        isGatewayNodeRepairing = true
+        gatewayNodeRepairError = nil
+        gatewayNodeRepairReadyToRetryStart = false
+        gatewayNodeRepairCompletedSteps = 0
+        gatewayNodeRepairCurrentStep = "修复 Homebrew 权限"
+        appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在执行基础环境修复…\n")
+        do {
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [1/4] 修复 Homebrew 权限\n")
+            try? await helperClient.repairHomebrewPermission(username: user.username)
+            gatewayNodeRepairCompletedSteps = 1
+            gatewayNodeRepairCurrentStep = "安装/修复 Node.js"
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [2/4] 安装/修复 Node.js\n")
+            try await helperClient.installNode(username: user.username, nodeDistURL: nodeDistURL)
+            gatewayNodeRepairCompletedSteps = 2
+            gatewayNodeRepairCurrentStep = "配置 npm 目录"
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [3/4] 配置 npm 目录\n")
+            try await helperClient.setupNpmEnv(username: user.username)
+            gatewayNodeRepairCompletedSteps = 3
+            gatewayNodeRepairCurrentStep = "执行体检修复"
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] [4/4] 执行体检修复\n")
+            _ = await helperClient.runHealthCheck(username: user.username, fix: true)
+            gatewayNodeRepairCompletedSteps = 4
+            gatewayNodeRepairCurrentStep = "修复完成，等待再次启动"
+            gatewayNodeRepairReadyToRetryStart = true
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 基础环境修复完成，等待手动再次启动。\n")
+        } catch {
+            gatewayNodeRepairError = error.localizedDescription
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Node.js 修复失败：\(error.localizedDescription)\n")
+        }
+        isGatewayNodeRepairing = false
+    }
+
+    private func retryGatewayStartAfterRepairFromWizardSheet() async {
+        guard !isGatewayNodeRepairing else { return }
+        isGatewayNodeRepairing = true
+        gatewayNodeRepairError = nil
+        gatewayNodeRepairCurrentStep = "正在启动 Gateway"
+        defer { isGatewayNodeRepairing = false }
+        await finishAndStartOpenclaw()
+        if statuses[InitStep.finish.rawValue] == .done {
+            showGatewayNodeRepairSheet = false
         }
     }
 

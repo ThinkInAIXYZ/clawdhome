@@ -219,6 +219,28 @@ struct GatewayManager {
         GatewayLog.log("STOP_OK", username: username)
     }
 
+    /// 卸载 gateway launchd 服务：
+    /// 1) 尝试 bootout 移除注册态
+    /// 2) 删除 /Library/LaunchDaemons 下的对应 plist，避免“删除用户后启动项残留”
+    static func uninstallGateway(username: String) throws {
+        let label = "\(gatewayLabel).\(username)"
+        let plistPath = launchDaemonPath(username: username)
+
+        GatewayLog.log("UNINSTALL", username: username, detail: "label=\(label)")
+        do {
+            try run("/bin/launchctl", args: ["bootout", "system/\(label)"])
+        } catch {
+            if !isIgnorableLaunchctlBootoutError(error) {
+                throw error
+            }
+        }
+
+        if FileManager.default.fileExists(atPath: plistPath) {
+            try FileManager.default.removeItem(atPath: plistPath)
+        }
+        GatewayLog.log("UNINSTALL_OK", username: username, detail: "plist=\(plistPath)")
+    }
+
     // MARK: - 原子重启
 
     /// 重启 gateway：先 bootout 清除旧注册（含内存中的旧 job spec），再走 startGateway 流程。

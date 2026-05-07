@@ -447,7 +447,8 @@ struct LocalProcessNSView: NSViewRepresentable {
 
         let npmGlobalBin = "/Users/\(username)/.npm-global/bin"
         let npmGlobalDir = "/Users/\(username)/.npm-global"
-        let pathEnv  = "\(npmGlobalBin):/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+        let userBrewBin = "/Users/\(username)/.brew/bin"
+        let pathEnv  = "\(npmGlobalBin):\(userBrewBin):/usr/bin:/bin"
         let openclawPath = "\(npmGlobalBin)/openclaw"
         let command = executable ?? openclawPath
         let commandArgs = executable != nil ? executableArgs : subcommandArgs
