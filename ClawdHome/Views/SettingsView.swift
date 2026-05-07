@@ -229,6 +229,8 @@ private struct GeneralSettingsTab: View {
             }
             #endif
 
+            HelperStatusSection()
+
             AppLockSection()
         }
         .formStyle(.grouped)
@@ -399,6 +401,143 @@ private struct DebugGatewayActivationPreviewSheet: View {
     }
 }
 #endif
+
+// MARK: - Helper 状态
+
+private struct HelperStatusSection: View {
+    @Environment(HelperClient.self) private var helperClient
+    @State private var healthState: HelperHealthState = .disconnected
+    @State private var isProbing = false
+    @State private var isRestarting = false
+    @State private var lastProbeTime: Date?
+
+    var body: some View {
+        Section("Helper 服务") {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 8, height: 8)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(statusTitle)
+                        .fontWeight(.medium)
+                    Text(statusDetail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if isProbing || isRestarting {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                Button {
+                    Task { await probe() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(isProbing || isRestarting)
+                .help("检测 Helper 健康状态")
+            }
+
+            if case .unresponsive = healthState {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text("Helper 进程存活但无响应，建议重启恢复。")
+                        .font(.caption)
+                    Spacer()
+                    Button("重启 Helper") {
+                        Task { await restartHelper() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .controlSize(.small)
+                    .disabled(isRestarting)
+                }
+            }
+
+            if case .disconnected = healthState, !helperClient.isConnected {
+                HStack(spacing: 8) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.red)
+                    Text("Helper 未连接。如已安装，尝试重启恢复。")
+                        .font(.caption)
+                    Spacer()
+                    Button("重启 Helper") {
+                        Task { await restartHelper() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .controlSize(.small)
+                    .disabled(isRestarting)
+                }
+            }
+
+            Text("Helper 是以 root 运行的后台服务（LaunchDaemon），负责所有特权操作。正常情况下由 launchd 自动管理，无需手动干预。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .task { await probe() }
+    }
+
+    private var statusColor: Color {
+        switch healthState {
+        case .connected: return .green
+        case .unresponsive: return .orange
+        case .disconnected: return helperClient.isConnected ? .yellow : .red
+        }
+    }
+
+    private var statusTitle: String {
+        switch healthState {
+        case .connected(let version): return "运行中（v\(version)）"
+        case .unresponsive: return "无响应"
+        case .disconnected: return helperClient.isConnected ? "连接中…" : "未连接"
+        }
+    }
+
+    private var statusDetail: String {
+        if let t = lastProbeTime {
+            let fmt = RelativeDateTimeFormatter()
+            fmt.unitsStyle = .short
+            return "上次检测：\(fmt.localizedString(for: t, relativeTo: Date()))"
+        }
+        return "正在检测…"
+    }
+
+    private func probe() async {
+        isProbing = true
+        healthState = await helperClient.probeHealth()
+        lastProbeTime = Date()
+        isProbing = false
+    }
+
+    private func restartHelper() async {
+        isRestarting = true
+        // 先尝试 XPC 优雅重启
+        let sent = await helperClient.requestHelperRestart()
+        if sent {
+            try? await Task.sleep(for: .seconds(2))
+            helperClient.connect()
+            try? await Task.sleep(for: .seconds(1))
+        } else {
+            // XPC 不通 → launchctl 强制重启
+            let ok = DaemonInstaller().forceRestart()
+            if ok {
+                try? await Task.sleep(for: .seconds(2))
+                helperClient.connect()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+        healthState = await helperClient.probeHealth()
+        lastProbeTime = Date()
+        isRestarting = false
+    }
+}
 
 // MARK: - App 锁定设置区
 
@@ -1005,7 +1144,9 @@ private struct BetaBadge: View {
 private struct AboutTab: View {
     @Environment(HelperClient.self) private var helperClient
     @Environment(UpdateChecker.self) private var updater
-    @State private var helperVersion = "—"
+    @State private var healthState: HelperHealthState = .disconnected
+    @State private var isProbing = false
+    @State private var isRestarting = false
     @State private var updateCheckMessage: String? = nil
 
     private var appVersion: String {
@@ -1014,6 +1155,28 @@ private struct AboutTab: View {
         let buildVersion = info?["CFBundleVersion"] as? String ?? ""
         return buildVersion.isEmpty ? shortVersion : "\(shortVersion) (\(buildVersion))"
     }
+
+    private var helperVersion: String {
+        if case .connected(let v) = healthState { return v }
+        return "—"
+    }
+
+    private var statusColor: Color {
+        switch healthState {
+        case .connected: return .green
+        case .unresponsive: return .orange
+        case .disconnected: return .red
+        }
+    }
+
+    private var statusText: String {
+        switch healthState {
+        case .connected: return L10n.k("views.settings_view.connected", fallback: "已连接")
+        case .unresponsive: return "无响应"
+        case .disconnected: return L10n.k("views.settings_view.disconnected", fallback: "未连接")
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // App 头部信息
@@ -1032,23 +1195,72 @@ private struct AboutTab: View {
 
             Divider()
 
-            GroupBox(L10n.k("views.settings_view.xpc_connection", fallback: "XPC 连接")) {
+            GroupBox("Helper 服务") {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Circle()
-                            .fill(helperClient.isConnected ? Color.green : Color.red)
+                            .fill(statusColor)
                             .frame(width: 10, height: 10)
-                        Text(helperClient.isConnected ? L10n.k("views.settings_view.connected", fallback: "已连接") : L10n.k("views.settings_view.disconnected", fallback: "未连接"))
+                        Text(statusText)
                         Spacer()
-                        if !helperClient.isConnected {
-                            Text(L10n.k("views.settings_view.run_install_helper_dev_sh", fallback: "请运行 sudo scripts/install-helper-dev.sh"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+
+                        if isProbing || isRestarting {
+                            ProgressView().controlSize(.small)
                         }
+
+                        Button {
+                            Task { await probe() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(isProbing || isRestarting)
+                        .help("重新检测 Helper 状态")
                     }
-                    if helperClient.isConnected {
-                        LabeledContent(L10n.k("views.settings_view.helper_version", fallback: "Helper 版本"), value: helperVersion)
-                        LabeledContent(L10n.k("views.settings_view.app_version", fallback: "App 版本"), value: appVersion)
+
+                    LabeledContent(L10n.k("views.settings_view.helper_version", fallback: "Helper 版本"), value: helperVersion)
+                    LabeledContent(L10n.k("views.settings_view.app_version", fallback: "App 版本"), value: appVersion)
+
+                    // 异常状态提示 + 重启按钮
+                    if case .unresponsive = healthState {
+                        Divider()
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text("Helper 进程存活但无响应，建议重启恢复。")
+                                .font(.caption)
+                            Spacer()
+                            Button("重启 Helper") {
+                                Task { await restartHelper() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.orange)
+                            .controlSize(.small)
+                            .disabled(isRestarting)
+                        }
+                    } else if case .disconnected = healthState {
+                        Divider()
+                        HStack(spacing: 8) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.red)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Helper 未连接，无法执行任何操作。")
+                                    .font(.caption)
+                                Text(L10n.k("views.settings_view.run_install_helper_dev_sh", fallback: "请运行 sudo scripts/install-helper-dev.sh"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("重启 Helper") {
+                                Task { await restartHelper() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.red)
+                            .controlSize(.small)
+                            .disabled(isRestarting)
+                        }
+                    } else {
+                        // 正常状态下显示更新检查
                         HStack(spacing: 10) {
                             Button {
                                 Task { await checkForAppUpdate() }
@@ -1096,11 +1308,33 @@ private struct AboutTab: View {
             .foregroundStyle(Color.accentColor)
             Spacer()
         }
-        .task {
-            if helperClient.isConnected {
-                helperVersion = (try? await helperClient.getVersion()) ?? L10n.k("common.unknown", fallback: "未知")
+        .task { await probe() }
+    }
+
+    private func probe() async {
+        isProbing = true
+        healthState = await helperClient.probeHealth()
+        isProbing = false
+    }
+
+    private func restartHelper() async {
+        isRestarting = true
+        let sent = await helperClient.requestHelperRestart()
+        if sent {
+            try? await Task.sleep(for: .seconds(2))
+            helperClient.connect()
+            try? await Task.sleep(for: .seconds(1))
+        } else {
+            // XPC 不通 → launchctl 强制重启
+            let ok = DaemonInstaller().forceRestart()
+            if ok {
+                try? await Task.sleep(for: .seconds(2))
+                helperClient.connect()
+                try? await Task.sleep(for: .seconds(1))
             }
         }
+        healthState = await helperClient.probeHealth()
+        isRestarting = false
     }
 
     @MainActor
