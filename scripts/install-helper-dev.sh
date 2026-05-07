@@ -22,7 +22,11 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ── 查找当前仓库优先、其次 Xcode 全局 DerivedData 中最新构建的 ClawdHomeHelper ──
 find_built_binary() {
-    find "$REPO_ROOT/build/DerivedData" "$HOME/Library/Developer/Xcode/DerivedData" \
+    local dirs=()
+    [ -d "$REPO_ROOT/build/DerivedData" ] && dirs+=("$REPO_ROOT/build/DerivedData")
+    [ -d "$HOME/Library/Developer/Xcode/DerivedData" ] && dirs+=("$HOME/Library/Developer/Xcode/DerivedData")
+    [ ${#dirs[@]} -eq 0 ] && return
+    find "${dirs[@]}" \
         -name "ClawdHomeHelper" -type f \
         ! -path "*.dSYM/*" \
         2>/dev/null \

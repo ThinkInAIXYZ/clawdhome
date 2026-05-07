@@ -10,6 +10,7 @@ enum HermesDetailMode: Hashable {
     case profiles
     case config
     case browser
+    case settings
     // 实例管理（与 OpenClaw 共享内容视图）
     case files
     case terminal
@@ -76,6 +77,10 @@ struct HermesDetailView: View {
     @State private var showInstallToolSuccess = false
     @State private var installToolError: String?
     @State private var isResettingBrowserAccount = false
+    @State private var isInstallingOpenCLI = false
+    @State private var isRunningOpenCLIDoctor = false
+    @State private var opencliVersion: String?
+    @State private var opencliDoctorMessage: String?
     @State private var showResetBrowserAccountConfirm = false
     @State private var showAddManualLoginSite = false
     @State private var manualLoginSiteName = ""
@@ -108,6 +113,8 @@ struct HermesDetailView: View {
 
                 if mode == .browser {
                     hermesBrowserBody
+                } else if mode == .settings {
+                    ShrimpSettingsV2View(user: user)
                 } else if mode == .profiles && showMultiAgentEntrypoints {
                     profilesBody
                 } else if mode == .files {
@@ -350,6 +357,10 @@ struct HermesDetailView: View {
                             ? L10n.k("common.status.installed", fallback: "已安装")
                             : L10n.k("common.status.not_installed", fallback: "未安装")
                     )
+                    row(
+                        "OpenCLI",
+                        opencliVersion.map { "v\($0)" } ?? L10n.k("common.status.not_installed", fallback: "未安装")
+                    )
                 }
             } label: {
                 Label(L10n.k("hermes.browser.runtime_account", fallback: "Hermes 浏览器账号"), systemImage: "globe")
@@ -384,6 +395,30 @@ struct HermesDetailView: View {
                 .buttonStyle(.bordered)
                 .disabled(!helperClient.isConnected || isInstallingBrowserAccountTool)
 
+                Button {
+                    Task { await installOpenCLI() }
+                } label: {
+                    Label(
+                        isInstallingOpenCLI
+                            ? "安装 OpenCLI 中…"
+                            : (opencliVersion == nil ? "安装 OpenCLI" : "升级 OpenCLI"),
+                        systemImage: "shippingbox"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!helperClient.isConnected || isInstallingOpenCLI || isRunningOpenCLIDoctor)
+
+                Button {
+                    Task { await runOpenCLIDoctor() }
+                } label: {
+                    Label(
+                        isRunningOpenCLIDoctor ? "Doctor 检测中…" : "OpenCLI Doctor",
+                        systemImage: "stethoscope"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!helperClient.isConnected || opencliVersion == nil || isInstallingOpenCLI || isRunningOpenCLIDoctor)
+
                 manualLoginMenu
 
                 Button(role: .destructive) {
@@ -398,6 +433,13 @@ struct HermesDetailView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(!helperClient.isConnected || isResettingBrowserAccount)
+            }
+
+            if let opencliDoctorMessage, !opencliDoctorMessage.isEmpty {
+                Text(opencliDoctorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
 
             Spacer()
@@ -877,6 +919,7 @@ struct HermesDetailView: View {
     @MainActor
     private func refreshBrowserAccountStatus() async {
         browserAccountStatus = await helperClient.getBrowserAccountStatus(username: user.username)
+        opencliVersion = await helperClient.getOpenCLIVersion(username: user.username)
     }
 
     @MainActor
@@ -942,6 +985,27 @@ struct HermesDetailView: View {
         } catch {
             await refreshBrowserAccountStatus()
         }
+    }
+
+    @MainActor
+    private func installOpenCLI() async {
+        isInstallingOpenCLI = true
+        defer { isInstallingOpenCLI = false }
+        do {
+            try await helperClient.installOpenCLI(username: user.username)
+            opencliDoctorMessage = "OpenCLI 安装完成。"
+            await refreshBrowserAccountStatus()
+        } catch {
+            opencliDoctorMessage = "OpenCLI 安装失败：\(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func runOpenCLIDoctor() async {
+        isRunningOpenCLIDoctor = true
+        defer { isRunningOpenCLIDoctor = false }
+        let (ok, output) = await helperClient.runOpenCLIDoctor(username: user.username)
+        opencliDoctorMessage = ok ? output : "Doctor 失败：\(output)"
     }
 
     private func configureChatTabsIfNeeded() {
@@ -1168,13 +1232,22 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, @preconcurren
     private var pollTask: Task<Void, Never>?
     private var lastResizeSent: (cols: Int, rows: Int)?
     private var pendingResize: (cols: Int, rows: Int)?
+    private var lastKnownSize: (cols: Int, rows: Int)?
     private var isReplaying = false
+    private var appDidBecomeActiveObserver: NSObjectProtocol?
 
     init(helperClient: HelperClient, username: String, command: [String]) {
         self.helperClient = helperClient
         self.username = username
         self.command = command
         super.init()
+        appDidBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleAppDidBecomeActive()
+        }
     }
 
     deinit {
@@ -1185,6 +1258,9 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, @preconcurren
             Task {
                 _ = await client.terminateMaintenanceTerminalSession(sessionID: sessionID)
             }
+        }
+        if let observer = appDidBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(observer)
         }
     }
 
@@ -1371,6 +1447,14 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, @preconcurren
         }
     }
 
+    private func handleAppDidBecomeActive() {
+        guard !isClosed, !didExit else { return }
+        guard let size = lastKnownSize ?? lastResizeSent ?? pendingResize else { return }
+        // 重新激活时强制触发一次 resize，确保 PTY/TUI 在未发生尺寸变化时也能重绘。
+        lastResizeSent = nil
+        sendResize(cols: size.cols, rows: size.rows)
+    }
+
     private func appendOutput(_ text: String) {
         guard !text.isEmpty else { return }
         outputBuffer += text
@@ -1401,6 +1485,7 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, @preconcurren
 
     func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
         guard newCols > 0, newRows > 0 else { return }
+        lastKnownSize = (newCols, newRows)
         if let lastResizeSent,
            lastResizeSent.cols == newCols,
            lastResizeSent.rows == newRows {
@@ -2036,6 +2121,7 @@ struct HermesDetailContainer: View {
             hermesSidebarButton(.terminal, label: "终端", icon: "terminal")
             hermesSidebarButton(.processes, label: L10n.k("user.detail.auto.processes", fallback: "进程"), icon: "square.3.layers.3d")
             hermesSidebarButton(.logs, label: L10n.k("user.detail.auto.logs", fallback: "日志"), icon: "doc.text.magnifyingglass")
+            hermesSidebarButton(.settings, label: L10n.k("user.detail.sidebar.settings", fallback: "设置"), icon: "gearshape")
 
             Spacer()
 

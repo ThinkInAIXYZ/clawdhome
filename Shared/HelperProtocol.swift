@@ -151,6 +151,24 @@ import Foundation
         withReply reply: @escaping (Bool, String) -> Void
     )
 
+    /// 安装用户级 OpenCLI（npm global）并刷新 clawdhome-browser 对 opencli 的 wrapper 接管
+    func installOpenCLI(
+        username: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 查询用户级 OpenCLI 版本（未安装返回空字符串）
+    func getOpenCLIVersion(
+        username: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 执行 opencli doctor，自检浏览器桥接与 daemon 状态
+    func runOpenCLIDoctor(
+        username: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
     /// 写入指定用户的 openclaw 配置项（~/.openclaw/）
     func setConfig(
         username: String,
