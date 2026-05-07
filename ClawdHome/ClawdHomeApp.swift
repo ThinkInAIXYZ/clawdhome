@@ -53,6 +53,13 @@ struct ClawdHomeApp: App {
                 .task { await updater.checkAppIfNeeded() }
                 .task { await MainActor.run { shrimpPool.start() } }
                 .onAppear { modelStore.load() }
+                .task {
+                    // 主界面稳定后延迟 2s 预热角色中心 WebView，用户无感知
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    await MainActor.run {
+                        RoleMarketWebViewCache.shared.preloadIfNeeded()
+                    }
+                }
         }
         .windowStyle(.titleBar)
         // .contentSize 会随 inspector 列宽变化不断触发窗口 resize，造成约束死循环崩溃

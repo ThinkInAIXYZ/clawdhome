@@ -8,12 +8,14 @@ struct AwakeningWizardView: View {
     @Binding var isPresented: Bool
     var onDismiss: (() -> Void)? = nil
     /// 正式唤醒回调 (username, fullName, description, soul, identity, userProfile)，由调用方负责创建用户并打开初始化向导
-    var onAwaken: ((String, String, String, String, String, String) -> Void)? = nil
+    var onAwaken: ((String, String, String, String, String, String) async throws -> Void)? = nil
 
     @State private var step = 1
     @State private var displayName = ""
     @State private var osUsername = ""
     @State private var osUsernameError: String? = nil
+    @State private var submitError: String? = nil
+    @State private var isSubmitting = false
 
     // 可编辑的文件内容（从 DNA 初始化）
     @State private var editedSoul: String = ""
@@ -73,21 +75,58 @@ struct AwakeningWizardView: View {
             .padding(.vertical, 8)
             .background(Color.green.opacity(0.07))
 
+            if let submitError {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.red)
+                            .padding(.top, 1)
+                        Text(submitError)
+                            .font(.system(size: 12))
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    HStack {
+                        Text("请点击“← 返回”修改后重试。")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button("返回修改") {
+                            step = 2
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(isSubmitting)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 24)
+                .padding(.top, 10)
+            }
+
             // 底部按钮
             HStack(spacing: 12) {
                 if step > 1 {
                     Button("← 返回") { step -= 1 }
                         .buttonStyle(.bordered)
+                        .disabled(isSubmitting)
                 } else {
                     Button("取消") {
                         isPresented = false
                         onDismiss?()
                     }
                     .buttonStyle(.bordered)
+                    .disabled(isSubmitting)
                 }
 
                 Button(action: handleNext) {
-                    Text(step == 3 ? "正式唤醒 🦞" : "下一步 →")
+                    Text(step == 3 ? (isSubmitting ? "唤醒中…" : "正式唤醒 🦞") : "下一步 →")
                         .font(.system(size: 13, weight: .semibold))
                         .padding(.horizontal, 8)
                 }
@@ -95,7 +134,7 @@ struct AwakeningWizardView: View {
                 .disabled(!canProceed)
             }
             .padding(.horizontal, 24)
-            .padding(.top, 12)
+            .padding(.top, 10)
             .padding(.bottom, 20)
         }
         .onAppear {
@@ -110,9 +149,31 @@ struct AwakeningWizardView: View {
             // 显示名预填充为角色名
             displayName = dna.name
         }
+        .overlay {
+            if isSubmitting {
+                ZStack {
+                    Color.black.opacity(0.16)
+                        .ignoresSafeArea()
+                    VStack(spacing: 10) {
+                        ProgressView()
+                            .controlSize(.large)
+                        Text("正在创建虾并启动初始化向导…")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("通常需要 3-8 秒，请稍候")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 16)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .transition(.opacity)
+            }
+        }
     }
 
     var canProceed: Bool {
+        if isSubmitting { return false }
         switch step {
         case 1: return true
         case 2:
@@ -124,6 +185,7 @@ struct AwakeningWizardView: View {
     }
 
     func handleNext() {
+        submitError = nil
         if step == 2 {
             guard isValidOSUsername(osUsername) else {
                 osUsernameError = "以字母开头，只允许字母、数字、下划线"
@@ -134,11 +196,28 @@ struct AwakeningWizardView: View {
         if step < 3 {
             step += 1
         } else {
+            guard !isSubmitting else { return }
+            isSubmitting = true
+
             // 正式唤醒：触发创建用户并进入初始化向导
-            let finalDisplayName = displayName.trimmingCharacters(in: .whitespaces)
-            onAwaken?(osUsername, finalDisplayName, dna.name, editedSoul, editedIdentity, editedUser)
-            isPresented = false
-            onDismiss?()
+            let finalDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let finalUsername = osUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            Task {
+                do {
+                    try await onAwaken?(finalUsername, finalDisplayName, dna.name, editedSoul, editedIdentity, editedUser)
+                    await MainActor.run {
+                        isSubmitting = false
+                        isPresented = false
+                        onDismiss?()
+                    }
+                } catch {
+                    await MainActor.run {
+                        isSubmitting = false
+                        submitError = error.localizedDescription
+                    }
+                }
+            }
         }
     }
 
@@ -289,11 +368,19 @@ struct DNAFileEditor: View {
             // 展开区：TextEditor
             if isExpanded {
                 TextEditor(text: $text)
-                    .font(.system(size: 12))
-                    .lineSpacing(3)
+                    .font(.system(size: 13))
+                    .lineSpacing(4)
                     .frame(minHeight: 120, maxHeight: 200)
-                    .padding(10)
+                    .padding(8)
+                    .scrollContentBackground(.hidden) // 隐藏系统默认背景
                     .background(Color(nsColor: .textBackgroundColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 14)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
