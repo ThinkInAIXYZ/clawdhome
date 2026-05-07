@@ -82,6 +82,10 @@ enum BrowserAccountManager {
             extensionPath: extensionPath,
             logURL: nil
         )
+        if let existingSession = readSession(username: username),
+           isReachable(httpEndpoint: existingSession.httpEndpoint) {
+            return existingSession
+        }
         try removeStaleActivePortIfNeeded(context.paths.devToolsActivePortFile.path)
 
         let port = try findAvailableLocalPort()
@@ -547,7 +551,7 @@ enum BrowserAccountManager {
           done
         fi
 
-        for _ in 1 2 3 4 5 6 7 8 9 10; do
+        for _ in {1..40}; do
           status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"
           echo "$status_json" | /usr/bin/grep -q '"extensionConnected":true' && break
           sleep 0.5
