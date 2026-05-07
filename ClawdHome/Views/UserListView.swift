@@ -131,6 +131,8 @@ struct ClawPoolView: View {
     // MARK: Gateway 分组 — Agent 卡片
     @State private var agentsByUser: [String: [AgentProfile]] = [:]
     @State private var expandedUsername: String?  // 当前展开角色面板的卡片
+    @State private var isLoadingAllAgents = false
+    @State private var lastLoadAllAgentsAt: Date = .distantPast
     private var currentUsername: String { NSUserName() }
     /// 默认仅展示标准用户；可在设置中显式开启当前管理员展示。
     private var displayedUsers: [ManagedUser] {
@@ -185,11 +187,21 @@ struct ClawPoolView: View {
     private var agentReloadKey: String {
         pool.users
             .filter { !$0.isAdmin }
-            .map { "\($0.username):\($0.isRunning):\($0.prefersHermesRuntime)" }
+            .sorted { $0.username.localizedCompare($1.username) == .orderedAscending }
+            .map { "\($0.username):\($0.prefersHermesRuntime)" }
             .joined(separator: "|")
     }
 
     private func loadAllAgents() async {
+        let now = Date()
+        guard !isLoadingAllAgents else { return }
+        guard now.timeIntervalSince(lastLoadAllAgentsAt) >= 5 else { return }
+        isLoadingAllAgents = true
+        defer {
+            isLoadingAllAgents = false
+            lastLoadAllAgentsAt = Date()
+        }
+
         for user in pool.users where !user.isAdmin {
             if user.prefersHermesRuntime {
                 if let profiles = try? await helperClient.listHermesProfiles(username: user.username) {
@@ -710,11 +722,19 @@ struct ClawPoolView: View {
         Table(displayedUsers, selection: $selectedClaw) {
             TableColumn("") { claw in
                 if claw.clawType == .macosUser {
-                    if claw.prefersHermesRuntime {
+                    if !claw.versionChecked {
+                        Text("🦞")
+                            .font(.system(size: 14))
+                            .frame(width: 16, height: 16)
+                    } else if claw.prefersHermesRuntime {
                         HermesLogoMark()
                             .frame(width: 16, height: 16)
-                    } else {
+                    } else if claw.openclawVersion != nil {
                         OpenClawLogoMark()
+                            .frame(width: 16, height: 16)
+                    } else {
+                        Text("🦞")
+                            .font(.system(size: 14))
                             .frame(width: 16, height: 16)
                     }
                 } else {
@@ -1463,13 +1483,21 @@ private struct ClawCard: View {
                 // 图标 + 状态角标
                 ZStack(alignment: .bottomTrailing) {
                     if claw.clawType == .macosUser {
-                        if claw.prefersHermesRuntime {
+                        if !claw.versionChecked {
+                            Text("🦞")
+                                .font(.system(size: 30))
+                                .frame(width: 44, height: 44)
+                        } else if claw.prefersHermesRuntime {
                             HermesLogoMark()
                                 .frame(width: 32, height: 32)
                                 .frame(width: 44, height: 44)
-                        } else {
+                        } else if claw.openclawVersion != nil {
                             OpenClawLogoMark()
                                 .frame(width: 32, height: 32)
+                                .frame(width: 44, height: 44)
+                        } else {
+                            Text("🦞")
+                                .font(.system(size: 30))
                                 .frame(width: 44, height: 44)
                         }
                     } else {

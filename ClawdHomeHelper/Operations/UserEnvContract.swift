@@ -16,12 +16,15 @@ enum UserEnvContract {
         "HOMEBREW_PREFIX",
         "HOMEBREW_CELLAR",
         "HOMEBREW_REPOSITORY",
+        "HOMEBREW_CACHE",
         "NPM_CONFIG_PREFIX",
         "npm_config_prefix",
         "NPM_CONFIG_CACHE",
         "npm_config_cache",
         "NPM_CONFIG_USERCONFIG",
         "npm_config_userconfig",
+        "OPENCLAW_PATH_BOOTSTRAPPED",
+        "OPENCLI_PROFILE",
     ]
 
     static func home(username: String) -> String {
@@ -44,6 +47,10 @@ enum UserEnvContract {
         "/var/lib/clawdhome/cache/npm"
     }
 
+    static func homebrewSharedCacheDir() -> String {
+        "/var/lib/clawdhome/cache/homebrew"
+    }
+
     /// ~/.zprofile 里要求存在的关键 export（顺序即最终建议顺序）
     static func zprofileRequiredExports() -> [String] {
         [
@@ -51,6 +58,7 @@ enum UserEnvContract {
             "export HOMEBREW_PREFIX=\"$HOME/.brew\"",
             "export HOMEBREW_CELLAR=\"$HOME/.brew/Cellar\"",
             "export HOMEBREW_REPOSITORY=\"$HOME/.brew\"",
+            "export HOMEBREW_CACHE=\"/var/lib/clawdhome/cache/homebrew\"",
             "export NPM_CONFIG_PREFIX=\"$HOME/.npm-global\"",
             "export npm_config_prefix=\"$HOME/.npm-global\"",
             "export NPM_CONFIG_CACHE=\"/var/lib/clawdhome/cache/npm\"",
@@ -67,6 +75,7 @@ enum UserEnvContract {
         let brew = brewRoot(username: username)
         let npmGlobal = npmGlobalDir(username: username)
         let npmCache = npmSharedCacheDir()
+        let homebrewCache = homebrewSharedCacheDir()
         let npmrc = npmUserConfig(username: username)
         var env: [String: String] = [
             "HOME": homeDir,
@@ -74,13 +83,20 @@ enum UserEnvContract {
             "HOMEBREW_PREFIX": brew,
             "HOMEBREW_CELLAR": "\(brew)/Cellar",
             "HOMEBREW_REPOSITORY": brew,
+            "HOMEBREW_CACHE": homebrewCache,
             "NPM_CONFIG_PREFIX": npmGlobal,
             "npm_config_prefix": npmGlobal,
             "NPM_CONFIG_CACHE": npmCache,
             "npm_config_cache": npmCache,
             "NPM_CONFIG_USERCONFIG": npmrc,
             "npm_config_userconfig": npmrc,
+            // OpenClaw 会在启动时 best-effort 追加 /opt/homebrew/bin、/usr/local/bin。
+            // ClawdHome 已经构造了虾用户隔离 PATH，这里阻止它把宿主工具链混回来。
+            "OPENCLAW_PATH_BOOTSTRAPPED": "1",
         ]
+        if let profile = BrowserAccountManager.readOpenCLIProfile(username: username) {
+            env["OPENCLI_PROFILE"] = profile
+        }
 
         let proxy = normalizedProxyEnvironment(username: username)
         for (key, value) in proxy {

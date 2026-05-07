@@ -21,9 +21,8 @@ extension ClawdHomeHelperImpl {
     func installOpenclaw(username: String, version: String?,
                          withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("安装 openclaw @\(username) v\(version ?? "latest")")
-        let logURL = initLogURL(username: username)
         do {
-            try InstallManager.install(username: username, version: version, logURL: logURL)
+            try InstallManager.install(username: username, version: version, logURL: initLogURL(username: username))
 
             // 升级后环境验证与修复
             let issues = InstallManager.verifyEnvironment(username: username)
@@ -946,7 +945,7 @@ enum HomebrewRepairManager {
         let home = UserEnvContract.home(username: username)
         let profilePath = "\(home)/.zprofile"
         let sharedCacheRoot = "/var/lib/clawdhome/cache"
-        let homebrewCacheDir = "\(sharedCacheRoot)/homebrew"
+        let homebrewCacheDir = UserEnvContract.homebrewSharedCacheDir()
         let nodePath = ConfigWriter.buildNodePath(username: username)
 
         let installScript = """
@@ -1010,6 +1009,7 @@ enum HomebrewRepairManager {
         )
         _ = try? FilePermissionHelper.chmod(sharedCacheRoot, mode: "1777")
         _ = try? FilePermissionHelper.chmod(homebrewCacheDir, mode: "1777")
+        _ = try? FilePermissionHelper.chmodSymbolicRecursive(homebrewCacheDir, expr: "a+rwX")
         let cacheTarPath = "\(homebrewCacheDir)/brew-master.tar.gz"
         if FileManager.default.fileExists(atPath: cacheTarPath) {
             // 缓存文件可能由上一只 Shrimp 用户创建；sticky 共享目录下，后续用户无法替换它。

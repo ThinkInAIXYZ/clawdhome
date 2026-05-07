@@ -126,13 +126,22 @@ final class ShrimpTerminalSession: NSObject, ObservableObject, TerminalViewDeleg
 
     private var lastResizeSent: (cols: Int, rows: Int)?
     private var pendingResize: (cols: Int, rows: Int)?
+    private var lastKnownSize: (cols: Int, rows: Int)?
     private var isReplaying = false
+    private var appDidBecomeActiveObserver: NSObjectProtocol?
 
     init(helperClient: HelperClient, username: String, command: [String]) {
         self.helperClient = helperClient
         self.username = username
         self.command = command
         super.init()
+        appDidBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleAppDidBecomeActive()
+        }
     }
 
     deinit {
@@ -143,6 +152,9 @@ final class ShrimpTerminalSession: NSObject, ObservableObject, TerminalViewDeleg
             Task {
                 _ = await client.terminateMaintenanceTerminalSession(sessionID: sessionID)
             }
+        }
+        if let observer = appDidBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(observer)
         }
     }
 
@@ -367,6 +379,14 @@ final class ShrimpTerminalSession: NSObject, ObservableObject, TerminalViewDeleg
         }
     }
 
+    private func handleAppDidBecomeActive() {
+        guard !isClosed, !didExit else { return }
+        guard let size = lastKnownSize ?? lastResizeSent ?? pendingResize else { return }
+        // 重新激活时强制触发一次 resize，确保 PTY/TUI 在未发生尺寸变化时也能重绘。
+        lastResizeSent = nil
+        sendResize(cols: size.cols, rows: size.rows)
+    }
+
     private func appendOutput(_ text: String) {
         guard !text.isEmpty else { return }
         outputBuffer += text
@@ -405,6 +425,7 @@ final class ShrimpTerminalSession: NSObject, ObservableObject, TerminalViewDeleg
 
     func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
         guard newCols > 0, newRows > 0 else { return }
+        lastKnownSize = (newCols, newRows)
         if let lastResizeSent,
            lastResizeSent.cols == newCols,
            lastResizeSent.rows == newRows {

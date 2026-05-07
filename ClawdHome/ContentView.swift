@@ -1,5 +1,6 @@
 // ClawdHome/ContentView.swift
 
+import AppKit
 import SwiftUI
 
 // MARK: - 顶层导航目的地
@@ -7,6 +8,7 @@ enum NavDestination: Hashable {
     case dashboard
     case clawPool
     case vaultFiles
+    case prompts
     case network
     case aiLab
     case models
@@ -23,8 +25,15 @@ struct ContentView: View {
     @Environment(AppLockStore.self) private var lockStore
     @State private var daemonInstaller = DaemonInstaller()
     @State private var navSelection: NavDestination? = .clawPool
+    @State private var chromeInstallCheckCompleted = false
+    @State private var isChromeInstalled = true
+    @State private var browserSessionPromptUsername: String?
+    @State private var browserSessionPromptSuppressed = false
+    @State private var browserSessionPromptCheckInFlight = false
     // 0 = 跟随系统, 1 = 浅色, 2 = 深色
     @AppStorage("colorSchemePreference") private var colorSchemePreference: Int = 0
+
+    private let chromeInstallCheckTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     private var preferredColorScheme: ColorScheme? {
         switch colorSchemePreference {
@@ -32,6 +41,13 @@ struct ContentView: View {
         case 2: return .dark
         default: return nil
         }
+    }
+
+    private var shouldShowChromeInstallHint: Bool {
+        chromeInstallCheckCompleted
+        && !isChromeInstalled
+        && !lockStore.isLocked
+        && (navSelection == .dashboard || navSelection == .clawPool || navSelection == nil)
     }
 
     var body: some View {
@@ -52,6 +68,8 @@ struct ContentView: View {
                             .tag(NavDestination.clawPool)
                         Label(L10n.k("auto.content_view.vault_files", fallback: "文件共享"), systemImage: "folder.badge.person.crop")
                             .tag(NavDestination.vaultFiles)
+                        Label("Prompt", systemImage: "text.bubble")
+                            .tag(NavDestination.prompts)
                     }
                     Section(L10n.k("auto.content_view.services", fallback: "服务")) {
                         Label { Text(L10n.k("auto.content_view.role_market", fallback: "角色中心")) } icon: { Text("🎭") }
@@ -142,6 +160,8 @@ struct ContentView: View {
                     VaultFilesView()
                         .environment(helperClient)
                         .environment(pool)
+                case .prompts:
+                    PromptLibraryView()
                 case .network:
                     NetworkPolicyView()
                         .environment(helperClient)
@@ -181,7 +201,37 @@ struct ContentView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            if shouldShowChromeInstallHint {
+                ChromeInstallHintCard()
+                    .padding(20)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
         .animation(.easeInOut(duration: 0.25), value: helperClient.isConnected)
+        .animation(.easeInOut(duration: 0.18), value: shouldShowChromeInstallHint)
+        .alert(
+            "初始化浏览器 Session？",
+            isPresented: Binding(
+                get: { browserSessionPromptUsername != nil },
+                set: { if !$0 { browserSessionPromptUsername = nil } }
+            ),
+            presenting: browserSessionPromptUsername
+        ) { username in
+            Button("这次不初始化", role: .cancel) {
+                browserSessionPromptSuppressed = true
+                browserSessionPromptUsername = nil
+            }
+            Button("打开浏览器") {
+                browserSessionPromptSuppressed = true
+                browserSessionPromptUsername = nil
+                Task {
+                    try? await helperClient.openBrowserAccount(username: username)
+                }
+            }
+        } message: { username in
+            Text("检测到 \(username) 的浏览器工具已安装，但还没有初始化 session。是否现在打开 Chrome 完成初始化？")
+        }
         .overlay {
             if lockStore.isLocked {
                 AppLockScreen()
@@ -194,6 +244,21 @@ struct ContentView: View {
         .onAppear {
             let visible = (navSelection == .dashboard || navSelection == nil)
             pool.setDashboardVisible(visible)
+            refreshChromeInstallStatus()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshChromeInstallStatus()
+        }
+        .onReceive(chromeInstallCheckTimer) { _ in
+            if chromeInstallCheckCompleted && !isChromeInstalled {
+                refreshChromeInstallStatus()
+            }
+        }
+        .onChange(of: isChromeInstalled) { _, _ in
+            checkForBrowserSessionInitializationPrompt()
+        }
+        .onChange(of: pool.didFinishInitialUserLoad) { _, _ in
+            checkForBrowserSessionInitializationPrompt()
         }
         .onChange(of: navSelection) { _, newValue in
             let visible = (newValue == .dashboard || newValue == nil)
@@ -201,6 +266,105 @@ struct ContentView: View {
         }
     }
 
+    private func refreshChromeInstallStatus() {
+        isChromeInstalled = ChromeInstallDetector.isGoogleChromeInstalled()
+        chromeInstallCheckCompleted = true
+        checkForBrowserSessionInitializationPrompt()
+    }
+
+    private func checkForBrowserSessionInitializationPrompt() {
+        guard chromeInstallCheckCompleted,
+              isChromeInstalled,
+              !browserSessionPromptSuppressed,
+              browserSessionPromptUsername == nil,
+              !browserSessionPromptCheckInFlight,
+              pool.didFinishInitialUserLoad,
+              !pool.users.isEmpty else {
+            return
+        }
+
+        browserSessionPromptCheckInFlight = true
+        let usernames = pool.users.map(\.username)
+        Task {
+            var candidate: String?
+            for username in usernames {
+                guard !Task.isCancelled else { return }
+                guard let status = await helperClient.getBrowserAccountStatus(username: username) else {
+                    continue
+                }
+                if status.toolInstalled && !status.sessionExists {
+                    candidate = username
+                    break
+                }
+            }
+
+            await MainActor.run {
+                browserSessionPromptCheckInFlight = false
+                guard let candidate,
+                      isChromeInstalled,
+                      !browserSessionPromptSuppressed,
+                      browserSessionPromptUsername == nil else {
+                    return
+                }
+                browserSessionPromptUsername = candidate
+            }
+        }
+    }
+
+}
+
+private enum ChromeInstallDetector {
+    static func isGoogleChromeInstalled() -> Bool {
+        if NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.google.Chrome") != nil {
+            return true
+        }
+
+        let fileManager = FileManager.default
+        let candidatePaths = [
+            "/Applications/Google Chrome.app",
+            "\(NSHomeDirectory())/Applications/Google Chrome.app",
+        ]
+        return candidatePaths.contains { fileManager.fileExists(atPath: $0) }
+    }
+}
+
+private struct ChromeInstallHintCard: View {
+    private let chromeDownloadURL = URL(string: "https://www.google.com/chrome/")!
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "globe.badge.chevron.backward")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("未检测到 Google Chrome")
+                        .font(.headline)
+                    Text("浏览器账号和网页登录能力需要 Chrome。安装完成后，这个提示会自动消失。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Link(destination: chromeDownloadURL) {
+                Label("前往 Chrome 官网安装", systemImage: "arrow.up.forward.square")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(14)
+        .frame(width: 320, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.orange.opacity(0.28), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.16), radius: 18, x: 0, y: 8)
+    }
 }
 
 // MARK: - 敬请期待占位视图

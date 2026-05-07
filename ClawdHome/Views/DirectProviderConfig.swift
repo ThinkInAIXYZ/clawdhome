@@ -1532,6 +1532,8 @@ final class EmbeddedGatewayConsoleCoordinator: NSObject, WKNavigationDelegate, W
     var pendingFileInputAccept = ""
     var onNavigationStateChanged: ((Bool) -> Void)?
     var onContentProcessTerminated: (() -> Void)?
+    var onPromptMemoryRequest: ((String) -> Void)?
+    var onPromptInputChanged: ((String) -> Void)?
     var onDidFinishNavigation: ((WKWebView) -> Void)?
 
     func webView(
@@ -1631,6 +1633,12 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
 
     let coordinator = EmbeddedGatewayConsoleCoordinator()
     private(set) var webView: WKWebView?
+    var onPromptMemoryRequest: ((String) -> Void)? {
+        didSet { coordinator.onPromptMemoryRequest = onPromptMemoryRequest }
+    }
+    var onPromptInputChanged: ((String) -> Void)? {
+        didSet { coordinator.onPromptInputChanged = onPromptInputChanged }
+    }
     private var loadedURL: String?
     private var loadState: LoadState = .idle
     private var lastRetryAt: Date = .distantPast
@@ -1653,8 +1661,10 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
         configuration.processPool = WKProcessPool()
         configuration.websiteDataStore = .default()
         configuration.userContentController.add(coordinator, name: "fileInputAccept")
+        configuration.userContentController.add(coordinator, name: "promptMemory")
         configuration.userContentController.addUserScript(.controlUIBootstrapReset)
         configuration.userContentController.addUserScript(.fileInputAcceptCapture)
+        configuration.userContentController.addUserScript(.promptMemoryBridge)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.setValue(false, forKey: "drawsBackground")
@@ -1774,6 +1784,17 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
                 self.startLoadWatchdog(for: targetURL)
             }
         }
+    }
+
+    func insertPromptText(_ text: String, mode: PromptInsertionMode) {
+        guard let webView else { return }
+        let payload: [String: Any] = ["text": text, "mode": mode.rawValue]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript(
+            "window.__clawdPromptMemory && window.__clawdPromptMemory.insert(\(json));",
+            completionHandler: nil
+        )
     }
 }
 
