@@ -16,7 +16,12 @@ struct ShrimpSettingsV2View: View {
     @Environment(HelperClient.self) private var helperClient
     @Environment(\.dismiss) private var dismiss
 
-    @State private var selectedTab: SettingsTab = .agents
+    @State private var selectedTab: SettingsTab
+
+    init(user: ManagedUser, initialTab: SettingsTab = .agents) {
+        self.user = user
+        _selectedTab = State(initialValue: initialTab)
+    }
 
     // 共享可变状态（从 openclaw.json 读取，保存时写回）
     @State private var config: ShrimpConfigV2 = .init()

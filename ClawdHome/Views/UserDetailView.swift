@@ -132,6 +132,9 @@ struct UserDetailView: View {
     @State private var quickTransferLastPaths: [String] = []
     // Tab
     @State private var selectedTab: ClawTab = .overview
+    /// 跳转到 settings tab 时，让 ShrimpSettingsV2View 内部默认选中哪个二级 tab（model/agents/...）
+    /// 用 .id(settingsInitialTab) 绑定让 view 在切换时重建并应用新的 initialTab
+    @State private var settingsInitialTab: ShrimpSettingsV2View.SettingsTab = .agents
     // Agent
     @State private var agents: [AgentProfile] = []
     @State private var selectedAgentId: String? = nil
@@ -468,7 +471,8 @@ struct UserDetailView: View {
                 username: user.username
             )
         case .settings:
-            ShrimpSettingsV2View(user: user)
+            ShrimpSettingsV2View(user: user, initialTab: settingsInitialTab)
+                .id(settingsInitialTab)
                 .environment(helperClient)
                 .environment(gatewayHub)
         }
@@ -1207,7 +1211,7 @@ struct UserDetailView: View {
                         foreground: .primary,
                         disabled: !helperClient.isConnected
                     ) {
-                        showModelConfig = true
+                        goToSettings(.model)
                     }
                     overviewCompactActionButton(
                         title: L10n.k("model_priority.button", fallback: "优先级"),
@@ -1918,7 +1922,7 @@ struct UserDetailView: View {
                         }
                     }
                     Spacer()
-                    Button(L10n.k("user.detail.auto.manage", fallback: "管理")) { showModelConfig = true }
+                    Button(L10n.k("user.detail.auto.manage", fallback: "管理")) { goToSettings(.model) }
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.accentColor)
                     .disabled(!helperClient.isConnected)
@@ -3263,6 +3267,12 @@ struct UserDetailView: View {
         openWindow(id: "maintenance-terminal", value: payload)
     }
 
+    /// 详情页"管理 / 配对"按钮的统一跳转：切到 settings tab 并设置二级 tab 初始值
+    private func goToSettings(_ tab: ShrimpSettingsV2View.SettingsTab) {
+        settingsInitialTab = tab
+        selectedTab = .settings
+    }
+
     private func openChannelOnboarding(_ flow: ChannelOnboardingFlow) {
         openWindow(
             id: "channel-onboarding",
@@ -3348,7 +3358,8 @@ struct UserDetailView: View {
                         foreground: isCurrentAgentBound ? .accentColor : (isMultiAgent ? .secondary : .primary),
                         disabled: !helperClient.isConnected
                     ) {
-                        openChannelOnboarding(chId)
+                        // Phase 3：详情页统一跳设置，扫码 / 编辑都在 settings.agents 里完成
+                        goToSettings(.agents)
                     }
                     .overlay(alignment: .topTrailing) {
                         if isCurrentAgentBound {
@@ -3377,8 +3388,8 @@ struct UserDetailView: View {
                     .font(.caption).foregroundStyle(.tertiary)
             }
             Spacer()
-            Button(L10n.k("user.detail.channel.pair", fallback: "配对")) {
-                openChannelOnboarding("feishu")
+            Button(L10n.k("user.detail.channel.manage", fallback: "管理")) {
+                goToSettings(.agents)
             }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.accentColor)
