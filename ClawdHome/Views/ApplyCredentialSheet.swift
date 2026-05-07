@@ -101,12 +101,9 @@ struct ApplyCredentialSheet: View {
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(account.name).font(.callout).fontWeight(.medium)
+                Text(account.displayNameWithAlias).font(.callout).fontWeight(.medium)
                 HStack(spacing: 4) {
-                    Text(account.providerDisplayName)
-                        .font(.caption2).foregroundStyle(.secondary)
                     if let kc = keyConfig {
-                        Text("·").font(.caption2).foregroundStyle(.tertiary)
                         Text(kc.inputLabel).font(.caption2).foregroundStyle(.secondary)
                     }
                     // 显示 secretKey 供用户理解

@@ -34,6 +34,7 @@ enum ExecCommand {
         let brewBin = "\(home)/.brew/bin"
         let npmGlobal = "\(home)/.npm-global"
         let npmGlobalBin = "\(npmGlobal)/bin"
+        let npmSharedCache = "/var/lib/clawdhome/cache/npm"
 
         // 构建 PATH（与 ConfigWriter.buildNodePath 一致的逻辑）
         var pathComponents = [npmGlobalBin, brewBin]
@@ -61,6 +62,8 @@ enum ExecCommand {
             "HOMEBREW_REPOSITORY=\(home)/.brew",
             "NPM_CONFIG_PREFIX=\(npmGlobal)",
             "npm_config_prefix=\(npmGlobal)",
+            "NPM_CONFIG_CACHE=\(npmSharedCache)",
+            "npm_config_cache=\(npmSharedCache)",
             "NPM_CONFIG_USERCONFIG=\(home)/.npmrc",
             "npm_config_userconfig=\(home)/.npmrc",
             "TERM=\(ProcessInfo.processInfo.environment["TERM"] ?? "xterm-256color")",

@@ -9,6 +9,7 @@ struct UserInitWizardView: View {
     let user: ManagedUser
     var onSessionActiveChanged: ((Bool) -> Void)? = nil
 
+    @Environment(GlobalModelStore.self) private var modelStore
     @Environment(HelperClient.self) private var helperClient
     @Environment(GatewayHub.self) private var gatewayHub
     @Environment(MaintenanceWindowRegistry.self) private var maintenanceWindowRegistry
@@ -61,6 +62,18 @@ struct UserInitWizardView: View {
     @State private var activeModelConfigTerminalToken: String? = nil
     @State private var isModelConfigTerminalOpen = false
     @State private var pendingModelConfigTerminalClose: ModelConfigTerminalCloseState? = nil
+    @State private var templateConfigMode: TemplateConfigMode = .existing
+    @State private var selectedGlobalTemplateID: UUID? = nil
+    @State private var hasLocalModelOverride = false
+    @State private var observedGlobalRevision = 0
+    @State private var pendingGlobalRevision = 0
+    @State private var showGlobalRefreshPrompt = false
+    @State private var modelTestPrompt = ""
+    @State private var isTestingModelConfig = false
+    @State private var modelTestMessage: String? = nil
+    @State private var modelTestFailed = false
+    @State private var programmaticProviderTarget: WizardProvider? = nil
+    @State private var newConfigDraft: NewConfigDraft? = nil
 
     // Step 4: 频道配置
     @State private var selectedChannel: WizardChannelType = .feishu
@@ -130,6 +143,103 @@ struct UserInitWizardView: View {
 
     private var availableWizardAuthMethods: [WizardAuthMethod] {
         selectedWizardProvider == .custom ? [.apiKey, .secretReference] : [.apiKey]
+    }
+
+    private var providerScopedTemplates: [ProviderTemplate] {
+        modelStore.templates(for: selectedWizardProvider.rawValue)
+    }
+
+    private var allGlobalTemplates: [ProviderTemplate] {
+        modelStore.providers.filter { !$0.modelIds.isEmpty }
+    }
+
+    private var templateCandidates: [ProviderTemplate] {
+        templateConfigMode == .existing ? allGlobalTemplates : providerScopedTemplates
+    }
+
+    private var selectedProviderTemplate: ProviderTemplate? {
+        if let id = selectedGlobalTemplateID,
+           let matched = templateCandidates.first(where: { $0.id == id }) {
+            return matched
+        }
+        return templateCandidates.first
+    }
+
+    private func snapshotNewConfigDraft() {
+        newConfigDraft = NewConfigDraft(
+            selectedWizardProvider: selectedWizardProvider,
+            selectedWizardAuthMethod: selectedWizardAuthMethod,
+            wizardApiKey: wizardApiKey,
+            customSecretReference: customSecretReference,
+            customProviderId: customProviderId,
+            customModelId: customModelId,
+            customModelAlias: customModelAlias,
+            customBaseURL: customBaseURL,
+            customCompatibility: customCompatibility,
+            selectedMinimaxModel: selectedMinimaxModel,
+            selectedQiniuModel: selectedQiniuModel,
+            selectedZAIModel: selectedZAIModel
+        )
+    }
+
+    private func restoreNewConfigDraftIfNeeded() {
+        guard let draft = newConfigDraft else { return }
+        programmaticProviderTarget = draft.selectedWizardProvider
+        selectedWizardProvider = draft.selectedWizardProvider
+        selectedWizardAuthMethod = draft.selectedWizardAuthMethod
+        wizardApiKey = draft.wizardApiKey
+        customSecretReference = draft.customSecretReference
+        customProviderId = draft.customProviderId
+        customModelId = draft.customModelId
+        customModelAlias = draft.customModelAlias
+        customBaseURL = draft.customBaseURL
+        customCompatibility = draft.customCompatibility
+        selectedMinimaxModel = draft.selectedMinimaxModel
+        selectedQiniuModel = draft.selectedQiniuModel
+        selectedZAIModel = draft.selectedZAIModel
+    }
+
+    private func storedSelection() -> ShrimpModelConfigSelection? {
+        ShrimpModelConfigSourceStore.shared.load(username: user.username)
+    }
+
+    private func persistSelectionMode() {
+        if templateConfigMode == .existing {
+            ShrimpModelConfigSourceStore.shared.saveExisting(
+                username: user.username,
+                templateID: selectedProviderTemplate?.id ?? selectedGlobalTemplateID
+            )
+        } else {
+            ShrimpModelConfigSourceStore.shared.saveNew(username: user.username)
+        }
+    }
+
+    private enum TemplateConfigMode: String, CaseIterable, Identifiable {
+        case existing
+        case new
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .existing: return "已有配置"
+            case .new: return "新增配置"
+            }
+        }
+    }
+
+    private struct NewConfigDraft {
+        var selectedWizardProvider: WizardProvider
+        var selectedWizardAuthMethod: WizardAuthMethod
+        var wizardApiKey: String
+        var customSecretReference: String
+        var customProviderId: String
+        var customModelId: String
+        var customModelAlias: String
+        var customBaseURL: String
+        var customCompatibility: CustomCompatibility
+        var selectedMinimaxModel: MinimaxModel
+        var selectedQiniuModel: QiniuModel
+        var selectedZAIModel: ZAIModel
     }
 
     private var wizardSectionTitleFont: Font {
@@ -305,6 +415,10 @@ struct UserInitWizardView: View {
             resetWizardStateOnly()
         }
         .onChange(of: selectedWizardProvider) { _, _ in
+            if let target = programmaticProviderTarget, target == selectedWizardProvider {
+                programmaticProviderTarget = nil
+                return
+            }
             if selectedWizardProvider != .custom {
                 selectedWizardAuthMethod = .apiKey
             } else if customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -314,6 +428,35 @@ struct UserInitWizardView: View {
             customModelFetchMessage = nil
             customModelFetchError = nil
             resetModelValidationState(clearCredential: true)
+            let candidates = templateConfigMode == .existing ? allGlobalTemplates : providerScopedTemplates
+            if let current = selectedGlobalTemplateID,
+               candidates.contains(where: { $0.id == current }) {
+                // 保留当前已选渠道
+            } else {
+                selectedGlobalTemplateID = candidates.first?.id
+            }
+        }
+        .onChange(of: templateConfigMode) { _, newMode in
+            let candidates = newMode == .existing ? allGlobalTemplates : providerScopedTemplates
+            if let current = selectedGlobalTemplateID,
+               candidates.contains(where: { $0.id == current }) {
+                // 保留当前已选渠道
+            } else {
+                selectedGlobalTemplateID = candidates.first?.id
+            }
+            if newMode == .existing {
+                snapshotNewConfigDraft()
+                if let template = selectedProviderTemplate {
+                    applyTemplate(template, clearFeedback: false)
+                }
+            } else {
+                restoreNewConfigDraftIfNeeded()
+            }
+        }
+        .onChange(of: selectedGlobalTemplateID) { _, _ in
+            guard templateConfigMode == .existing else { return }
+            guard let template = selectedProviderTemplate else { return }
+            applyTemplate(template, clearFeedback: false)
         }
         .onChange(of: selectedWizardAuthMethod) { _, _ in
             resetModelValidationState(clearCredential: false)
@@ -322,6 +465,28 @@ struct UserInitWizardView: View {
             if case .idle = modelValidationState { return }
             modelValidationState = .idle
             modelConfigError = ""
+        }
+        .onChange(of: modelStore.revision) { _, newRevision in
+            guard currentStep == .configureModel else { return }
+            guard !isHydratingState else { return }
+            guard newRevision != observedGlobalRevision else { return }
+            pendingGlobalRevision = newRevision
+            showGlobalRefreshPrompt = true
+        }
+        .alert("全局模型池已更新", isPresented: $showGlobalRefreshPrompt) {
+            Button("刷新为全局") {
+                applyGlobalTemplateSelection()
+                observedGlobalRevision = pendingGlobalRevision
+            }
+            Button("保持当前", role: .cancel) {
+                observedGlobalRevision = pendingGlobalRevision
+            }
+        } message: {
+            if hasLocalModelOverride {
+                Text("当前龙虾已存在本地覆盖。可选择刷新为全局配置，或保持当前本地配置。")
+            } else {
+                Text("当前使用全局模型池配置，是否刷新为最新全局内容？")
+            }
         }
     }
 
@@ -608,49 +773,67 @@ struct UserInitWizardView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
 
+            Picker("配置来源", selection: $templateConfigMode) {
+                ForEach(TemplateConfigMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
             HStack(alignment: .bottom, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.k("wizard.provider.label", fallback: "模型提供商"))
-                        .font(.subheadline).fontWeight(.medium)
-                    Picker(L10n.k("wizard.provider.label", fallback: "模型提供商"), selection: $selectedWizardProvider) {
-                        ForEach(WizardProvider.allCases) { provider in
-                            Text(provider.displayName).tag(provider)
+                if templateConfigMode == .new {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L10n.k("wizard.provider.label", fallback: "模型提供商"))
+                            .font(.subheadline).fontWeight(.medium)
+                        Picker(L10n.k("wizard.provider.label", fallback: "模型提供商"), selection: $selectedWizardProvider) {
+                            ForEach(WizardProvider.allCases) { provider in
+                                Text(provider.displayName).tag(provider)
+                            }
                         }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .wizardInputSurface()
                     }
-                    .pickerStyle(.menu)
                     .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .wizardInputSurface()
                 }
-                .frame(maxWidth: .infinity)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.k("wizard.auth_method.label", fallback: "认证方式"))
-                        .font(.subheadline).fontWeight(.medium)
-                    Picker(L10n.k("wizard.auth_method.label", fallback: "认证方式"), selection: $selectedWizardAuthMethod) {
-                        ForEach(availableWizardAuthMethods) { method in
-                            Text(method.title).tag(method)
+                if templateConfigMode == .new {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L10n.k("wizard.auth_method.label", fallback: "认证方式"))
+                            .font(.subheadline).fontWeight(.medium)
+                        Picker(L10n.k("wizard.auth_method.label", fallback: "认证方式"), selection: $selectedWizardAuthMethod) {
+                            ForEach(availableWizardAuthMethods) { method in
+                                Text(method.title).tag(method)
+                            }
                         }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .wizardInputSurface()
                     }
-                    .pickerStyle(.menu)
                     .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .wizardInputSurface()
                 }
-                .frame(maxWidth: .infinity)
 
-                providerMoreModelsRow()
+                if templateConfigMode == .new {
+                    providerMoreModelsRow()
+                }
             }
             .padding(.bottom, 2)
 
-            Divider()
-
-            providerDetailForm
-                .padding(.top, 2)
+            if templateConfigMode == .existing {
+                globalTemplateSection
+            } else {
+                Divider()
+                providerDetailForm
+                    .padding(.top, 2)
+            }
 
             modelValidationStatusView
+
+            modelConfigTestSection
 
             if !modelConfigError.isEmpty, !isValidationFailureState {
                 Label(modelConfigError, systemImage: "exclamationmark.triangle.fill")
@@ -688,6 +871,238 @@ struct UserInitWizardView: View {
         }
         .buttonStyle(.plain)
         .disabled(isModelConfigTerminalOpen)
+    }
+
+    @ViewBuilder
+    private var globalTemplateSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                if allGlobalTemplates.isEmpty {
+                    Text("当前暂无可用渠道")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker(
+                        "全局渠道",
+                        selection: Binding<UUID?>(
+                            get: { selectedProviderTemplate?.id },
+                            set: { selectedGlobalTemplateID = $0 }
+                        )
+                    ) {
+                        ForEach(allGlobalTemplates) { template in
+                            Text(template.displayNameWithAlias)
+                                .tag(Optional(template.id))
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    if let alias = selectedProviderTemplate?.displayNameWithAlias {
+                        Text("配置别名：\(alias)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    Text("同一供应商可配置多个渠道，但下游同一时刻只启用一个。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text("选择渠道后会立即切换到该配置。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } label: {
+            Label("全局模型池", systemImage: "tray.full")
+                .font(.caption)
+        }
+    }
+
+    @ViewBuilder
+    private var modelConfigTestSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField("测试内容（留空默认：请发送你好）", text: $modelTestPrompt)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption)
+            HStack(spacing: 8) {
+                Button(isTestingModelConfig ? "测试中…" : "测试当前配置") {
+                    Task { await runModelConfigTest() }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isTestingModelConfig || isApplyingModel)
+
+                if let modelTestMessage {
+                    Label(modelTestMessage, systemImage: modelTestFailed ? "xmark.circle.fill" : "checkmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(modelTestFailed ? .red : .green)
+                }
+            }
+        }
+    }
+
+    private func applyGlobalTemplateSelection() {
+        templateConfigMode = .existing
+        guard let template = selectedProviderTemplate
+            ?? modelStore.providerTemplate(id: selectedGlobalTemplateID)
+            ?? allGlobalTemplates.first
+            ?? modelStore.firstTemplate else { return }
+        applyTemplate(template)
+    }
+
+    private func applyTemplate(_ template: ProviderTemplate, clearFeedback: Bool = true) {
+        selectedGlobalTemplateID = template.id
+        if let provider = wizardProvider(for: template.providerGroupId) {
+            setWizardProviderProgrammatically(provider)
+        }
+        if let primary = template.modelIds.first, !primary.isEmpty {
+            applyModelSelectionFromPrimary(primary)
+        }
+        if template.providerGroupId == "custom" {
+            if let providerId = template.customProviderId, !providerId.isEmpty {
+                customProviderId = providerId
+            }
+            if let baseURL = template.customBaseURL, !baseURL.isEmpty {
+                customBaseURL = baseURL
+            }
+            if let apiType = template.customAPIType, !apiType.isEmpty {
+                customCompatibility = apiType.contains("anthropic") ? .anthropic : .openai
+            }
+        }
+        let secretKey = "\(template.providerGroupId):\(template.name)"
+        if let secret = GlobalSecretsStore.shared.value(
+            for: secretKey,
+            fallbackProvider: template.providerGroupId
+        ), !secret.isEmpty {
+            wizardApiKey = secret
+            selectedWizardAuthMethod = .apiKey
+            customSecretReference = ""
+        }
+        hasLocalModelOverride = false
+        observedGlobalRevision = modelStore.revision
+        if clearFeedback {
+            modelValidationState = .idle
+            modelConfigError = ""
+            modelTestMessage = nil
+            modelTestFailed = false
+        }
+    }
+
+    private func wizardProvider(for groupId: String) -> WizardProvider? {
+        switch groupId {
+        case WizardProvider.kimiCoding.rawValue: return .kimiCoding
+        case WizardProvider.minimax.rawValue: return .minimax
+        case WizardProvider.qiniu.rawValue: return .qiniu
+        case WizardProvider.zai.rawValue: return .zai
+        case WizardProvider.custom.rawValue: return .custom
+        default: return nil
+        }
+    }
+
+    private func applyModelSelectionFromPrimary(_ primary: String) {
+        if let model = MinimaxModel(rawValue: primary) {
+            setWizardProviderProgrammatically(.minimax)
+            selectedMinimaxModel = model
+            return
+        }
+        if let model = QiniuModel(rawValue: primary) {
+            setWizardProviderProgrammatically(.qiniu)
+            selectedQiniuModel = model
+            return
+        }
+        if let model = ZAIModel(rawValue: primary) {
+            setWizardProviderProgrammatically(.zai)
+            selectedZAIModel = model
+            return
+        }
+        if primary.hasPrefix("kimi-coding/") {
+            setWizardProviderProgrammatically(.kimiCoding)
+            return
+        }
+        if primary.contains("/") {
+            let parts = primary.split(separator: "/", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { return }
+            setWizardProviderProgrammatically(.custom)
+            customProviderId = parts[0]
+            customModelId = parts[1]
+        }
+    }
+
+    private func setWizardProviderProgrammatically(_ provider: WizardProvider) {
+        programmaticProviderTarget = provider
+        selectedWizardProvider = provider
+    }
+
+    @MainActor
+    private func runModelConfigTest() async {
+        modelTestMessage = nil
+        modelTestFailed = false
+        if templateConfigMode == .existing {
+            guard let template = selectedProviderTemplate else {
+                modelTestFailed = true
+                modelTestMessage = "请先选择已有配置"
+                return
+            }
+            applyTemplate(template, clearFeedback: false)
+        }
+        let apiKey = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else {
+            modelTestFailed = true
+            modelTestMessage = templateConfigMode == .existing
+                ? "所选已有配置未设置 API Key"
+                : "请先填写 API Key"
+            return
+        }
+
+        let modelId = currentWizardModelName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !modelId.isEmpty else {
+            modelTestFailed = true
+            modelTestMessage = "请先选择模型"
+            return
+        }
+
+        let prompt = modelTestPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "请发送你好"
+            : modelTestPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let route = wizardRouteOptions()
+        isTestingModelConfig = true
+        let result = await ModelPingService.shared.ping(
+            modelId: modelId,
+            apiKey: apiKey,
+            message: prompt,
+            baseURL: route.baseURL,
+            apiType: route.apiType,
+            authHeader: route.authHeader
+        )
+        isTestingModelConfig = false
+
+        if result.success {
+            let response = (result.responseText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if response.isEmpty {
+                modelTestMessage = String(format: "测试成功（%.0fms）", result.latencyMs)
+            } else {
+                modelTestMessage = String(format: "测试成功（%.0fms）：%@", result.latencyMs, response)
+            }
+            modelTestFailed = false
+        } else {
+            modelTestMessage = result.errorMessage ?? "测试失败"
+            modelTestFailed = true
+        }
+    }
+
+    private func wizardRouteOptions() -> (baseURL: String?, apiType: String?, authHeader: Bool) {
+        switch selectedWizardProvider {
+        case .minimax:
+            return ("https://api.minimaxi.com/anthropic", "anthropic-messages", true)
+        case .qiniu:
+            return ("https://api.qnaigc.com/v1", "openai-completions", false)
+        case .zai:
+            return ("https://open.bigmodel.cn/api/paas/v4", "openai-completions", false)
+        case .kimiCoding:
+            return ("https://api.kimi.com/coding", "anthropic-messages", false)
+        case .custom:
+            return (customBaseURLTrimmed.isEmpty ? nil : customBaseURLTrimmed, customCompatibility.apiType, false)
+        }
     }
 
     @ViewBuilder
@@ -1422,6 +1837,18 @@ struct UserInitWizardView: View {
         activeModelConfigTerminalToken = nil
         isModelConfigTerminalOpen = false
         pendingModelConfigTerminalClose = nil
+        templateConfigMode = .existing
+        selectedGlobalTemplateID = nil
+        hasLocalModelOverride = false
+        observedGlobalRevision = 0
+        pendingGlobalRevision = 0
+        showGlobalRefreshPrompt = false
+        modelTestPrompt = ""
+        isTestingModelConfig = false
+        modelTestMessage = nil
+        modelTestFailed = false
+        programmaticProviderTarget = nil
+        newConfigDraft = nil
         selectedChannel = .feishu
         isStartingOpenclaw = false
         finishProgressMessages = []
@@ -1789,6 +2216,15 @@ struct UserInitWizardView: View {
     }
 
     private func applyModelConfig() async {
+        if templateConfigMode == .existing {
+            guard let template = selectedProviderTemplate else {
+                modelValidationState = .failure("请先选择已有配置")
+                modelConfigError = "请先选择已有配置"
+                return
+            }
+            applyTemplate(template, clearFeedback: false)
+        }
+
         if let validationError = await validateModelConfigInput() {
             modelValidationState = .failure(validationError)
             modelConfigError = validationError
@@ -1803,6 +2239,8 @@ struct UserInitWizardView: View {
         do {
             try await writeSelectedModelConfig()
             try await probeSelectedProvider()
+            hasLocalModelOverride = (templateConfigMode == .new)
+            persistSelectionMode()
             modelValidationState = .success(
                 L10n.f(
                     "wizard.model_config.validation.success_provider",
@@ -1823,6 +2261,9 @@ struct UserInitWizardView: View {
 
     private var modelApplyDisabled: Bool {
         if isApplyingModel { return true }
+        if templateConfigMode == .existing {
+            return selectedProviderTemplate == nil
+        }
         if selectedWizardProvider == .custom {
             let hasModel = !customModelIdTrimmed.isEmpty
             let hasBaseURL = !customBaseURLTrimmed.isEmpty
@@ -1873,9 +2314,15 @@ struct UserInitWizardView: View {
     }
 
     private func validateModelConfigInput() async -> String? {
+        if templateConfigMode == .existing, selectedProviderTemplate == nil {
+            return "请先选择已有配置"
+        }
         if selectedWizardProvider != .custom {
             let key = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
             if key.isEmpty {
+                if templateConfigMode == .existing {
+                    return "所选已有配置未设置 API Key"
+                }
                 return L10n.k("wizard.model_config.validation.empty_key", fallback: "请先输入 API Key，再执行验证。")
             }
             return nil
@@ -2540,14 +2987,142 @@ struct UserInitWizardView: View {
     private func loadSavedState() async {
         defer { isHydratingState = false }
         let json = await helperClient.loadInitState(username: user.username)
-        guard let saved = InitWizardState.from(json: json) else { return }
-        await applySavedState(saved)
+        if let saved = InitWizardState.from(json: json) {
+            await applySavedState(saved)
+            await prefillModelSelectionFromLocalOrGlobal(savedModelName: saved.modelName)
+        } else {
+            await prefillModelSelectionFromLocalOrGlobal(savedModelName: nil)
+        }
+        observedGlobalRevision = modelStore.revision
     }
 
     private func reconcileStateFromPersistence() async {
         let json = await helperClient.loadInitState(username: user.username)
         guard let saved = InitWizardState.from(json: json) else { return }
         await applySavedState(saved)
+    }
+
+    private func prefillModelSelectionFromLocalOrGlobal(savedModelName: String?) async {
+        let savedPrimary = savedModelName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let config = await helperClient.getConfigJSON(username: user.username)
+        let localPrimary = primaryModelFromConfig(config)
+        let stored = storedSelection()
+
+        if stored?.source == .existing {
+            templateConfigMode = .existing
+            hasLocalModelOverride = false
+            if let storedID = stored?.templateID {
+                selectedGlobalTemplateID = storedID
+            }
+            if selectedGlobalTemplateID == nil {
+                selectedGlobalTemplateID = allGlobalTemplates.first?.id
+                    ?? modelStore.firstTemplate?.id
+            }
+            if let template = modelStore.providerTemplate(id: selectedGlobalTemplateID)
+                ?? allGlobalTemplates.first
+                ?? modelStore.firstTemplate {
+                applyTemplate(template, clearFeedback: false)
+            }
+            return
+        }
+
+        if stored?.source == .new {
+            if let localPrimary, !localPrimary.isEmpty {
+                templateConfigMode = .new
+                hasLocalModelOverride = true
+                applyModelSelectionFromPrimary(localPrimary)
+                await hydrateWizardCredentialFromLocalConfig(config: config, primaryModel: localPrimary)
+                snapshotNewConfigDraft()
+                return
+            }
+
+            if !savedPrimary.isEmpty {
+                templateConfigMode = .new
+                hasLocalModelOverride = true
+                applyModelSelectionFromPrimary(savedPrimary)
+                snapshotNewConfigDraft()
+                return
+            }
+        }
+
+        if let localPrimary, !localPrimary.isEmpty {
+            templateConfigMode = .new
+            hasLocalModelOverride = true
+            applyModelSelectionFromPrimary(localPrimary)
+            await hydrateWizardCredentialFromLocalConfig(config: config, primaryModel: localPrimary)
+            snapshotNewConfigDraft()
+            return
+        }
+
+        if !savedPrimary.isEmpty {
+            templateConfigMode = .new
+            hasLocalModelOverride = false
+            applyModelSelectionFromPrimary(savedPrimary)
+            snapshotNewConfigDraft()
+            return
+        }
+
+        templateConfigMode = .existing
+        hasLocalModelOverride = false
+        if selectedGlobalTemplateID == nil {
+            selectedGlobalTemplateID = allGlobalTemplates.first?.id
+                ?? modelStore.firstTemplate?.id
+        }
+        if let template = modelStore.providerTemplate(id: selectedGlobalTemplateID)
+            ?? allGlobalTemplates.first
+            ?? modelStore.firstTemplate {
+            applyTemplate(template, clearFeedback: false)
+        }
+    }
+
+    private func primaryModelFromConfig(_ config: [String: Any]) -> String? {
+        let model = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:]
+        let primary = (model["primary"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let primary, !primary.isEmpty else { return nil }
+        return primary
+    }
+
+    private func hydrateWizardCredentialFromLocalConfig(config: [String: Any], primaryModel: String) async {
+        let authProfiles = await readUserJSON(relativePath: ".openclaw/agents/main/agent/auth-profiles.json")
+        let profiles = (authProfiles["profiles"] as? [String: Any]) ?? [:]
+        switch selectedWizardProvider {
+        case .kimiCoding:
+            wizardApiKey = ((profiles["kimi-coding:default"] as? [String: Any])?["key"] as? String) ?? ""
+            selectedWizardAuthMethod = .apiKey
+        case .minimax:
+            wizardApiKey = ((profiles["minimax:cn"] as? [String: Any])?["key"] as? String) ?? ""
+            selectedWizardAuthMethod = .apiKey
+        case .qiniu:
+            wizardApiKey = ((profiles["qiniu:default"] as? [String: Any])?["key"] as? String) ?? ""
+            selectedWizardAuthMethod = .apiKey
+        case .zai:
+            wizardApiKey = ((profiles["zai:default"] as? [String: Any])?["key"] as? String) ?? ""
+            selectedWizardAuthMethod = .apiKey
+        case .custom:
+            let providerId = primaryModel.split(separator: "/", maxSplits: 1).map(String.init).first ?? effectiveCustomProviderId
+            let customProviderConfig = (((config["models"] as? [String: Any])?["providers"] as? [String: Any])?[providerId] as? [String: Any]) ?? [:]
+            if let baseURL = customProviderConfig["baseUrl"] as? String, !baseURL.isEmpty {
+                customBaseURL = baseURL
+            }
+            if let api = customProviderConfig["api"] as? String {
+                customCompatibility = api.contains("anthropic") ? .anthropic : .openai
+            }
+            if let value = customProviderConfig["apiKey"] as? String, !value.isEmpty {
+                if value.hasPrefix("${") || value.hasPrefix("env:") || value.contains(":") {
+                    selectedWizardAuthMethod = .secretReference
+                    customSecretReference = value
+                    wizardApiKey = ""
+                } else {
+                    selectedWizardAuthMethod = .apiKey
+                    wizardApiKey = value
+                    customSecretReference = ""
+                }
+            } else {
+                wizardApiKey = ""
+                customSecretReference = ""
+            }
+        }
     }
 
     private var waitingStatusMessage: String {
