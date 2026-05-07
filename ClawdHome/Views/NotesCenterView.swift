@@ -12,10 +12,10 @@ private enum NotesCenterTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .overview: return "Overview"
-        case .configuration: return "Configuration"
-        case .shrimps: return "Shrimps"
-        case .maintenance: return "Maintenance"
+        case .overview: return "概览"
+        case .configuration: return "配置"
+        case .shrimps: return "用户映射"
+        case .maintenance: return "维护"
         }
     }
 
@@ -98,7 +98,7 @@ struct NotesCenterView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .navigationTitle("Wiki Support")
+        .navigationTitle("笔记状态")
         .task {
             await refreshStatus()
         }
@@ -108,9 +108,9 @@ struct NotesCenterView: View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top, spacing: 18) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("ClawdHome Wiki Support")
+                    Text("笔记状态")
                         .font(.system(size: 30, weight: .semibold))
-                    Text("A calmer workspace for runtime health, project binding, local store settings, and per-shrimp note mappings.")
+                    Text("检查笔记运行时、共享项目、本地配置和各用户笔记映射状态。")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -128,7 +128,7 @@ struct NotesCenterView: View {
                     NotesStatusPill(title: overallStatusTitle, tone: overallStatusTone)
 
                     if store.isLoading {
-                        ProgressView("Refreshing…")
+                        ProgressView("刷新中…")
                             .controlSize(.small)
                     }
 
@@ -149,25 +149,25 @@ struct NotesCenterView: View {
 
             LazyVGrid(columns: summaryColumns, alignment: .leading, spacing: 12) {
                 NotesStatTile(
-                    title: "Runtime",
+                    title: "运行时",
                     value: runtimeSummaryValue,
                     detail: runtimeSummaryDetail,
                     tone: runtimeStatusTone
                 )
                 NotesStatTile(
-                    title: "Shared Project",
+                    title: "共享项目",
                     value: projectSummaryValue,
                     detail: projectSummaryDetail,
                     tone: projectStatusTone
                 )
                 NotesStatTile(
-                    title: "Local Store",
+                    title: "本地配置",
                     value: storeSummaryValue,
                     detail: storeSummaryDetail,
                     tone: storeStatusTone
                 )
                 NotesStatTile(
-                    title: "Shrimp Coverage",
+                    title: "用户覆盖",
                     value: shrimpSummaryValue,
                     detail: shrimpSummaryDetail,
                     tone: shrimpStatusTone
@@ -220,30 +220,30 @@ struct NotesCenterView: View {
     private var overviewTab: some View {
         VStack(alignment: .leading, spacing: 16) {
             NotesPanel(
-                title: "Current Status",
-                subtitle: "The main signals to check before editing note settings or repairing a shrimp workspace."
+                title: "当前状态",
+                subtitle: "调整笔记配置或修复用户映射前，先确认这些核心状态。"
             ) {
                 LazyVGrid(columns: detailColumns, alignment: .leading, spacing: 16) {
-                    NotesKeyValueBlock(label: "Installed", value: yesNo(store.appInstalled))
-                    NotesKeyValueBlock(label: "Running", value: yesNo(store.appRunning))
-                    NotesKeyValueBlock(label: "HTTP Over UDS Ready", value: readyValue)
-                    NotesKeyValueBlock(label: "Shared Project Complete", value: yesNo(store.globalAudit?.projectStructureComplete == true))
-                    NotesKeyValueBlock(label: "Store File", value: storeFileValue)
-                    NotesKeyValueBlock(label: "Last Project", value: store.storeSnapshot.lastProject ?? "Not Set")
-                    NotesKeyValueBlock(label: "Ready Shrimps", value: shrimpSummaryValue)
-                    NotesKeyValueBlock(label: "Needs Attention", value: "\(issueUserCount)")
+                    NotesKeyValueBlock(label: "已安装", value: yesNo(store.appInstalled))
+                    NotesKeyValueBlock(label: "运行中", value: yesNo(store.appRunning))
+                    NotesKeyValueBlock(label: "HTTP Over UDS", value: readyValue)
+                    NotesKeyValueBlock(label: "共享项目完整", value: yesNo(store.globalAudit?.projectStructureComplete == true))
+                    NotesKeyValueBlock(label: "配置文件", value: storeFileValue)
+                    NotesKeyValueBlock(label: "最近项目", value: store.storeSnapshot.lastProject ?? "未设置")
+                    NotesKeyValueBlock(label: "已就绪用户", value: shrimpSummaryValue)
+                    NotesKeyValueBlock(label: "待处理", value: "\(issueUserCount)")
                 }
             }
 
             NotesPanel(
-                title: "Attention Queue",
-                subtitle: "Use this list to see what is actually broken instead of scanning every path manually."
+                title: "待处理队列",
+                subtitle: "这里列出真实异常，避免手动逐个检查路径。"
             ) {
                 if overviewAlerts.isEmpty {
                     ContentUnavailableView(
-                        "Everything Looks Healthy",
+                        "状态正常",
                         systemImage: "checkmark.seal",
-                        description: Text("Runtime, shared project, local store, and shrimp note mappings are all in a usable state.")
+                        description: Text("运行时、共享项目、本地配置和用户笔记映射都处于可用状态。")
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
