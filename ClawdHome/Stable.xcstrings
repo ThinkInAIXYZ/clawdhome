@@ -9782,13 +9782,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "File size"
+            "value": "File Quick Transfer"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "文件大小"
+            "value": "文件快传"
           }
         }
       }

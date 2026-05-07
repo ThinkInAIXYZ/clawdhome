@@ -1,0 +1,5 @@
+# Treat xcstrings as JSON text, normalize line endings
+*.xcstrings text eol=lf
+
+# Use union merge strategy for xcstrings to reduce conflicts
+*.xcstrings merge=union
