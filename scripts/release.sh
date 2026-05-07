@@ -48,6 +48,21 @@ ok()   { echo "✅ $*"; }
 warn() { echo "⚠️  $*"; }
 fail() { echo "❌ $*" >&2; exit 1; }
 
+fail_missing_notes() {
+  local lang_label="$1"
+  local notes_file="$2"
+  cat >&2 <<EOF
+❌ 缺少${lang_label} release notes：$notes_file
+
+请先按下面步骤处理：
+  1. 运行：make release-notes-draft
+  2. 编辑并确认：$notes_file
+  3. 预检查：make release-dry-run
+  4. 正式发布：make release
+EOF
+  exit 1
+}
+
 set_plist_value() {
   local key="$1"
   local value="$2"
@@ -132,8 +147,8 @@ if [ "$DRY_RUN" = true ]; then
   exit 0
 fi
 
-[ -f "$ZH_NOTES_FILE" ] || fail "缺少中文 release notes：$ZH_NOTES_FILE"
-[ -f "$EN_NOTES_FILE" ] || fail "缺少英文 release notes：$EN_NOTES_FILE"
+[ -f "$ZH_NOTES_FILE" ] || fail_missing_notes "中文" "$ZH_NOTES_FILE"
+[ -f "$EN_NOTES_FILE" ] || fail_missing_notes "英文" "$EN_NOTES_FILE"
 
 # ── Step 2：生成 CHANGELOG ────────────────────────────────────────────────────
 
