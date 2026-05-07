@@ -1033,9 +1033,14 @@ struct UserDetailView: View {
                 VStack(alignment: .leading, spacing: UserDetailWindowLayout.overviewSidebarSectionSpacing) {
                     overviewStatusCard
                     overviewQuickActionSection
+
+                    // ─── Agent 联动区 ───
                     if shouldShowOverviewSupplementaryCards {
+                        Divider().padding(.vertical, 4)
+                        overviewAgentIdentifier
                         overviewSupplementaryEntriesSection
                     }
+
                     overviewResourceCard
                     overviewOpenConsoleButton
                 }
@@ -1277,11 +1282,27 @@ struct UserDetailView: View {
         }
     }
 
+    /// 当前 Agent 标识（多 agent 时显示）
+    @ViewBuilder
+    private var overviewAgentIdentifier: some View {
+        if agents.count > 1, let agent = selectedAgent {
+            HStack(spacing: 6) {
+                if !agent.emoji.isEmpty {
+                    Text(agent.emoji)
+                }
+                Text(agent.name)
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+
     private var overviewSupplementaryEntriesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             overviewSupplementaryCard(
                 title: L10n.k("user.detail.auto.model_configuration", fallback: "模型配置"),
-                subtitle: defaultModel.map { L10n.f("views.user_detail_view.current_model", fallback: "当前：%@", String(describing: $0)) }
+                subtitle: (selectedAgent?.modelPrimary ?? defaultModel).map { L10n.f("views.user_detail_view.current_model", fallback: "当前：%@", String(describing: $0)) }
                     ?? L10n.k("user.detail.auto.configuration", fallback: "未配置")
             ) {
                 HStack(spacing: 8) {
