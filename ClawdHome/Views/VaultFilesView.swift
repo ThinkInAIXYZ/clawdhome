@@ -49,7 +49,7 @@ struct VaultFilesView: View {
             // 每只虾的安全文件夹
             ForEach(shrimpUsers) { user in
                 VaultCard(
-                    title: "\(user.fullName)_专属",
+                    title: L10n.f("views.vault_files.exclusive_title", fallback: "%@_专属", user.fullName),
                     icon: "🦞",
                     iconColor: .blue,
                     badge: vaultBadge(for: user.username),
@@ -81,20 +81,20 @@ struct VaultFilesView: View {
     private var publicBadge: String {
         guard FileManager.default.fileExists(atPath: publicPath),
               let items = try? FileManager.default.contentsOfDirectory(atPath: publicPath) else {
-            return "0 个项目"
+            return L10n.f("views.vault_files.item_count", fallback: "%d 个项目", 0)
         }
         let count = items.filter { !$0.hasPrefix(".") }.count
-        return "\(count) 个项目"
+        return L10n.f("views.vault_files.item_count", fallback: "%d 个项目", count)
     }
 
     private func vaultBadge(for username: String) -> String {
         let vaultPath = "/Users/Shared/ClawdHome/vaults/\(username)"
         guard FileManager.default.fileExists(atPath: vaultPath),
               let items = try? FileManager.default.contentsOfDirectory(atPath: vaultPath) else {
-            return "0 个项目"
+            return L10n.f("views.vault_files.item_count", fallback: "%d 个项目", 0)
         }
         let count = items.filter { !$0.hasPrefix(".") }.count
-        return "\(count) 个项目"
+        return L10n.f("views.vault_files.item_count", fallback: "%d 个项目", count)
     }
 
     // MARK: - 操作

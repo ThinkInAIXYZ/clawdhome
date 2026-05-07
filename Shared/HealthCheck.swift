@@ -16,12 +16,12 @@ enum DiagnosticGroup: String, Codable, CaseIterable {
 
     var title: String {
         switch self {
-        case .environment: return "环境检测"
-        case .permissions: return "权限检测"
-        case .config:      return "配置校验"
-        case .security:    return "安全审计"
-        case .gateway:     return "Gateway 状态"
-        case .network:     return "网络连通"
+        case .environment: return String(localized: "health.group.environment", defaultValue: "环境检测")
+        case .permissions: return String(localized: "health.group.permissions", defaultValue: "权限检测")
+        case .config:      return String(localized: "health.group.config",      defaultValue: "配置校验")
+        case .security:    return String(localized: "health.group.security",    defaultValue: "安全审计")
+        case .gateway:     return String(localized: "health.group.gateway",     defaultValue: "Gateway 状态")
+        case .network:     return String(localized: "health.group.network",     defaultValue: "网络连通")
         }
     }
 

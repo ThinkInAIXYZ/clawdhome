@@ -1407,12 +1407,12 @@ struct UserDetailView: View {
         let minute = (interval % 3_600) / 60
 
         if day > 0 {
-            return "\(day)天 \(max(hour, 1))小时"
+            return L10n.f("views.detail.duration_days_hours", fallback: "%d天 %d小时", day, max(hour, 1))
         }
         if hour > 0 {
-            return "\(hour)小时 \(max(minute, 1))分钟"
+            return L10n.f("views.detail.duration_hours_minutes", fallback: "%d小时 %d分钟", hour, max(minute, 1))
         }
-        return "\(max(minute, 1))分钟"
+        return L10n.f("views.detail.duration_minutes", fallback: "%d分钟", max(minute, 1))
     }
 
     @ViewBuilder
@@ -2265,7 +2265,7 @@ struct UserDetailView: View {
         gatewayNodeRepairError = nil
         gatewayNodeRepairReadyToRetryStart = false
         gatewayNodeRepairCompletedSteps = 0
-        gatewayNodeRepairCurrentStep = "修复 Homebrew 权限"
+        gatewayNodeRepairCurrentStep = L10n.k("views.detail.repair.step_homebrew", fallback: "修复 Homebrew 权限")
         appLog("[gateway-repair] start user=\(user.username)")
         defer {
             isGatewayNodeRepairing = false
@@ -2275,22 +2275,22 @@ struct UserDetailView: View {
             try? await helperClient.repairHomebrewPermission(username: user.username)
             gatewayNodeRepairCompletedSteps = 1
 
-            gatewayNodeRepairCurrentStep = "安装/修复 Node.js"
+            gatewayNodeRepairCurrentStep = L10n.k("views.detail.repair.step_node", fallback: "安装/修复 Node.js")
             appLog("[gateway-repair] step 2/4 install-node user=\(user.username)")
             try await helperClient.installNode(username: user.username, nodeDistURL: nodeDistURL)
             gatewayNodeRepairCompletedSteps = 2
 
-            gatewayNodeRepairCurrentStep = "配置 npm 目录"
+            gatewayNodeRepairCurrentStep = L10n.k("views.detail.repair.step_npm", fallback: "配置 npm 目录")
             appLog("[gateway-repair] step 3/4 setup-npm-env user=\(user.username)")
             try await helperClient.setupNpmEnv(username: user.username)
             gatewayNodeRepairCompletedSteps = 3
 
-            gatewayNodeRepairCurrentStep = "执行体检修复"
+            gatewayNodeRepairCurrentStep = L10n.k("views.detail.repair.step_healthcheck", fallback: "执行体检修复")
             appLog("[gateway-repair] step 4/4 health-check-fix user=\(user.username)")
             _ = await helperClient.runHealthCheck(username: user.username, fix: true)
             gatewayNodeRepairCompletedSteps = 4
 
-            gatewayNodeRepairCurrentStep = "修复完成，等待再次启动"
+            gatewayNodeRepairCurrentStep = L10n.k("views.detail.repair.step_done", fallback: "修复完成，等待再次启动")
             gatewayNodeRepairReadyToRetryStart = true
             appLog("[gateway-repair] completed user=\(user.username)")
         } catch {
@@ -2303,7 +2303,7 @@ struct UserDetailView: View {
         guard !isGatewayNodeRepairing else { return }
         isGatewayNodeRepairing = true
         gatewayNodeRepairError = nil
-        gatewayNodeRepairCurrentStep = "正在启动 Gateway"
+        gatewayNodeRepairCurrentStep = L10n.k("views.detail.repair.step_starting", fallback: "正在启动 Gateway")
         appLog("[gateway-repair] retry-start user=\(user.username)")
         defer { isGatewayNodeRepairing = false }
         do {
@@ -3002,7 +3002,7 @@ struct UserDetailView: View {
             return
         }
         NSWorkspace.shared.open(url)
-        xcodeFixMessage = L10n.k("user.detail.auto.open_settings_command_line_tools", fallback: "已打开“软件更新”。若未看到安装弹窗，可在系统设置中手动安装 Command Line Tools。")
+        xcodeFixMessage = L10n.k("user.detail.auto.open_settings_command_line_tools", fallback: "已打开\u{201C}软件更新\u{201D}。若未看到安装弹窗，可在系统设置中手动安装 Command Line Tools。")
     }
 
     // MARK: - 版本回退持久化
@@ -3395,7 +3395,7 @@ struct UserDetailView: View {
         if boundCount == 0 {
             return L10n.k("user.detail.auto.feishu_wechat_configuration", fallback: "飞书/微信均通过独立流程扫码绑定，支持首次配置和重新绑定。")
         }
-        return "已配置 \(boundCount) 个频道"
+        return L10n.f("views.detail.channel_count", fallback: "已配置 %d 个频道", boundCount)
     }
 
     private static func channelAliases(for canonicalId: String) -> [String] {
@@ -3777,7 +3777,7 @@ struct DeleteUserSheet: View {
                         Text(L10n.k("user.detail.auto.deleting_please_wait", fallback: "删除中，请稍候…"))
                             .font(.caption)
                             .fontWeight(.semibold)
-                        Text(L10n.k("views.user_detail_view.delete_authorization_hint", fallback: "如果系统弹出授权窗口，请点击“允许”。如果你拒绝了，或者没有出现，请退出程序后重新操作。你也可以前往“系统设置 → 用户与群组”删除该用户。"))
+                        Text(L10n.k("views.user_detail_view.delete_authorization_hint", fallback: "如果系统弹出授权窗口，请点击\u{201C}允许\u{201D}。如果你拒绝了，或者没有出现，请退出程序后重新操作。你也可以前往\u{201C}系统设置 → 用户与群组\u{201D}删除该用户。"))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -4467,10 +4467,10 @@ private enum SkillsFilter: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: return "全部"
-        case .ready: return "就绪"
-        case .needsSetup: return "需配置"
-        case .disabled: return "已禁用"
+        case .all: return L10n.k("views.detail.skills_filter_all", fallback: "全部")
+        case .ready: return L10n.k("views.detail.skills_filter_ready", fallback: "就绪")
+        case .needsSetup: return L10n.k("views.detail.skills_filter_needs_setup", fallback: "需配置")
+        case .disabled: return L10n.k("views.detail.skills_filter_disabled", fallback: "已禁用")
         }
     }
 }
@@ -4522,20 +4522,20 @@ private struct SkillsTabContent: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Skills").font(.headline)
-                    Text("满足依赖条件（二进制、环境变量、配置）后自动启用")
+                    Text(L10n.k("views.detail.skills_auto_enable_hint", fallback: "满足依赖条件（二进制、环境变量、配置）后自动启用"))
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if isPreparingSkillsMarket {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
-                        Text("准备中…").font(.caption).foregroundStyle(.secondary)
+                        Text(L10n.k("views.detail.skills_preparing", fallback: "准备中…")).font(.caption).foregroundStyle(.secondary)
                     }
                 } else {
                     Button {
                         Task { await openSkillsMarket() }
                     } label: {
-                        Label("获取更多 Skills", systemImage: "arrow.up.right.square")
+                        Label(L10n.k("views.detail.skills_get_more", fallback: "获取更多 Skills"), systemImage: "arrow.up.right.square")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -4546,11 +4546,11 @@ private struct SkillsTabContent: View {
                     Button {
                         Task { await store.refresh() }
                     } label: {
-                        Label("刷新", systemImage: "arrow.clockwise")
+                        Label(L10n.k("views.detail.skills_refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.bordered).controlSize(.small)
                 }
-                Picker("筛选", selection: $filter) {
+                Picker(L10n.k("views.detail.skills_filter", fallback: "筛选"), selection: $filter) {
                     ForEach(SkillsFilter.allCases) { f in
                         Text(f.title).tag(f)
                     }
@@ -4567,7 +4567,7 @@ private struct SkillsTabContent: View {
             // 搜索栏
             HStack {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("搜索 Skills…", text: Bindable(store).searchText)
+                TextField(L10n.k("views.detail.skills_search", fallback: "搜索 Skills…"), text: Bindable(store).searchText)
                     .textFieldStyle(.plain)
                 if !store.searchText.isEmpty {
                     Button { store.searchText = "" } label: {
@@ -4600,10 +4600,10 @@ private struct SkillsTabContent: View {
                 ContentUnavailableView(err, systemImage: "exclamationmark.triangle")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if store.skills.isEmpty && !store.isLoading {
-                ContentUnavailableView("暂无 Skills", systemImage: "star.leadinghalf.filled")
+                ContentUnavailableView(L10n.k("views.detail.skills_empty", fallback: "暂无 Skills"), systemImage: "star.leadinghalf.filled")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filteredSkills.isEmpty {
-                ContentUnavailableView("没有匹配的 Skills", systemImage: "magnifyingglass")
+                ContentUnavailableView(L10n.k("views.detail.skills_no_match", fallback: "没有匹配的 Skills"), systemImage: "magnifyingglass")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(filteredSkills) { skill in
@@ -4636,7 +4636,7 @@ private struct SkillsTabContent: View {
             if let url = skillsMarketURL {
                 SkillsMarketSheetView(url: url)
             } else {
-                ContentUnavailableView("无法打开 Skills 商店", systemImage: "network")
+                ContentUnavailableView(L10n.k("views.detail.skills_store_error", fallback: "无法打开 Skills 商店"), systemImage: "network")
                     .frame(minWidth: 800, minHeight: 520)
             }
         }
@@ -4655,7 +4655,7 @@ private struct SkillsTabContent: View {
                 return
             }
         }
-        store.statusMessage = "未获取到可用 Token，请先确认 Gateway 已启动并就绪。"
+        store.statusMessage = L10n.k("views.detail.skills_no_token", fallback: "未获取到可用 Token，请先确认 Gateway 已启动并就绪。")
     }
 
     private func makeSkillsMarketURL(from rawURL: String) -> URL? {
@@ -4682,20 +4682,20 @@ private struct SkillsMarketSheetView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Text("Skills 商店")
+                Text(L10n.k("views.detail.skills_store_title", fallback: "Skills 商店"))
                     .font(.headline)
                 Spacer()
-                Button("重载") {
+                Button(L10n.k("views.detail.skills_store_reload", fallback: "重载")) {
                     store.reloadCurrent()
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                Button("浏览器打开") {
+                Button(L10n.k("views.detail.skills_store_open_browser", fallback: "浏览器打开")) {
                     NSWorkspace.shared.open(url)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                Button("关闭") {
+                Button(L10n.k("views.detail.skills_store_close", fallback: "关闭")) {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
@@ -4758,7 +4758,7 @@ private struct SkillItemRow: View {
                        let url = URL(string: urlStr),
                        url.scheme == "http" || url.scheme == "https" {
                         Link(destination: url) {
-                            Label("网站", systemImage: "link")
+                            Label(L10n.k("views.detail.skill_website", fallback: "网站"), systemImage: "link")
                                 .font(.caption2.weight(.semibold))
                         }
                         .buttonStyle(.link)
@@ -4767,7 +4767,7 @@ private struct SkillItemRow: View {
 
                 // 禁用状态提示
                 if skill.disabled {
-                    Text("已在配置中禁用")
+                    Text(L10n.k("views.detail.skill_disabled_in_config", fallback: "已在配置中禁用"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
@@ -4808,15 +4808,15 @@ private struct SkillItemRow: View {
     private var missingSummary: some View {
         VStack(alignment: .leading, spacing: 2) {
             if shouldShowMissingBins {
-                Text("缺少二进制: \(skill.missing.bins.joined(separator: ", "))")
+                Text(L10n.f("views.detail.skill_missing_bins", fallback: "缺少二进制: %@", skill.missing.bins.joined(separator: ", ")))
                     .font(.caption).foregroundStyle(.secondary)
             }
             if !skill.missing.env.isEmpty {
-                Text("缺少环境变量: \(skill.missing.env.joined(separator: ", "))")
+                Text(L10n.f("views.detail.skill_missing_env", fallback: "缺少环境变量: %@", skill.missing.env.joined(separator: ", ")))
                     .font(.caption).foregroundStyle(.secondary)
             }
             if !skill.missing.config.isEmpty {
-                Text("需要配置: \(skill.missing.config.joined(separator: ", "))")
+                Text(L10n.f("views.detail.skill_missing_config", fallback: "需要配置: %@", skill.missing.config.joined(separator: ", ")))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -4843,7 +4843,7 @@ private struct SkillItemRow: View {
         HStack(spacing: 6) {
             ForEach(skill.missing.env, id: \.self) { envKey in
                 let isPrimary = envKey == skill.primaryEnv
-                Button(isPrimary ? "设置 API Key" : "设置 \(envKey)") {
+                Button(isPrimary ? L10n.k("views.detail.skill_set_api_key", fallback: "设置 API Key") : L10n.f("views.detail.skill_set_env", fallback: "设置 %@", envKey)) {
                     onSetEnv(envKey, isPrimary)
                 }
                 .buttonStyle(.bordered).controlSize(.small)
@@ -4865,7 +4865,7 @@ private struct SkillItemRow: View {
             } else if !installOptions.isEmpty {
                 // 有可安装选项 → 显示安装按钮
                 ForEach(installOptions) { option in
-                    Button("安装") {
+                    Button(L10n.k("views.detail.skill_install", fallback: "安装")) {
                         Task { await store.install(skill: skill, option: option) }
                     }
                     .buttonStyle(.borderedProminent).controlSize(.small)
@@ -4885,17 +4885,17 @@ private struct SkillItemRow: View {
 
                 // 卸载按钮（仅非内置 skill）
                 if !skill.isBundled {
-                    Button("卸载") {
+                    Button(L10n.k("views.detail.skill_uninstall", fallback: "卸载")) {
                         showRemoveConfirm = true
                     }
                     .buttonStyle(.bordered).controlSize(.mini)
                     .foregroundStyle(.secondary)
                     .confirmationDialog(
-                        "卸载 \(skill.name)？",
+                        L10n.f("views.detail.skill_uninstall_confirm", fallback: "卸载 %@？", skill.name),
                         isPresented: $showRemoveConfirm,
                         titleVisibility: .visible
                     ) {
-                        Button("卸载", role: .destructive) {
+                        Button(L10n.k("views.detail.skill_uninstall", fallback: "卸载"), role: .destructive) {
                             Task { await store.remove(skillKey: skill.skillKey) }
                         }
                     }
@@ -4915,25 +4915,25 @@ private struct SkillEnvEditorSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(editor.isPrimary ? "设置 API Key" : "设置环境变量")
+            Text(editor.isPrimary ? L10n.k("views.detail.skill_set_api_key", fallback: "设置 API Key") : L10n.k("views.detail.skill_set_env_var", fallback: "设置环境变量"))
                 .font(.headline)
             Text("Skill: \(editor.skillName)")
                 .font(.subheadline).foregroundStyle(.secondary)
 
             if let url = homepageUrl {
-                Link("获取密钥 →", destination: url).font(.caption)
+                Link(L10n.k("views.detail.skill_get_key", fallback: "获取密钥 →"), destination: url).font(.caption)
             }
 
             SecureField(editor.envKey, text: $value)
                 .textFieldStyle(.roundedBorder)
 
-            Text("保存至 openclaw.json 中 skills.entries.\(editor.skillKey)")
+            Text(L10n.f("views.detail.skill_save_hint", fallback: "保存至 openclaw.json 中 skills.entries.%@", editor.skillKey))
                 .font(.caption2).foregroundStyle(.tertiary)
 
             HStack {
-                Button("取消") { dismiss() }
+                Button(L10n.k("views.detail.skill_cancel", fallback: "取消")) { dismiss() }
                 Spacer()
-                Button("保存") {
+                Button(L10n.k("views.detail.skill_save", fallback: "保存")) {
                     onSave(value)
                     dismiss()
                 }
@@ -5896,8 +5896,8 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         case .kimiCoding: return "Kimi Code"
         case .minimax: return "MiniMax"
         case .qiniu: return "Qiniu AI"
-        case .zai: return "智谱 Z.AI"
-        case .custom: return "自定义"
+        case .zai: return L10n.k("views.detail.provider_zai", fallback: "智谱 Z.AI")
+        case .custom: return L10n.k("views.detail.provider_custom", fallback: "自定义")
         }
     }
 
@@ -5906,8 +5906,8 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         case .kimiCoding: return "Kimi Code API Key"
         case .minimax: return "MiniMax API Key"
         case .qiniu: return "Qiniu API Key"
-        case .zai: return "智谱 API Key"
-        case .custom: return "自定义 API Key"
+        case .zai: return L10n.k("views.detail.provider_zai_api_key", fallback: "智谱 API Key")
+        case .custom: return L10n.k("views.detail.provider_custom_api_key", fallback: "自定义 API Key")
         }
     }
 
@@ -5917,7 +5917,7 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         case .minimax: return L10n.k("views.user_detail_view.minimax_api_key", fallback: "粘贴 MiniMax API Key")
         case .qiniu: return "sk-..."
         case .zai: return "sk-..."
-        case .custom: return "留空则尝试使用 CUSTOM_API_KEY"
+        case .custom: return L10n.k("views.detail.provider_custom_placeholder", fallback: "留空则尝试使用 CUSTOM_API_KEY")
         }
     }
 
@@ -5935,8 +5935,8 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
         switch self {
         case .kimiCoding: return L10n.k("views.user_detail_view.kimi_code", fallback: "Kimi Code 控制台")
         case .minimax: return L10n.k("views.user_detail_view.minimax", fallback: "MiniMax 控制台")
-        case .qiniu: return "七牛 API Key"
-        case .zai: return "获取 API Key"
+        case .qiniu: return L10n.k("views.detail.provider_qiniu_console", fallback: "七牛 API Key")
+        case .zai: return L10n.k("views.detail.provider_zai_console", fallback: "获取 API Key")
         case .custom: return nil
         }
     }
@@ -5957,11 +5957,11 @@ private enum DirectProviderChoice: String, CaseIterable, Identifiable {
     var promotionTitle: String? {
         switch self {
         case .minimax:
-            return "🎁 领取 9 折专属优惠"
+            return L10n.k("views.detail.promo_minimax", fallback: "🎁 领取 9 折专属优惠")
         case .qiniu:
-            return "免费领取 1000 万 Token"
+            return L10n.k("views.detail.promo_qiniu", fallback: "免费领取 1000 万 Token")
         case .zai:
-            return "95折优惠订阅"
+            return L10n.k("views.detail.promo_zai", fallback: "95折优惠订阅")
         case .custom:
             return nil
         default:
@@ -6179,8 +6179,8 @@ private struct KimiMinimaxModelConfigPanel: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .builtinUI: return "内置 UI"
-            case .cliMore: return "更多模型（命令行）"
+            case .builtinUI: return L10n.k("views.detail.config_mode_builtin", fallback: "内置 UI")
+            case .cliMore: return L10n.k("views.detail.config_mode_cli", fallback: "更多模型（命令行）")
             }
         }
     }
@@ -6438,7 +6438,7 @@ private struct KimiMinimaxModelConfigPanel: View {
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(.body, design: .monospaced))
                                 HStack(spacing: 8) {
-                                    Button(isFetchingCustomModels ? "拉取中…" : "从 API 拉取列表") {
+                                    Button(isFetchingCustomModels ? L10n.k("views.detail.custom_fetching", fallback: "拉取中…") : L10n.k("views.detail.custom_fetch_list", fallback: "从 API 拉取列表")) {
                                         Task { await fetchCustomModels() }
                                     }
                                     .buttonStyle(.bordered)
@@ -7026,8 +7026,8 @@ private struct KimiMinimaxModelConfigPanel: View {
         let baseURL = customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedAPIKey = CustomModelConfigUtils.resolvedAPIKey(apiKey)
 
-        guard !modelId.isEmpty else { throw HelperError.operationFailed("请先选择模型") }
-        guard !baseURL.isEmpty else { throw HelperError.operationFailed("请先填写 Base URL") }
+        guard !modelId.isEmpty else { throw HelperError.operationFailed(L10n.k("views.detail.error_select_model", fallback: "请先选择模型")) }
+        guard !baseURL.isEmpty else { throw HelperError.operationFailed(L10n.k("views.detail.error_fill_base_url", fallback: "请先填写 Base URL")) }
 
         let primary = "\(providerId)/\(modelId)"
         let patch: [String: Any] = [
@@ -7100,7 +7100,7 @@ private struct KimiMinimaxModelConfigPanel: View {
     private func fetchCustomModels() async {
         let baseURL = customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !baseURL.isEmpty else {
-            customModelFetchError = "请先填写 Base URL"
+            customModelFetchError = L10n.k("views.detail.error_fill_base_url", fallback: "请先填写 Base URL")
             customModelFetchMessage = nil
             return
         }
@@ -7116,7 +7116,7 @@ private struct KimiMinimaxModelConfigPanel: View {
             let ids = try await CustomModelConfigUtils.fetchModelIDs(baseURL: baseURL, apiKey: apiKey)
             if ids.isEmpty {
                 customModelSuggestions = []
-                customModelFetchMessage = "已请求成功，但未解析到可用模型 ID（该接口可能不支持标准 list）"
+                customModelFetchMessage = L10n.k("views.detail.custom_fetch_empty", fallback: "已请求成功，但未解析到可用模型 ID（该接口可能不支持标准 list）")
                 return
             }
 
@@ -7124,7 +7124,7 @@ private struct KimiMinimaxModelConfigPanel: View {
             if effectiveCustomModelId.isEmpty, let first = ids.first {
                 customModelId = first
             }
-            customModelFetchMessage = "已拉取 \(ids.count) 个模型"
+            customModelFetchMessage = L10n.f("views.detail.custom_fetch_success", fallback: "已拉取 %d 个模型", ids.count)
         } catch {
             customModelFetchError = error.localizedDescription
         }

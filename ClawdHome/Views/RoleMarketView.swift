@@ -422,16 +422,16 @@ struct RoleMarketView: View {
 
     private func validateAwakeningInput(username: String, fullName: String) throws {
         guard !username.isEmpty else {
-            throw AwakeningValidationError(message: "系统用户名不能为空")
+            throw AwakeningValidationError(message: L10n.k("views.role_market.error_username_empty", fallback: "系统用户名不能为空"))
         }
         guard !fullName.isEmpty else {
-            throw AwakeningValidationError(message: "显示名不能为空")
+            throw AwakeningValidationError(message: L10n.k("views.role_market.error_display_name_empty", fallback: "显示名不能为空"))
         }
         if pool.users.contains(where: { $0.username.caseInsensitiveCompare(username) == .orderedSame }) {
-            throw AwakeningValidationError(message: "用户名 @\(username) 已存在，请换一个再试")
+            throw AwakeningValidationError(message: L10n.f("views.role_market.error_username_exists", fallback: "用户名 @%@ 已存在，请换一个再试", username))
         }
         if pool.users.contains(where: { $0.fullName.caseInsensitiveCompare(fullName) == .orderedSame }) {
-            throw AwakeningValidationError(message: "显示名“\(fullName)”已被使用，请换一个名字")
+            throw AwakeningValidationError(message: L10n.f("views.role_market.error_display_name_taken", fallback: "显示名「%@」已被使用，请换一个名字", fullName))
         }
     }
 
@@ -443,7 +443,7 @@ struct RoleMarketView: View {
             || lowercased.contains("/users/\(username.lowercased())")
         if hasDirectoryConflict {
             return AwakeningValidationError(
-                message: "创建失败：检测到用户名或显示名冲突（@\(username) / \(fullName)）。请修改后重试。"
+                message: L10n.f("views.role_market.error_create_conflict", fallback: "创建失败：检测到用户名或显示名冲突（@%@ / %@）。请修改后重试。", username, fullName)
             )
         }
         return error

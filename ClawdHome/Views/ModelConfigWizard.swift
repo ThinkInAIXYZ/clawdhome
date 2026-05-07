@@ -315,8 +315,8 @@ struct ModelAddSheet: View {
         var id: String { rawValue }
         var displayName: String {
             switch self {
-            case .customAPIKey: return "粘贴 API Key"
-            case .secretReference: return "使用 Secret Reference"
+            case .customAPIKey: return L10n.k("views.model_config_wizard.auth_paste_key", fallback: "粘贴 API Key")
+            case .secretReference: return L10n.k("views.model_config_wizard.auth_secret_ref", fallback: "使用 Secret Reference")
             }
         }
     }
@@ -1128,35 +1128,35 @@ struct ModelAddSheet: View {
         guard isCustomProvider, customAuthChoice == .secretReference else { return nil }
         let raw = secretReferenceInput.trimmingCharacters(in: .whitespacesAndNewlines)
         if raw.isEmpty {
-            return "Secret Reference 不能为空。"
+            return L10n.k("views.model_config_wizard.error_secret_ref_empty", fallback: "Secret Reference 不能为空。")
         }
         if raw.hasPrefix("${"), raw.hasSuffix("}") {
             let envName = String(raw.dropFirst(2).dropLast())
-            guard !envName.isEmpty else { return "环境变量引用格式错误。示例：${CUSTOM_API_KEY}" }
+            guard !envName.isEmpty else { return L10n.k("views.model_config_wizard.error_env_ref_format", fallback: "环境变量引用格式错误。示例：${CUSTOM_API_KEY}") }
             let existing = await helperClient.getConfig(username: user.username, key: "env.\(envName)")
             if existing == nil || existing?.isEmpty == true {
-                return "环境变量 \(envName) 未配置（预检失败）。"
+                return L10n.f("views.model_config_wizard.error_env_not_configured", fallback: "环境变量 %@ 未配置（预检失败）。", envName)
             }
             return nil
         }
         if raw.hasPrefix("env:") {
             let envName = String(raw.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !envName.isEmpty else { return "env 引用格式错误。示例：env:CUSTOM_API_KEY" }
+            guard !envName.isEmpty else { return L10n.k("views.model_config_wizard.error_env_format", fallback: "env 引用格式错误。示例：env:CUSTOM_API_KEY") }
             let existing = await helperClient.getConfig(username: user.username, key: "env.\(envName)")
             if existing == nil || existing?.isEmpty == true {
-                return "环境变量 \(envName) 未配置（预检失败）。"
+                return L10n.f("views.model_config_wizard.error_env_not_configured", fallback: "环境变量 %@ 未配置（预检失败）。", envName)
             }
             return nil
         }
 
         if raw.contains(":") {
             if !GlobalSecretsStore.shared.has(secretKey: raw) {
-                return "provider ref \(raw) 不存在于全局 secrets（预检失败）。"
+                return L10n.f("views.model_config_wizard.error_provider_ref_missing", fallback: "provider ref %@ 不存在于全局 secrets（预检失败）。", raw)
             }
             return nil
         }
 
-        return "Secret Reference 格式不支持。请使用 env:VAR / ${VAR} / provider:account。"
+        return L10n.k("views.model_config_wizard.error_secret_ref_unsupported", fallback: "Secret Reference 格式不支持。请使用 env:VAR / ${VAR} / provider:account。")
     }
 }
 

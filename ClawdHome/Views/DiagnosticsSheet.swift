@@ -40,7 +40,7 @@ struct DiagnosticsSheet: View {
             HStack {
                 Image(systemName: "stethoscope")
                     .foregroundStyle(.tint)
-                Text("诊断中心").font(.headline)
+                Text(L10n.k("views.diagnostics.title", fallback: "诊断中心")).font(.headline)
                 Text("@\(user.username)").foregroundStyle(.secondary)
                 Spacer()
                 Button(L10n.k("auto.health_check_sheet.done", fallback: "完成")) { dismiss() }
@@ -54,7 +54,7 @@ struct DiagnosticsSheet: View {
 
             if let err = loadError, groupResults.isEmpty {
                 ContentUnavailableView(
-                    "诊断失败",
+                    L10n.k("views.diagnostics.failed", fallback: "诊断失败"),
                     systemImage: "exclamationmark.triangle",
                     description: Text(err)
                 )
@@ -84,14 +84,14 @@ struct DiagnosticsSheet: View {
                                     Text(L10n.k("auto.health_check_sheet.text_114268798e", fallback: "修复中…"))
                                 }
                             } else {
-                                Text("一键修复（\(fixableIssueCount) 项）")
+                                Text(L10n.f("views.diagnostics.fix_all", fallback: "一键修复（%d 项）", fixableIssueCount))
                             }
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(isFixing || isRunning)
                     }
                     Spacer()
-                    Button(isRunning || isFixing ? "诊断中…" : "重新诊断") {
+                    Button(isRunning || isFixing ? L10n.k("views.diagnostics.running", fallback: "诊断中…") : L10n.k("views.diagnostics.rerun", fallback: "重新诊断")) {
                         Task { await runGroupByGroup(fix: false) }
                     }
                     .buttonStyle(.bordered)
@@ -112,11 +112,11 @@ struct DiagnosticsSheet: View {
         HStack(spacing: 16) {
             if isComplete {
                 if criticalCount > 0 {
-                    Label("\(criticalCount) 个严重问题", systemImage: "xmark.circle.fill")
+                    Label(L10n.f("views.diagnostics.critical_count", fallback: "%d 个严重问题", criticalCount), systemImage: "xmark.circle.fill")
                         .foregroundStyle(.red)
                 }
                 if warnCount > 0 {
-                    Label("\(warnCount) 个警告", systemImage: "exclamationmark.triangle.fill")
+                    Label(L10n.f("views.diagnostics.warning_count", fallback: "%d 个警告", warnCount), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                 }
                 if !hasIssues {
@@ -126,12 +126,12 @@ struct DiagnosticsSheet: View {
             } else {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("诊断中… \(completedGroups.count)/\(groupOrder.count)")
+                    Text(L10n.f("views.diagnostics.progress", fallback: "诊断中… %d/%d", completedGroups.count, groupOrder.count))
                 }
             }
             Spacer()
             if isComplete {
-                Text("检查于 \(Date().formatted(date: .omitted, time: .shortened))")
+                Text(L10n.f("views.diagnostics.checked_at", fallback: "检查于 %@", Date().formatted(date: .omitted, time: .shortened)))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

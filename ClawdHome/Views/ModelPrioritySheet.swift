@@ -18,7 +18,7 @@ struct ModelChainEntry: Identifiable, Equatable {
         case "minimax": return "MiniMax"
         case "kimi-coding": return "Kimi Code"
         case "qiniu": return "Qiniu AI"
-        case "zai": return "智谱 Z.AI"
+        case "zai": return L10n.k("views.model_priority.provider_zai", fallback: "智谱 Z.AI")
         default: return prefix
         }
     }
@@ -41,7 +41,7 @@ enum AddModelProvider: String, CaseIterable, Identifiable {
         case .qiniu: return "Qiniu AI"
         case .kimiCoding: return "Kimi Code"
         case .minimax: return "MiniMax"
-        case .zai: return "智谱 Z.AI"
+        case .zai: return L10n.k("views.model_priority.provider_zai", fallback: "智谱 Z.AI")
         case .custom: return L10n.k("model_priority.provider_custom", fallback: "自定义")
         }
     }

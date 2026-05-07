@@ -34,7 +34,7 @@ private enum UserEntryWindowResolver {
     ) -> Bool {
         guard !state.isCompleted else { return false }
         if hasRecoverableWizardProgress(state) { return true }
-        // 全 pending 的 pre-start 会话仅在未安装 openclaw 时才视为“待初始化”。
+        // 全 pending 的 pre-start 会话仅在未安装 openclaw 时才视为"待初始化"。
         return !hasInstalledOpenClaw
     }
 
@@ -152,10 +152,10 @@ struct ClawPoolView: View {
 
     private var pendingActionMessage: String? {
         if let username = webUIOpenInFlightUsernames.sorted().first {
-            return "正在打开 @\(username) 的 Web UI…"
+            return L10n.f("views.user_list.opening_web_ui", fallback: "正在打开 @%@ 的 Web UI…", username)
         }
         if let username = windowOpenInFlightUsernames.sorted().first {
-            return "正在打开 @\(username) 的概览…"
+            return L10n.f("views.user_list.opening_overview", fallback: "正在打开 @%@ 的概览…", username)
         }
         return nil
     }
@@ -380,7 +380,7 @@ struct ClawPoolView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text(L10n.k("user.list.gateway.node_missing.title", fallback: "检测到 Node.js 环境缺失"))
                     .font(.headline)
-                Text(L10n.k("user.list.gateway.node_missing.message", fallback: "将执行基础环境修复。修复完成后，请手动点击“再次启动 Gateway”。"))
+                Text(L10n.k("user.list.gateway.node_missing.message", fallback: "将执行基础环境修复。修复完成后，请手动点击\u{201C}再次启动 Gateway\u{201D}。"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -569,7 +569,7 @@ struct ClawPoolView: View {
             }
             Button { Task { await openWebUI(for: claw) } } label: {
                 if webUIOpenInFlightUsernames.contains(claw.username.lowercased()) {
-                    Label("打开中…", systemImage: "hourglass")
+                    Label(L10n.k("views.user_list.opening", fallback: "打开中…"), systemImage: "hourglass")
                 } else {
                     Label(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"), systemImage: "globe")
                 }

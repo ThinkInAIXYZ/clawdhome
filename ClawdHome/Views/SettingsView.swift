@@ -166,7 +166,9 @@ private struct GeneralSettingsTab: View {
                                 } else {
                                     Image(systemName: "checkmark.circle.fill")
                                 }
-                                Text(isApplyingProxy ? "应用中…" : "应用到所有虾")
+                                Text(isApplyingProxy
+                                     ? L10n.k("views.settings_view.proxy_applying", fallback: "应用中…")
+                                     : L10n.k("views.settings_view.proxy_apply_all", fallback: "应用到所有虾"))
                             }
                         }
                         .buttonStyle(.borderedProminent)
@@ -226,7 +228,7 @@ private struct GeneralSettingsTab: View {
                 }
                 .buttonStyle(.bordered)
 
-                Text(L10n.k("settings.debug.preview_gateway_activation_hint", fallback: "打开独立预览窗口查看“正在启动 OpenClaw Gateway…”动画，不会触发真实启动。"))
+                Text(L10n.k("settings.debug.preview_gateway_activation_hint", fallback: "打开独立预览窗口查看\u{201C}正在启动 OpenClaw Gateway…\u{201D}动画，不会触发真实启动。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -258,7 +260,7 @@ private struct GeneralSettingsTab: View {
 
     private func loadFromSystemProxy() {
         guard let raw = CFNetworkCopySystemProxySettings()?.takeRetainedValue() as? [String: Any] else {
-            proxyError = "无法读取系统代理配置。"
+            proxyError = L10n.k("views.settings_view.proxy_read_failed", fallback: "无法读取系统代理配置。")
             proxyMessage = nil
             return
         }
@@ -281,12 +283,12 @@ private struct GeneralSettingsTab: View {
             if let port = raw[kCFNetworkProxiesHTTPPort as String] as? Int { proxyPort = String(port) }
             proxyEnabled = !proxyHost.isEmpty
         } else {
-            proxyError = "未检测到系统代理，请手动填写。"
+            proxyError = L10n.k("views.settings_view.proxy_not_detected", fallback: "未检测到系统代理，请手动填写。")
             proxyMessage = nil
             return
         }
 
-        proxyMessage = "已读取系统代理，可按需修改后应用。"
+        proxyMessage = L10n.k("views.settings_view.proxy_loaded", fallback: "已读取系统代理，可按需修改后应用。")
         proxyError = nil
     }
 
@@ -302,7 +304,7 @@ private struct GeneralSettingsTab: View {
 
         let users = pool.users.filter { !$0.isAdmin && $0.clawType == .macosUser }
         if users.isEmpty {
-            proxyError = "没有可应用代理的虾用户。"
+            proxyError = L10n.k("views.settings_view.proxy_no_users", fallback: "没有可应用代理的虾用户。")
             return
         }
 
@@ -324,7 +326,7 @@ private struct GeneralSettingsTab: View {
         var failed: [String] = []
         let total = users.count
         for (idx, u) in users.enumerated() {
-            proxyProgressText = "正在应用 \(idx + 1)/\(total)：\(u.username)"
+            proxyProgressText = L10n.f("views.settings_view.proxy_applying_progress", fallback: "正在应用 %@/%@：%@", String(idx + 1), String(total), u.username)
             do {
                 try await helperClient.applyProxySettings(
                     username: u.username,
@@ -339,11 +341,11 @@ private struct GeneralSettingsTab: View {
         }
 
         if failed.isEmpty {
-            proxyMessage = "代理配置已应用到 \(users.count) 个虾用户。"
-            proxyProgressText = "应用完成：\(users.count)/\(users.count)"
+            proxyMessage = L10n.f("views.settings_view.proxy_applied_success", fallback: "代理配置已应用到 %@ 个虾用户。", String(users.count))
+            proxyProgressText = L10n.f("views.settings_view.proxy_done_count", fallback: "应用完成：%@/%@", String(users.count), String(users.count))
         } else {
-            proxyError = "部分用户应用失败：\n" + failed.joined(separator: "\n")
-            proxyProgressText = "应用完成：成功 \(users.count - failed.count)，失败 \(failed.count)"
+            proxyError = L10n.f("views.settings_view.proxy_partial_fail", fallback: "部分用户应用失败：\n%@", failed.joined(separator: "\n"))
+            proxyProgressText = L10n.f("views.settings_view.proxy_done_mixed", fallback: "应用完成：成功 %@，失败 %@", String(users.count - failed.count), String(failed.count))
         }
     }
 }
@@ -417,7 +419,7 @@ private struct HelperStatusSection: View {
     @State private var lastProbeTime: Date?
 
     var body: some View {
-        Section("Helper 服务") {
+        Section(L10n.k("views.settings_view.helper_service", fallback: "Helper 服务")) {
             HStack(spacing: 10) {
                 Circle()
                     .fill(statusColor)
@@ -445,17 +447,17 @@ private struct HelperStatusSection: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(isProbing || isRestarting)
-                .help("检测 Helper 健康状态")
+                .help(L10n.k("views.settings_view.helper_probe_health", fallback: "检测 Helper 健康状态"))
             }
 
             if case .unresponsive = healthState {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
-                    Text("Helper 进程存活但无响应，建议重启恢复。")
+                    Text(L10n.k("views.settings_view.helper_unresponsive_hint", fallback: "Helper 进程存活但无响应，建议重启恢复。"))
                         .font(.caption)
                     Spacer()
-                    Button("重启 Helper") {
+                    Button(L10n.k("views.settings_view.helper_restart", fallback: "重启 Helper")) {
                         Task { await restartHelper() }
                     }
                     .buttonStyle(.borderedProminent)
@@ -469,10 +471,10 @@ private struct HelperStatusSection: View {
                 HStack(spacing: 8) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.red)
-                    Text("Helper 未连接。如已安装，尝试重启恢复。")
+                    Text(L10n.k("views.settings_view.helper_disconnected_hint", fallback: "Helper 未连接。如已安装，尝试重启恢复。"))
                         .font(.caption)
                     Spacer()
-                    Button("重启 Helper") {
+                    Button(L10n.k("views.settings_view.helper_restart", fallback: "重启 Helper")) {
                         Task { await restartHelper() }
                     }
                     .buttonStyle(.borderedProminent)
@@ -482,7 +484,7 @@ private struct HelperStatusSection: View {
                 }
             }
 
-            Text("Helper 是以 root 运行的后台服务（LaunchDaemon），负责所有特权操作。正常情况下由 launchd 自动管理，无需手动干预。")
+            Text(L10n.k("views.settings_view.helper_description", fallback: "Helper 是以 root 运行的后台服务（LaunchDaemon），负责所有特权操作。正常情况下由 launchd 自动管理，无需手动干预。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -499,9 +501,11 @@ private struct HelperStatusSection: View {
 
     private var statusTitle: String {
         switch healthState {
-        case .connected(let version): return "运行中（v\(version)）"
-        case .unresponsive: return "无响应"
-        case .disconnected: return helperClient.isConnected ? "连接中…" : "未连接"
+        case .connected(let version): return L10n.f("views.settings_view.helper_status_running", fallback: "运行中（v%@）", version)
+        case .unresponsive: return L10n.k("views.settings_view.helper_status_unresponsive", fallback: "无响应")
+        case .disconnected: return helperClient.isConnected
+            ? L10n.k("views.settings_view.helper_status_connecting", fallback: "连接中…")
+            : L10n.k("views.settings_view.helper_status_disconnected", fallback: "未连接")
         }
     }
 
@@ -509,9 +513,9 @@ private struct HelperStatusSection: View {
         if let t = lastProbeTime {
             let fmt = RelativeDateTimeFormatter()
             fmt.unitsStyle = .short
-            return "上次检测：\(fmt.localizedString(for: t, relativeTo: Date()))"
+            return L10n.f("views.settings_view.helper_last_probe", fallback: "上次检测：%@", fmt.localizedString(for: t, relativeTo: Date()))
         }
-        return "正在检测…"
+        return L10n.k("views.settings_view.helper_probing", fallback: "正在检测…")
     }
 
     private func probe() async {
@@ -1209,7 +1213,7 @@ private struct AboutTab: View {
     private var statusText: String {
         switch healthState {
         case .connected: return L10n.k("views.settings_view.connected", fallback: "已连接")
-        case .unresponsive: return "无响应"
+        case .unresponsive: return L10n.k("views.settings_view.helper_status_unresponsive", fallback: "无响应")
         case .disconnected: return L10n.k("views.settings_view.disconnected", fallback: "未连接")
         }
     }
@@ -1232,7 +1236,7 @@ private struct AboutTab: View {
 
             Divider()
 
-            GroupBox("Helper 服务") {
+            GroupBox(L10n.k("views.settings_view.helper_service", fallback: "Helper 服务")) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Circle()
@@ -1252,7 +1256,7 @@ private struct AboutTab: View {
                         }
                         .buttonStyle(.borderless)
                         .disabled(isProbing || isRestarting)
-                        .help("重新检测 Helper 状态")
+                        .help(L10n.k("views.settings_view.helper_reprobe", fallback: "重新检测 Helper 状态"))
                     }
 
                     LabeledContent(L10n.k("views.settings_view.helper_version", fallback: "Helper 版本"), value: helperVersion)
@@ -1264,10 +1268,10 @@ private struct AboutTab: View {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
-                            Text("Helper 进程存活但无响应，建议重启恢复。")
+                            Text(L10n.k("views.settings_view.helper_unresponsive_hint", fallback: "Helper 进程存活但无响应，建议重启恢复。"))
                                 .font(.caption)
                             Spacer()
-                            Button("重启 Helper") {
+                            Button(L10n.k("views.settings_view.helper_restart", fallback: "重启 Helper")) {
                                 Task { await restartHelper() }
                             }
                             .buttonStyle(.borderedProminent)
@@ -1281,20 +1285,20 @@ private struct AboutTab: View {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.red)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Helper 未连接，无法执行任何操作。")
+                                Text(L10n.k("views.settings_view.helper_disconnected_no_ops", fallback: "Helper 未连接，无法执行任何操作。"))
                                     .font(.caption)
                                 #if DEBUG
                                 Text(L10n.k("views.settings_view.run_install_helper_dev_sh", fallback: "请运行 sudo scripts/install-helper-dev.sh"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 #else
-                                Text("请重启 Helper；若仍失败，请重新安装官方签名安装包。")
+                                Text(L10n.k("views.settings_view.helper_reinstall_hint", fallback: "请重启 Helper；若仍失败，请重新安装官方签名安装包。"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 #endif
                             }
                             Spacer()
-                            Button("重启 Helper") {
+                            Button(L10n.k("views.settings_view.helper_restart", fallback: "重启 Helper")) {
                                 Task { await restartHelper() }
                             }
                             .buttonStyle(.borderedProminent)
@@ -1423,22 +1427,22 @@ private struct StorageDirectoriesSection: View {
 
     private let directories: [DirectoryItem] = [
         DirectoryItem(
-            label: "共享空间",
+            label: L10n.k("views.settings_view.storage_shared_space", fallback: "共享空间"),
             path: "/Users/Shared/ClawdHome",
             icon: "folder.badge.person.crop",
-            description: "公共文件夹和安全文件夹，用于人和虾之间的文件共享"
+            description: L10n.k("views.settings_view.storage_shared_desc", fallback: "公共文件夹和安全文件夹，用于人和虾之间的文件共享")
         ),
         DirectoryItem(
-            label: "Helper 数据",
+            label: L10n.k("views.settings_view.storage_helper_data", fallback: "Helper 数据"),
             path: "/var/lib/clawdhome",
             icon: "lock.shield",
-            description: "守护进程状态、安装缓存、本地模型（root 专用）"
+            description: L10n.k("views.settings_view.storage_helper_data_desc", fallback: "守护进程状态、安装缓存、本地模型（root 专用）")
         ),
         DirectoryItem(
-            label: "Helper 日志",
+            label: L10n.k("views.settings_view.storage_helper_log", fallback: "Helper 日志"),
             path: "/tmp/clawdhome-helper.log",
             icon: "doc.text",
-            description: "JSONL 格式，最大 2MB，自动轮转"
+            description: L10n.k("views.settings_view.storage_helper_log_desc", fallback: "JSONL 格式，最大 2MB，自动轮转")
         ),
     ]
 

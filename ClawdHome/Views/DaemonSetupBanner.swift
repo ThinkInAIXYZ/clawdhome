@@ -46,7 +46,7 @@ struct DaemonSetupBanner: View {
                             if isRestarting {
                                 ProgressView().controlSize(.small)
                             }
-                            Text(isRestarting ? "重启中…" : "重启 Helper")
+                            Text(isRestarting ? L10n.k("views.daemon_setup.restarting", fallback: "重启中…") : L10n.k("views.daemon_setup.restart_helper", fallback: "重启 Helper"))
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -98,7 +98,7 @@ struct DaemonSetupBanner: View {
             try? await Task.sleep(for: .seconds(2))
             helperClient.connect()
         } else {
-            errorMessage = "重启失败，请手动运行：sudo launchctl kickstart -k system/ai.clawdhome.mac.helper"
+            errorMessage = L10n.k("views.daemon_setup.restart_failed", fallback: "重启失败，请手动运行：sudo launchctl kickstart -k system/ai.clawdhome.mac.helper")
         }
         isRestarting = false
     }

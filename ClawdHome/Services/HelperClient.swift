@@ -203,7 +203,7 @@ final class HelperClient {
                         level: .warn
                     )
                 }
-                // 超时类失败在长阻塞任务（如 install/diagnostics）期间可能是“假断连”。
+                // 超时类失败在长阻塞任务（如 install/diagnostics）期间可能是"假断连"。
                 // 若当前已连接，则保持连接状态，避免 maintainConnection 触发重连风暴。
                 if connected {
                     self.isConnected = true
@@ -383,7 +383,7 @@ final class HelperClient {
         let effectiveSeconds = XPCTimeoutPolicy.effectiveTimeoutSeconds(requested: requestedSeconds)
         return try await requestWithTimeout(
             timeout: timeout,
-            timeoutMessage: "XPC 调用超时（\(effectiveSeconds)s，基础 \(requestedSeconds)s + 冗余 \(effectiveSeconds - requestedSeconds)s）",
+            timeoutMessage: L10n.f("services.helper_client.xpc_timeout", fallback: "XPC 调用超时（%ds，基础 %ds + 冗余 %ds）", effectiveSeconds, requestedSeconds, effectiveSeconds - requestedSeconds),
             operation: operation
         )
     }
@@ -420,7 +420,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = try await xpcCall { done in
             proxy.setupVault(username: username) { ok, msg in done((ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "Vault 初始化失败") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.vault_init_failed", fallback: "Vault 初始化失败")) }
     }
 
     /// 删除用户（由 Helper 以 root 执行）
