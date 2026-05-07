@@ -146,7 +146,7 @@ struct AddProviderModelSheet: View {
                 if hasDuplicateAlias {
                     HStack {
                         Spacer().frame(width: 72)
-                        Text(L10n.k("add_provider_model.alias_exists", fallback: "别名已存在，请使用唯一别名"))
+                        Text(L10n.k("add_provider_model.duplicate_alias", fallback: "别名已存在，请使用唯一别名"))
                             .font(.caption2)
                             .foregroundStyle(.red)
                     }
@@ -332,7 +332,7 @@ struct AddProviderModelSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.k("add_provider_model.provider_id_label", fallback: "Provider ID（可选，默认 custom）"))
+                Text(L10n.k("add_provider_model.provider_id_optional", fallback: "Provider ID（可选，默认 custom）"))
                     .font(.caption)
                     .foregroundStyle(.primary)
                 TextField("custom", text: $customProviderId)
@@ -395,7 +395,7 @@ struct AddProviderModelSheet: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.caption)
                 HStack(spacing: 10) {
-                    Button(isTestingCredential ? "测试中…" : "测试配置") {
+                    Button(isTestingCredential ? L10n.k("add_provider_model.testing", fallback: "测试中…") : L10n.k("add_provider_model.test_config", fallback: "测试配置")) {
                         Task { await testCredential() }
                     }
                     .buttonStyle(.bordered)
@@ -524,17 +524,17 @@ struct AddProviderModelSheet: View {
 
         guard let modelId = selectedTestModelId else {
             testFailed = true
-            testFeedback = isCustomGroup ? "请先填写自定义模型 ID" : "请先选择至少一个模型"
+            testFeedback = isCustomGroup ? L10n.k("add_provider_model.validate.no_model_id", fallback: "请先填写自定义模型 ID") : L10n.k("add_provider_model.validate.no_model_selected", fallback: "请先选择至少一个模型")
             return
         }
         guard let apiKey = resolvedCredentialForTest(), !apiKey.isEmpty else {
             testFailed = true
-            testFeedback = "请先填写或保留可用凭据"
+            testFeedback = L10n.k("add_provider_model.validate.no_credential", fallback: "请先填写或保留可用凭据")
             return
         }
 
         let prompt = testContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "请发送你好"
+            ? L10n.k("add_provider_model.test.default_prompt", fallback: "请发送你好")
             : testContent.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let route = routeOptions(for: modelId)
@@ -552,13 +552,13 @@ struct AddProviderModelSheet: View {
         if result.success {
             let response = (result.responseText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if response.isEmpty {
-                testFeedback = String(format: "测试成功（%.0fms）", result.latencyMs)
+                testFeedback = String(format: L10n.k("add_provider_model.test.success", fallback: "测试成功（%.0fms）"), result.latencyMs)
             } else {
-                testFeedback = String(format: "测试成功（%.0fms）：%@", result.latencyMs, response)
+                testFeedback = String(format: L10n.k("add_provider_model.test.success_with_response", fallback: "测试成功（%.0fms）：%@"), result.latencyMs, response)
             }
             testFailed = false
         } else {
-            testFeedback = result.errorMessage ?? "测试失败"
+            testFeedback = result.errorMessage ?? L10n.k("add_provider_model.test.failed", fallback: "测试失败")
             testFailed = true
         }
     }

@@ -195,7 +195,7 @@ struct StorageRowContent: View {
 
 // MARK: - 独立探活（不依赖 DashboardView）
 
-/// 让 UserDetailView 自行对 gateway 发 HTTP 探活，
+/// 让 OpenClawDetailView 自行对 gateway 发 HTTP 探活，
 /// 确保独立窗口或非 Dashboard 页面也能刷新 readiness 状态
 struct UserDetailWindowTitleBinder: NSViewRepresentable {
     let title: String

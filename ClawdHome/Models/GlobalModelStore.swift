@@ -105,7 +105,7 @@ final class GlobalModelStore {
         return providers.first { $0.id == id }
     }
 
-    // MARK: - 兼容（UserDetailView 应用模版）
+    // MARK: - 兼容（OpenClawDetailView 应用模版）
 
     var templateDefault: String? { allTemplateModels.first?.id }
     var templateFallbacks: [String] { allTemplateModels.dropFirst().map(\.id) }

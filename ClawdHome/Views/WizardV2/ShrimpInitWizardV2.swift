@@ -814,9 +814,9 @@ struct ShrimpInitWizardV2: View {
     private var installToolsView: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("安装依赖工具")
+                Text(L10n.k("shrimp.wizard.install.title", fallback: "安装依赖工具"))
                     .font(.title2).fontWeight(.semibold)
-                Text("用于 OAuth 登录、网页自动化与账号授权回调。缺失浏览器工具会导致部分平台无法完成绑定。")
+                Text(L10n.k("shrimp.wizard.install.description", fallback: "用于 OAuth 登录、网页自动化与账号授权回调。缺失浏览器工具会导致部分平台无法完成绑定。"))
                     .foregroundStyle(.secondary)
                     .font(.subheadline)
             }
@@ -826,9 +826,9 @@ struct ShrimpInitWizardV2: View {
                     Image(systemName: browserToolInstalled ? "checkmark.circle.fill" : "circle.dotted")
                         .foregroundStyle(browserToolInstalled ? .green : .secondary)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("浏览器工具（必需）")
+                        Text(L10n.k("shrimp.wizard.browser_tool.title", fallback: "浏览器工具（必需）"))
                             .font(.headline)
-                        Text("安装用户级 browser wrapper 与授权辅助能力。")
+                        Text(L10n.k("shrimp.wizard.browser_tool.description", fallback: "安装用户级 browser wrapper 与授权辅助能力。"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text(browserToolInstalled ? "当前状态：已安装" : "当前状态：未安装")
@@ -1852,7 +1852,7 @@ struct ShrimpInitWizardV2: View {
 
             // 3. 把 agentId → DNA 映射写入 pending_v2_agents.json，供 gateway ready 后消费
             //    格式：[{"agentDefId": "main", "dna": {...}}]
-            //    gateway 启动后 UserDetailView.consumePendingV2Agents() 会找到对应 profile 写 persona 文件
+            //    gateway 启动后 OpenClawDetailView.consumePendingV2Agents() 会找到对应 profile 写 persona 文件
             await MainActor.run { savePhase = .writeAgentSnapshot }
             if !dnasSnapshot.isEmpty {
                 let entries: [[String: Any]] = dnasSnapshot.compactMap { (agentDefId, dna) in
@@ -1879,7 +1879,7 @@ struct ShrimpInitWizardV2: View {
                 }
             }
 
-            // 4. 重启 gateway，使新写入的 openclaw.json 生效，并触发 UserDetailView
+            // 4. 重启 gateway，使新写入的 openclaw.json 生效，并触发 OpenClawDetailView
             //    的 consumePendingV2Agents()（由 readinessMap == .ready 的 onChange 触发）
             await MainActor.run { savePhase = .restartGateway }
             do {

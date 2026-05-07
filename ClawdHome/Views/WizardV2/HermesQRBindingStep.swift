@@ -71,7 +71,7 @@ struct HermesQRBindingStep: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(platform.displayName)
                     .font(.headline)
-                Text("需要在终端内完成扫码授权")
+                Text(L10n.k("hermes.qr_binding.scan_required", fallback: "需要在终端内完成扫码授权"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

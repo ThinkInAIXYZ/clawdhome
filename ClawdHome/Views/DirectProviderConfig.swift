@@ -1665,6 +1665,7 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
         configuration.userContentController.addUserScript(.controlUIBootstrapReset)
         configuration.userContentController.addUserScript(.fileInputAcceptCapture)
         configuration.userContentController.addUserScript(.promptMemoryBridge)
+        configuration.userContentController.addUserScript(.hideRedundantHelperSessionEntry)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.setValue(false, forKey: "drawsBackground")

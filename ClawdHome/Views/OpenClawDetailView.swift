@@ -1,4 +1,4 @@
-// ClawdHome/Views/UserDetailView.swift
+// ClawdHome/Views/OpenClawDetailView.swift
 
 import AppKit
 import Carbon.HIToolbox
@@ -19,7 +19,32 @@ private enum DetailXcodeHealthState {
     case unhealthy
 }
 
-struct UserDetailView: View {
+private enum BrowserToolInstallFeedbackState: Equatable {
+    case idle
+    case installing
+    case success
+    case failure(String)
+
+    var icon: String {
+        switch self {
+        case .idle: return "info.circle"
+        case .installing: return "hourglass"
+        case .success: return "checkmark.circle.fill"
+        case .failure: return "xmark.octagon.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .idle: return .secondary
+        case .installing: return .secondary
+        case .success: return .green
+        case .failure: return .red
+        }
+    }
+}
+
+struct OpenClawDetailView: View {
     let user: ManagedUser
     var onDeleted: (() -> Void)? = nil
 
@@ -131,6 +156,8 @@ struct UserDetailView: View {
     @State private var browserAccountStatus: BrowserAccountStatus? = nil
     @State private var isOpeningBrowserAccount = false
     @State private var isInstallingBrowserAccountTool = false
+    @State private var browserToolInstallFeedback: BrowserToolInstallFeedbackState = .idle
+    @State private var browserToolInstallFeedbackTask: Task<Void, Never>? = nil
     @State private var isResettingBrowserAccount = false
     @State private var showResetBrowserAccountConfirm = false
     @State private var showAddManualLoginSite = false
@@ -145,7 +172,7 @@ struct UserDetailView: View {
     /// 详情页内嵌终端的 tab 管理器，挂在 detail view 的生命周期上：详情窗关闭即回收 PTY 会话
     @StateObject private var terminalTabManager = ShrimpTerminalTabManager(
         engine: .openclaw,
-        titlePrefix: "终端"
+        titlePrefix: L10n.k("user.detail.auto.terminal", fallback: "终端")
     )
     // Agent
     @State private var agents: [AgentProfile] = []
@@ -273,7 +300,7 @@ struct UserDetailView: View {
     }
 
     private var selectedAgentLabel: String {
-        selectedAgent?.name ?? "默认角色"
+        selectedAgent?.name ?? L10n.k("user.detail.default_agent_name", fallback: "默认角色")
     }
 
     private var shouldRenderOverviewSidebar: Bool {
@@ -302,7 +329,7 @@ struct UserDetailView: View {
         case .files:     return (L10n.k("user.detail.auto.files", fallback: "文件"), "folder")
         case .logs:      return (L10n.k("user.detail.auto.logs", fallback: "日志"), "doc.text.magnifyingglass")
         case .cron:      return (L10n.k("user.detail.auto.scheduled", fallback: "定时"), "clock")
-        case .skills:    return ("Skills", "star.leadinghalf.filled")
+        case .skills:    return (L10n.k("user.detail.auto.skills_title", fallback: "技能"), "star.leadinghalf.filled")
         case .characterDef: return (L10n.k("user.detail.auto.character_def", fallback: "角色"), "theatermasks")
         case .sessions:  return (L10n.k("user.detail.auto.sessions", fallback: "会话"), "bubble.left.and.bubble.right")
         case .memory:    return (L10n.k("user.detail.auto.memory", fallback: "记忆"), "brain.head.profile")
@@ -526,7 +553,7 @@ struct UserDetailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .overlay {
-            if shouldEmbedOverviewConsole, embeddedOverviewConsoleURL != nil {
+            if selectedTab == .overview, shouldEmbedOverviewConsole, embeddedOverviewConsoleURL != nil {
                 PromptMemoryOverlay(
                     username: user.username,
                     currentInput: promptMemoryCurrentInput,
@@ -785,28 +812,28 @@ struct UserDetailView: View {
             Text(L10n.k("user.detail.auto.userprocess_openclaw_process_start", fallback: "将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。"))
         }
         .confirmationDialog(
-            "重置浏览器账号？",
+            L10n.k("user.detail.browser.reset_title", fallback: "重置浏览器账号？"),
             isPresented: $showResetBrowserAccountConfirm,
             titleVisibility: .visible
         ) {
-            Button("备份并重置", role: .destructive) {
+            Button(L10n.k("user.browser.backup_reset", fallback: "备份并重置"), role: .destructive) {
                 Task { await resetBrowserAccount() }
             }
             Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) {
                 showResetBrowserAccountConfirm = false
             }
         } message: {
-            Text("将备份并清空该用户的 ClawdHome Chrome profile。其他用户和你的主浏览器账号不会受影响。")
+            Text(L10n.k("user.browser.reset_confirm_message", fallback: "将备份并清空该用户的 ClawdHome Chrome profile。其他用户和你的主浏览器账号不会受影响。"))
         }
-        .alert("添加登录网站", isPresented: $showAddManualLoginSite) {
-            TextField("名称", text: $manualLoginSiteName)
+        .alert(L10n.k("browser.add_login_site.title", fallback: "添加登录网站"), isPresented: $showAddManualLoginSite) {
+            TextField(L10n.k("common.label.name", fallback: "名称"), text: $manualLoginSiteName)
             TextField("https://example.com", text: $manualLoginSiteURL)
-            Button("添加") {
+            Button(L10n.k("common.action.add", fallback: "添加")) {
                 addManualLoginSiteAndOpen()
             }
             Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) {}
         } message: {
-            Text("添加后会立即在该用户的 ClawdHome Chrome 中打开。")
+            Text(L10n.k("browser.add_login_site.message", fallback: "添加后会立即在该用户的 ClawdHome Chrome 中打开。"))
         }
         .alert(
             L10n.k("user.detail.auto.file", fallback: "文件快传结果"),
@@ -1319,8 +1346,8 @@ struct UserDetailView: View {
 
     private var overviewBrowserAccountCard: some View {
         overviewSupplementaryCard(
-            title: "浏览器账号",
-            subtitle: browserAccountStatus?.message ?? "尚未检查"
+            title: L10n.k("browser.account.title", fallback: "浏览器账号"),
+            subtitle: browserAccountStatus?.message ?? L10n.k("hermes.browser.status_unchecked", fallback: "尚未检查")
         ) {
             VStack(alignment: .leading, spacing: 8) {
                 if let endpoint = browserAccountStatus?.httpEndpoint,
@@ -1332,7 +1359,7 @@ struct UserDetailView: View {
                 }
                 HStack(spacing: 8) {
                     overviewCompactActionButton(
-                        title: isOpeningBrowserAccount ? "打开中…" : "打开",
+                        title: isOpeningBrowserAccount ? L10n.k("browser.account.opening", fallback: "打开中…") : L10n.k("browser.account.open", fallback: "打开"),
                         systemImage: "globe",
                         tint: Color.blue.opacity(0.12),
                         foreground: .blue,
@@ -1341,19 +1368,22 @@ struct UserDetailView: View {
                         Task { await openBrowserAccount() }
                     }
                     overviewCompactActionButton(
-                        title: browserAccountStatus?.toolInstalled == true ? "已安装" : "安装工具",
-                        systemImage: "wrench.and.screwdriver",
+                        title: browserToolInstallButtonTitle,
+                        systemImage: browserToolInstallButtonIcon,
                         tint: Color.secondary.opacity(0.08),
-                        foreground: .primary,
+                        foreground: browserToolInstallButtonForeground,
                         disabled: !helperClient.isConnected || isInstallingBrowserAccountTool
                     ) {
                         Task { await installBrowserAccountTool() }
                     }
                 }
+                if browserToolInstallFeedback != .idle {
+                    browserToolInstallFeedbackView
+                }
                 HStack(spacing: 8) {
                     manualLoginMenuCompact
                     overviewCompactActionButton(
-                        title: isResettingBrowserAccount ? "重置中…" : "重置",
+                        title: isResettingBrowserAccount ? L10n.k("browser.account.resetting", fallback: "重置中…") : L10n.k("common.action.reset", fallback: "重置"),
                         systemImage: "trash",
                         tint: Color.red.opacity(0.10),
                         foreground: .red,
@@ -1381,7 +1411,7 @@ struct UserDetailView: View {
                 manualLoginSiteURL = ""
                 showAddManualLoginSite = true
             } label: {
-                Label("添加网站…", systemImage: "plus")
+                Label(L10n.k("browser.add_site_label", fallback: "添加网站…"), systemImage: "plus")
             }
         } label: {
             overviewCompactActionLabel(
@@ -1395,6 +1425,70 @@ struct UserDetailView: View {
         .buttonStyle(.plain)
         .disabled(!helperClient.isConnected || isOpeningBrowserAccount)
         .opacity((!helperClient.isConnected || isOpeningBrowserAccount) ? 0.55 : 1)
+    }
+
+    private var browserToolInstallButtonTitle: String {
+        switch browserToolInstallFeedback {
+        case .installing:
+            return L10n.k("browser.tool.installing", fallback: "安装中…")
+        case .success:
+            return L10n.k("browser.tool.install.success", fallback: "安装成功")
+        case .failure:
+            return L10n.k("browser.tool.install.failed", fallback: "安装失败")
+        case .idle:
+            return browserAccountStatus?.toolInstalled == true
+                ? L10n.k("browser.tool.installed", fallback: "已安装")
+                : L10n.k("browser.tool.install", fallback: "安装工具")
+        }
+    }
+
+    private var browserToolInstallButtonIcon: String {
+        switch browserToolInstallFeedback {
+        case .installing:
+            return "hourglass"
+        case .success:
+            return "checkmark.circle.fill"
+        case .failure:
+            return "xmark.octagon.fill"
+        case .idle:
+            return "wrench.and.screwdriver"
+        }
+    }
+
+    private var browserToolInstallButtonForeground: Color {
+        switch browserToolInstallFeedback {
+        case .installing:
+            return .secondary
+        case .success:
+            return .green
+        case .failure:
+            return .red
+        case .idle:
+            return .primary
+        }
+    }
+
+    private var browserToolInstallFeedbackView: some View {
+        let feedbackMessage: String = {
+            switch browserToolInstallFeedback {
+            case .idle:
+                return ""
+            case .installing:
+                return L10n.k("browser.tool.installing.detail", fallback: "浏览器工具安装中，请稍候（首次会安装 OpenCLI，可能需要 1-3 分钟）…")
+            case .success:
+                return L10n.k("browser.tool.install.success.detail", fallback: "浏览器工具安装成功，可直接点击“打开”继续登录。")
+            case let .failure(message):
+                return L10n.f("browser.tool.install.failed.detail", fallback: "浏览器工具安装失败：%@", message)
+            }
+        }()
+        return HStack(spacing: 6) {
+            Image(systemName: browserToolInstallFeedback.icon)
+                .imageScale(.small)
+            Text(feedbackMessage)
+                .lineLimit(2)
+        }
+        .font(.caption)
+        .foregroundStyle(browserToolInstallFeedback.color)
     }
 
     private var overviewResourceCard: some View {
@@ -2999,14 +3093,26 @@ struct UserDetailView: View {
     @MainActor
     private func installBrowserAccountTool() async {
         isInstallingBrowserAccountTool = true
+        browserToolInstallFeedbackTask?.cancel()
+        browserToolInstallFeedbackTask = nil
+        browserToolInstallFeedback = .installing
         actionError = nil
         defer { isInstallingBrowserAccountTool = false }
         do {
             browserAccountStatus = try await helperClient.installBrowserAccountTool(username: user.username)
-            _ = try await helperClient.openBrowserAccount(username: user.username)
             await refreshBrowserAccountStatus()
+            browserToolInstallFeedback = .success
+            browserToolInstallFeedbackTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                guard !Task.isCancelled else { return }
+                if browserToolInstallFeedback == .success {
+                    browserToolInstallFeedback = .idle
+                }
+                browserToolInstallFeedbackTask = nil
+            }
         } catch {
             actionError = error.localizedDescription
+            browserToolInstallFeedback = .failure(error.localizedDescription)
             await refreshBrowserAccountStatus()
         }
     }
@@ -3899,3 +4005,4 @@ struct UserDetailView: View {
     }
 
 }
+

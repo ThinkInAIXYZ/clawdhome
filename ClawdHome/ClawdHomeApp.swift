@@ -1399,7 +1399,7 @@ private struct UserInitWizardWindowPositioner: NSViewRepresentable {
 
 // MARK: - 龙虾详情窗口容器
 
-/// 通过 username 从 ShrimpPool 查找用户并展示 UserDetailView。
+/// 通过 username 从 ShrimpPool 查找用户并展示 OpenClawDetailView。
 /// 同一 username 的窗口由 SwiftUI 去重：再次 openWindow 只会置前已有窗口。
 private struct ClawDetailWindow: View {
     let username: String
@@ -1422,7 +1422,7 @@ private struct ClawDetailWindow: View {
                 })
             } else {
                 NavigationStack {
-                    UserDetailView(user: user, onDeleted: {
+                    OpenClawDetailView(user: user, onDeleted: {
                         dismiss()
                         Task { @MainActor in
                             pool.removeUser(username: username)

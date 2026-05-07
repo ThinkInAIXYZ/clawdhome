@@ -476,7 +476,7 @@ struct CharacterDefTabView: View {
         do {
             // 通过 Gateway RPC 删除（自动清理配置 + workspace + sessions，无需 restart）
             try await gatewayHub.agentsDelete(username: username, agentId: agentId)
-            // 删除后的 UI 刷新由 UserDetailView 的 onChange 处理
+            // 删除后的 UI 刷新由 OpenClawDetailView 的 onChange 处理
         } catch {
             loadError = error.localizedDescription
         }
