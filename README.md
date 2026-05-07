@@ -7,9 +7,9 @@
 
 English | [中文](README.zh.md)
 
-> Native macOS control plane for securely running and managing multiple isolated OpenClaw gateway instances on a single Mac.
+> Multi-Agent security console for macOS — run an entire AI Agent team safely on a single Mac.
 
-ClawdHome is built for people who want one machine to host multiple OpenClaw "Shrimps" without mixing identities, data, permissions, or operational risk. It combines a SwiftUI admin app, a privileged XPC helper daemon, and macOS multi-user isolation into a single workflow for setup, monitoring, cloning, maintenance, and recovery.
+ClawdHome lets you run multiple independent AI Agent instances on one Mac — supporting both OpenClaw and Hermes Agent engines — with each instance isolated in its own macOS user account, runtime, data directory, and permission boundary. A single SwiftUI control panel backed by a privileged XPC helper daemon covers initialization, monitoring, backup, model configuration, and IM channel onboarding, with no shell scripting required.
 
 Website: [clawdhome.app](https://clawdhome.app)  
 Downloads: [GitHub Releases](https://github.com/ThinkInAIXYZ/clawdhome/releases)  
@@ -47,41 +47,50 @@ Changelog: [English](CHANGELOG.en.md) | [中文](CHANGELOG.zh.md)
 
 ## Why ClawdHome
 
-- Real isolation: each Shrimp maps to its own macOS user account, runtime context, data, and permission boundary.
-- Safer privilege model: system-level actions are routed through an explicit XPC helper instead of ad-hoc shell flows inside the UI app.
-- Faster iteration: clone an existing Shrimp for experiments, rehearsal, or regression checks, then promote what works.
-- Native Mac fit: uses macOS user and process primitives instead of heavier VM or container workflows for this class of desktop automation.
-- Unified operations: manage onboarding, gateway lifecycle, files, logs, processes, config, and diagnostics from one place.
+Most multi-Agent setups are either too weak (Chrome profiles share a single macOS user account — credentials and cookies are readable across profiles) or too heavy (VMs and Docker cannot run macOS-native desktop apps). ClawdHome fills the gap: **strong isolation with low operational overhead**.
+
+- **Real isolation, enforced by the OS kernel**: each Shrimp is a separate macOS user account. Processes, files, Keychain entries, and network policies are separated at the kernel level. If one Agent is compromised, its blast radius stops at its own UID boundary.
+- **Safer privilege model**: the UI never executes privileged operations directly. All system-level actions go through an explicit XPC helper (LaunchDaemon) with a typed, auditable call surface.
+- **Dual-engine coexistence**: run OpenClaw and Hermes Agent side-by-side on the same Mac, each independently configured, sharing a common API key store and backup system.
+- **Unified operations**: initialization wizard, gateway lifecycle, file management, diagnostics, config hot-reload, backup/restore, and Cron tasks all live in one panel — no custom scripts, no manual launchd wiring.
+- **Local-first, compliance-friendly**: all core features work offline. Data never leaves the machine unless you opt in to cloud services, which suits regulated industries with data residency requirements.
 
 ## Highlights
 
-- Run multiple OpenClaw gateway instances on one Mac with clear per-instance boundaries.
-- Guided onboarding for new Shrimps, including channel-specific setup flows such as WeChat pairing.
-- Clone an existing Shrimp into a new isolated account for low-risk testing and rollout rehearsal.
-- Gateway lifecycle management with health visibility and watchdog-based recovery.
-- Built-in tools for files, sessions, processes, logs, and maintenance operations.
-- Model and provider configuration from the app, including direct model setup and Role Market-based presets.
-- Local AI operations support, including integration hooks for local model services where configured.
-- English and Chinese localization based on `Stable.xcstrings`.
+- **Dual-engine multi-Agent**: manage OpenClaw + Hermes Agents from a single panel. Each Shrimp supports multiple Agents, each with its own identity, model config, and IM binding.
+- **Role Market and Skills Store**: summon a preconfigured Agent team from the Role Market with one click; extend capabilities via the Skills Store without starting from scratch.
+- **13+ IM channels out of the box**: WeChat, Feishu, Telegram, Slack, WeCom, DingTalk, WhatsApp, email, and more — pair by QR scan or token form, unified channel directory maintained in one place.
+- **All-in-one operations panel**: health monitoring, watchdog auto-recovery, maintenance terminal, and an integrated diagnostics center covering environment, permissions, config, security, gateway, and network.
+- **Layered backup and restore**: per-Shrimp or global backups, restorable to any point in time.
+- **Centralized model and provider management**: API keys stored in an isolated Keychain, apply a model profile to multiple Agents in one action, supports custom providers and local model services.
+- **English and Chinese localization**: built on `Stable.xcstrings`, language follows the system setting.
+
+## Who It's For
+
+**AI studios and independent builders**: run Agents for multiple clients on one Mac, each client's credentials and data physically separated. Watchdog keeps things running around the clock; backups give you a paper trail when clients ask for evidence.
+
+**Enterprise IT and compliance teams**: fully on-premise deployment, no data leaves the machine by default. Gateway logs and config changes are traceable, fitting financial, medical, and legal scenarios with data sovereignty and audit requirements.
+
+**Developers and technical creators**: clone an existing Shrimp as an experiment sandbox, test freely, delete when done — the main environment stays clean. Use a dedicated demo Shrimp for livestreams so your real API keys never appear on screen.
 
 ## Architecture
 
 ```text
 ClawdHome.app (SwiftUI admin UI)
   -> XPC -> ClawdHomeHelper (privileged LaunchDaemon)
-      -> per-user OpenClaw gateway instances
+      -> per-user OpenClaw / Hermes Agent instances
 ```
 
 - `ClawdHome.app` is the operator-facing control plane for status, setup, and day-to-day maintenance.
 - `ClawdHomeHelper` is the privileged boundary for user management, process control, file operations, installs, and system automation.
-- Each Shrimp runs as a separate macOS user with its own OpenClaw runtime and data.
+- Each Shrimp runs as a separate macOS user with its own Agent runtime and data directory.
 
 ## Security Model
 
-- Privileged operations stay inside the helper boundary.
+- Privileged operations stay inside the helper boundary; the UI layer executes no system commands directly.
 - Sensitive actions use explicit XPC methods rather than arbitrary shell paths.
 - Ownership and permission repair are built into important lifecycle workflows.
-- Runtime resources are separated per Shrimp to reduce blast radius and accidental cross-contamination.
+- Runtime resources are separated per Shrimp to contain the blast radius of any single instance.
 
 ## Quick Start
 
@@ -188,7 +197,7 @@ release-notes/      generated release-note drafts
 - [ ] External key management with an exec-based secrets provider
 - [ ] Finer-grained network access control management
 - [ ] Simpler setup for more model providers and IM channels
-- [ ] Better local small-model workflows and OpenClaw integration
+- [ ] Better local small-model workflows and Agent integration
 - [ ] Stronger rescue and diagnostics capabilities
 - [ ] Better gateway probing and historical health tracking
 - [ ] More production-ready signed and notarized distribution workflows
