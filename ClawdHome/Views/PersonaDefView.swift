@@ -19,6 +19,7 @@ import SwiftUI
 enum PersonaFile: String, CaseIterable, Identifiable {
     case soul     = "SOUL.md"
     case identity = "IDENTITY.md"
+    case agents   = "AGENTS.md"
     case tools    = "TOOLS.md"
     case memory   = "MEMORY.md"
     case user     = "USER.md"
@@ -29,6 +30,7 @@ enum PersonaFile: String, CaseIterable, Identifiable {
         switch self {
         case .soul:     return "💫"
         case .identity: return "🪪"
+        case .agents:   return "🤖"
         case .tools:    return "🔧"
         case .memory:   return "🗂️"
         case .user:     return "👤"
@@ -39,6 +41,7 @@ enum PersonaFile: String, CaseIterable, Identifiable {
         switch self {
         case .soul:     return L10n.k("persona.file.soul.desc",     fallback: "核心价值观 · 行为准则")
         case .identity: return L10n.k("persona.file.identity.desc", fallback: "说话风格 · 身份设定")
+        case .agents:   return L10n.k("persona.file.agents.desc",   fallback: "操作指令 · 记忆管理")
         case .tools:    return L10n.k("persona.file.tools.desc",    fallback: "可调用的 API 和工具")
         case .memory:   return L10n.k("persona.file.memory.desc",   fallback: "记住的重要事实")
         case .user:     return L10n.k("persona.file.user.desc",     fallback: "用户认知 · 偏好设定")
@@ -49,6 +52,32 @@ enum PersonaFile: String, CaseIterable, Identifiable {
     var relPath: String { ".openclaw/workspace/\(rawValue)" }
 }
 
+// MARK: - 选中项模型（静态角色文件 or 记忆日志）
+
+enum PersonaSelection: Hashable {
+    case file(PersonaFile)
+    case memoryLog(String)  // filename, e.g. "2024-03-15.md"
+
+    var isMemoryLog: Bool {
+        if case .memoryLog = self { return true }
+        return false
+    }
+
+    var displayName: String {
+        switch self {
+        case .file(let f): return f.rawValue
+        case .memoryLog(let name): return name
+        }
+    }
+
+    var relPath: String {
+        switch self {
+        case .file(let f): return f.relPath
+        case .memoryLog(let name): return ".openclaw/workspace/memory/\(name)"
+        }
+    }
+}
+
 // MARK: - CharacterDefTabView（顶层入口）
 
 struct CharacterDefTabView: View {
@@ -57,10 +86,15 @@ struct CharacterDefTabView: View {
     @Environment(HelperClient.self) private var helperClient
 
     // 编辑器状态
-    @State private var selectedFile: PersonaFile = .soul
+    @State private var selection: PersonaSelection = .file(.soul)
     @State private var editorContents: [PersonaFile: String] = [:]   // 内存中的编辑内容
     @State private var savedContents: [PersonaFile: String] = [:]    // 最后一次保存到磁盘的内容
     @State private var existsOnDisk: [PersonaFile: Bool] = [:]        // 文件是否存在
+
+    // 记忆日志
+    @State private var memoryLogFiles: [String] = []                  // memory/ 目录下的文件名列表
+    @State private var memoryLogContent: String = ""                  // 当前选中日志的内容
+    @State private var memoryLogExpanded: Bool = false                // 侧边栏展开状态
     @State private var isLoading: Bool = false
     @State private var isSaving: Bool = false
 
@@ -69,7 +103,7 @@ struct CharacterDefTabView: View {
     @State private var lastCommitFailed: Bool = false
 
     // 切换文件时的脏检查 Sheet
-    @State private var pendingSwitch: PersonaFile? = nil
+    @State private var pendingSwitch: PersonaSelection? = nil
     @State private var showDirtySheet: Bool = false
 
     // 历史刷新令牌（每次保存成功后 +1，PersonaHistoryView 监听此值自动重载）
@@ -88,56 +122,70 @@ struct CharacterDefTabView: View {
         HSplitView {
             // 左侧侧边栏
             PersonaFileSidebarView(
-                selectedFile: $selectedFile,
+                selection: $selection,
                 editorContents: editorContents,
                 savedContents: savedContents,
                 existsOnDisk: existsOnDisk,
-                onSelect: { file in handleFileSelect(file) }
+                memoryLogFiles: memoryLogFiles,
+                memoryLogExpanded: $memoryLogExpanded,
+                onSelect: { sel in handleSelect(sel) }
             )
             .frame(minWidth: 160, idealWidth: 190, maxWidth: 220)
 
             // 右侧主区域
-            PersonaEditorAreaView(
-                username: username,
-                selectedFile: selectedFile,
-                content: Binding(
-                    get: { editorContents[selectedFile] ?? "" },
-                    set: { editorContents[selectedFile] = $0 }
-                ),
-                isLoading: isLoading,
-                isSaving: isSaving,
-                isDirty: isDirty(selectedFile),
-                fileExistsOnDisk: existsOnDisk[selectedFile] ?? false,
-                gitInitFailed: gitInitFailed,
-                lastCommitFailed: lastCommitFailed,
-                loadError: loadError,
-                historyRefreshToken: historyRefreshToken,
-                onSave: { Task { await save(file: selectedFile) } },
-                onDiscard: { discardEdits(file: selectedFile) },
-                onRestored: { Task { await reloadAfterRestore() } }
-            )
+            switch selection {
+            case .file(let file):
+                PersonaEditorAreaView(
+                    username: username,
+                    selectedFile: file,
+                    content: Binding(
+                        get: { editorContents[file] ?? "" },
+                        set: { editorContents[file] = $0 }
+                    ),
+                    isLoading: isLoading,
+                    isSaving: isSaving,
+                    isDirty: isDirty(file),
+                    fileExistsOnDisk: existsOnDisk[file] ?? false,
+                    gitInitFailed: gitInitFailed,
+                    lastCommitFailed: lastCommitFailed,
+                    loadError: loadError,
+                    historyRefreshToken: historyRefreshToken,
+                    onSave: { Task { await save(file: file) } },
+                    onDiscard: { discardEdits(file: file) },
+                    onRestored: { Task { await reloadAfterRestore() } }
+                )
+            case .memoryLog(let name):
+                PersonaMemoryLogView(
+                    filename: name,
+                    content: memoryLogContent,
+                    isLoading: isLoading,
+                    loadError: loadError
+                )
+            }
         }
         .task {
             await initGitAndLoadFirstFile()
         }
         // 切换文件时的脏检查
         .confirmationDialog(
-            L10n.k("persona.dirty.title", fallback: "保存对 \(selectedFile.rawValue) 的更改？"),
+            L10n.k("persona.dirty.title", fallback: "保存对 \(selection.displayName) 的更改？"),
             isPresented: $showDirtySheet,
             titleVisibility: .visible
         ) {
-            Button(L10n.k("persona.dirty.save", fallback: "保存")) {
-                Task {
-                    await save(file: selectedFile)
-                    if let target = pendingSwitch {
-                        await switchToFile(target)
+            if case .file(let currentFile) = selection {
+                Button(L10n.k("persona.dirty.save", fallback: "保存")) {
+                    Task {
+                        await save(file: currentFile)
+                        if let target = pendingSwitch {
+                            await switchTo(target)
+                        }
                     }
                 }
-            }
-            Button(L10n.k("persona.dirty.discard", fallback: "丢弃"), role: .destructive) {
-                discardEdits(file: selectedFile)
-                if let target = pendingSwitch {
-                    Task { await switchToFile(target) }
+                Button(L10n.k("persona.dirty.discard", fallback: "丢弃"), role: .destructive) {
+                    discardEdits(file: currentFile)
+                    if let target = pendingSwitch {
+                        Task { await switchTo(target) }
+                    }
                 }
             }
             Button(L10n.k("persona.dirty.cancel", fallback: "取消"), role: .cancel) {
@@ -173,20 +221,26 @@ struct CharacterDefTabView: View {
         return editor != saved
     }
 
-    private func handleFileSelect(_ file: PersonaFile) {
-        guard file != selectedFile else { return }
-        if isDirty(selectedFile) {
-            pendingSwitch = file
+    private func handleSelect(_ sel: PersonaSelection) {
+        guard sel != selection else { return }
+        // 只有当前选中的是角色文件且有未保存修改时才需要确认
+        if case .file(let currentFile) = selection, isDirty(currentFile) {
+            pendingSwitch = sel
             showDirtySheet = true
         } else {
-            Task { await switchToFile(file) }
+            Task { await switchTo(sel) }
         }
     }
 
-    private func switchToFile(_ file: PersonaFile) async {
+    private func switchTo(_ sel: PersonaSelection) async {
         pendingSwitch = nil
-        selectedFile = file
-        await loadFile(file)
+        selection = sel
+        switch sel {
+        case .file(let file):
+            await loadFile(file)
+        case .memoryLog(let name):
+            await loadMemoryLog(name)
+        }
     }
 
     private func initGitAndLoadFirstFile() async {
@@ -197,6 +251,44 @@ struct CharacterDefTabView: View {
             gitInitFailed = true
         }
         await loadFile(.soul)
+        // 同时加载记忆日志列表
+        await loadMemoryLogList()
+    }
+
+    private func loadMemoryLogList() async {
+        do {
+            let entries = try await helperClient.listDirectory(
+                username: username,
+                relativePath: ".openclaw/workspace/memory"
+            )
+            memoryLogFiles = entries
+                .filter { !$0.isDirectory && $0.name.hasSuffix(".md") }
+                .map(\.name)
+                .sorted(by: >) // 最新日期在前
+        } catch {
+            memoryLogFiles = []
+        }
+    }
+
+    private func loadMemoryLog(_ name: String) async {
+        isLoading = true
+        loadError = nil
+        defer { isLoading = false }
+        do {
+            let data = try await helperClient.readFile(
+                username: username,
+                relativePath: ".openclaw/workspace/memory/\(name)"
+            )
+            memoryLogContent = String(data: data, encoding: .utf8) ?? ""
+        } catch {
+            let msg = error.localizedDescription
+            if msg.contains("No such file") || msg.contains("not found") || msg.contains("不存在") {
+                memoryLogContent = ""
+                loadError = nil
+            } else {
+                loadError = L10n.k("persona.load.offline", fallback: "虾未运行，无法读取文件")
+            }
+        }
     }
 
     private func loadFile(_ file: PersonaFile) async {
@@ -288,7 +380,9 @@ struct CharacterDefTabView: View {
     }
 
     private func reloadAfterRestore() async {
-        await loadFile(selectedFile)
+        if case .file(let file) = selection {
+            await loadFile(file)
+        }
         showRestoreToast = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             showRestoreToast = false
@@ -299,11 +393,13 @@ struct CharacterDefTabView: View {
 // MARK: - PersonaFileSidebarView（左侧文件列表）
 
 private struct PersonaFileSidebarView: View {
-    @Binding var selectedFile: PersonaFile
+    @Binding var selection: PersonaSelection
     let editorContents: [PersonaFile: String]
     let savedContents: [PersonaFile: String]
     let existsOnDisk: [PersonaFile: Bool]
-    let onSelect: (PersonaFile) -> Void
+    let memoryLogFiles: [String]
+    @Binding var memoryLogExpanded: Bool
+    let onSelect: (PersonaSelection) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -318,6 +414,37 @@ private struct PersonaFileSidebarView: View {
                 sidebarRow(file)
             }
 
+            // 记忆日志区域
+            if !memoryLogFiles.isEmpty {
+                Divider().padding(.vertical, 6)
+
+                Button(action: { withAnimation(.easeInOut(duration: 0.2)) { memoryLogExpanded.toggle() } }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: memoryLogExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 12)
+                        Text(L10n.k("persona.sidebar.memory_logs", fallback: "记忆日志"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("\(memoryLogFiles.count)")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if memoryLogExpanded {
+                    ForEach(memoryLogFiles, id: \.self) { name in
+                        memoryLogRow(name)
+                    }
+                }
+            }
+
             Spacer()
         }
         .background(.background)
@@ -325,11 +452,11 @@ private struct PersonaFileSidebarView: View {
 
     @ViewBuilder
     private func sidebarRow(_ file: PersonaFile) -> some View {
-        let isSelected = file == selectedFile
+        let isSelected = selection == .file(file)
         let isDirty = (editorContents[file] ?? "") != (savedContents[file] ?? "")
         let isNew = !(existsOnDisk[file] ?? true)   // 文件尚未在磁盘创建
 
-        Button(action: { onSelect(file) }) {
+        Button(action: { onSelect(.file(file)) }) {
             HStack(spacing: 0) {
                 // 图标
                 Text(file.icon)
@@ -376,6 +503,94 @@ private struct PersonaFileSidebarView: View {
                     .fill(Color.secondary.opacity(0.3))
                     .frame(width: 2)
                     .padding(.vertical, 2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func memoryLogRow(_ name: String) -> some View {
+        let isSelected = selection == .memoryLog(name)
+        // 从文件名提取日期显示（去掉 .md 后缀）
+        let dateLabel = String(name.dropLast(3))
+
+        Button(action: { onSelect(.memoryLog(name)) }) {
+            HStack(spacing: 0) {
+                Text("📅")
+                    .font(.system(size: 11))
+                    .frame(width: 24)
+                Text(dateLabel)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                isSelected
+                    ? Color(NSColor.selectedContentBackgroundColor).opacity(0.15)
+                    : Color.clear
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - PersonaMemoryLogView（记忆日志只读查看）
+
+private struct PersonaMemoryLogView: View {
+    let filename: String
+    let content: String
+    let isLoading: Bool
+    let loadError: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // 工具栏
+            HStack {
+                Image(systemName: "calendar.badge.clock")
+                    .foregroundStyle(.secondary)
+                Text(filename)
+                    .font(.headline)
+                Spacer()
+                Text(L10n.k("persona.memory_log.readonly", fallback: "只读"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.1), in: Capsule())
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            if isLoading {
+                ProgressView(L10n.k("persona.loading", fallback: "加载中…"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let err = loadError {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle).foregroundStyle(.secondary)
+                    Text(err).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if content.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "doc.text")
+                        .font(.largeTitle).foregroundStyle(.secondary)
+                    Text(L10n.k("persona.memory_log.empty", fallback: "日志为空"))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView(.vertical) {
+                    Text(content)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                }
             }
         }
     }
@@ -515,7 +730,7 @@ private struct PersonaEditorAreaView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(selectedFile.rawValue)
                     .font(.headline)
-                Text("~\(username)/\(selectedFile.relPath)")
+                Text("~/\(selectedFile.relPath)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
