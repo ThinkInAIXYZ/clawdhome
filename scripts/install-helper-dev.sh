@@ -39,6 +39,11 @@ install)
     fi
     echo "📦 安装来源：$BUILT_BINARY"
 
+    # 必须先停止旧进程再替换二进制！
+    # 否则内核延迟代码页校验会发现磁盘签名不匹配 → SIGKILL: Invalid Page
+    launchctl bootout system "$PLIST_PATH" 2>/dev/null || true
+    sleep 1
+
     mkdir -p "$DEST_DIR"
     cp "$BUILT_BINARY" "$DEST_BINARY"
     chmod 555 "$DEST_BINARY"
@@ -61,6 +66,8 @@ install)
     </dict>
     <key>RunAtLoad</key>
     <true/>
+    <key>KeepAlive</key>
+    <true/>
     <key>StandardErrorPath</key>
     <string>/tmp/clawdhome-helper.log</string>
     <key>StandardOutPath</key>
@@ -71,8 +78,6 @@ EOF
     chown root:wheel "$PLIST_PATH"
     chmod 644 "$PLIST_PATH"
 
-    # 若已加载，先卸载旧的
-    launchctl bootout system "$PLIST_PATH" 2>/dev/null || true
     launchctl bootstrap system "$PLIST_PATH"
 
     echo "✅ ClawdHomeHelper 已安装并启动"

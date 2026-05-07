@@ -14,5 +14,7 @@
         <key>ai.clawdhome.mac.helper</key>
         <true/>
     </dict>
+    <key>KeepAlive</key>
+    <true/>
 </dict>
 </plist>
