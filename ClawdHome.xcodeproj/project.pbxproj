@@ -70,6 +70,7 @@
 		6F9101485DF1A9C40CE39C65 /* ProcessModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76A73EBA6C37473C494E20D /* ProcessModels.swift */; };
 		7038876B62DAABF3E0D5672A /* InstallManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9091EC70CE63EDC745444F7 /* InstallManager.swift */; };
 		70983A6303C616757188623F /* ConfigEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3793B8613E7B9D05787DDB8B /* ConfigEditorSheet.swift */; };
+		C995644F8A8C786C0B5D689D /* CustomProviderFormFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB700C239BC180E618B6D07 /* CustomProviderFormFields.swift */; };
 		73046B9EABB8BA0B9F0FECDE /* GatewayCronModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6AA535876BDE2A4F506473 /* GatewayCronModels.swift */; };
 		7A11F882D706844DD3EF518F /* WizardConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C409AF7F1CC045A211F7F27E /* WizardConnection.swift */; };
 		7A19BA1D08E439220F09D5CD /* CloneClawSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A692ECF0806042C37B632CB /* CloneClawSheet.swift */; };
@@ -203,6 +204,7 @@
 		5C6946296FDE26A0A2A7A8EC /* ProcessManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessManager.swift; sourceTree = "<group>"; };
 		5D7D1F12DB908202E9E91105 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		5F97A493AAFD488D32EC70F5 /* ClawdHome.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClawdHome.entitlements; sourceTree = "<group>"; };
+		5FB700C239BC180E618B6D07 /* CustomProviderFormFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomProviderFormFields.swift; sourceTree = "<group>"; };
 		6474BB5EEF5B87B65666E978 /* NetworkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkModels.swift; sourceTree = "<group>"; };
 		6482AE0816A0181D42B69AB4 /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
 		67AB0A69D9F15FA551CD2FFE /* ClawPoolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawPoolView.swift; sourceTree = "<group>"; };
@@ -511,6 +513,7 @@
 				9A692ECF0806042C37B632CB /* CloneClawSheet.swift */,
 				BFC7D68C6A9C0FEAD2BF30EA /* CommandOutputPanel.swift */,
 				3793B8613E7B9D05787DDB8B /* ConfigEditorSheet.swift */,
+				5FB700C239BC180E618B6D07 /* CustomProviderFormFields.swift */,
 				A8FE553DC729ACE5F8E46933 /* DaemonSetupBanner.swift */,
 				B0C17363344B936997067010 /* DashboardView.swift */,
 				9C19F01A93D19BBDF5814CC6 /* DiagnosticsSheet.swift */,
@@ -730,6 +733,7 @@
 				7A19BA1D08E439220F09D5CD /* CloneClawSheet.swift in Sources */,
 				2B83A4BD11F3D23D044AAE93 /* CommandOutputPanel.swift in Sources */,
 				70983A6303C616757188623F /* ConfigEditorSheet.swift in Sources */,
+				C995644F8A8C786C0B5D689D /* CustomProviderFormFields.swift in Sources */,
 				84EE8ABA47536FEBAD8C7E53 /* ContentView.swift in Sources */,
 				E05E2364346E9729CD25F0A7 /* DaemonInstaller.swift in Sources */,
 				1EF1D1156BEAC282AC695473 /* DaemonSetupBanner.swift in Sources */,
