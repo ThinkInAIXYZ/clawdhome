@@ -24,6 +24,34 @@ extension ClawdHomeHelperImpl {
         let logURL = initLogURL(username: username)
         do {
             try InstallManager.install(username: username, version: version, logURL: logURL)
+
+            // 升级后环境验证与修复
+            let issues = InstallManager.verifyEnvironment(username: username)
+            if !issues.isEmpty {
+                helperLog("[post-install] 发现 \(issues.count) 个环境问题 @\(username): \(issues.map(\.id).joined(separator: ", "))", level: .warn)
+                let (fixed, failed) = InstallManager.repairEnvironment(username: username, issues: issues)
+                if !fixed.isEmpty {
+                    helperLog("[post-install] 已修复: \(fixed.joined(separator: ", ")) @\(username)")
+                }
+                if !failed.isEmpty {
+                    helperLog("[post-install] 未能修复: \(failed.joined(separator: ", ")) @\(username)", level: .warn)
+                }
+            }
+
+            // 升级后刷新 LaunchDaemon plist（PATH 可能因 node 版本变化而改变）
+            if let uid = try? UserManager.uid(for: username) {
+                let (running, _) = GatewayManager.status(username: username, uid: uid)
+                if running {
+                    helperLog("[post-install] 网关运行中，重启以刷新 PATH @\(username)")
+                    do {
+                        try GatewayManager.restartGateway(username: username, uid: uid)
+                        helperLog("[post-install] 网关重启成功 @\(username)")
+                    } catch {
+                        helperLog("[post-install] 网关重启失败 @\(username): \(error.localizedDescription)", level: .warn)
+                    }
+                }
+            }
+
             reply(true, nil)
         } catch {
             helperLog("安装 openclaw 失败 @\(username): \(error.localizedDescription)", level: .error)
@@ -33,6 +61,85 @@ extension ClawdHomeHelperImpl {
 
     func getOpenclawVersion(username: String, withReply reply: @escaping (String) -> Void) {
         reply(InstallManager.installedVersion(username: username) ?? "")
+    }
+
+    func reinstallOpenclaw(username: String, version: String?,
+                           withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("重装 openclaw @\(username) v\(version ?? "latest")")
+        let logURL = initLogURL(username: username)
+
+        // 1. 停止网关（如果正在运行）
+        var wasRunning = false
+        if let uid = try? UserManager.uid(for: username) {
+            let (running, _) = GatewayManager.status(username: username, uid: uid)
+            wasRunning = running
+            if running {
+                helperLog("[reinstall] 停止网关 @\(username)")
+                do {
+                    try GatewayManager.stopGateway(username: username, uid: uid)
+                } catch {
+                    helperLog("[reinstall] 停止网关失败 @\(username): \(error.localizedDescription)", level: .warn)
+                }
+                // 等待网关退出
+                for _ in 0..<20 {
+                    let s = GatewayManager.status(username: username, uid: uid)
+                    if !s.running { break }
+                    Thread.sleep(forTimeInterval: 0.5)
+                }
+            }
+        }
+
+        // 2. 清除旧的 openclaw 安装（仅清除 openclaw 包，不影响其他 npm 全局包）
+        let openclawModulePath = "\(InstallManager.npmGlobalDir(for: username))/lib/node_modules/openclaw"
+        let openclawBinPath = "\(InstallManager.npmGlobalBin(for: username))/openclaw"
+        if FileManager.default.fileExists(atPath: openclawModulePath) {
+            helperLog("[reinstall] 清除旧安装: \(openclawModulePath) @\(username)")
+            try? FileManager.default.removeItem(atPath: openclawModulePath)
+        }
+        if FileManager.default.fileExists(atPath: openclawBinPath) {
+            try? FileManager.default.removeItem(atPath: openclawBinPath)
+        }
+
+        // 3. 重新安装
+        do {
+            try InstallManager.install(username: username, version: version, logURL: logURL)
+        } catch {
+            helperLog("[reinstall] 重装失败 @\(username): \(error.localizedDescription)", level: .error)
+            // 即使安装失败，也尝试重启网关
+            if wasRunning, let uid = try? UserManager.uid(for: username) {
+                try? GatewayManager.startGateway(username: username, uid: uid)
+            }
+            reply(false, error.localizedDescription)
+            return
+        }
+
+        // 4. 验证环境
+        let issues = InstallManager.verifyEnvironment(username: username)
+        if !issues.isEmpty {
+            helperLog("[reinstall] 重装后发现 \(issues.count) 个环境问题 @\(username)")
+            let (fixed, failed) = InstallManager.repairEnvironment(username: username, issues: issues)
+            if !fixed.isEmpty {
+                helperLog("[reinstall] 已修复: \(fixed.joined(separator: ", ")) @\(username)")
+            }
+            if !failed.isEmpty {
+                helperLog("[reinstall] 未能修复: \(failed.joined(separator: ", ")) @\(username)", level: .warn)
+            }
+        }
+
+        // 5. 重启网关
+        if wasRunning, let uid = try? UserManager.uid(for: username) {
+            helperLog("[reinstall] 重启网关 @\(username)")
+            do {
+                try GatewayManager.startGateway(username: username, uid: uid)
+            } catch {
+                helperLog("[reinstall] 重启网关失败 @\(username): \(error.localizedDescription)", level: .warn)
+                reply(true, "重装成功，但网关重启失败: \(error.localizedDescription)")
+                return
+            }
+        }
+
+        helperLog("[reinstall] 重装完成 @\(username)")
+        reply(true, nil)
     }
 
     // MARK: 用户环境初始化

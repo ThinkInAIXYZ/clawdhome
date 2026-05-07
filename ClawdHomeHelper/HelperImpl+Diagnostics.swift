@@ -355,7 +355,53 @@ extension ClawdHomeHelperImpl {
                 fixable: true, fixed: nil, fixError: nil, latencyMs: nil))
         }
 
+        items += diagEnvDeep(username: username, fix: fix)
         items += diagEnvContract(username: username, fix: fix)
+
+        return items
+    }
+
+    // MARK: 诊断 - 深度环境验证（符号链接、可执行性、PATH 导出）
+
+    private func diagEnvDeep(username: String, fix: Bool) -> [DiagnosticItem] {
+        var items: [DiagnosticItem] = []
+
+        let envIssues = InstallManager.verifyEnvironment(username: username)
+        if envIssues.isEmpty {
+            items.append(DiagnosticItem(
+                id: "env-deep-ok", group: .environment, severity: "ok",
+                title: "运行环境完整",
+                detail: "openclaw 可执行、node/npm 符号链接正常、PATH 导出完整",
+                fixable: false, fixed: nil, fixError: nil, latencyMs: nil))
+        } else {
+            let repairResult: (fixed: [String], failed: [String])
+            if fix {
+                repairResult = InstallManager.repairEnvironment(username: username, issues: envIssues)
+            } else {
+                repairResult = ([], [])
+            }
+
+            for issue in envIssues {
+                let wasFixed = repairResult.fixed.contains(issue.id)
+                let fixFailed = repairResult.failed.contains(issue.id)
+                let severity: String
+                switch issue.id {
+                case "openclaw-missing", "openclaw-not-runnable",
+                     "node-symlink-broken", "npm-symlink-broken":
+                    severity = "critical"
+                default:
+                    severity = "warn"
+                }
+                items.append(DiagnosticItem(
+                    id: "env-\(issue.id)", group: .environment, severity: severity,
+                    title: issue.title,
+                    detail: issue.detail,
+                    fixable: issue.fixable,
+                    fixed: fix ? wasFixed : nil,
+                    fixError: fixFailed ? "自动修复失败" : nil,
+                    latencyMs: nil))
+            }
+        }
 
         return items
     }
