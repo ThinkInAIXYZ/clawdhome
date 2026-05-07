@@ -140,7 +140,11 @@ if [ "$DRY_RUN" = true ]; then
   echo "  2. 更新 CHANGELOG.zh.md / CHANGELOG.en.md"
   echo "  3. git commit -m \"chore(release): v${NEXT_VERSION}\""
   echo "  4. git tag -a v${NEXT_VERSION}"
-  echo "  5. xcodebuild + pkgbuild/productsign${NOTARIZE:+ + notarize} → dist/ClawdHome-${NEXT_VERSION}.pkg"
+  if [ "${NOTARIZE:-false}" = "true" ]; then
+    echo "  5. xcodebuild + pkgbuild/productsign + notarize → dist/ClawdHome-${NEXT_VERSION}.pkg"
+  else
+    echo "  5. xcodebuild + pkgbuild/productsign → dist/ClawdHome-${NEXT_VERSION}.pkg"
+  fi
   echo "  6. 同步 version.json（含中英文 release notes）"
   echo "  7. git push && git push --tags"
   echo "  8. gh release create v${NEXT_VERSION}"
