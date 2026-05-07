@@ -1481,6 +1481,9 @@ private struct ClawCard: View {
                                 onUpgrade()
                             }
                         }
+                    } else if !claw.versionChecked {
+                        ProgressView()
+                            .controlSize(.mini)
                     } else {
                         Text(L10n.k("views.user_list_view.not_initialized", fallback: "未初始化")).foregroundStyle(.tertiary)
                     }

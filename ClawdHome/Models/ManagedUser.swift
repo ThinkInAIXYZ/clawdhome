@@ -166,6 +166,8 @@ final class ManagedUser: Identifiable, Hashable {
     var hasFreezeWarning: Bool { freezeWarning != nil }
     var pid: Int32?
     var openclawVersion: String?
+    /// 版本是否已检查过（区分"加载中"与"未初始化"）
+    var versionChecked: Bool = false
     var startedAt: Date?
     var lastActiveAt: Date?
 

@@ -266,6 +266,12 @@ private let openClawQuickCommandSections: [(section: String, items: [OpenClawQui
         OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.channel_login", fallback: "频道登录"), command: "openclaw channels login"),
         OpenClawQuickCommand(label: L10n.k("app.maintenance.quick.command.restart_service", fallback: "重启服务"), command: "openclaw gateway restart"),
     ]),
+    (L10n.k("app.maintenance.quick.section.upgrade_maintenance", fallback: "升级 / 维护"), [
+        OpenClawQuickCommand(
+            label: L10n.k("app.maintenance.quick.command.upgrade_latest", fallback: "升级到最新"),
+            command: "openclaw --version; npm install -g openclaw@latest; openclaw --version"
+        ),
+    ]),
 ]
 
 // MARK: - 通用维护终端窗口
