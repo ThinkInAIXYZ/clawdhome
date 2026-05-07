@@ -605,7 +605,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "BUILD_NUM=$(git -C \"${SRCROOT}\" rev-list --count HEAD 2>/dev/null || echo 0)\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion ${BUILD_NUM}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\n/usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString 1.1.${BUILD_NUM}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\n";
+			shellScript = "APP_BUILD=\"${CURRENT_PROJECT_VERSION:-}\"\nAPP_VERSION=\"${MARKETING_VERSION:-}\"\nif [ -n \"$APP_BUILD\" ]; then\n  /usr/libexec/PlistBuddy -c \"Set :CFBundleVersion ${APP_BUILD}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\nfi\nif [ -n \"$APP_VERSION\" ]; then\n  /usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString ${APP_VERSION}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\nfi\n";
 		};
 		217CF341688DD108EF049819 /* Embed Helper into App Bundle */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -644,7 +644,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "BUILD_NUM=$(git -C \"${SRCROOT}\" rev-list --count HEAD 2>/dev/null || echo 0)\nOUT=\"${SRCROOT}/ClawdHomeHelper/GeneratedVersion.swift\"\necho \"// Auto-generated — do not edit\" > \"$OUT\"\necho \"let kHelperVersion = \\\"1.1.${BUILD_NUM}\\\"\" >> \"$OUT\"\n";
+			shellScript = "APP_VERSION=\"${MARKETING_VERSION:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \"${SRCROOT}/ClawdHome/Info.plist\" 2>/dev/null || echo 0.0.0)}\"\nAPP_BUILD=\"${CURRENT_PROJECT_VERSION:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \"${SRCROOT}/ClawdHome/Info.plist\" 2>/dev/null || echo 0)}\"\nOUT=\"${SRCROOT}/ClawdHomeHelper/GeneratedVersion.swift\"\necho \"// Auto-generated — do not edit\" > \"$OUT\"\necho \"let kHelperVersion = \\\"${APP_VERSION} (${APP_BUILD})\\\"\" >> \"$OUT\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
