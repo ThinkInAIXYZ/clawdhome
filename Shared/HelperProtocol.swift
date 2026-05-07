@@ -710,6 +710,48 @@ import Foundation
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
+    // MARK: - OpenClaw 插件管理 (v2)
+
+    /// 为指定用户安装 openclaw plugin（npm exec openclaw plugins install <packageSpec>）
+    /// packageSpec 示例："@larksuite/openclaw-lark"
+    /// 纯插件安装，不执行 bot 绑定（--install-only 语义）
+    func installOpenclawPlugin(
+        username: String,
+        packageSpec: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 列出指定用户已安装的 openclaw plugins（返回 JSON 编码的 [String]）
+    func listOpenclawPlugins(
+        username: String,
+        withReply reply: @escaping (String?, String?) -> Void
+    )
+
+    /// 为指定用户移除 openclaw plugin
+    func removeOpenclawPlugin(
+        username: String,
+        packageSpec: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 以指定用户身份执行 openclaw channels login（标准 channel login 流程）
+    /// argsJSON 示例：["--channel","openclaw-weixin","--account","wechat-work"]
+    /// 返回 (success, outputLines) — outputLines 包含二维码/URL 等交互输出
+    func runChannelLogin(
+        username: String,
+        argsJSON: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 应用 ShrimpConfigV2 JSON 到指定用户的 openclaw.json（v2 批量写入）
+    /// configJSON：JSON 编码的 ShrimpConfigV2
+    /// 返回 (success, errorMessage?)
+    func applyV2Config(
+        username: String,
+        configJSON: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
     // MARK: - Hermes Agent 引擎（双引擎支持）
     // 与 openclaw 并列的另一种 AI 代理运行时，基于 Python 3.11+ venv 安装。
     // 设计文档：docs/design-hermes-agent-integration.md
