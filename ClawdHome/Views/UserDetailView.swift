@@ -628,15 +628,15 @@ struct UserDetailView: View {
         case .files:     UserFilesView(users: [user], preselectedUser: user)
         case .logs:
             GatewayLogViewer(username: user.username, externalSearchQuery: $logSearchText)
-        case .cron:      CronTabView(username: user.username)
-        case .skills:    SkillsTabView(username: user.username, gatewayURL: gatewayURL)
+        case .cron:      CronTabView(username: user.username, agentId: selectedAgentId)
+        case .skills:    SkillsTabView(username: user.username, gatewayURL: gatewayURL, agentId: selectedAgentId)
         case .characterDef: CharacterDefTabView(
                 username: user.username,
                 agentId: selectedAgentId,
                 agentLabel: selectedAgent != nil && selectedAgent?.isDefault != true ? selectedAgentLabel : nil
             )
-        case .sessions:  SessionsTabView(username: user.username)
-        case .memory:    MemoryTabView(username: user.username)
+        case .sessions:  SessionsTabView(username: user.username, agentId: selectedAgentId)
+        case .memory:    MemoryTabView(username: user.username, agentId: selectedAgentId)
         case .processes:
             ProcessTabView(
                 username: user.username
@@ -4310,6 +4310,7 @@ private struct GatewayProbeModifier: ViewModifier {
 
 private struct CronTabView: View {
     let username: String
+    var agentId: String? = nil
     @Environment(GatewayHub.self) private var hub
 
     private var isConnected: Bool {
@@ -4613,6 +4614,7 @@ private struct CronRunEntryRow: View {
 private struct SkillsTabView: View {
     let username: String
     let gatewayURL: String?
+    var agentId: String? = nil
     @Environment(GatewayHub.self) private var hub
 
     private var isConnected: Bool {
