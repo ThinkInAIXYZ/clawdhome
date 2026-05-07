@@ -4146,8 +4146,6 @@ private struct CronRunEntryRow: View {
 
 // MARK: - Skills Tab
 
-// MARK: - Skills Tab
-
 private struct SkillsTabView: View {
     let username: String
     @Environment(GatewayHub.self) private var hub
@@ -4256,7 +4254,7 @@ private struct SkillItemRow: View {
                     }
                     .buttonStyle(.bordered).controlSize(.small)
                     .confirmationDialog(
-                        "卸载 \(skill.name)？",
+                        L10n.f("user.detail.skills.remove_confirm", fallback: "卸载 %@？", skill.name),
                         isPresented: $showRemoveConfirm,
                         titleVisibility: .visible
                     ) {
