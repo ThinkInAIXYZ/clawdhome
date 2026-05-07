@@ -13,9 +13,13 @@ enum GatewayStartDiagnosis {
 @Observable
 final class HelperClient {
     private var controlConnection: NSXPCConnection?
+    /// 维护终端专用连接，避免与通用控制操作互相阻塞导致 PTY 轮询超时
+    private var maintenanceConnection: NSXPCConnection?
     /// Gateway 生命周期操作专用连接，避免与通用控制调用互相阻塞
     private var gatewayConnection: NSXPCConnection?
     private var dashboardConnection: NSXPCConnection?
+    /// 详情页/列表页首屏元数据读取专用连接，避免与控制通道串行阻塞
+    private var metadataConnection: NSXPCConnection?
     /// 专用于长时间安装/升级操作，避免阻塞 controlConnection 上的其他 XPC 调用
     private var installConnection: NSXPCConnection?
     /// 文件管理专用连接，避免与控制操作互相阻塞
@@ -101,8 +105,10 @@ final class HelperClient {
         guard connectionGeneration == generation else { return }
         switch label {
         case "control": controlConnection = nil
+        case "maintenance": maintenanceConnection = nil
         case "gateway": gatewayConnection = nil
         case "dashboard": dashboardConnection = nil
+        case "metadata": metadataConnection = nil
         case "install": installConnection = nil
         case "file": fileConnection = nil
         case "process": processConnection = nil
@@ -137,16 +143,20 @@ final class HelperClient {
 
         // 先清理旧连接
         controlConnection?.invalidate()
+        maintenanceConnection?.invalidate()
         gatewayConnection?.invalidate()
         dashboardConnection?.invalidate()
+        metadataConnection?.invalidate()
         installConnection?.invalidate()
         fileConnection?.invalidate()
         processConnection?.invalidate()
         personaReadConnection?.invalidate()
 
         controlConnection = makeConnection(label: "control", generation: gen, affectsConnectivity: true)
+        maintenanceConnection = makeConnection(label: "maintenance", generation: gen)
         gatewayConnection = makeConnection(label: "gateway", generation: gen)
         dashboardConnection = makeConnection(label: "dashboard", generation: gen)
+        metadataConnection = makeConnection(label: "metadata", generation: gen)
         installConnection = makeConnection(label: "install", generation: gen)
         fileConnection = makeConnection(label: "file", generation: gen)
         processConnection = makeConnection(label: "process", generation: gen)
@@ -158,8 +168,10 @@ final class HelperClient {
         connectionGeneration &+= 1
         verifyInFlightGeneration = nil
         controlConnection?.invalidate(); controlConnection = nil
+        maintenanceConnection?.invalidate(); maintenanceConnection = nil
         gatewayConnection?.invalidate(); gatewayConnection = nil
         dashboardConnection?.invalidate(); dashboardConnection = nil
+        metadataConnection?.invalidate(); metadataConnection = nil
         installConnection?.invalidate(); installConnection = nil
         fileConnection?.invalidate(); fileConnection = nil
         processConnection?.invalidate(); processConnection = nil
@@ -301,11 +313,25 @@ final class HelperClient {
         return proxyWithLogging(gatewayConnection)
     }
 
+    private var maintenanceProxy: (any ClawdHomeHelperProtocol)? {
+        if maintenanceConnection == nil, isConnected {
+            maintenanceConnection = makeConnection(label: "maintenance", generation: connectionGeneration)
+        }
+        return proxyWithLogging(maintenanceConnection)
+    }
+
     private var dashboardProxy: (any ClawdHomeHelperProtocol)? {
         if dashboardConnection == nil, isConnected {
             dashboardConnection = makeConnection(label: "dashboard", generation: connectionGeneration)
         }
         return proxyWithLogging(dashboardConnection)
+    }
+
+    private var metadataProxy: (any ClawdHomeHelperProtocol)? {
+        if metadataConnection == nil, isConnected {
+            metadataConnection = makeConnection(label: "metadata", generation: connectionGeneration)
+        }
+        return proxyWithLogging(metadataConnection)
     }
 
     private var installProxy: (any ClawdHomeHelperProtocol)? {
@@ -631,10 +657,13 @@ final class HelperClient {
     // MARK: - 版本查询
 
     /// 查询指定用户已安装的 openclaw 版本，未安装返回 nil
-    func getOpenclawVersion(username: String) async -> String? {
-        guard let proxy = controlProxy else { return nil }
+    func getOpenclawVersion(
+        username: String,
+        timeout: Duration = HelperClient.xpcDefaultTimeout
+    ) async -> String? {
+        guard let proxy = metadataProxy else { return nil }
         do {
-            let v: String = try await xpcCall { done in
+            let v: String = try await xpcCall(timeout: timeout) { done in
                 proxy.getOpenclawVersion(username: username) { version in
                     done(version)
                 }
@@ -665,10 +694,13 @@ final class HelperClient {
     }
 
     /// 查询指定用户已安装的 Hermes 版本，未安装返回 nil
-    func getHermesVersion(username: String) async -> String? {
-        guard let proxy = controlProxy else { return nil }
+    func getHermesVersion(
+        username: String,
+        timeout: Duration = HelperClient.xpcDefaultTimeout
+    ) async -> String? {
+        guard let proxy = metadataProxy else { return nil }
         do {
-            let v: String = try await xpcCall { done in
+            let v: String = try await xpcCall(timeout: timeout) { done in
                 proxy.getHermesVersion(username: username) { version in done(version) }
             }
             return v.isEmpty ? nil : v
@@ -970,7 +1002,7 @@ final class HelperClient {
     /// 指定用户 Node.js 是否已安装就绪（用于控制 npm 相关操作）
     /// 注意：保留手动兜底机制，兼容旧版 Helper 回调丢失的情况
     func isNodeInstalled(username: String) async -> Bool {
-        guard let proxy = controlProxy else { return false }
+        guard let proxy = metadataProxy else { return false }
         return await withCheckedContinuation { cont in
             let lock = NSLock()
             var resolved = false
@@ -1076,7 +1108,7 @@ final class HelperClient {
 
     /// 读取 npm 安装源（优先用户级配置）
     func getNpmRegistry(username: String) async -> String {
-        guard let proxy = controlProxy else { return NpmRegistryOption.npmOfficial.rawValue }
+        guard let proxy = metadataProxy else { return NpmRegistryOption.npmOfficial.rawValue }
         do {
             return try await xpcCall { done in
                 proxy.getNpmRegistry(username: username) { done($0) }
@@ -1105,7 +1137,7 @@ final class HelperClient {
 
     /// 读取向导进度 JSON（文件不存在返回空字符串）
     func loadInitState(username: String) async -> String {
-        guard let proxy = controlProxy else { return "" }
+        guard let proxy = metadataProxy else { return "" }
         do {
             return try await xpcCall { done in
                 proxy.loadInitState(username: username) { done($0) }
@@ -1289,12 +1321,53 @@ final class HelperClient {
 
     /// 返回用户 gateway 的访问 URL
     func getGatewayURL(username: String) async -> String {
-        guard let proxy = gatewayProxy else { return "" }
-        do {
-            return try await xpcCall { done in
+        func requestURL(using proxy: any ClawdHomeHelperProtocol, timeout: Duration) async throws -> String {
+            try await xpcCall(timeout: timeout) { done in
                 proxy.getGatewayURL(username: username) { done($0) }
             }
-        } catch { return "" }
+        }
+
+        // 第 1 次：走 gateway 专用通道（快路径）
+        if let proxy = gatewayProxy,
+           let url = try? await requestURL(using: proxy, timeout: .seconds(6)),
+           !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return url
+        }
+
+        // 自愈：gateway 通道可能进入“半卡死”状态，重建后重试 1 次
+        appLog("[HelperClient] getGatewayURL gateway channel timeout/failure, rebuild and retry @\(username)", level: .warn)
+        gatewayConnection?.invalidate()
+        gatewayConnection = nil
+        if isConnected {
+            gatewayConnection = makeConnection(label: "gateway", generation: connectionGeneration)
+        }
+        if let proxy = gatewayProxy,
+           let url = try? await requestURL(using: proxy, timeout: .seconds(6)),
+           !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return url
+        }
+
+        // 兜底：改走 control 通道，避免单一子通道故障导致 UI 白屏
+        if let proxy = controlProxy,
+           let url = try? await requestURL(using: proxy, timeout: .seconds(6)),
+           !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            appLog("[HelperClient] getGatewayURL fallback to control channel succeeded @\(username)", level: .warn)
+            return url
+        }
+
+        // 终极自愈：若所有通道均失败，重建整套 XPC 连接后再试一次。
+        // 目标：覆盖“App 重启无效、仅 Helper 子通道卡死”的情况，避免用户必须手动重启 Helper。
+        appLog("[HelperClient] getGatewayURL all channels failed, reconnecting helper channels @\(username)", level: .error)
+        connect(reason: "getGatewayURL self-heal reconnect @\(username)")
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        if let proxy = controlProxy,
+           let url = try? await requestURL(using: proxy, timeout: .seconds(6)),
+           !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            appLog("[HelperClient] getGatewayURL recovered after full reconnect @\(username)", level: .warn)
+            return url
+        }
+
+        return ""
     }
 
     // MARK: - 仪表盘
@@ -1658,7 +1731,7 @@ final class HelperClient {
 
     /// 启动通用维护终端会话（Helper 侧 PTY）
     func startMaintenanceTerminalSession(username: String, command: [String]) async -> (Bool, String, String?) {
-        guard let proxy = controlProxy else { return (false, "", L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        guard let proxy = maintenanceProxy else { return (false, "", L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         let commandJSON = (try? String(data: JSONEncoder().encode(command), encoding: .utf8)) ?? "[]"
         appLog("[maintenance] session start request @\(username) cmd=\(command.joined(separator: " "))")
         do {
@@ -1681,7 +1754,7 @@ final class HelperClient {
     /// 轮询通用维护终端会话输出
     func pollMaintenanceTerminalSession(sessionID: String, fromOffset: Int64) async
     -> (Bool, Data, Int64, Bool, Int32, String?) {
-        guard let proxy = controlProxy else {
+        guard let proxy = maintenanceProxy else {
             return (false, Data(), fromOffset, true, -1, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
         }
         do {
@@ -1698,7 +1771,7 @@ final class HelperClient {
 
     /// 向通用维护终端会话发送输入
     func sendMaintenanceTerminalSessionInput(sessionID: String, input: Data) async -> (Bool, String?) {
-        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        guard let proxy = maintenanceProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         let base64 = input.base64EncodedString()
         do {
             return try await xpcCall { done in
@@ -1711,7 +1784,7 @@ final class HelperClient {
 
     /// 调整通用维护终端会话终端尺寸
     func resizeMaintenanceTerminalSession(sessionID: String, cols: Int, rows: Int) async -> (Bool, String?) {
-        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        guard let proxy = maintenanceProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         do {
             return try await xpcCall { done in
                 proxy.resizeMaintenanceTerminalSession(sessionID: sessionID, cols: Int32(cols), rows: Int32(rows)) { ok, err in
@@ -1723,7 +1796,7 @@ final class HelperClient {
 
     /// 终止通用维护终端会话
     func terminateMaintenanceTerminalSession(sessionID: String) async -> (Bool, String?) {
-        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        guard let proxy = maintenanceProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         do {
             return try await xpcCall { done in
                 proxy.terminateMaintenanceTerminalSession(sessionID: sessionID) { ok, err in
