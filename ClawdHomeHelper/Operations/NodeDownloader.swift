@@ -133,7 +133,7 @@ struct NodeDownloader {
         log("✓ Node.js 安装完成：\(version)\n")
 
         // 8. 修复归属，确保目标用户可写可升级
-        _ = try? run("/usr/sbin/chown", args: ["-R", "\(username):\(username)", brewRoot])
+        _ = try? run("/usr/sbin/chown", args: ["-R", username, brewRoot])
 
         // 7. 保留 cachePath 供后续快速安装复用（不再删除）
     }
