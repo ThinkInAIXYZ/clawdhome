@@ -116,7 +116,7 @@ struct HermesDetailView: View {
                     GatewayLogViewer(username: user.username, runtime: .hermes, externalSearchQuery: $hermesLogSearchText)
                 }
             }
-            .padding(.trailing, isRightPanelExpanded ? UserDetailWindowLayout.expandedSidebarWidth + 12 : 0)
+            // right panel 改为浮动覆盖（zIndex/shadow 已配置），内容层不再让位以避免终端宽度被挤压
 
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 6) {
@@ -206,6 +206,8 @@ struct HermesDetailView: View {
                         .zIndex(5)
                 }
             }
+            // 浮层按钮整体上移：让 sidebar 切换按钮贴近窗口顶部，配合 console top padding 压缩留白
+            .padding(.top, -12)
         }
         .padding(20)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -266,11 +268,15 @@ struct HermesDetailView: View {
             showsTemplateMenu: false
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // 顶部留白，避开 HermesDetailView 右上角浮层（"+ 新建 Profile" / "sidebar 切换"）对 3 菜单的遮挡
+        .padding(.top, 28)
     }
 
     private var shellBody: some View {
         ShrimpTerminalConsole(username: user.username, tabManager: shellTabManager, isActive: mode == .terminal)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // 顶部留白，避开 HermesDetailView 右上角浮层对 3 菜单的遮挡
+            .padding(.top, 28)
     }
 
     private var terminalColumn: some View {
