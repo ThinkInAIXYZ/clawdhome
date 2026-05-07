@@ -591,6 +591,9 @@ struct UserDetailView: View {
                 refreshGatewayURLUntilTokenReady()
             }
         }
+        .onDisappear {
+            embeddedOverviewConsoleStore.invalidateLoadedURL()
+        }
     }
 
     private var tabbedContentSheets1: some View {
@@ -916,7 +919,7 @@ struct UserDetailView: View {
               let urlStr = gatewayURL,
               !urlStr.isEmpty,
               gatewayToken(from: urlStr) != nil else { return nil }
-        return URL(string: urlStr)
+        return gatewayConsoleURL(from: urlStr)
     }
 
     private var shouldShowOverviewSupplementaryCards: Bool {
@@ -1286,7 +1289,7 @@ struct UserDetailView: View {
 
     private var overviewOpenConsoleButton: some View {
         Button {
-            guard let url = embeddedOverviewConsoleURL ?? (gatewayURL.flatMap(URL.init(string:))) else { return }
+            guard let url = embeddedOverviewConsoleURL ?? gatewayConsoleURL(from: gatewayURL) else { return }
             NSWorkspace.shared.open(url)
         } label: {
             HStack(spacing: 8) {
@@ -1704,7 +1707,7 @@ struct UserDetailView: View {
     private var addressRowContent: some View {
         if isEffectivelyRunning, let urlStr = gatewayURL, !urlStr.isEmpty,
            gatewayToken(from: urlStr) != nil,
-           let nsURL = URL(string: urlStr) {
+           let nsURL = gatewayConsoleURL(from: urlStr) {
             Button(L10n.k("user.detail.auto.open_openclaw_web_console", fallback: "打开 OpenClaw Web 控制台")) {
                 NSWorkspace.shared.open(nsURL)
             }
@@ -2797,6 +2800,22 @@ struct UserDetailView: View {
               fragment.hasPrefix("token=") else { return nil }
         let token = String(fragment.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
         return token.isEmpty ? nil : token
+    }
+
+    /// 将 helper 返回的 `#token=...` URL 规范化为 `?token=...`，避免 hash 与前端路由冲突导致白屏。
+    private func gatewayConsoleURL(from rawURL: String?) -> URL? {
+        guard let rawURL, var components = URLComponents(string: rawURL) else { return nil }
+        guard let token = gatewayToken(from: rawURL) else { return components.url }
+
+        var items = components.queryItems ?? []
+        if let idx = items.firstIndex(where: { $0.name == "token" }) {
+            items[idx] = URLQueryItem(name: "token", value: token)
+        } else {
+            items.append(URLQueryItem(name: "token", value: token))
+        }
+        components.queryItems = items
+        components.fragment = nil
+        return components.url
     }
 
     private func loadWizardState() async -> InitWizardState? {
