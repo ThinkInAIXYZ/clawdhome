@@ -23,15 +23,6 @@ targets:
     sources:
       - path: ClawdHome
       - path: Shared
-    preBuildScripts:
-      - name: "Build Embedded LLM Wiki Runtime"
-        script: |
-          bash "${SRCROOT}/scripts/build-embedded-llmwiki-runtime.sh"
-        basedOnDependencyAnalysis: false
-      - name: "Build Embedded LLM Wiki Frontend"
-        script: |
-          bash "${SRCROOT}/scripts/build-embedded-llmwiki-frontend.sh"
-        basedOnDependencyAnalysis: false
     dependencies:
       - target: ClawdHomeHelper
         embed: false

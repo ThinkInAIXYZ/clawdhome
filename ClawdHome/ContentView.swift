@@ -8,7 +8,6 @@ enum NavDestination: Hashable {
     case dashboard
     case clawPool
     case vaultFiles
-    case notes
     case prompts
     case network
     case aiLab
@@ -69,8 +68,6 @@ struct ContentView: View {
                             .tag(NavDestination.clawPool)
                         Label(L10n.k("auto.content_view.vault_files", fallback: "文件共享"), systemImage: "folder.badge.person.crop")
                             .tag(NavDestination.vaultFiles)
-                        Label(L10n.k("content_view.notes_center", fallback: "笔记"), systemImage: "book.closed")
-                            .tag(NavDestination.notes)
                         Label("Prompt", systemImage: "text.bubble")
                             .tag(NavDestination.prompts)
                     }
@@ -161,10 +158,6 @@ struct ContentView: View {
                     .environment(helperClient)
                 case .vaultFiles:
                     VaultFilesView()
-                        .environment(helperClient)
-                        .environment(pool)
-                case .notes:
-                    NotesWorkspaceView()
                         .environment(helperClient)
                         .environment(pool)
                 case .prompts:
@@ -371,77 +364,6 @@ private struct ChromeInstallHintCard: View {
                 .stroke(.orange.opacity(0.28), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.16), radius: 18, x: 0, y: 8)
-    }
-}
-
-private enum NotesWorkspaceTab: String, CaseIterable, Identifiable {
-    case editor
-    case status
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .editor: return "笔记"
-        case .status: return "笔记状态"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .editor: return "book.closed"
-        case .status: return "checklist.checked"
-        }
-    }
-}
-
-private struct NotesWorkspaceView: View {
-    @State private var selectedTab: NotesWorkspaceTab = .editor
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                ForEach(NotesWorkspaceTab.allCases) { tab in
-                    Button {
-                        selectedTab = tab
-                    } label: {
-                        Label(tab.title, systemImage: tab.icon)
-                            .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .regular))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(selectedTab == tab ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.05))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(selectedTab == tab ? Color.accentColor.opacity(0.28) : Color.primary.opacity(0.08), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(selectedTab == tab ? Color.accentColor : Color.primary)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
-            .background(Color(nsColor: .windowBackgroundColor))
-
-            Divider()
-
-            ZStack {
-                WikiHostView {
-                    selectedTab = .status
-                }
-                .opacity(selectedTab == .editor ? 1 : 0)
-                .allowsHitTesting(selectedTab == .editor)
-
-                NotesCenterView()
-                    .opacity(selectedTab == .status ? 1 : 0)
-                    .allowsHitTesting(selectedTab == .status)
-            }
-        }
-        .navigationTitle(selectedTab.title)
     }
 }
 
