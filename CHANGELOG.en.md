@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.0] - 2026-04-03
+
+### Features
+- Added Node toolchain diagnosis with one-click repair to quickly troubleshoot and fix gateway runtime issues
+
+### Improvements & Fixes
+- Improved app update check and upgrade progress UX
+
+
 ## [1.5.0] - 2026-04-02
 
 ### Features
