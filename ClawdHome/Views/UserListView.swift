@@ -819,7 +819,7 @@ struct ClawPoolView: View {
             HStack(spacing: 6) {
                 shrimpCardStatusIndicator(user: user, readiness: readiness)
 
-                Text(user.fullName.isEmpty ? user.username : user.fullName)
+                Text("@\(user.username)")
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                 if user.isAdmin {
@@ -829,10 +829,6 @@ struct ClawPoolView: View {
                         .padding(.horizontal, 4).padding(.vertical, 1)
                         .background(Color.accentColor.opacity(0.85), in: Capsule())
                 }
-                Text("@\(user.username)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
                 Spacer(minLength: 0)
                 // 版本号（紧凑显示）
                 if let v = user.openclawVersionLabel {
