@@ -329,18 +329,28 @@ enum BackupManager {
 
         // 全局备份
         let globalDir = "\(destinationDir)/global"
+        let globalExists = fm.fileExists(atPath: globalDir)
+        helperLog("[listBackups] globalDir=\(globalDir) exists=\(globalExists)")
         if let files = try? fm.contentsOfDirectory(atPath: globalDir) {
+            helperLog("[listBackups] global files: \(files)")
             for file in files where file.hasSuffix(".tar.gz") {
                 let path = "\(globalDir)/\(file)"
                 if let entry = makeEntry(path: path, filename: file, type: "global", username: nil) {
                     entries.append(entry)
+                } else {
+                    helperLog("[listBackups] makeEntry failed for \(path)", level: .warn)
                 }
             }
+        } else {
+            helperLog("[listBackups] contentsOfDirectory failed for globalDir", level: .warn)
         }
 
         // Shrimp 备份
         let shrimpsDir = "\(destinationDir)/shrimps"
+        let shrimpsExists = fm.fileExists(atPath: shrimpsDir)
+        helperLog("[listBackups] shrimpsDir=\(shrimpsDir) exists=\(shrimpsExists)")
         if let userDirs = try? fm.contentsOfDirectory(atPath: shrimpsDir) {
+            helperLog("[listBackups] shrimp userDirs: \(userDirs)")
             for userDir in userDirs {
                 let userPath = "\(shrimpsDir)/\(userDir)"
                 var isDir: ObjCBool = false
@@ -354,8 +364,11 @@ enum BackupManager {
                     }
                 }
             }
+        } else {
+            helperLog("[listBackups] contentsOfDirectory failed for shrimpsDir", level: .warn)
         }
 
+        helperLog("[listBackups] 总计 \(entries.count) 个条目")
         return entries.sorted { $0.createdAt > $1.createdAt }
     }
 

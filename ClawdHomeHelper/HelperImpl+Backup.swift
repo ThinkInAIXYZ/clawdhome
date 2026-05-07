@@ -251,11 +251,14 @@ extension ClawdHomeHelperImpl {
 
     func listBackups(destinationDir: String,
                      withReply reply: @escaping (String?) -> Void) {
+        helperLog("[listBackups] 查询备份列表 dir=\(destinationDir)")
         let entries = BackupManager.listBackups(destinationDir: destinationDir)
+        helperLog("[listBackups] 找到 \(entries.count) 个备份条目")
         if let data = try? JSONEncoder().encode(entries),
            let json = String(data: data, encoding: .utf8) {
             reply(json)
         } else {
+            helperLog("[listBackups] JSON 编码失败", level: .error)
             reply(nil)
         }
     }
