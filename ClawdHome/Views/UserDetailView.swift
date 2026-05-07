@@ -344,6 +344,10 @@ struct UserDetailView: View {
                 forceOnboardingAtEntry = true
                 versionChecked = false
             }
+            // 虾塘点击 agent 卡片跳转：消费 pendingAgentSelection，自动选中对应 agent
+            if let pendingAgent = pool.pendingAgentSelection.removeValue(forKey: user.username) {
+                selectedAgentId = pendingAgent
+            }
             maybeOpenStandaloneInitWindow()
         }
         .onChange(of: user.username) { _, _ in
@@ -702,7 +706,21 @@ struct UserDetailView: View {
             }
         }
         .onChange(of: selectedAgentId) { _, newId in
-            // 后续 Task 5-6 会实现：右侧面板刷新、WebView 切换、角色 Tab 切换
+            guard let newId = newId else { return }
+            // 通过 JS 通知 OpenClaw Control UI 切换到对应 agent
+            // agentId 仅允许 [a-zA-Z0-9_-]，过滤非法字符防止 JS 注入
+            let sanitized = newId.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+            guard !sanitized.isEmpty else { return }
+            let js = """
+            (function() {
+                var sel = document.querySelector('.agents-select');
+                if (sel) {
+                    sel.value = '\(sanitized)';
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            })();
+            """
+            embeddedOverviewConsoleStore.webView?.evaluateJavaScript(js, completionHandler: nil)
         }
         .onChange(of: gatewayHub.readinessMap[user.username]) { _, newReadiness in
             if newReadiness == .ready {
