@@ -1866,7 +1866,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
             throw CloneClawManagerError.invalidConfigFormat
         }
         let cleaned = CloneClawManager.sanitizeOpenclawConfig(object)
-        let outData = try JSONSerialization.data(withJSONObject: cleaned, options: [.prettyPrinted, .sortedKeys])
+        let outData = try JSONSerialization.data(withJSONObject: cleaned, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         try outData.write(to: URL(fileURLWithPath: path), options: .atomic)
         let owner = "\(uid):\(gid)"
         try run("/usr/sbin/chown", args: [owner, path])
@@ -2127,7 +2127,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         set(&root, keys: ArraySlice(keys), value: value)
         // 序列化写回
         do {
-            let outData = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+            let outData = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
             // 确保目录存在
             let dir = "/Users/\(username)/.openclaw"
             if !fm.fileExists(atPath: dir) {
@@ -2270,7 +2270,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         env["no_proxy"] = noProxyValue
         root["env"] = env
 
-        let outData = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+        let outData = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         let dir = "/Users/\(username)/.openclaw"
         if !fm.fileExists(atPath: dir) {
             try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -3076,7 +3076,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         }
         sqlite3_finalize(stmt)
 
-        guard let json = try? JSONSerialization.data(withJSONObject: results),
+        guard let json = try? JSONSerialization.data(withJSONObject: results, options: [.withoutEscapingSlashes]),
               let jsonStr = String(data: json, encoding: .utf8) else {
             reply("[]", nil)
             return
