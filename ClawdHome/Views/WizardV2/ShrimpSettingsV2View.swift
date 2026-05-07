@@ -12,14 +12,16 @@ import SwiftUI
 
 struct ShrimpSettingsV2View: View {
     let user: ManagedUser
+    let includeAgentsTab: Bool
 
     @Environment(HelperClient.self) private var helperClient
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedTab: SettingsTab
 
-    init(user: ManagedUser, initialTab: SettingsTab = .agents) {
+    init(user: ManagedUser, initialTab: SettingsTab = .agents, includeAgentsTab: Bool = true) {
         self.user = user
+        self.includeAgentsTab = includeAgentsTab
         _selectedTab = State(initialValue: initialTab)
     }
 
@@ -78,7 +80,12 @@ struct ShrimpSettingsV2View: View {
                 splitContent
             }
         }
-        .onAppear { loadConfig() }
+        .onAppear {
+            if !visibleTabs.contains(selectedTab), let first = visibleTabs.first {
+                selectedTab = first
+            }
+            loadConfig()
+        }
     }
 
     // MARK: - 内嵌布局：左侧二级 sidebar + 右侧 content
@@ -110,7 +117,7 @@ struct ShrimpSettingsV2View: View {
 
     private var secondarySidebar: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(SettingsTab.allCases, id: \.rawValue) { tab in
+            ForEach(visibleTabs, id: \.rawValue) { tab in
                 sidebarRow(tab)
             }
             Spacer()
@@ -119,6 +126,10 @@ struct ShrimpSettingsV2View: View {
         .padding(.horizontal, 8)
         .frame(width: 160, alignment: .topLeading)
         .background(.bar)
+    }
+
+    private var visibleTabs: [SettingsTab] {
+        includeAgentsTab ? SettingsTab.allCases : [.model, .advanced]
     }
 
     @ViewBuilder
