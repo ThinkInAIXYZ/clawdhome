@@ -616,8 +616,10 @@ private struct ClawDetailWindow: View {
         NavigationStack {
             if let user {
                 UserDetailView(user: user, onDeleted: {
-                    pool.removeUser(username: username)
                     dismiss()
+                    Task { @MainActor in
+                        pool.removeUser(username: username)
+                    }
                 })
             } else {
                 ContentUnavailableView(

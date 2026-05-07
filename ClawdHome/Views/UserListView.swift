@@ -76,15 +76,25 @@ struct ClawPoolView: View {
                     adminUser: NSUserName(),
                     option: $contextDeleteOption,
                     adminPassword: $contextDeleteAdminPassword,
+                    success: contextDeleteStep == .done,
                     isDeleting: contextIsDeleting,
                     error: contextDeleteError,
                     onConfirm: {
                         Task { await performContextDelete(for: claw) }
                     },
+                    onCloseSuccess: {
+                        if selectedClaw == claw.id { selectedClaw = nil }
+                        pool.removeUser(username: claw.username)
+                        contextMenuUser = nil
+                        contextDeleteStep = nil
+                        contextDeleteError = nil
+                        contextDeleteAdminPassword = ""
+                    },
                     onCancel: {
                         contextMenuUser = nil
                         contextDeleteError = nil
                         contextDeleteAdminPassword = ""
+                        contextDeleteStep = nil
                     }
                 )
                 .interactiveDismissDisabled(contextIsDeleting)
@@ -582,11 +592,7 @@ struct ClawPoolView: View {
             try await deleteUserViaSysadminctl(username: targetUsername, keepHome: keepHome, adminPassword: adminPassword)
 
             contextDeleteStep = .done
-            try? await Task.sleep(for: .milliseconds(700))
-            if selectedClaw == claw.id { selectedClaw = nil }
-            pool.removeUser(username: targetUsername)
             contextIsDeleting = false
-            // contextMenuUser 已在 onConfirm 里清 nil，无需再清
         } catch {
             contextDeleteError = error.localizedDescription
             contextDeleteStep = nil
@@ -657,7 +663,7 @@ struct ClawPoolView: View {
                     throw HelperError.operationFailed(L10n.k("views.user_list_view.adminpassword", fallback: "管理员密码错误，请重试"))
                 }
                 if !verifyOutput.isEmpty {
-                    throw HelperError.operationFailed(L10n.k("views.user_list_view.admin_verifyoutput", fallback: "管理员权限校验失败：\(verifyOutput)"))
+                    throw HelperError.operationFailed(L10n.f("views.user_detail_view.text_0a32bf3a", fallback: "管理员权限校验失败：%@", String(describing: verifyOutput)))
                 }
                 throw HelperError.operationFailed(L10n.k("views.user_list_view.admin_privilege_check_failed", fallback: "管理员权限校验失败"))
             }
@@ -676,14 +682,14 @@ struct ClawPoolView: View {
                 let output = result.output
                 if output.lowercased().contains("unknown user") { return }
                 if output.isEmpty {
-                    throw HelperError.operationFailed(L10n.k("views.user_list_view.deleteuser_sysadminctl_exit_result_status", fallback: "删除用户失败：sysadminctl exit \(result.status)"))
+                    throw HelperError.operationFailed(L10n.f("views.user_detail_view.sysa_minctl_exit", fallback: "删除用户失败：sysadminctl exit %@", String(describing: result.status)))
                 }
-                throw HelperError.operationFailed(L10n.k("views.user_list_view.deleteuser_output", fallback: "删除用户失败：\(output)"))
+                throw HelperError.operationFailed(L10n.f("views.user_detail_view.text_9d82e8aa", fallback: "删除用户失败：%@", String(describing: output)))
             }
 
             if !waitForUserRecordRemoval(username: username, retries: 40, sleepMs: 250) {
                 appLog("[user-delete] record still exists after command @\(username)", level: .warn)
-                throw HelperError.operationFailed(L10n.k("views.user_list_view.deleteuser_username", fallback: "删除用户 \(username) 后校验失败：系统记录仍存在"))
+                throw HelperError.operationFailed(L10n.f("views.user_detail_view.text_a1027837", fallback: "删除用户 %@ 后校验失败：系统记录仍存在", String(describing: username)))
             }
             appLog("[user-delete] success @\(username)")
         }.value

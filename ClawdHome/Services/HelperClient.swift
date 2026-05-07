@@ -484,7 +484,13 @@ final class HelperClient {
             proxy.getDashboardSnapshot { cont.resume(returning: $0) }
         }
         guard let data = json.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(DashboardSnapshot.self, from: data)
+        do {
+            return try JSONDecoder().decode(DashboardSnapshot.self, from: data)
+        } catch {
+            let preview = json.prefix(240).replacingOccurrences(of: "\n", with: " ")
+            appLog("[dashboard] snapshot decode failed: \(error.localizedDescription); payload=\(preview)", level: .warn)
+            return nil
+        }
     }
 
     /// 获取当前连接列表（无连接或未连接时返回空数组）

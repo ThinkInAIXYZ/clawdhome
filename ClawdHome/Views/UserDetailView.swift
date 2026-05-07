@@ -286,11 +286,17 @@ struct UserDetailView: View {
     @State private var quickTransferLastPaths: [String] = []
     // Tab
     @State private var selectedTab: ClawTab = .overview
+    private var shouldPinWindowTopmost: Bool {
+        !user.isAdmin
+        && user.clawType == .macosUser
+        && (user.initStep != nil || hasPendingInitWizard)
+    }
 
     var body: some View {
         tabbedContent
         .navigationTitle(user.fullName.isEmpty ? user.username : user.fullName)
         .navigationSubtitle("@\(user.username)")
+        .background(UserDetailWindowLevelBinder(elevated: shouldPinWindowTopmost))
         .onAppear {
             descriptionDraft = user.profileDescription
         }
@@ -440,10 +446,23 @@ struct UserDetailView: View {
                 adminUser: NSUserName(),
                 option: $deleteHomeOption,
                 adminPassword: $deleteAdminPassword,
+                success: deleteStep == .done,
                 isDeleting: isDeleting,
                 error: deleteError,
                 onConfirm: { Task { await performDelete() } },
-                onCancel: { showDeleteConfirm = false; deleteError = nil; deleteAdminPassword = "" }
+                onCloseSuccess: {
+                    showDeleteConfirm = false
+                    deleteStep = nil
+                    deleteError = nil
+                    deleteAdminPassword = ""
+                    onDeleted?()
+                },
+                onCancel: {
+                    showDeleteConfirm = false
+                    deleteError = nil
+                    deleteAdminPassword = ""
+                    deleteStep = nil
+                }
             )
             .interactiveDismissDisabled(isDeleting)
         }
@@ -636,7 +655,7 @@ struct UserDetailView: View {
                     if let cpu = user.cpuPercent, let mem = user.memRssMB {
                         Text(String(format: "%.1f%%  /  %.0f MB", cpu, mem))
                             .monospacedDigit()
-                    } else if isEffectivelyRunning {
+                    } else if isEffectivelyRunning, pool.snapshot == nil {
                         ProgressView().scaleEffect(0.6)
                     } else {
                         Text("—").foregroundStyle(.tertiary)
@@ -720,7 +739,7 @@ struct UserDetailView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-        } else if isEffectivelyRunning {
+        } else if isEffectivelyRunning, pool.snapshot == nil {
             ProgressView().scaleEffect(0.6)
         } else {
             Text("—").foregroundStyle(.tertiary)
@@ -1978,10 +1997,7 @@ struct UserDetailView: View {
             try await deleteUserViaSysadminctl(username: targetUsername, keepHome: keepHome, adminPassword: adminPassword)
 
             deleteStep = .done
-            try? await Task.sleep(for: .milliseconds(700))
             isDeleting = false
-            showDeleteConfirm = false
-            onDeleted?()
         } catch {
             deleteError = error.localizedDescription
             deleteStep = nil
@@ -2280,6 +2296,9 @@ struct UserDetailView: View {
                     Divider()
                     HStack {
                         Button(L10n.k("user.detail.auto.deleteuser", fallback: "删除用户"), role: .destructive) {
+                            deleteStep = nil
+                            deleteError = nil
+                            deleteAdminPassword = ""
                             showDeleteConfirm = true
                         }
                         .buttonStyle(.plain)
@@ -2322,6 +2341,46 @@ struct UserDetailView: View {
         }
     }
 
+}
+
+private struct UserDetailWindowLevelBinder: NSViewRepresentable {
+    let elevated: Bool
+
+    final class Coordinator {
+        var lastElevated: Bool?
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            apply(window: view.window, context: context)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            apply(window: nsView.window, context: context)
+        }
+    }
+
+    private func apply(window: NSWindow?, context: Context) {
+        guard let window else { return }
+        let targetLevel: NSWindow.Level = elevated ? .floating : .normal
+        if window.level != targetLevel {
+            window.level = targetLevel
+        }
+        let changed = context.coordinator.lastElevated != elevated
+        context.coordinator.lastElevated = elevated
+        guard elevated, changed else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+    }
 }
 
 // MARK: - Alerts Modifier（拆分减轻类型检查压力）
@@ -2439,20 +2498,22 @@ struct DeleteUserSheet: View {
     let adminUser: String
     @Binding var option: DeleteHomeOption
     @Binding var adminPassword: String
+    let success: Bool
     @State private var showAdminPassword = false
     @FocusState private var isAdminPasswordFocused: Bool
     let isDeleting: Bool
     let error: String?
     let onConfirm: () -> Void
+    let onCloseSuccess: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // 标题
+            // 标题（避免转义符视觉噪音）
             VStack(alignment: .leading, spacing: 3) {
-                Text(L10n.f("views.user_detail_view.text_6e1d141a", fallback: "删除用户 \\\"@%@\\\"", String(describing: username)))
+                Text("删除用户 @\(username)")
                     .font(.headline)
-                Text(L10n.k("user.detail.auto.accountdelete_selectfolder", fallback: "账户将被永久删除，请选择个人文件夹的处理方式："))
+                Text("此操作不可恢复，请选择个人文件夹处理方式。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -2468,6 +2529,18 @@ struct DeleteUserSheet: View {
                 .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
             }
 
+            if success {
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("删除成功，即将关闭…")
+                        .font(.subheadline)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
+            }
+
             if isDeleting {
                 HStack(alignment: .top, spacing: 8) {
                     ProgressView()
@@ -2476,7 +2549,7 @@ struct DeleteUserSheet: View {
                         Text(L10n.k("user.detail.auto.deleting_please_wait", fallback: "删除中，请稍候…"))
                             .font(.caption)
                             .fontWeight(.semibold)
-                        Text(L10n.k("user.detail.auto.if_macos_shows_a_permission_prompt_click_allow", fallback: "如果系统弹出授权窗口，请点击“允许”。"))
+                        Text("如果系统弹出授权窗口，请点击“允许”。如果你拒绝了，或者没有出现，请退出程序后重新操作。你也可以前往“系统设置 → 用户与群组”删除该用户。")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -2486,90 +2559,106 @@ struct DeleteUserSheet: View {
                 .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
             }
 
-            // 选项
-            VStack(alignment: .leading, spacing: 0) {
-                optionRow(
-                    value: .keepHome,
-                    title: L10n.k("user.detail.auto.folder", fallback: "保留个人文件夹"),
-                    desc: L10n.f("views.user_detail_view.users", fallback: "/Users/%@/ 保持不变", String(describing: username))
-                )
-                Divider().padding(.leading, 28)
-                optionRow(
-                    value: .deleteHome,
-                    title: L10n.k("user.detail.auto.deletefolder", fallback: "删除个人文件夹"),
-                    desc: L10n.f("views.user_detail_view.users_4c31c5", fallback: "/Users/%@/ 及全部内容将被永久删除", String(describing: username))
-                )
-            }
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-            .disabled(isDeleting)
-
-            // 管理员密码
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.k("user.detail.auto.adminpassword", fallback: "管理员密码")).font(.subheadline)
-                Text(L10n.f("views.user_detail_view.text_626047b9", fallback: "账号：%@", String(describing: adminUser)))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 8) {
-                    Image(systemName: "person.badge.key.fill")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 18)
-                    if showAdminPassword {
-                        TextField(L10n.k("user.detail.auto.inputadminpassword", fallback: "请输入管理员登录密码"), text: $adminPassword)
-                            .textFieldStyle(.roundedBorder)
-                            .focused($isAdminPasswordFocused)
-                            .onChange(of: isAdminPasswordFocused) { _, focused in
-                                if focused {
-                                    KeyboardInputSourceSwitcher.switchToEnglishASCII()
-                                }
-                            }
-                            .onChange(of: adminPassword) { _, newValue in
-                                let asciiOnly = newValue.filter(\.isASCII)
-                                if asciiOnly != newValue {
-                                    adminPassword = asciiOnly
-                                }
-                            }
-                    } else {
-                        SecureField(L10n.k("user.detail.auto.inputadminpassword", fallback: "请输入管理员登录密码"), text: $adminPassword)
-                            .textFieldStyle(.roundedBorder)
-                            .focused($isAdminPasswordFocused)
-                            .onChange(of: isAdminPasswordFocused) { _, focused in
-                                if focused {
-                                    KeyboardInputSourceSwitcher.switchToEnglishASCII()
-                                }
-                            }
-                            .onChange(of: adminPassword) { _, newValue in
-                                let asciiOnly = newValue.filter(\.isASCII)
-                                if asciiOnly != newValue {
-                                    adminPassword = asciiOnly
-                                }
-                            }
-                    }
-                    Button {
-                        showAdminPassword.toggle()
-                        isAdminPasswordFocused = true
-                    } label: {
-                        Image(systemName: showAdminPassword ? "eye.slash" : "eye")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(showAdminPassword ? L10n.k("user.detail.auto.password", fallback: "隐藏密码") : L10n.k("user.detail.auto.password", fallback: "显示密码"))
+            if !success {
+                // 选项
+                VStack(alignment: .leading, spacing: 0) {
+                    optionRow(
+                        value: .keepHome,
+                        title: L10n.k("user.detail.auto.folder", fallback: "保留个人文件夹"),
+                        desc: L10n.f("views.user_detail_view.users", fallback: "/Users/%@/ 保持不变", String(describing: username))
+                    )
+                    Divider().padding(.leading, 28)
+                    optionRow(
+                        value: .deleteHome,
+                        title: L10n.k("user.detail.auto.deletefolder", fallback: "删除个人文件夹"),
+                        desc: L10n.f("views.user_detail_view.users_4c31c5", fallback: "/Users/%@/ 及全部内容将被永久删除", String(describing: username))
+                    )
                 }
-            }
-            .disabled(isDeleting)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                .disabled(isDeleting)
 
-            // 按钮
-            HStack {
-                Spacer()
-                Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                    .disabled(isDeleting)
-                Button(L10n.k("user.detail.auto.deleteuser", fallback: "删除用户"), role: .destructive, action: onConfirm)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(adminPassword.isEmpty || isDeleting)
+                // 管理员密码
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.k("user.detail.auto.adminpassword", fallback: "管理员密码")).font(.subheadline)
+                    Text(L10n.f("views.user_detail_view.text_626047b9", fallback: "账号：%@", String(describing: adminUser)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.badge.key.fill")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 18)
+                        if showAdminPassword {
+                            TextField(L10n.k("user.detail.auto.inputadminpassword", fallback: "请输入管理员登录密码"), text: $adminPassword)
+                                .textFieldStyle(.roundedBorder)
+                                .id("delete-admin-password-plain")
+                                .focused($isAdminPasswordFocused)
+                                .onChange(of: isAdminPasswordFocused) { _, focused in
+                                    if focused {
+                                        KeyboardInputSourceSwitcher.switchToEnglishASCII()
+                                    }
+                                }
+                                .onChange(of: adminPassword) { _, newValue in
+                                    let asciiOnly = newValue.filter(\.isASCII)
+                                    if asciiOnly != newValue {
+                                        adminPassword = asciiOnly
+                                    }
+                                }
+                        } else {
+                            SecureField(L10n.k("user.detail.auto.inputadminpassword", fallback: "请输入管理员登录密码"), text: $adminPassword)
+                                .textFieldStyle(.roundedBorder)
+                                .id("delete-admin-password-secure")
+                                .focused($isAdminPasswordFocused)
+                                .onChange(of: isAdminPasswordFocused) { _, focused in
+                                    if focused {
+                                        KeyboardInputSourceSwitcher.switchToEnglishASCII()
+                                    }
+                                }
+                                .onChange(of: adminPassword) { _, newValue in
+                                    let asciiOnly = newValue.filter(\.isASCII)
+                                    if asciiOnly != newValue {
+                                        adminPassword = asciiOnly
+                                    }
+                                }
+                        }
+                        Button {
+                            showAdminPassword.toggle()
+                            isAdminPasswordFocused = true
+                        } label: {
+                            Image(systemName: showAdminPassword ? "eye.slash" : "eye")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help(showAdminPassword ? L10n.k("user.detail.auto.password", fallback: "隐藏密码") : L10n.k("user.detail.auto.password", fallback: "显示密码"))
+                    }
+                }
+                .disabled(isDeleting)
+
+                // 按钮
+                HStack {
+                    Spacer()
+                    Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), action: onCancel)
+                        .keyboardShortcut(.cancelAction)
+                        .disabled(isDeleting)
+                    Button(L10n.k("user.detail.auto.deleteuser", fallback: "删除用户"), role: .destructive, action: onConfirm)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(adminPassword.isEmpty || isDeleting)
+                }
+            } else {
+                HStack {
+                    Spacer()
+                    Button(L10n.k("user.detail.auto.close", fallback: "关闭"), action: onCloseSuccess)
+                        .keyboardShortcut(.defaultAction)
+                }
             }
         }
         .padding(24)
         .frame(width: 440)
+        .onChange(of: isDeleting) { _, deleting in
+            if deleting { isAdminPasswordFocused = false }
+        }
+        .onChange(of: success) { _, didSucceed in
+            if didSucceed { isAdminPasswordFocused = false }
+        }
     }
 
     @ViewBuilder

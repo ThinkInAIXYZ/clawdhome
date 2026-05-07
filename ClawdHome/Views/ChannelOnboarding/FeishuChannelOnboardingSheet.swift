@@ -39,6 +39,8 @@ struct FeishuChannelOnboardingSheet: View {
     @State private var lastOutputAt: Date? = nil
     @State private var now = Date()
     @State private var outputBuffer = ""
+    @State private var didDetectPairingDone = false
+    @State private var didScheduleAutoClose = false
 
     private let commandExecutable = "npx"
     private let waitingThreshold: TimeInterval = 8
@@ -48,6 +50,15 @@ struct FeishuChannelOnboardingSheet: View {
 
     private var commandSummary: String {
         ([commandExecutable] + commandArgs).joined(separator: " ")
+    }
+
+    private var completionMarkers: [String] {
+        [
+            "success! bot configured",
+            "bot configured",
+            "机器人配置成功",
+            "openclaw is all set"
+        ]
     }
 
     private var isRunning: Bool {
@@ -162,6 +173,7 @@ struct FeishuChannelOnboardingSheet: View {
             appLog("[\(logPrefix)] ui onboarding window disappeared; terminate active terminal session @\(username)")
         }
         .background(ChannelOnboardingWindowTitleBinder(title: windowTitle))
+        .background(ChannelOnboardingWindowLevelBinder())
         .frame(minWidth: 900, minHeight: 460)
     }
 
@@ -238,6 +250,8 @@ struct FeishuChannelOnboardingSheet: View {
         lastOutputAt = Date()
         now = Date()
         outputBuffer = ""
+        didDetectPairingDone = false
+        didScheduleAutoClose = false
         showTerminal = true
         terminalRunID += 1
     }
@@ -250,6 +264,7 @@ struct FeishuChannelOnboardingSheet: View {
         if outputBuffer.count > maxChars {
             outputBuffer.removeFirst(outputBuffer.count - maxChars)
         }
+        evaluatePairingCompletion(from: chunk)
     }
 
     private func copyTerminalOutput() {
@@ -267,8 +282,14 @@ struct FeishuChannelOnboardingSheet: View {
     private func handleCommandExit(_ code: Int32?) {
         exitCode = code
         let normalized = code ?? -999
+        evaluatePairingCompletion(from: outputBuffer)
         if normalized == 0 {
-            statusText = L10n.k("channel.runtime.exit.success", fallback: "命令执行完成。若终端输出了二维码，请直接扫码完成配对。")
+            if didDetectPairingDone {
+                statusText = L10n.k("channel.runtime.exit.success_autoclose", fallback: "检测到配对已完成，窗口将自动关闭。")
+                scheduleAutoCloseIfNeeded()
+            } else {
+                statusText = L10n.k("channel.runtime.exit.success", fallback: "命令执行完成。若已扫码完成配对，可直接关闭窗口。")
+            }
             appLog("[\(logPrefix)] ui interactive run success @\(username)")
         } else {
             statusText = L10n.f(
@@ -277,6 +298,28 @@ struct FeishuChannelOnboardingSheet: View {
                 normalized
             )
             appLog("[\(logPrefix)] ui interactive run failed @\(username) exit=\(normalized)", level: .error)
+        }
+    }
+
+    private func evaluatePairingCompletion(from text: String) {
+        guard !didDetectPairingDone else { return }
+        let normalized = text.lowercased()
+        let matched = completionMarkers.contains { marker in
+            normalized.contains(marker.lowercased())
+        }
+        guard matched else { return }
+
+        didDetectPairingDone = true
+        statusText = L10n.k("channel.runtime.pairing.detected_autoclose", fallback: "已检测到“配置成功/完成”提示，窗口将在 2 秒后自动关闭。")
+        appLog("[\(logPrefix)] completion marker detected; schedule auto close @\(username)")
+        scheduleAutoCloseIfNeeded()
+    }
+
+    private func scheduleAutoCloseIfNeeded() {
+        guard !didScheduleAutoClose else { return }
+        didScheduleAutoClose = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            dismiss()
         }
     }
 }
@@ -296,5 +339,41 @@ private struct ChannelOnboardingWindowTitleBinder: NSViewRepresentable {
         DispatchQueue.main.async {
             nsView.window?.title = title
         }
+    }
+}
+
+private struct ChannelOnboardingWindowLevelBinder: NSViewRepresentable {
+    final class Coordinator {
+        var didActivate = false
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            apply(window: view.window, context: context)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            apply(window: nsView.window, context: context)
+        }
+    }
+
+    private func apply(window: NSWindow?, context: Context) {
+        guard let window else { return }
+        if window.level != .floating {
+            window.level = .floating
+        }
+        guard !context.coordinator.didActivate else { return }
+        context.coordinator.didActivate = true
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
     }
 }
