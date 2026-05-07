@@ -62,7 +62,6 @@ final class MaintenanceTerminalSession {
         self.outputPipe = Pipe()
 
         let home = "/Users/\(username)"
-        let npmGlobalDir = "\(home)/.npm-global"
         let inheritedEnv = ProcessInfo.processInfo.environment
         let lang = inheritedEnv["LANG"] ?? "en_US.UTF-8"
         let lcAll = inheritedEnv["LC_ALL"] ?? lang
@@ -86,18 +85,21 @@ final class MaintenanceTerminalSession {
 
         let bootstrapScript = "stty cols 120 rows 40 >/dev/null 2>&1 || true; exec \"$0\" \"$@\""
 
-        let commandArgs = [
-            "-q", "/dev/null",
-            "/usr/bin/sudo", "-n", "-u", username, "-H",
-            "/usr/bin/env",
-            "HOME=\(home)",
-            "PATH=\(effectivePath)",
-            "NPM_CONFIG_PREFIX=\(npmGlobalDir)",
-            "npm_config_prefix=\(npmGlobalDir)",
+        var envArgs = UserEnvContract
+            .orderedRuntimeEnvironment(username: username, nodePath: effectivePath)
+            .map { "\($0.0)=\($0.1)" }
+        envArgs.append(contentsOf: [
             "LANG=\(lang)",
             "LC_ALL=\(lcAll)",
             "LC_CTYPE=\(lcCType)",
             "TERM=xterm-256color",
+        ])
+
+        let commandArgs = [
+            "-q", "/dev/null",
+            "/usr/bin/sudo", "-n", "-u", username, "-H",
+            "/usr/bin/env",
+        ] + envArgs + [
             "/bin/sh", "-lc", bootstrapScript,
             resolvedExecutable,
         ] + argvRest

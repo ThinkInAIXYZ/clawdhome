@@ -83,17 +83,21 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
                    nodePath: String,
                    command: String,
                    args: [String]) throws -> String {
-        let home = "/Users/\(username)"
-        let npmGlobalDir = "\(home)/.npm-global"
+        let envPairs = UserEnvContract.orderedRuntimeEnvironment(username: username, nodePath: nodePath)
+        let envArgs = envPairs.map { "\($0.0)=\($0.1)" }
+        let shellArgs: [String]
+        if args.count >= 2, args[0] == "-lc" {
+            let script = args[1]
+            let forcedEnvPrefix = UserEnvContract.shellForcedExportPrefix(username: username, nodePath: nodePath)
+            shellArgs = ["-lc", "\(forcedEnvPrefix); \(script)"] + Array(args.dropFirst(2))
+        } else {
+            shellArgs = args
+        }
+
         let fullArgs = [
             "-n", "-u", username, "-H",
             "/usr/bin/env",
-            "HOME=\(home)",
-            "PATH=\(nodePath)",
-            "NPM_CONFIG_PREFIX=\(npmGlobalDir)",
-            "npm_config_prefix=\(npmGlobalDir)",
-            command,
-        ] + args
+        ] + envArgs + [command] + shellArgs
         return try run("/usr/bin/sudo", args: fullArgs)
     }
 
