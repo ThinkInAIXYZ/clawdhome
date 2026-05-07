@@ -106,6 +106,10 @@ struct BrowserAccountStatus: Codable, Equatable {
     let sessionExists: Bool
     let browserReachable: Bool
     let httpEndpoint: String?
+    var openCLIBrowserBridgeInstalled: Bool? = nil
+    var openCLIBrowserBridgeInstalledVersion: String? = nil
+    var openCLIBrowserBridgeLatestVersion: String? = nil
+    var openCLIBrowserBridgeUpdateAvailable: Bool? = nil
     var openCLIProfile: String? = nil
     let message: String
 }
