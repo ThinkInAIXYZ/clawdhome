@@ -9,6 +9,7 @@ struct ConfigEditorSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(HelperClient.self) private var helperClient
+    @Environment(GatewayHub.self) private var gatewayHub
 
     // 预设配置字段
     @State private var apiKey: String = ""
@@ -90,13 +91,18 @@ struct ConfigEditorSheet: View {
         saveSuccess = false
 
         do {
-            // 只保存非空字段
+            var patch: [String: Any] = ["gateway": ["mode": gatewayMode]]
             if !apiKey.isEmpty {
-                try await helperClient.setConfig(username: user.username, key: "anthropic.apiKey", value: apiKey)
+                patch["anthropic"] = ["apiKey": apiKey]
             }
-            try await helperClient.setConfig(username: user.username, key: "gateway.mode", value: gatewayMode)
+            let (_, baseHash) = try await gatewayHub.configGetFull(username: user.username)
+            try await gatewayHub.configPatch(
+                username: user.username,
+                patch: patch,
+                baseHash: baseHash,
+                note: "ClawdHome: config editor update"
+            )
             saveSuccess = true
-            // 短暂显示成功后关闭
             try? await Task.sleep(nanoseconds: 1_200_000_000)
             dismiss()
         } catch {

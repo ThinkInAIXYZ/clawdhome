@@ -20,10 +20,32 @@ struct ConfigWriter {
             "/usr/bin/env", "PATH=\(nodePath)",
             openclawPath, "config", "set", key, value
         ]
-        if let logURL {
-            try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
-        } else {
-            try run("/usr/bin/sudo", args: args)
+        do {
+            if let logURL {
+                try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
+            } else {
+                try run("/usr/bin/sudo", args: args)
+            }
+        } catch {
+            // 若报错包含 "Config invalid"，先运行 openclaw doctor --fix 自动修复再重试
+            if error.localizedDescription.contains("Config invalid") {
+                helperLog("config set 失败 (Config invalid)，尝试 openclaw doctor --fix @\(username)", level: .warn)
+                let doctorArgs: [String] = [
+                    "-n", "-u", username, "-H",
+                    "/usr/bin/env", "PATH=\(nodePath)",
+                    openclawPath, "doctor", "--fix"
+                ]
+                _ = try? run("/usr/bin/sudo", args: doctorArgs)
+                // 修复后重试原命令
+                if let logURL {
+                    try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
+                } else {
+                    try run("/usr/bin/sudo", args: args)
+                }
+                helperLog("openclaw doctor --fix 修复成功，config set 重试通过 @\(username)", level: .info)
+                return
+            }
+            throw error
         }
         // 文件由目标用户进程创建，归属已正确，无需 chown
     }
