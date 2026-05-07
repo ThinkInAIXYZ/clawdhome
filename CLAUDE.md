@@ -82,7 +82,7 @@ The helper binary is embedded into the app bundle at `Contents/Library/LaunchDae
   - `GatewayHub` / `GatewayClient` — HTTP clients for communicating with running gateway instances.
   - `ProviderKeychainStore` / `UserPasswordStore` — Keychain-backed credential storage.
   - `WizardConnection` — manages the init wizard flow for new Shrimps.
-- **Models/** — app-side state objects (`ManagedUser`, `GlobalModelStore`, `GlobalSecretsStore`, `AccountKeychain`, `ProviderKeyConfig`).
+- **Models/** — app-side state objects (`ManagedUser`, `GlobalModelStore`, `GlobalSecretsStore`, `ProviderKeyConfig`).
 - **Views/** — SwiftUI views. Key screens: `DashboardView`, `UserDetailView`, `UserInitWizardView`, `ClawPoolView`, `ModelManagerView`, `UserFilesView`.
 
 ### Helper Layer (`ClawdHomeHelper/`)

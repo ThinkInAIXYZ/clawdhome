@@ -59,6 +59,7 @@ struct ModelConfigWizard: View {
                 // ── 嵌入式 header（向导 / 设置面板共用） ──
                 embeddedHeader
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 12)
 
                 if isLoadingStatus {
                     Spacer()
@@ -139,7 +140,8 @@ struct ModelConfigWizard: View {
                         showAddModel = false
                         Task { await loadStatus() }
                     }
-                    .padding(16)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 16)
                 }
             }
             .frame(width: 460, height: 500)

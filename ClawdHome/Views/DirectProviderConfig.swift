@@ -5,6 +5,7 @@ import SwiftUI
 import WebKit
 
 enum DirectProviderChoice: String, CaseIterable, Identifiable {
+    case bailian = "bailian"
     case qiniu = "qiniu"
     case kimiCoding = "kimi-coding"
     case minimax = "minimax"
@@ -15,6 +16,7 @@ enum DirectProviderChoice: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .bailian: return "阿里云百炼"
         case .kimiCoding: return "Kimi Code"
         case .minimax: return "MiniMax"
         case .qiniu: return "Qiniu AI"
@@ -25,6 +27,7 @@ enum DirectProviderChoice: String, CaseIterable, Identifiable {
 
     var apiKeyLabel: String {
         switch self {
+        case .bailian: return "百炼 API Key"
         case .kimiCoding: return "Kimi Code API Key"
         case .minimax: return "MiniMax API Key"
         case .qiniu: return "Qiniu API Key"
@@ -35,6 +38,7 @@ enum DirectProviderChoice: String, CaseIterable, Identifiable {
 
     var apiKeyPlaceholder: String {
         switch self {
+        case .bailian: return "sk-..."
         case .kimiCoding: return "sk-..."
         case .minimax: return L10n.k("views.user_detail_view.minimax_api_key", fallback: "粘贴 MiniMax API Key")
         case .qiniu: return "sk-..."
@@ -45,6 +49,7 @@ enum DirectProviderChoice: String, CaseIterable, Identifiable {
 
     var consoleURL: String? {
         switch self {
+        case .bailian: return "https://bailian.console.aliyun.com/cn-beijing/?tab=plan#/efm/subscription/token-plan"
         case .kimiCoding: return "https://www.kimi.com/code/console"
         case .minimax: return "https://platform.minimaxi.com/user-center/basic-information/interface-key"
         case .qiniu: return "https://portal.qiniu.com/ai-inference/api-key?ref=clawdhome.app"
@@ -55,6 +60,7 @@ enum DirectProviderChoice: String, CaseIterable, Identifiable {
 
     var consoleTitle: String? {
         switch self {
+        case .bailian: return "百炼 Token Plan"
         case .kimiCoding: return L10n.k("views.user_detail_view.kimi_code", fallback: "Kimi Code 控制台")
         case .minimax: return L10n.k("views.user_detail_view.minimax", fallback: "MiniMax 控制台")
         case .qiniu: return L10n.k("views.detail.provider_qiniu_console", fallback: "七牛 API Key")
@@ -65,10 +71,12 @@ enum DirectProviderChoice: String, CaseIterable, Identifiable {
 
     var promotionURL: String? {
         switch self {
+        case .bailian:
+            return "https://www.aliyun.com/minisite/goods?userCode=vb7y6zwf"
         case .minimax:
             return "https://platform.minimaxi.com/subscribe/token-plan?code=BvYUzElSu4&source=link"
         case .qiniu:
-            return "https://www.qiniu.com/ai/promotion/invited?cps_key=1hdl63udiuyqa"
+            return "https://s.qiniu.com/vqEvYv"
         case .zai:
             return "https://www.bigmodel.cn/glm-coding?ic=BXQV5BQ8BB"
         default:
@@ -78,6 +86,8 @@ enum DirectProviderChoice: String, CaseIterable, Identifiable {
 
     var promotionTitle: String? {
         switch self {
+        case .bailian:
+            return "🎁 新客 9 折优惠"
         case .minimax:
             return L10n.k("views.detail.promo_minimax", fallback: "🎁 领取 9 折专属优惠")
         case .qiniu:
@@ -133,11 +143,12 @@ struct ProviderModelConfigCore: View {
     @State private var isLoading = true
     @State private var isSaving = false
     @State private var isRestartingGateway = false
-    @State private var selectedProvider: DirectProviderChoice = .qiniu
+    @State private var selectedProvider: DirectProviderChoice = .bailian
+    @State private var selectedBailianModelId: String = "bailian/qwen3.6-plus"
     @State private var selectedKimiModelId: String = "kimi-coding/k2p5"
     @State private var selectedMinimaxModelId: String = "minimax/MiniMax-M2.7"
-    @State private var selectedQiniuModelId: String = "qiniu/deepseek-v3.2-251201"
-    @State private var selectedZAIModelId: String = "zai/glm-5"
+    @State private var selectedQiniuModelId: String = "qiniu/deepseek/deepseek-v4-pro"
+    @State private var selectedZAIModelId: String = "zai/glm-5.1"
     @State private var customProviderId = ""
     @State private var customBaseURL = "https://api.example.com/v1"
     @State private var customCompatibility: DirectCustomCompatibility = .openai
@@ -455,7 +466,7 @@ struct ProviderModelConfigCore: View {
                                     NSWorkspace.shared.open(url)
                                 }
                             } label: {
-                                Label(promotionTitle, systemImage: "gift")
+                                Text(promotionTitle)
                                     .font(.caption)
                             }
                             .buttonStyle(.borderless)
@@ -497,7 +508,9 @@ struct ProviderModelConfigCore: View {
                 }
             }
 
-            if selectedProvider == .minimax {
+            if selectedProvider == .bailian {
+                directModelPicker(providerId: "bailian", selection: $selectedBailianModelId)
+            } else if selectedProvider == .minimax {
                 directModelPicker(providerId: "minimax", title: L10n.k("user.detail.auto.minimax_models", fallback: "MiniMax 模型"), selection: $selectedMinimaxModelId)
             } else if selectedProvider == .kimiCoding {
                 directModelPicker(providerId: "kimi-coding", title: L10n.k("user.detail.auto.kimi_models", fallback: "Kimi 模型"), selection: $selectedKimiModelId)
@@ -658,6 +671,7 @@ struct ProviderModelConfigCore: View {
         // 映射 providerGroupId 到 DirectProviderChoice
         let providerChoice: DirectProviderChoice
         switch template.providerGroupId {
+        case "bailian": providerChoice = .bailian
         case "qiniu": providerChoice = .qiniu
         case "kimi-coding": providerChoice = .kimiCoding
         case "minimax": providerChoice = .minimax
@@ -669,6 +683,7 @@ struct ProviderModelConfigCore: View {
         selectedProvider = providerChoice
         providerKeys[providerChoice.rawValue] = apiKey
         switch providerChoice {
+        case .bailian: selectedBailianModelId = selectedTemplateModelId
         case .qiniu: selectedQiniuModelId = selectedTemplateModelId
         case .kimiCoding: selectedKimiModelId = selectedTemplateModelId
         case .minimax: selectedMinimaxModelId = selectedTemplateModelId
@@ -801,7 +816,10 @@ struct ProviderModelConfigCore: View {
             currentFallbackModels = []
         }
         if let primary = currentPrimaryModel(from: config) {
-            if primary.hasPrefix("minimax/") {
+            if primary.hasPrefix("bailian/") {
+                selectedProvider = .bailian
+                selectedBailianModelId = primary
+            } else if primary.hasPrefix("minimax/") {
                 selectedProvider = .minimax
                 selectedMinimaxModelId = primary
             } else if primary.hasPrefix("qiniu/") {
@@ -826,10 +844,12 @@ struct ProviderModelConfigCore: View {
         let authProfiles = await readUserJSON(relativePath: ".openclaw/agents/main/agent/auth-profiles.json")
         let profiles = (authProfiles["profiles"] as? [String: Any]) ?? [:]
 
+        let bailianKey = ((profiles["bailian:default"] as? [String: Any])?["key"] as? String) ?? ""
         let kimiKey = ((profiles["kimi-coding:default"] as? [String: Any])?["key"] as? String) ?? ""
         let minimaxKey = ((profiles["minimax:cn"] as? [String: Any])?["key"] as? String) ?? ""
         let qiniuKey = ((profiles["qiniu:default"] as? [String: Any])?["key"] as? String) ?? ""
         let zaiKey = ((profiles["zai:default"] as? [String: Any])?["key"] as? String) ?? ""
+        providerKeys[DirectProviderChoice.bailian.rawValue] = bailianKey
         providerKeys[DirectProviderChoice.kimiCoding.rawValue] = kimiKey
         providerKeys[DirectProviderChoice.minimax.rawValue] = minimaxKey
         providerKeys[DirectProviderChoice.qiniu.rawValue] = qiniuKey
@@ -884,6 +904,7 @@ struct ProviderModelConfigCore: View {
     /// 推算当前选择将要设置的主模型 ID
     private func resolveNewPrimary() -> String {
         switch selectedProvider {
+        case .bailian: return selectedBailianModelId
         case .kimiCoding: return selectedKimiModelId
         case .minimax: return selectedMinimaxModelId
         case .qiniu: return selectedQiniuModelId
@@ -906,63 +927,27 @@ struct ProviderModelConfigCore: View {
         showGlobalPoolPrompt = false
 
         do {
-            // IMPORTANT:
-            // Qiniu must keep legacy direct config-file writes.
-            // OpenClaw does not provide built-in Qiniu models, and we rely on explicit file fields.
-            // Do NOT migrate this provider to gatewayHub.configPatch().
-            if selectedProvider == .qiniu {
-                try await applyQiniuLegacyConfig(apiKey: apiKey, action: action)
-                isRestartingGateway = true
-                gatewayHub.markPendingStart(username: user.username)
-                try await helperClient.restartGateway(username: user.username)
-                saveMessage = L10n.k("user.detail.auto.configuration", fallback: "配置已应用")
-
-                // 刷新当前模型显示
-                let newStatus = await helperClient.getModelsStatus(username: user.username)
-                currentDefaultModel = newStatus?.resolvedDefault ?? newStatus?.defaultModel
-                currentFallbackModels = newStatus?.fallbacks ?? []
-
-                let resolvedModel = resolveNewPrimary()
-                recordLastSaved(apiKey: apiKey, modelId: resolvedModel)
-                onSaved?(resolvedModel)
-                return
-            }
-
             // 1. 构建 config patch + 同步 agent 文件
             let (patch, agentFileSync) = try await buildProviderPatch(apiKey: apiKey)
 
-            // 2. 优先走 WebSocket config.patch；Gateway 未连接时回退到本地直写
-            do {
-                let (cfg, baseHash) = try await gatewayHub.configGetFull(username: user.username)
-                var mergedPatch = mergePatchWithExistingAliases(patch: patch, existingConfig: cfg)
-                applyOldModelAction(action, to: &mergedPatch, existingConfig: cfg)
+            // 2. 仅使用 WebSocket config.patch；失败时直接报错（不再回退本地直写）
+            let (cfg, baseHash) = try await gatewayHub.configGetFull(username: user.username)
+            var mergedPatch = mergePatchWithExistingAliases(patch: patch, existingConfig: cfg)
+            applyOldModelAction(action, to: &mergedPatch, existingConfig: cfg)
 
-                let (noop, _) = try await gatewayHub.configPatch(
-                    username: user.username,
-                    patch: mergedPatch,
-                    baseHash: baseHash,
-                    note: "ClawdHome: apply \(selectedProvider.title) config"
-                )
+            let (noop, _) = try await gatewayHub.configPatch(
+                username: user.username,
+                patch: mergedPatch,
+                baseHash: baseHash,
+                note: "ClawdHome: apply \(selectedProvider.title) config"
+            )
 
-                // 3. 同步 agent 目录文件
-                try await agentFileSync()
+            // 3. 同步 agent 目录文件
+            try await agentFileSync()
 
-                if !noop {
-                    isRestartingGateway = true
-                    gatewayHub.markPendingStart(username: user.username)
-                }
-            } catch {
-                guard isGatewayConnectivityError(error) else { throw error }
-                let cfg = await helperClient.getConfigJSON(username: user.username)
-                var mergedPatch = mergePatchWithExistingAliases(patch: patch, existingConfig: cfg)
-                applyOldModelAction(action, to: &mergedPatch, existingConfig: cfg)
-
-                try await applyPatchDirect(mergedPatch, existingConfig: cfg)
-                try await agentFileSync()
-
+            if !noop {
                 isRestartingGateway = true
                 gatewayHub.markPendingStart(username: user.username)
-                try await helperClient.restartGateway(username: user.username)
             }
             saveMessage = L10n.k("user.detail.auto.configuration", fallback: "配置已应用")
 
@@ -975,7 +960,7 @@ struct ProviderModelConfigCore: View {
             recordLastSaved(apiKey: apiKey, modelId: resolvedModel)
             onSaved?(resolvedModel)
         } catch {
-            saveError = error.localizedDescription
+            saveError = debugErrorMessage(error)
         }
     }
 
@@ -985,6 +970,12 @@ struct ProviderModelConfigCore: View {
         lastSavedModelIds = [modelId]
 
         switch selectedProvider {
+        case .bailian:
+            lastSavedProviderGroupId = "bailian"
+            lastSavedProviderDisplayName = "阿里云百炼"
+            lastSavedCustomProviderId = nil
+            lastSavedCustomBaseURL = nil
+            lastSavedCustomAPIType = nil
         case .qiniu:
             lastSavedProviderGroupId = "qiniu"
             lastSavedProviderDisplayName = "Qiniu AI"
@@ -1055,104 +1046,68 @@ struct ProviderModelConfigCore: View {
         patch["agents"] = agentsPatch
     }
 
-    /// Gateway 掉线时，按 merge-patch 语义在本地合成并直写变更的顶层键
-    private func applyPatchDirect(_ patch: [String: Any], existingConfig: [String: Any]) async throws {
-        let merged = mergeJSON(base: existingConfig, patch: patch)
-        for key in patch.keys.sorted() {
-            guard let value = merged[key] else { continue }
-            try await helperClient.setConfigDirect(username: user.username, path: key, value: value)
+    private func buildBailianPatch(apiKey: String) async throws -> ([String: Any], () async throws -> Void) {
+        let providerModels = builtInModels(for: "bailian").map(\.providerModelConfig)
+        let patch: [String: Any] = [
+            "models": [
+                "mode": "merge",
+                "providers": ["bailian": [
+                    "baseUrl": "https://coding.dashscope.aliyuncs.com/v1",
+                    "apiKey": apiKey,
+                    "api": "openai-completions",
+                    "models": providerModels,
+                ] as [String: Any]],
+            ] as [String: Any],
+            "auth": ["profiles": ["bailian:default": ["provider": "bailian", "mode": "api_key"]]],
+            "agents": ["defaults": [
+                "model": ["primary": selectedBailianModelId],
+            ] as [String: Any]],
+        ]
+        let sync: () async throws -> Void = { [self] in
+            try await syncBailianAgentFiles(apiKey: apiKey, providerModels: providerModels)
         }
+        return (patch, sync)
     }
 
-    private func mergeJSON(base: [String: Any], patch: [String: Any]) -> [String: Any] {
-        var result = base
-        for (key, patchValue) in patch {
-            if patchValue is NSNull {
-                result.removeValue(forKey: key)
-                continue
-            }
-            if let patchObject = patchValue as? [String: Any] {
-                let baseObject = result[key] as? [String: Any] ?? [:]
-                result[key] = mergeJSON(base: baseObject, patch: patchObject)
-            } else {
-                result[key] = patchValue
-            }
-        }
-        return result
+    private func syncBailianAgentFiles(apiKey: String, providerModels: [[String: Any]]) async throws {
+        let agentDir = ".openclaw/agents/main/agent"
+        try await helperClient.createDirectory(username: user.username, relativePath: agentDir)
+
+        var authProfilesRoot = await readUserJSON(relativePath: "\(agentDir)/auth-profiles.json")
+        var profiles = (authProfilesRoot["profiles"] as? [String: Any]) ?? [:]
+        profiles["bailian:default"] = [
+            "type": "api_key",
+            "provider": "bailian",
+            "key": apiKey,
+        ]
+        authProfilesRoot["version"] = (authProfilesRoot["version"] as? Int) ?? 1
+        authProfilesRoot["profiles"] = profiles
+        try await writeUserJSON(authProfilesRoot, relativePath: "\(agentDir)/auth-profiles.json")
+
+        var modelsRoot = await readUserJSON(relativePath: "\(agentDir)/models.json")
+        var providers = (modelsRoot["providers"] as? [String: Any]) ?? [:]
+        providers["bailian"] = [
+            "baseUrl": "https://coding.dashscope.aliyuncs.com/v1",
+            "api": "openai-completions",
+            "models": providerModels,
+        ]
+        modelsRoot["providers"] = providers
+        try await writeUserJSON(modelsRoot, relativePath: "\(agentDir)/models.json")
     }
 
     /// Qiniu 配置必须保持 v1.6.0 的 legacy 直写方式（setConfigDirect）。
     /// 背景：OpenClaw 没有内置 Qiniu 模型；统一 patch 流程可能在后续 schema/迁移中覆盖掉这类外部模型配置。
     /// 维护要求：请勿替换为 gatewayHub.configPatch。
-    private func applyQiniuLegacyConfig(apiKey: String, action: OldModelAction) async throws {
-        let config = await helperClient.getConfigJSON(username: user.username)
-        let qiniuModels = builtInModels(for: "qiniu")
-        let providerModels = qiniuModels.map(\.providerModelConfig)
-        let newPrimary = selectedQiniuModelId
-
-        var normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: newPrimary)
-        var fallbacks = (normalizedModelConfig["fallbacks"] as? [String]) ?? []
-        fallbacks.removeAll { $0 == newPrimary }
-        if let oldPrimary = currentDefaultModel, !oldPrimary.isEmpty {
-            fallbacks.removeAll { $0 == oldPrimary }
-            if action == .keepAsFallback {
-                fallbacks.insert(oldPrimary, at: 0)
-            }
-        }
-        if fallbacks.isEmpty {
-            normalizedModelConfig.removeValue(forKey: "fallbacks")
-        } else {
-            normalizedModelConfig["fallbacks"] = fallbacks
-        }
-
-        var aliasMap = ((((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:])
-        for model in qiniuModels {
-            var aliasConfig = (aliasMap[model.id] as? [String: Any]) ?? [:]
-            aliasConfig["alias"] = model.label
-            aliasMap[model.id] = aliasConfig
-        }
-
-        try await helperClient.setConfigDirect(username: user.username, path: "env.QINIU_API_KEY", value: apiKey)
-        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "models.providers.qiniu",
-            value: [
-                "baseUrl": "https://api.qnaigc.com/v1",
-                "apiKey": "${QINIU_API_KEY}",
-                "api": "openai-completions",
-                "models": providerModels,
-            ]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "auth.profiles.qiniu:default",
-            value: ["provider": "qiniu", "mode": "api_key"]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "agents.defaults.model",
-            value: normalizedModelConfig
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "agents.defaults.models",
-            value: aliasMap
-        )
-
-        try await syncQiniuAgentFiles(apiKey: apiKey, providerModels: providerModels)
-    }
-
     /// 构建 provider 配置 patch 和 agent 文件同步闭包
     private func buildProviderPatch(apiKey: String) async throws -> (patch: [String: Any], agentFileSync: () async throws -> Void) {
         switch selectedProvider {
+        case .bailian:
+            return try await buildBailianPatch(apiKey: apiKey)
         case .kimiCoding:
             return try await buildKimiPatch(apiKey: apiKey)
         case .minimax:
             return try await buildMinimaxPatch(apiKey: apiKey)
         case .qiniu:
-            // NOTE: 正常应用流程由 doApplyConfig 的 qiniu legacy 分支处理。
-            // 这里保留仅用于兼容/回退，勿作为默认路径。
             return try await buildQiniuPatch(apiKey: apiKey)
         case .zai:
             return try await buildZAIPatch(apiKey: apiKey)
@@ -1313,6 +1268,12 @@ struct ProviderModelConfigCore: View {
         // 根据提供商构建新的 alias
         var aliasMap = existingAliases ?? [:]
         switch selectedProvider {
+        case .bailian:
+            for model in builtInModels(for: "bailian") {
+                var a = (aliasMap[model.id] as? [String: Any]) ?? [:]
+                a["alias"] = model.label
+                aliasMap[model.id] = a
+            }
         case .minimax:
             var a = (aliasMap[selectedMinimaxModelId] as? [String: Any]) ?? [:]
             a["alias"] = a["alias"] ?? "Minimax"
@@ -1380,8 +1341,15 @@ struct ProviderModelConfigCore: View {
             }
             customModelFetchMessage = L10n.f("views.detail.custom_fetch_success", fallback: "已拉取 %d 个模型", ids.count)
         } catch {
-            customModelFetchError = error.localizedDescription
+            customModelFetchError = debugErrorMessage(error)
         }
+    }
+
+    private func debugErrorMessage(_ error: Error) -> String {
+        let nsError = error as NSError
+        let typeName = String(describing: type(of: error))
+        let reason = nsError.localizedFailureReason ?? nsError.localizedDescription
+        return "[\(typeName)] code=\(nsError.code) \(reason)"
     }
 
     private func syncMinimaxAgentFiles(apiKey: String, providerModels: [[String: Any]]) async throws {

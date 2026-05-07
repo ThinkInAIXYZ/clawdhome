@@ -152,7 +152,7 @@ struct AddProviderModelSheet: View {
                     }
                 }
             }
-            .padding(.horizontal, 16).padding(.vertical, 10)
+            .padding(.horizontal, 20).padding(.vertical, 10)
 
             Divider()
 
@@ -409,7 +409,7 @@ struct AddProviderModelSheet: View {
                 }
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
+        .padding(.horizontal, 20).padding(.vertical, 10)
     }
 
     // MARK: - 提交
@@ -567,6 +567,9 @@ struct AddProviderModelSheet: View {
         if isCustomGroup {
             let base = customBaseURLTrimmed
             return (base.isEmpty ? nil : base, customAPIType, false)
+        }
+        if modelId.hasPrefix("bailian/") {
+            return ("https://coding.dashscope.aliyuncs.com/v1", "openai-completions", false)
         }
         if modelId.hasPrefix("minimax/") {
             return ("https://api.minimaxi.com/anthropic", "anthropic-messages", true)

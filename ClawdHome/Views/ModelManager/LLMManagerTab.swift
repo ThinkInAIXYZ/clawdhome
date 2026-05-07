@@ -8,6 +8,7 @@ struct LLMManagerTab: View {
     @State private var showAddSheet = false
     @State private var editingProvider: ProviderTemplate? = nil
     @State private var deleteConfirmId: UUID? = nil
+    @State private var configuredSecretKeys: Set<String> = []
 
     private var deleteTarget: ProviderTemplate? {
         guard let id = deleteConfirmId else { return nil }
@@ -70,6 +71,10 @@ struct LLMManagerTab: View {
         .sheet(item: $editingProvider) { provider in
             AddProviderModelSheet(editing: provider)
         }
+        .task { refreshConfiguredSecrets() }
+        .onChange(of: modelStore.revision) { _, _ in
+            refreshConfiguredSecrets()
+        }
         .alert(L10n.f("views.model_manager.llmmanager_tab.delete_confirm", fallback: "删除「%@」？", deleteTarget?.name ?? ""),
                isPresented: Binding(
                    get: { deleteConfirmId != nil },
@@ -118,7 +123,8 @@ struct LLMManagerTab: View {
                 Text(L10n.f("views.model_manager.llmmanager_tab.text_498748aa", fallback: "· %@ 个型号", String(describing: provider.modelIds.count)))
                     .font(.caption).foregroundStyle(.secondary)
                 // 凭据状态
-                let hasKey = AccountKeychain.hasCredential(for: provider.id)
+                let secretKey = "\(provider.providerGroupId):\(provider.name)"
+                let hasKey = configuredSecretKeys.contains(secretKey)
                 Image(systemName: hasKey ? "key.fill" : "key")
                     .font(.caption2)
                     .foregroundStyle(hasKey ? Color.accentColor : Color.secondary.opacity(0.4))
@@ -137,5 +143,9 @@ struct LLMManagerTab: View {
                 .help(L10n.k("views.model_manager.llmmanager_tab.account_78fbf7", fallback: "移除该账户"))
             }
         }
+    }
+
+    private func refreshConfiguredSecrets() {
+        configuredSecretKeys = Set(GlobalSecretsStore.shared.allEntries().map(\.secretKey))
     }
 }
