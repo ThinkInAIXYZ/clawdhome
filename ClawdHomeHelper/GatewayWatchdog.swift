@@ -56,7 +56,7 @@ final class GatewayWatchdog {
             }
 
             helperLog("[watchdog] detected unexpected gateway exit @\(user.username); restarting", level: .error)
-            GatewayLog.log("WATCHDOG_RESTART", username: user.username, detail: "unexpected exit detected; auto-restarting")
+            helperLog("[GatewayManager] WATCHDOG_RESTART: unexpected exit detected; auto-restarting @\(user.username)")
             do {
                 try GatewayManager.startGateway(username: user.username, uid: user.uid)
                 clearRetry(username: user.username)
@@ -64,7 +64,7 @@ final class GatewayWatchdog {
                 let retryInterval = retryIntervalForRestartFailure(error)
                 let level: LogLevel = retryInterval >= 120 ? .warn : .error
                 helperLog("[watchdog] restart failed @\(user.username): \(error.localizedDescription)", level: level)
-                GatewayLog.log("WATCHDOG_RESTART_FAIL", username: user.username, detail: error.localizedDescription)
+                helperLog("[GatewayManager] WATCHDOG_RESTART_FAIL: \(error.localizedDescription) @\(user.username)", level: .error)
                 setRetry(username: user.username, date: now.addingTimeInterval(retryInterval))
             }
         }
