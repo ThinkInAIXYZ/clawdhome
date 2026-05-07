@@ -251,7 +251,7 @@ actor GatewayClient {
     }
 
     private func serializeJSON(_ value: Any) throws -> String {
-        let data = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+        let data = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .withoutEscapingSlashes])
         guard let json = String(data: data, encoding: .utf8) else {
             throw GatewayClientError.encodingError(
                 NSError(domain: "GatewayClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "UTF-8 encoding failed"])
@@ -441,11 +441,12 @@ actor GatewayClient {
         return try JSONDecoder().decode(GatewaySkillsStatusReport.self, from: data)
     }
 
-    func skillsInstall(skillKey: String, optionId: String) async throws -> GatewaySkillInstallResult {
-        guard let payload = try await request(method: "skills.install", params: ["skillKey": skillKey, "optionId": optionId]),
-              let resultDict = payload["result"] as? [String: Any]
-        else { throw GatewayClientError.requestFailed(code: nil, message: "skills.install returned no result") }
-        let data = try JSONSerialization.data(withJSONObject: resultDict)
+    /// 安装 skill（本地 installer）
+    func skillsInstall(name: String, installId: String, timeoutMs: Int = 300_000) async throws -> GatewaySkillInstallResult {
+        let params: [String: Any] = ["name": name, "installId": installId, "timeoutMs": timeoutMs]
+        guard let payload = try await request(method: "skills.install", params: params)
+        else { throw GatewayClientError.requestFailed(code: nil, message: "skills.install returned nil") }
+        let data = try JSONSerialization.data(withJSONObject: payload)
         return try JSONDecoder().decode(GatewaySkillInstallResult.self, from: data)
     }
 
@@ -453,8 +454,18 @@ actor GatewayClient {
         _ = try await request(method: "skills.remove", params: ["skillKey": skillKey])
     }
 
-    func skillsUpdate(skillKey: String) async throws -> GatewaySkillUpdateResult {
-        guard let payload = try await request(method: "skills.update", params: ["skillKey": skillKey]) else {
+    /// 更新 skill 配置（启用/禁用、API Key、环境变量）
+    func skillsUpdate(
+        skillKey: String,
+        enabled: Bool? = nil,
+        apiKey: String? = nil,
+        env: [String: String]? = nil
+    ) async throws -> GatewaySkillUpdateResult {
+        var params: [String: Any] = ["skillKey": skillKey]
+        if let enabled { params["enabled"] = enabled }
+        if let apiKey { params["apiKey"] = apiKey }
+        if let env, !env.isEmpty { params["env"] = env }
+        guard let payload = try await request(method: "skills.update", params: params) else {
             throw GatewayClientError.requestFailed(code: nil, message: "skills.update returned nil")
         }
         let data = try JSONSerialization.data(withJSONObject: payload)

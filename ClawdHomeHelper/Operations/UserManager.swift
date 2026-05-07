@@ -152,10 +152,18 @@ struct UserManager {
     static func prepareDeleteUser(username: String) {
         if let uid = try? UserManager.uid(for: username) {
             helperLog("用户删除预清理 @\(username): 停止 Gateway (uid=\(uid))")
-            _ = try? GatewayManager.stopGateway(username: username, uid: uid)
+            do {
+                try GatewayManager.stopGateway(username: username, uid: uid)
+            } catch {
+                helperLog("stopGateway failed during prepareDeleteUser @\(username): \(error.localizedDescription)", level: .warn)
+            }
         }
         // 无论是否能读取到 uid，都按用户名卸载 launchd 服务与 plist，避免启动项残留
-        _ = try? GatewayManager.uninstallGateway(username: username)
+        do {
+            try GatewayManager.uninstallGateway(username: username)
+        } catch {
+            helperLog("uninstallGateway failed during prepareDeleteUser @\(username): \(error.localizedDescription)", level: .warn)
+        }
         removeFromAllGroups(username: username)
     }
 
@@ -191,7 +199,9 @@ struct UserManager {
                 let tokens = line.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
                 guard let groupName = tokens.first,
                       Array(tokens.dropFirst()).contains(username) else { continue }
-                _ = try? dscl(["-delete", "/Groups/\(groupName)", "GroupMembership", username])
+                if (try? dscl(["-delete", "/Groups/\(groupName)", "GroupMembership", username])) == nil {
+                    helperLog("dscl -delete GroupMembership \(groupName) failed for @\(username)", level: .warn)
+                }
                 helperLog("用户删除预清理 @\(username): 从群组 \(groupName) 移除 (GroupMembership)")
             }
         }
@@ -203,7 +213,9 @@ struct UserManager {
                 let tokens = line.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
                 guard let groupName = tokens.first,
                       Array(tokens.dropFirst()).contains(guid) else { continue }
-                _ = try? dscl(["-delete", "/Groups/\(groupName)", "GroupMembers", guid])
+                if (try? dscl(["-delete", "/Groups/\(groupName)", "GroupMembers", guid])) == nil {
+                    helperLog("dscl -delete GroupMembers \(groupName) failed for @\(username)", level: .warn)
+                }
                 helperLog("用户删除预清理 @\(username): 从群组 \(groupName) 移除 (GroupMembers)")
             }
         }

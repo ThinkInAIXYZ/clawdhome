@@ -83,7 +83,6 @@ targets:
     sources:
       - path: ClawdHomeHelper
       - path: Shared
-      - path: Shared/ProcessModels.swift
       - path: ClawdHomeHelper/GeneratedVersion.swift
         optional: true
         type: file

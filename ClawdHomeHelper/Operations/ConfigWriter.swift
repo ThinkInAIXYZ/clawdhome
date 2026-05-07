@@ -100,8 +100,14 @@ struct ConfigWriter {
         // 验证修复后是合法 JSON 再写回
         guard let repaired = content.data(using: .utf8),
               (try? JSONSerialization.jsonObject(with: repaired)) != nil else { return }
-        try? repaired.write(to: URL(fileURLWithPath: configPath))
-        _ = try? run("/usr/sbin/chown", args: [username, configPath])
+        do {
+            try repaired.write(to: URL(fileURLWithPath: configPath))
+        } catch {
+            helperLog("repairConfig write failed for \(configPath): \(error.localizedDescription)", level: .warn)
+        }
+        if (try? run("/usr/sbin/chown", args: [username, configPath])) == nil {
+            helperLog("chown \(configPath) to \(username) failed after config repair", level: .warn)
+        }
     }
 
     // MARK: - 内部工具

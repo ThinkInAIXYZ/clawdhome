@@ -9998,13 +9998,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Never checked"
+            "value": "Check"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "从未体检"
+            "value": "体检"
           }
         }
       }
@@ -11840,6 +11840,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "是"
+          }
+        }
+      }
+    },
+    "user.detail.process.mem": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MEM"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内存"
           }
         }
       }

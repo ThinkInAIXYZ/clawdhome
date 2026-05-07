@@ -13,6 +13,8 @@ enum GatewayStartDiagnosis {
 @Observable
 final class HelperClient {
     private var controlConnection: NSXPCConnection?
+    /// Gateway 生命周期操作专用连接，避免与通用控制调用互相阻塞
+    private var gatewayConnection: NSXPCConnection?
     private var dashboardConnection: NSXPCConnection?
     /// 专用于长时间安装/升级操作，避免阻塞 controlConnection 上的其他 XPC 调用
     private var installConnection: NSXPCConnection?
@@ -24,10 +26,17 @@ final class HelperClient {
     private var personaReadConnection: NSXPCConnection?
     private(set) var isConnected: Bool = false
 
+    /// 连接世代计数器：每次 connect()/disconnect() 递增。
+    /// invalidationHandler 捕获创建时的世代值，仅当世代匹配时才修改 isConnected，
+    /// 防止旧连接的异步回调干扰新连接状态。
+    private var connectionGeneration: UInt64 = 0
+    /// 当前是否有连接探针在进行；用于避免重复 connect() 互相 invalidate 造成重连风暴。
+    private var verifyInFlightGeneration: UInt64?
+
     // MARK: - XPC 超时常量
 
-    /// 普通操作默认超时（30 秒，适用于简单读写和状态查询）
-    private static let xpcDefaultTimeout: Duration = .seconds(30)
+    /// 普通操作默认超时（35 秒，适用于简单读写和状态查询）
+    private static let xpcDefaultTimeout: Duration = .seconds(35)
     /// 命令执行类超时（5 分钟，CLI 命令可能涉及网络请求）
     private static let xpcCommandTimeout: Duration = .seconds(300)
     /// 安装类操作超时（10 分钟，npm install / brew install / 大文件下载）
@@ -35,44 +44,97 @@ final class HelperClient {
 
     // MARK: - 私有：创建 XPC 连接
 
-    private func makeConnection(label: String) -> NSXPCConnection {
+    private func makeConnection(label: String, generation: UInt64, affectsConnectivity: Bool = false) -> NSXPCConnection {
         let conn = NSXPCConnection(machServiceName: kHelperMachServiceName, options: .privileged)
         conn.remoteObjectInterface = NSXPCInterface(with: ClawdHomeHelperProtocol.self)
         conn.invalidationHandler = { [weak self] in
-            os_log(.error, "[HelperClient] %{public}@ invalidated — Helper 可能已终止", label)
+            os_log(.error, "[HelperClient] %{public}@ invalidated (gen=%llu)", label, generation)
+            appLog("[HelperClient] \(label) invalidated (gen=\(generation))", level: .warn)
             DispatchQueue.main.async {
-                self?.isConnected = false
+                guard let self, self.connectionGeneration == generation else { return }
+                self.clearConnection(label: label, generation: generation)
+                if affectsConnectivity {
+                    os_log(.error, "[HelperClient] %{public}@ invalidated → 标记断连 (gen=%llu)", label, generation)
+                    appLog("[HelperClient] \(label) invalidated -> disconnected (gen=\(generation))", level: .warn)
+                    self.isConnected = false
+                    if self.verifyInFlightGeneration == generation {
+                        self.verifyInFlightGeneration = nil
+                    }
+                } else {
+                    os_log(.info, "[HelperClient] %{public}@ invalidated → 将按需重建通道 (gen=%llu)", label, generation)
+                    appLog("[HelperClient] \(label) invalidated -> will recreate on demand (gen=\(generation))")
+                }
             }
         }
-        conn.interruptionHandler = { [weak self] in
-            os_log(.info, "[HelperClient] %{public}@ interrupted — 自动恢复中", label)
-            _ = self  // suppress unused warning
+        conn.interruptionHandler = {
+            os_log(.info, "[HelperClient] %{public}@ interrupted — XPC 自动恢复中 (gen=%llu)", label, generation)
         }
         conn.resume()
         return conn
     }
 
-    func connect() {
+    private func clearConnection(label: String, generation: UInt64) {
+        guard connectionGeneration == generation else { return }
+        switch label {
+        case "control": controlConnection = nil
+        case "gateway": gatewayConnection = nil
+        case "dashboard": dashboardConnection = nil
+        case "install": installConnection = nil
+        case "file": fileConnection = nil
+        case "process": processConnection = nil
+        case "personaRead": personaReadConnection = nil
+        default: break
+        }
+    }
+
+    func connect(
+        reason: String? = nil,
+        fileID: String = #fileID,
+        function: String = #function,
+        line: Int = #line
+    ) {
+        let source = reason ?? "\(fileID):\(line) \(function)"
+        if let inflight = verifyInFlightGeneration {
+            os_log(
+                .info,
+                "[HelperClient] connect() skipped: verify in-flight (gen=%llu, source=%{public}@)",
+                inflight,
+                source
+            )
+            appLog("[HelperClient] connect() skipped: verify in-flight (gen=\(inflight), source=\(source))")
+            return
+        }
+        // 递增世代，使所有旧连接的回调失效
+        connectionGeneration &+= 1
+        let gen = connectionGeneration
+        verifyInFlightGeneration = gen
+        os_log(.info, "[HelperClient] connect() gen=%llu source=%{public}@", gen, source)
+        appLog("[HelperClient] connect() gen=\(gen) source=\(source)")
+
         // 先清理旧连接
         controlConnection?.invalidate()
+        gatewayConnection?.invalidate()
         dashboardConnection?.invalidate()
         installConnection?.invalidate()
         fileConnection?.invalidate()
         processConnection?.invalidate()
         personaReadConnection?.invalidate()
 
-        controlConnection = makeConnection(label: "control")
-        dashboardConnection = makeConnection(label: "dashboard")
-        installConnection = makeConnection(label: "install")
-        fileConnection = makeConnection(label: "file")
-        processConnection = makeConnection(label: "process")
-        personaReadConnection = makeConnection(label: "personaRead")
-        // 不再依赖 invalidationHandler 判断连接状态，改用主动探测
-        verifyConnection()
+        controlConnection = makeConnection(label: "control", generation: gen, affectsConnectivity: true)
+        gatewayConnection = makeConnection(label: "gateway", generation: gen)
+        dashboardConnection = makeConnection(label: "dashboard", generation: gen)
+        installConnection = makeConnection(label: "install", generation: gen)
+        fileConnection = makeConnection(label: "file", generation: gen)
+        processConnection = makeConnection(label: "process", generation: gen)
+        personaReadConnection = makeConnection(label: "personaRead", generation: gen)
+        verifyConnection(generation: gen, source: source)
     }
 
     func disconnect() {
+        connectionGeneration &+= 1
+        verifyInFlightGeneration = nil
         controlConnection?.invalidate(); controlConnection = nil
+        gatewayConnection?.invalidate(); gatewayConnection = nil
         dashboardConnection?.invalidate(); dashboardConnection = nil
         installConnection?.invalidate(); installConnection = nil
         fileConnection?.invalidate(); fileConnection = nil
@@ -82,17 +144,108 @@ final class HelperClient {
     }
 
     /// 通过真实 XPC 调用验证 Helper 可达，而非依赖连接对象状态
-    private func verifyConnection() {
-        guard let proxy = controlConnection?.remoteObjectProxyWithErrorHandler({ [weak self] error in
-            os_log(.error, "[HelperClient] verify probe failed: %{public}@", error.localizedDescription)
-            DispatchQueue.main.async { self?.isConnected = false }
+    private func verifyConnection(generation: UInt64, source: String) {
+        let lock = NSLock()
+        var finished = false
+        var fallbackStarted = false
+
+        func finish(_ connected: Bool, _ message: String) {
+            lock.lock()
+            let shouldApply = !finished
+            if shouldApply { finished = true }
+            lock.unlock()
+            guard shouldApply else { return }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.connectionGeneration == generation else { return }
+                if connected {
+                    os_log(
+                        .info,
+                        "[HelperClient] verify probe ok (gen=%llu, source=%{public}@)",
+                        generation,
+                        source
+                    )
+                    appLog("[HelperClient] verify probe ok (gen=\(generation), source=\(source))")
+                } else {
+                    os_log(
+                        .error,
+                        "[HelperClient] verify probe failed: %{public}@ (gen=%llu, source=%{public}@)",
+                        message,
+                        generation,
+                        source
+                    )
+                    appLog(
+                        "[HelperClient] verify probe failed: \(message) (gen=\(generation), source=\(source))",
+                        level: .warn
+                    )
+                }
+                // 超时类失败在长阻塞任务（如 install/diagnostics）期间可能是“假断连”。
+                // 若当前已连接，则保持连接状态，避免 maintainConnection 触发重连风暴。
+                if connected {
+                    self.isConnected = true
+                } else {
+                    let lower = message.lowercased()
+                    let isTimeout = lower.contains("timeout") || message.contains("超时")
+                    if self.isConnected && isTimeout {
+                        appLog(
+                            "[HelperClient] verify timeout ignored (keep connected) (gen=\(generation), source=\(source))"
+                        )
+                    } else {
+                        self.isConnected = false
+                    }
+                }
+                if self.verifyInFlightGeneration == generation {
+                    self.verifyInFlightGeneration = nil
+                }
+            }
+        }
+
+        func startFallback(primaryMessage: String) {
+            lock.lock()
+            let shouldStart = !finished && !fallbackStarted
+            if shouldStart { fallbackStarted = true }
+            lock.unlock()
+            guard shouldStart else { return }
+
+            os_log(
+                .info,
+                "[HelperClient] verify primary probe failed, fallback to getGatewayStatus (gen=%llu, source=%{public}@)",
+                generation,
+                source
+            )
+            appLog(
+                "[HelperClient] verify primary probe failed -> fallback getGatewayStatus (gen=\(generation), source=\(source), reason=\(primaryMessage))"
+            )
+
+            guard let fallbackProxy = controlConnection?.remoteObjectProxyWithErrorHandler({ error in
+                finish(false, "fallback proxy error: \(error.localizedDescription); primary: \(primaryMessage)")
+            }) as? any ClawdHomeHelperProtocol else {
+                finish(false, "fallback proxy unavailable; primary: \(primaryMessage)")
+                return
+            }
+
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 8) {
+                finish(false, "fallback timeout (8s); primary: \(primaryMessage)")
+            }
+
+            fallbackProxy.getGatewayStatus(username: "__probe__") { _, _ in
+                finish(true, "")
+            }
+        }
+
+        guard let proxy = controlConnection?.remoteObjectProxyWithErrorHandler({ error in
+            startFallback(primaryMessage: error.localizedDescription)
         }) as? any ClawdHomeHelperProtocol else {
-            isConnected = false
+            finish(false, "control proxy unavailable")
             return
         }
-        // 用一个轻量调用探测：获取任意用户的 gateway 状态（不存在的用户也能快速返回）
-        proxy.getGatewayStatus(username: "__probe__") { [weak self] _, _ in
-            DispatchQueue.main.async { self?.isConnected = true }
+
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 4) {
+            startFallback(primaryMessage: "probe timeout (4s)")
+        }
+
+        proxy.getVersion { _ in
+            finish(true, "")
         }
     }
 
@@ -107,27 +260,56 @@ final class HelperClient {
     }
 
     private var controlProxy: (any ClawdHomeHelperProtocol)? {
-        proxyWithLogging(controlConnection)
+        if controlConnection == nil, isConnected {
+            controlConnection = makeConnection(
+                label: "control",
+                generation: connectionGeneration,
+                affectsConnectivity: true
+            )
+        }
+        return proxyWithLogging(controlConnection)
+    }
+
+    private var gatewayProxy: (any ClawdHomeHelperProtocol)? {
+        if gatewayConnection == nil, isConnected {
+            gatewayConnection = makeConnection(label: "gateway", generation: connectionGeneration)
+        }
+        return proxyWithLogging(gatewayConnection)
     }
 
     private var dashboardProxy: (any ClawdHomeHelperProtocol)? {
-        proxyWithLogging(dashboardConnection)
+        if dashboardConnection == nil, isConnected {
+            dashboardConnection = makeConnection(label: "dashboard", generation: connectionGeneration)
+        }
+        return proxyWithLogging(dashboardConnection)
     }
 
     private var installProxy: (any ClawdHomeHelperProtocol)? {
-        proxyWithLogging(installConnection)
+        if installConnection == nil, isConnected {
+            installConnection = makeConnection(label: "install", generation: connectionGeneration)
+        }
+        return proxyWithLogging(installConnection)
     }
 
     private var fileProxy: (any ClawdHomeHelperProtocol)? {
-        proxyWithLogging(fileConnection)
+        if fileConnection == nil, isConnected {
+            fileConnection = makeConnection(label: "file", generation: connectionGeneration)
+        }
+        return proxyWithLogging(fileConnection)
     }
 
     private var processProxy: (any ClawdHomeHelperProtocol)? {
-        proxyWithLogging(processConnection)
+        if processConnection == nil, isConnected {
+            processConnection = makeConnection(label: "process", generation: connectionGeneration)
+        }
+        return proxyWithLogging(processConnection)
     }
 
     private var personaReadProxy: (any ClawdHomeHelperProtocol)? {
-        proxyWithLogging(personaReadConnection)
+        if personaReadConnection == nil, isConnected {
+            personaReadConnection = makeConnection(label: "personaRead", generation: connectionGeneration)
+        }
+        return proxyWithLogging(personaReadConnection)
     }
 
     // MARK: - XPC 调用超时基础设施
@@ -153,8 +335,11 @@ final class HelperClient {
                 continuation.resume(with: result)
             }
 
-            // 超时路径
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Double(timeout.components.seconds)) {
+            let requestedSeconds = max(1, Int(timeout.components.seconds))
+            let effectiveSeconds = XPCTimeoutPolicy.effectiveTimeoutSeconds(requested: requestedSeconds)
+
+            // 超时路径（基础超时 + 冗余缓冲，减少误伤）
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Double(effectiveSeconds)) {
                 resumeOnce(with: .failure(HelperError.operationFailed(timeoutMessage)))
             }
 
@@ -170,15 +355,17 @@ final class HelperClient {
         timeout: Duration = HelperClient.xpcDefaultTimeout,
         operation: @escaping (@escaping (T) -> Void) -> Void
     ) async throws -> T {
-        try await requestWithTimeout(
+        let requestedSeconds = max(1, Int(timeout.components.seconds))
+        let effectiveSeconds = XPCTimeoutPolicy.effectiveTimeoutSeconds(requested: requestedSeconds)
+        return try await requestWithTimeout(
             timeout: timeout,
-            timeoutMessage: "XPC 调用超时（\(Int(timeout.components.seconds))s）",
+            timeoutMessage: "XPC 调用超时（\(effectiveSeconds)s，基础 \(requestedSeconds)s + 冗余 \(effectiveSeconds - requestedSeconds)s）",
             operation: operation
         )
     }
 
     private func isGatewayRunningQuickly(username: String) async -> Bool {
-        guard let proxy = controlProxy else { return false }
+        guard let proxy = gatewayProxy else { return false }
         do {
             let (running, _): (Bool, Int32) = try await xpcCall(timeout: .seconds(3)) { done in
                 proxy.getGatewayStatus(username: username) { running, pid in
@@ -309,11 +496,11 @@ final class HelperClient {
     // MARK: - Gateway 管理
 
     func startGateway(username: String) async throws {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?)
         do {
             (ok, msg) = try await requestWithTimeout(
-                timeout: .seconds(25),
+                timeout: .seconds(35),
                 timeoutMessage: L10n.k(
                     "services.helper_client.gateway_start_timeout",
                     fallback: "启动 Gateway 超时，请检查 Helper 日志后重试"
@@ -345,7 +532,7 @@ final class HelperClient {
     }
 
     func stopGateway(username: String) async throws {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = try await xpcCall { done in
             proxy.stopGateway(username: username) { ok, msg in done((ok, msg)) }
         }
@@ -353,7 +540,7 @@ final class HelperClient {
     }
 
     func restartGateway(username: String) async throws {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = try await xpcCall { done in
             proxy.restartGateway(username: username) { ok, msg in done((ok, msg)) }
         }
@@ -363,7 +550,7 @@ final class HelperClient {
     /// 查询 gateway 运行状态
     /// - Returns: (isRunning, pid)，pid 为 -1 表示未运行或未知
     func getGatewayStatus(username: String) async throws -> (running: Bool, pid: Int32) {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
         return try await xpcCall { done in
             proxy.getGatewayStatus(username: username) { running, pid in
                 done((running, pid))
@@ -420,25 +607,16 @@ final class HelperClient {
     }
 
     private func shouldSuggestNodeRepair(username: String, startupErrorMessage: String) async -> Bool {
-        if Self.isLikelyMissingIsolatedNodeToolchain(message: startupErrorMessage) {
-            return true
-        }
-        return !(await isNodeInstalled(username: username))
+        let nodeInstalledProbe = await nodeInstalledIfControlReachable(username: username)
+        return GatewayStartFailureClassifier.shouldSuggestNodeRepair(
+            startupErrorMessage: startupErrorMessage,
+            nodeInstalledProbe: nodeInstalledProbe
+        )
     }
 
-    static func isLikelyMissingIsolatedNodeToolchain(message: String) -> Bool {
-        let lowered = message.lowercased()
-        if lowered.contains("env: node: no such file or directory") { return true }
-        if lowered.contains("未找到 npm，请先完成 node.js 安装步骤") { return true }
-        if lowered.contains("node.js 未安装就绪") { return true }
-        if lowered.contains("未找到隔离用户环境 npx") { return true }
-        if lowered.contains("npx is restricted to the isolated user environment") { return true }
-        if lowered.contains("exit 127")
-            && lowered.contains("openclaw")
-            && lowered.contains("gateway.port") {
-            return true
-        }
-        return false
+    private func nodeInstalledIfControlReachable(username: String) async -> Bool? {
+        guard controlProxy != nil else { return nil }
+        return await isNodeInstalled(username: username)
     }
 
     /// 安装 Node.js（输出实时写入 /tmp/clawdhome-init-<username>.log）
@@ -698,7 +876,7 @@ final class HelperClient {
 
     /// 返回用户 gateway 的访问 URL
     func getGatewayURL(username: String) async -> String {
-        guard let proxy = controlProxy else { return "" }
+        guard let proxy = gatewayProxy else { return "" }
         do {
             return try await xpcCall { done in
                 proxy.getGatewayURL(username: username) { done($0) }
@@ -1082,6 +1260,7 @@ final class HelperClient {
     /// 获取模型状态（直接读取 openclaw.json，零 CLI 开销）
     func getModelsStatus(username: String) async -> ModelsStatus? {
         let config = await getConfigJSON(username: username)
+        guard !config.isEmpty else { return nil }
         // agents.defaults.model.{primary, fallbacks}
         // OpenClaw schema 字段名为 "fallbacks"（复数）
         let model = (config["agents"] as? [String: Any])
@@ -1096,7 +1275,9 @@ final class HelperClient {
         } else {
             fallbacks = []
         }
-        return ModelsStatus(defaultModel: primary, resolvedDefault: primary, fallbacks: fallbacks, imageModel: nil, imageFallbacks: [])
+        // meta.lastTouchedVersion — openclaw 每次修改配置时写入的版本号
+        let version = (config["meta"] as? [String: Any])?["lastTouchedVersion"] as? String
+        return ModelsStatus(defaultModel: primary, resolvedDefault: primary, fallbacks: fallbacks, imageModel: nil, imageFallbacks: [], installedVersion: version)
     }
 
     /// 设置默认模型（openclaw models set <model>）
@@ -1131,7 +1312,7 @@ final class HelperClient {
 
     /// 对指定用户执行体检（环境隔离 + 安全审计）
     /// fix=true 时自动修复可修复的权限问题
-    func runHealthCheck(username: String, fix: Bool) async -> HealthCheckResult? {
+    func runHealthCheck(username: String, fix: Bool) async -> DiagnosticsResult? {
         guard let proxy = controlProxy else { return nil }
         do {
             let (_, json): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
@@ -1140,10 +1321,40 @@ final class HelperClient {
                 }
             }
             guard let data = json.data(using: .utf8) else { return nil }
-            return try? JSONDecoder().decode(HealthCheckResult.self, from: data)
+            return try? JSONDecoder().decode(DiagnosticsResult.self, from: data)
         } catch { return nil }
     }
 
+    // MARK: - 统一诊断
+
+    /// 对指定用户执行统一诊断（环境 + 权限 + 配置 + 安全 + Gateway + 网络）
+    func runDiagnostics(username: String, fix: Bool) async -> DiagnosticsResult? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            let (_, json): (Bool, String) = try await xpcCall(timeout: .seconds(60)) { done in
+                proxy.runDiagnostics(username: username, fix: fix) { ok, json in
+                    done((ok, json))
+                }
+            }
+            guard let data = json.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(DiagnosticsResult.self, from: data)
+        } catch { return nil }
+    }
+
+    /// 单组诊断（逐组调用，实时展示进度）
+    func runDiagnosticGroup(username: String, group: DiagnosticGroup, fix: Bool) async -> [DiagnosticItem] {
+        guard let proxy = controlProxy else { return [] }
+        do {
+            let (_, json): (Bool, String) = try await xpcCall(timeout: .seconds(30)) { done in
+                proxy.runDiagnosticGroup(username: username, groupName: group.rawValue, fix: fix) { ok, json in
+                    done((ok, json))
+                }
+            }
+            guard let data = json.data(using: .utf8) else { return [] }
+            return (try? JSONDecoder().decode([DiagnosticItem].self, from: data)) ?? []
+        } catch { return [] }
+    }
+    
     // MARK: - Helper 生命周期
 
     func getVersion() async throws -> String {
@@ -1155,6 +1366,7 @@ final class HelperClient {
 
     /// Helper 健康探针（5 秒超时的 getVersion 调用）
     /// 返回 .connected(version) / .unresponsive / .disconnected
+    /// 当健康状态异常时同步更新 isConnected，触发顶部横幅显示
     func probeHealth() async -> HelperHealthState {
         guard let proxy = controlProxy else { return .disconnected }
         do {
@@ -1176,8 +1388,11 @@ final class HelperClient {
                 proxy.requestRestart { done($0) }
             }
             if ok {
-                // Helper 即将退出，主动标记断连，触发 maintainConnection 重连
-                await MainActor.run { isConnected = false }
+                // Helper 即将退出，递增世代使旧回调失效，标记断连触发 maintainConnection 重连
+                await MainActor.run {
+                    connectionGeneration &+= 1
+                    isConnected = false
+                }
             }
             return ok
         } catch {

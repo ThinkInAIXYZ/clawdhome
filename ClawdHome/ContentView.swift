@@ -24,11 +24,6 @@ struct ContentView: View {
     @State private var navSelection: NavDestination? = .clawPool
     var body: some View {
         VStack(spacing: 0) {
-            // Helper 未连接时显示安装引导横幅
-            if !helperClient.isConnected {
-                DaemonSetupBanner(installer: daemonInstaller)
-            }
-
             if let err = pool.loadError {
                 Text(L10n.f("content_view.text_c851a279", fallback: "加载用户失败：%@", String(describing: err)))
                     .foregroundStyle(.red)
@@ -155,6 +150,14 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .roleMarketAdoptionStarted)) { _ in
             navSelection = .clawPool
         }
+        .overlay(alignment: .top) {
+            // Helper 未连接时显示安装引导横幅（最顶层浮动）
+            if !helperClient.isConnected {
+                DaemonSetupBanner(installer: daemonInstaller)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: helperClient.isConnected)
         .overlay {
             if lockStore.isLocked {
                 AppLockScreen()

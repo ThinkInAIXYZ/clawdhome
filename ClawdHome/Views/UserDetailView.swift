@@ -276,7 +276,7 @@ struct UserDetailView: View {
     @State private var isReopeningInitWizard = false
     @State private var suppressNpmRegistryOnChange = false
     @State private var showHealthCheck = false
-    @State private var lastHealthCheck: HealthCheckResult? = nil
+    @State private var lastHealthCheck: DiagnosticsResult? = nil
     @State private var showUpgradeConfirm = false
     @State private var pendingUpgradeVersion: String? = nil
     // 版本回退（记录升级前版本，支持降级）
@@ -377,7 +377,8 @@ struct UserDetailView: View {
             initPresentationRoute: initPresentationRoute,
             isAdmin: user.isAdmin,
             versionChecked: versionChecked,
-            hasInstalledOpenClaw: user.openclawVersion != nil
+            hasInstalledOpenClaw: user.openclawVersion != nil,
+            isGatewayOperational: isEffectivelyRunning
         )
     }
 
@@ -564,6 +565,11 @@ struct UserDetailView: View {
             } else {
                 gatewayURLTokenPollTask?.cancel()
                 gatewayURLTokenPollTask = nil
+                // Gateway 启动后立即崩溃：readinessMap 还停留在 .starting，但进程已死
+                if gatewayHub.readinessMap[user.username] == .starting {
+                    gatewayHub.markPendingStopped(username: user.username)
+                    showHealthCheck = true
+                }
             }
         }
         .onChange(of: gatewayHub.readinessMap[user.username]) { _, newReadiness in
@@ -601,8 +607,8 @@ struct UserDetailView: View {
             .environment(gatewayHub)
         }
         .sheet(isPresented: $showHealthCheck) {
-            HealthCheckSheet(user: user) { result in
-                lastHealthCheck = result
+            DiagnosticsSheet(user: user) { diagResult in
+                lastHealthCheck = diagResult
             }
         }
         .sheet(isPresented: $showUpgradeConfirm) {
@@ -796,7 +802,7 @@ struct UserDetailView: View {
         case .standaloneWizard:
             standaloneInitWizardNotice
         case .detailTabs:
-            if user.isAdmin && versionChecked && user.openclawVersion == nil {
+            if user.isAdmin && versionChecked && user.openclawVersion == nil && !isEffectivelyRunning {
                 ContentUnavailableView(
                     L10n.k("user.detail.auto.adminnot_installed_openclaw", fallback: "管理员账号未安装 openclaw"),
                     systemImage: "shield.lefthalf.filled",
@@ -979,12 +985,9 @@ struct UserDetailView: View {
     }
 
     private var overviewQuickActionSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            LazyVGrid(
-                columns: [GridItem(.flexible(), spacing: UserDetailWindowLayout.overviewCompactActionSpacing),
-                          GridItem(.flexible(), spacing: UserDetailWindowLayout.overviewCompactActionSpacing)],
-                spacing: UserDetailWindowLayout.overviewCompactActionSpacing
-            ) {
+        VStack(alignment: .leading, spacing: UserDetailWindowLayout.overviewCompactActionSpacing) {
+            // 第一行：启动/重启 | 终端
+            HStack(spacing: UserDetailWindowLayout.overviewCompactActionSpacing) {
                 overviewCompactActionButton(
                     title: user.isRunning
                         ? L10n.k("user.detail.auto.restart", fallback: "重启")
@@ -1015,6 +1018,16 @@ struct UserDetailView: View {
                 }
 
                 overviewCompactActionButton(
+                    title: L10n.k("user.detail.auto.health_check", fallback: "体检"),
+                    systemImage: "stethoscope",
+                    tint: Color.secondary.opacity(0.08),
+                    foreground: .primary,
+                    disabled: !helperClient.isConnected
+                ) {
+                    showHealthCheck = true
+                }
+
+                overviewCompactActionButton(
                     title: L10n.k("user.detail.auto.terminal", fallback: "终端"),
                     systemImage: "terminal",
                     tint: Color.secondary.opacity(0.08),
@@ -1023,7 +1036,10 @@ struct UserDetailView: View {
                 ) {
                     openTerminal()
                 }
+            }
 
+            // 第二行：冻结 | 更多操作
+            HStack(spacing: UserDetailWindowLayout.overviewCompactActionSpacing) {
                 Menu {
                     if user.isFrozen {
                         Button {
@@ -1061,21 +1077,14 @@ struct UserDetailView: View {
 
                 Menu {
                     Button {
-                        showHealthCheck = true
-                    } label: {
-                        Label(L10n.k("user.detail.auto.health_check", fallback: "体检"), systemImage: "checkmark.shield")
-                    }
-
-                    Button {
                         showPassword = true
                     } label: {
                         Label(L10n.k("views.user_detail_view.os_user_password", fallback: "获取 OS 用户密码"), systemImage: "key")
                     }
 
-                    Divider()
-
                     if updater.needsUpdate(user.openclawVersion),
                        let latest = updater.latestVersion {
+                        Divider()
                         Button {
                             pendingUpgradeVersion = latest
                             showUpgradeConfirm = true
@@ -1086,11 +1095,11 @@ struct UserDetailView: View {
                             )
                         }
                         .disabled(isInstalling || isRollingBack || !helperClient.isConnected)
-
-                        Divider()
                     }
 
                     if !user.isAdmin {
+                        Divider()
+
                         Button {
                             showLogoutConfirm = true
                         } label: {
@@ -1303,16 +1312,15 @@ struct UserDetailView: View {
         tint: Color,
         foreground: Color
     ) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
             Text(title)
                 .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
-            Spacer(minLength: 0)
         }
         .foregroundStyle(foreground)
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         .frame(height: UserDetailWindowLayout.overviewActionButtonHeight)
         .frame(maxWidth: .infinity)
         .background(
@@ -1675,32 +1683,11 @@ struct UserDetailView: View {
         HStack(spacing: 12) {
             Text(L10n.k("user.detail.auto.health_check", fallback: "健康体检")).font(.subheadline)
             Spacer()
-            if let check = lastHealthCheck {
-                let issueCount = check.criticalCount + check.warnCount
-                HStack(spacing: 4) {
-                    if issueCount > 0 {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange).font(.system(size: 11))
-                        Text(L10n.f("views.user_detail_view.text_7c8c2ef4", fallback: "%@ 个问题", String(describing: issueCount))).foregroundStyle(.orange)
-                    } else {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green).font(.system(size: 11))
-                        Text(L10n.k("user.detail.auto.normal", fallback: "正常")).foregroundStyle(.green)
-                    }
-                    Text("·").foregroundStyle(.tertiary)
-                    Text(Date(timeIntervalSince1970: check.checkedAt), style: .relative)
-                        .foregroundStyle(.secondary).font(.callout)
-                    Text(L10n.k("user.detail.auto.ago", fallback: "前")).foregroundStyle(.secondary).font(.callout)
-                }
-            } else {
-                Text(L10n.k("user.detail.auto.health_check", fallback: "从未体检")).foregroundStyle(.tertiary).font(.callout)
-            }
-            Button(lastHealthCheck == nil ? L10n.k("views.user_detail_view.text_258fc51d", fallback: "体检") : L10n.k("views.user_detail_view.text_dced7ba8", fallback: "重新体检")) {
+            Button(L10n.k("views.user_detail_view.text_258fc51d", fallback: "体检")) {
                 showHealthCheck = true
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
-            .padding(.leading, 4)
             .disabled(!helperClient.isConnected)
         }
     }
@@ -2195,6 +2182,8 @@ struct UserDetailView: View {
             } catch {
                 if error is GatewayStartNodeRepairPromptError {
                     // 已切换到"修复并继续启动"弹窗，不显示通用错误。
+                } else if error is GatewayStartDiagnosticsPromptError {
+                    // 已自动弹出诊断中心，不显示通用错误。
                 } else {
                     actionError = error.localizedDescription
                 }
@@ -2205,21 +2194,28 @@ struct UserDetailView: View {
     }
 
     private struct GatewayStartNodeRepairPromptError: Error {}
+    private struct GatewayStartDiagnosticsPromptError: Error {}
 
     private func startGatewayWithNodeRepairPrompt() async throws {
-        let result = try await helperClient.startGatewayDiagnoseNodeToolchain(username: user.username)
-        switch result {
-        case .started:
-            return
-        case .needsNodeRepair(let reason):
-            appLog("[gateway-repair] detected missing base env user=\(user.username) reason=\(reason)", level: .warn)
-            gatewayNodeRepairReason = reason
-            gatewayNodeRepairCompletedSteps = 0
-            gatewayNodeRepairCurrentStep = ""
-            gatewayNodeRepairError = nil
-            gatewayNodeRepairReadyToRetryStart = false
-            showGatewayNodeRepairSheet = true
-            throw GatewayStartNodeRepairPromptError()
+        do {
+            let result = try await helperClient.startGatewayDiagnoseNodeToolchain(username: user.username)
+            switch result {
+            case .started:
+                return
+            case .needsNodeRepair(let reason):
+                appLog("[gateway-repair] detected missing base env user=\(user.username) reason=\(reason)", level: .warn)
+                gatewayNodeRepairReason = reason
+                gatewayNodeRepairCompletedSteps = 0
+                gatewayNodeRepairCurrentStep = ""
+                gatewayNodeRepairError = nil
+                gatewayNodeRepairReadyToRetryStart = false
+                showGatewayNodeRepairSheet = true
+                throw GatewayStartNodeRepairPromptError()
+            }
+        } catch let error where !(error is GatewayStartNodeRepairPromptError) {
+            appLog("[gateway-diag] start failed, opening diagnostics user=\(user.username) error=\(error.localizedDescription)", level: .warn)
+            showHealthCheck = true
+            throw GatewayStartDiagnosticsPromptError()
         }
     }
 
@@ -2472,11 +2468,18 @@ struct UserDetailView: View {
             xcodeEnvStatus = nil
             return
         }
+
+        // 所有 XPC 调用一次性并行发出，避免分批串行等待
         async let statusResult = helperClient.getGatewayStatus(username: user.username)
-        async let versionResult = helperClient.getOpenclawVersion(username: user.username)
         async let wizardStateResult = loadWizardState()
         async let nodeInstalledResult = helperClient.isNodeInstalled(username: user.username)
         async let xcodeStatusResult = helperClient.getXcodeEnvStatus()
+        async let urlResult = helperClient.getGatewayURL(username: user.username)
+        async let modelsStatusResult = helperClient.getModelsStatus(username: user.username)
+        async let installedVersionResult = helperClient.getOpenclawVersion(username: user.username)
+        async let npmRegistryResult = helperClient.getNpmRegistry(username: user.username)
+
+        // --- 处理结果 ---
 
         if let (running, pid) = try? await statusResult {
             if user.isFrozen {
@@ -2495,23 +2498,28 @@ struct UserDetailView: View {
             }
         }
         guard requestID == refreshStatusGeneration else { return }
-        user.openclawVersion = await versionResult
+
         let wizardState = await wizardStateResult
         let ensuredPending = await ensureOnboardingWizardSessionIfNeeded(
             existingState: wizardState,
             forceOnboarding: forceOnboardingAtEntry
         )
         hasPendingInitWizard = ensuredPending
-        versionChecked = true
         isNodeInstalledReady = await nodeInstalledResult
         xcodeEnvStatus = await xcodeStatusResult
 
-        // 并行加载 Gateway 地址和模型状态（snapshot 由 ShrimpPool 全局维护，无需单独拉取）
-        async let urlResult = helperClient.getGatewayURL(username: user.username)
-        async let modelsStatusResult = helperClient.getModelsStatus(username: user.username)
-        async let npmRegistryResult = helperClient.getNpmRegistry(username: user.username)
-        let (url, modelsStatus, registryURL) = await (urlResult, modelsStatusResult, npmRegistryResult)
+        let (url, modelsStatus, installedVersion, registryURL) = await (
+            urlResult,
+            modelsStatusResult,
+            installedVersionResult,
+            npmRegistryResult
+        )
         guard requestID == refreshStatusGeneration else { return }
+
+        // 统一使用安装探测结果作为“是否已安装”的单一事实来源，避免不同来源互相覆盖导致闪烁。
+        user.openclawVersion = installedVersion
+        versionChecked = true
+
         gatewayURL = url.isEmpty ? nil : url
         if user.isRunning, gatewayToken(from: url) == nil {
             refreshGatewayURLUntilTokenReady()
@@ -4184,6 +4192,8 @@ private struct CronRunEntryRow: View {
 }
 
 // MARK: - Skills Tab
+// 参考 openclaw/apps/macos/Sources/OpenClaw/SkillsSettings.swift
+// 参考 openclaw commit 505b980f63 (2026-04-07)
 
 private struct SkillsTabView: View {
     let username: String
@@ -4202,117 +4212,402 @@ private struct SkillsTabView: View {
     }
 }
 
+// MARK: 筛选枚举
+
+private enum SkillsFilter: String, CaseIterable, Identifiable {
+    case all, ready, needsSetup, disabled
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "全部"
+        case .ready: return "就绪"
+        case .needsSetup: return "需配置"
+        case .disabled: return "已禁用"
+        }
+    }
+}
+
+// MARK: 环境变量编辑状态
+
+private struct SkillEnvEditorState: Identifiable {
+    let skillKey: String
+    let skillName: String
+    let envKey: String
+    let isPrimary: Bool
+    let homepage: String?
+
+    var id: String { "\(skillKey)::\(envKey)" }
+}
+
+// MARK: SkillsTabContent
+
 private struct SkillsTabContent: View {
     let store: GatewaySkillsStore
+    @State private var filter: SkillsFilter = .all
+    @State private var envEditor: SkillEnvEditorState?
+
+    private var filteredSkills: [GatewaySkillStatus] {
+        let base = store.skills.filter { skill in
+            switch filter {
+            case .all: return true
+            case .ready: return !skill.disabled && skill.eligible
+            case .needsSetup: return !skill.disabled && !skill.eligible
+            case .disabled: return skill.disabled
+            }
+        }
+        if store.searchText.isEmpty { return base }
+        let q = store.searchText.lowercased()
+        return base.filter {
+            $0.name.lowercased().contains(q) || $0.description.lowercased().contains(q)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             // 顶栏
-            HStack {
-                Text("Skills").font(.headline)
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Skills").font(.headline)
+                    Text("满足依赖条件（二进制、环境变量、配置）后自动启用")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
                 Spacer()
                 if store.isLoading {
                     ProgressView().scaleEffect(0.7).frame(width: 20, height: 20)
+                } else {
+                    Button {
+                        Task { await store.refresh() }
+                    } label: {
+                        Label("刷新", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
                 }
-                Button {
-                    Task { await store.refresh() }
-                } label: {
-                    Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
+                Picker("筛选", selection: $filter) {
+                    ForEach(SkillsFilter.allCases) { f in
+                        Text(f.title).tag(f)
+                    }
                 }
-                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 90)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             .background(.bar)
 
             Divider()
 
+            // 搜索栏
+            HStack {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("搜索 Skills…", text: Bindable(store).searchText)
+                    .textFieldStyle(.plain)
+                if !store.searchText.isEmpty {
+                    Button { store.searchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 6)
+            .background(.bar)
+
+            Divider()
+
+            // 状态消息
+            if let msg = store.statusMessage {
+                HStack {
+                    Text(msg).font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button { store.statusMessage = nil } label: {
+                        Image(systemName: "xmark").font(.caption2)
+                    }
+                    .buttonStyle(.plain).foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 4)
+                .background(Color.accentColor.opacity(0.06))
+            }
+
+            // 内容
             if let err = store.error {
                 ContentUnavailableView(err, systemImage: "exclamationmark.triangle")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if store.skills.isEmpty && !store.isLoading {
-                ContentUnavailableView(
-                    L10n.k("user.detail.skills.no_skills", fallback: "暂无 Skills"),
-                    systemImage: "star.leadinghalf.filled"
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ContentUnavailableView("暂无 Skills", systemImage: "star.leadinghalf.filled")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if filteredSkills.isEmpty {
+                ContentUnavailableView("没有匹配的 Skills", systemImage: "magnifyingglass")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(store.skills) { skill in
-                    SkillItemRow(skill: skill, store: store)
+                List(filteredSkills) { skill in
+                    SkillItemRow(skill: skill, store: store, onSetEnv: { envKey, isPrimary in
+                        envEditor = SkillEnvEditorState(
+                            skillKey: skill.skillKey,
+                            skillName: skill.name,
+                            envKey: envKey,
+                            isPrimary: isPrimary,
+                            homepage: skill.homepage
+                        )
+                    })
                 }
                 .listStyle(.plain)
             }
         }
         .task { await store.refresh() }
+        .sheet(item: $envEditor) { editor in
+            SkillEnvEditorSheet(editor: editor) { value in
+                Task {
+                    if editor.isPrimary {
+                        await store.setApiKey(skillKey: editor.skillKey, value: value)
+                    } else {
+                        await store.setEnvVar(skillKey: editor.skillKey, envKey: editor.envKey, value: value)
+                    }
+                }
+            }
+        }
     }
 }
+
+// MARK: SkillItemRow
 
 private struct SkillItemRow: View {
     let skill: GatewaySkillStatus
     let store: GatewaySkillsStore
+    let onSetEnv: (_ envKey: String, _ isPrimary: Bool) -> Void
     @State private var showRemoveConfirm = false
 
-    private var isPending: Bool { store.pendingOps[skill.skillKey] != nil }
+    private var isBusy: Bool { store.isBusy(skill: skill) }
     private var pendingLabel: String { store.pendingOps[skill.skillKey] ?? "" }
+    private var requirementsMet: Bool { skill.missing.isEmpty }
+
+    /// 有 missing bins 且存在 install option 时可安装
+    private var installOptions: [GatewaySkillInstallOption] {
+        guard !skill.missing.bins.isEmpty else { return [] }
+        let missingSet = Set(skill.missing.bins)
+        return skill.install.filter { opt in
+            opt.bins.isEmpty || !missingSet.isDisjoint(with: opt.bins)
+        }
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
-            // 状态指示
-            Circle()
-                .fill(skill.eligible ? Color.green : Color.orange)
-                .frame(width: 8, height: 8)
+        HStack(alignment: .top, spacing: 12) {
+            // Emoji
+            Text(skill.emoji ?? "✨").font(.title2)
 
-            // 名称 + 描述
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    if let emoji = skill.emoji {
-                        Text(emoji)
-                    }
-                    Text(skill.name)
-                        .font(.subheadline).fontWeight(.medium)
-                    if skill.always {
-                        CronTagBadge("always-on")
-                    }
-                    if !skill.missing.isEmpty {
-                        CronTagBadge("⚠️ missing")
+            // 信息区
+            VStack(alignment: .leading, spacing: 4) {
+                // 名称
+                Text(skill.name).font(.headline)
+
+                // 描述
+                Text(skill.description)
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3)
+
+                // 标签行：来源 + 主页链接
+                HStack(spacing: 8) {
+                    CronTagBadge(skill.sourceLabel)
+                    if let urlStr = skill.homepage,
+                       let url = URL(string: urlStr),
+                       url.scheme == "http" || url.scheme == "https" {
+                        Link(destination: url) {
+                            Label("网站", systemImage: "link")
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .buttonStyle(.link)
                     }
                 }
-                Text(skill.description)
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+
+                // 禁用状态提示
+                if skill.disabled {
+                    Text("已在配置中禁用")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                // 缺失依赖提示（仅当没有安装选项或有非 bin 缺失时）
+                if !skill.disabled, !requirementsMet, shouldShowMissingSummary {
+                    missingSummary
+                }
+
+                // 配置检查
+                if !skill.configChecks.isEmpty {
+                    configChecksView
+                }
+
+                // 环境变量设置按钮
+                if !skill.missing.env.isEmpty {
+                    envActionRow
+                }
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            // 操作按钮区
-            if isPending {
+            // 右侧操作区
+            trailingActions
+        }
+        .padding(.vertical, 6)
+    }
+
+    // MARK: 缺失摘要
+
+    private var shouldShowMissingBins: Bool {
+        !skill.missing.bins.isEmpty && installOptions.isEmpty
+    }
+
+    private var shouldShowMissingSummary: Bool {
+        shouldShowMissingBins || !skill.missing.env.isEmpty || !skill.missing.config.isEmpty
+    }
+
+    private var missingSummary: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if shouldShowMissingBins {
+                Text("缺少二进制: \(skill.missing.bins.joined(separator: ", "))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if !skill.missing.env.isEmpty {
+                Text("缺少环境变量: \(skill.missing.env.joined(separator: ", "))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if !skill.missing.config.isEmpty {
+                Text("需要配置: \(skill.missing.config.joined(separator: ", "))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: 配置检查
+
+    private var configChecksView: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(skill.configChecks) { check in
                 HStack(spacing: 4) {
-                    ProgressView().scaleEffect(0.7)
+                    Image(systemName: check.satisfied ? "checkmark.circle" : "xmark.circle")
+                        .foregroundStyle(check.satisfied ? .green : .secondary)
+                        .font(.caption)
+                    Text(check.path).font(.caption)
+                }
+            }
+        }
+    }
+
+    // MARK: 环境变量按钮
+
+    private var envActionRow: some View {
+        HStack(spacing: 6) {
+            ForEach(skill.missing.env, id: \.self) { envKey in
+                let isPrimary = envKey == skill.primaryEnv
+                Button(isPrimary ? "设置 API Key" : "设置 \(envKey)") {
+                    onSetEnv(envKey, isPrimary)
+                }
+                .buttonStyle(.bordered).controlSize(.small)
+                .disabled(isBusy)
+            }
+        }
+    }
+
+    // MARK: 右侧操作
+
+    @ViewBuilder
+    private var trailingActions: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            if isBusy {
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.small)
                     Text(pendingLabel).font(.caption).foregroundStyle(.secondary)
                 }
-            } else {
-                HStack(spacing: 6) {
-                    if !skill.disabled {
-                        Button(L10n.k("user.detail.skills.update", fallback: "更新")) {
-                            Task { try? await store.update(skillKey: skill.skillKey) }
-                        }
-                        .buttonStyle(.bordered).controlSize(.small)
+            } else if !installOptions.isEmpty {
+                // 有可安装选项 → 显示安装按钮
+                ForEach(installOptions) { option in
+                    Button("安装") {
+                        Task { await store.install(skill: skill, option: option) }
                     }
-                    Button(L10n.k("user.detail.skills.remove", fallback: "卸载")) {
+                    .buttonStyle(.borderedProminent).controlSize(.small)
+                    .help(option.label)
+                }
+            } else {
+                // 已安装 → 启用/禁用 Toggle
+                Toggle("", isOn: Binding(
+                    get: { !skill.disabled },
+                    set: { enabled in
+                        Task { await store.toggleEnabled(skillKey: skill.skillKey, enabled: enabled) }
+                    }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .disabled(isBusy || !requirementsMet)
+
+                // 卸载按钮（仅非内置 skill）
+                if !skill.isBundled {
+                    Button("卸载") {
                         showRemoveConfirm = true
                     }
-                    .buttonStyle(.bordered).controlSize(.small)
+                    .buttonStyle(.bordered).controlSize(.mini)
+                    .foregroundStyle(.secondary)
                     .confirmationDialog(
-                        L10n.f("user.detail.skills.remove_confirm", fallback: "卸载 %@？", skill.name),
+                        "卸载 \(skill.name)？",
                         isPresented: $showRemoveConfirm,
                         titleVisibility: .visible
                     ) {
-                        Button(L10n.k("user.detail.skills.remove", fallback: "卸载"), role: .destructive) {
-                            Task { try? await store.remove(skillKey: skill.skillKey) }
+                        Button("卸载", role: .destructive) {
+                            Task { await store.remove(skillKey: skill.skillKey) }
                         }
                     }
                 }
             }
         }
-        .padding(.vertical, 4)
+    }
+}
+
+// MARK: 环境变量编辑 Sheet
+
+private struct SkillEnvEditorSheet: View {
+    let editor: SkillEnvEditorState
+    let onSave: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var value: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(editor.isPrimary ? "设置 API Key" : "设置环境变量")
+                .font(.headline)
+            Text("Skill: \(editor.skillName)")
+                .font(.subheadline).foregroundStyle(.secondary)
+
+            if let url = homepageUrl {
+                Link("获取密钥 →", destination: url).font(.caption)
+            }
+
+            SecureField(editor.envKey, text: $value)
+                .textFieldStyle(.roundedBorder)
+
+            Text("保存至 openclaw.json 中 skills.entries.\(editor.skillKey)")
+                .font(.caption2).foregroundStyle(.tertiary)
+
+            HStack {
+                Button("取消") { dismiss() }
+                Spacer()
+                Button("保存") {
+                    onSave(value)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+
+    private var homepageUrl: URL? {
+        guard let raw = editor.homepage?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              let url = URL(string: raw),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else { return nil }
+        return url
     }
 }
 
@@ -4672,6 +4967,7 @@ private struct ProcessTabView: View {
                         widths: columnWidths,
                         onToggle: nil
                     )
+                        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                         .onTapGesture(count: 2) { detailTarget = proc }
                         .simultaneousGesture(
                             TapGesture(count: 1).onEnded {
@@ -4697,6 +4993,7 @@ private struct ProcessTabView: View {
                             }
                         }
                     )
+                    .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                     .onTapGesture(count: 2) { detailTarget = node.entry }
                     .simultaneousGesture(
                         TapGesture(count: 1).onEnded {
@@ -4885,7 +5182,7 @@ private struct ProcessDetailSheet: View {
                         detailRow(L10n.k("user.detail.auto.process_pid", fallback: "父进程 PID"), value: "\(resolved.ppid)")
                         detailRow(L10n.k("user.detail.auto.status", fallback: "状态"), value: resolved.stateLabel)
                         detailRow("CPU", value: String(format: "%.1f%%", resolved.cpuPercent))
-                        detailRow(L10n.k("user.detail.auto.memory", fallback: "内存"), value: resolved.memLabel)
+                        detailRow(L10n.k("user.detail.process.mem", fallback: "内存"), value: resolved.memLabel)
                         detailRow(L10n.k("user.detail.auto.runtime", fallback: "运行时长"), value: resolved.uptimeLabel)
                         detailRow(L10n.k("user.detail.auto.start", fallback: "启动时间"), value: formatTime(resolved.startTime))
                         detailRow(L10n.k("user.detail.auto.port", fallback: "监听端口"), value: resolved.listeningPorts.isEmpty ? "—" : resolved.listeningPorts.joined(separator: ", "))
@@ -4991,6 +5288,7 @@ private struct ProcessColumnHeader: View {
             memCol(right: $widths.uptime) { onSort(.mem) }
             uptimeCol(right: $widths.ports) { onSort(.uptime) }
             resizableText(L10n.k("user.detail.auto.port", fallback: "端口"), width: $widths.ports, min: 84, max: 360)
+            Spacer(minLength: 0)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -5021,7 +5319,7 @@ private struct ProcessColumnHeader: View {
                 rightWidth: right, rightMin: 54, rightMax: 160, action: action)
     }
     @ViewBuilder private func memCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
-        sortBtn(L10n.k("user.detail.auto.memory", fallback: "内存"), field: .mem, width: $widths.mem, min: 54, max: 160, align: .trailing,
+        sortBtn(L10n.k("user.detail.process.mem", fallback: "内存"), field: .mem, width: $widths.mem, min: 54, max: 160, align: .trailing,
                 rightWidth: right, rightMin: 48, rightMax: 160, action: action)
     }
     @ViewBuilder private func uptimeCol(right: Binding<CGFloat>, action: @escaping () -> Void) -> some View {
@@ -5154,6 +5452,7 @@ private struct ProcessRow: View {
                 .frame(width: widths.ports, alignment: .leading)
                 .padding(.horizontal, 4)
 
+            Spacer(minLength: 0)
         }
         .padding(.vertical, 2)
     }
@@ -6033,6 +6332,26 @@ private struct KimiMinimaxModelConfigPanel: View {
         saveError = nil
 
         do {
+            // IMPORTANT:
+            // Qiniu must keep legacy direct config-file writes.
+            // OpenClaw does not provide built-in Qiniu models, and we rely on explicit file fields.
+            // Do NOT migrate this provider to gatewayHub.configPatch().
+            if selectedProvider == .qiniu {
+                try await applyQiniuLegacyConfig(apiKey: apiKey, action: action)
+                isRestartingGateway = true
+                gatewayHub.markPendingStart(username: user.username)
+                try await helperClient.restartGateway(username: user.username)
+                saveMessage = L10n.k("user.detail.auto.configuration", fallback: "配置已应用")
+
+                // 刷新当前模型显示
+                let newStatus = await helperClient.getModelsStatus(username: user.username)
+                currentDefaultModel = newStatus?.resolvedDefault ?? newStatus?.defaultModel
+                currentFallbackModels = newStatus?.fallbacks ?? []
+
+                onApplied?()
+                return
+            }
+
             // 1. 构建 config patch + 同步 agent 文件
             let (patch, agentFileSync) = try await buildProviderPatch(apiKey: apiKey)
 
@@ -6087,6 +6406,67 @@ private struct KimiMinimaxModelConfigPanel: View {
         }
     }
 
+    /// Qiniu 配置必须保持 v1.6.0 的 legacy 直写方式（setConfigDirect）。
+    /// 背景：OpenClaw 没有内置 Qiniu 模型；统一 patch 流程可能在后续 schema/迁移中覆盖掉这类外部模型配置。
+    /// 维护要求：请勿替换为 gatewayHub.configPatch。
+    private func applyQiniuLegacyConfig(apiKey: String, action: OldModelAction) async throws {
+        let config = await helperClient.getConfigJSON(username: user.username)
+        let providerModels = DirectQiniuModel.allCases.map(\.providerModelConfig)
+        let newPrimary = selectedQiniuModel.rawValue
+
+        var normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: newPrimary)
+        var fallbacks = (normalizedModelConfig["fallbacks"] as? [String]) ?? []
+        fallbacks.removeAll { $0 == newPrimary }
+        if let oldPrimary = currentDefaultModel, !oldPrimary.isEmpty {
+            fallbacks.removeAll { $0 == oldPrimary }
+            if action == .keepAsFallback {
+                fallbacks.insert(oldPrimary, at: 0)
+            }
+        }
+        if fallbacks.isEmpty {
+            normalizedModelConfig.removeValue(forKey: "fallbacks")
+        } else {
+            normalizedModelConfig["fallbacks"] = fallbacks
+        }
+
+        var aliasMap = ((((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:])
+        for model in DirectQiniuModel.allCases {
+            var aliasConfig = (aliasMap[model.rawValue] as? [String: Any]) ?? [:]
+            aliasConfig["alias"] = model.alias
+            aliasMap[model.rawValue] = aliasConfig
+        }
+
+        try await helperClient.setConfigDirect(username: user.username, path: "env.QINIU_API_KEY", value: apiKey)
+        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "models.providers.qiniu",
+            value: [
+                "baseUrl": "https://api.qnaigc.com/v1",
+                "apiKey": "${QINIU_API_KEY}",
+                "api": "openai-completions",
+                "models": providerModels,
+            ]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "auth.profiles.qiniu:default",
+            value: ["provider": "qiniu", "mode": "api_key"]
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "agents.defaults.model",
+            value: normalizedModelConfig
+        )
+        try await helperClient.setConfigDirect(
+            username: user.username,
+            path: "agents.defaults.models",
+            value: aliasMap
+        )
+
+        try await syncQiniuAgentFiles(apiKey: apiKey, providerModels: providerModels)
+    }
+
     /// 构建 provider 配置 patch 和 agent 文件同步闭包
     private func buildProviderPatch(apiKey: String) async throws -> (patch: [String: Any], agentFileSync: () async throws -> Void) {
         switch selectedProvider {
@@ -6095,6 +6475,8 @@ private struct KimiMinimaxModelConfigPanel: View {
         case .minimax:
             return try await buildMinimaxPatch(apiKey: apiKey)
         case .qiniu:
+            // NOTE: 正常应用流程由 doApplyConfig 的 qiniu legacy 分支处理。
+            // 这里保留仅用于兼容/回退，勿作为默认路径。
             return try await buildQiniuPatch(apiKey: apiKey)
         case .zai:
             return try await buildZAIPatch(apiKey: apiKey)
@@ -6463,10 +6845,8 @@ private final class EmbeddedGatewayConsoleCoordinator: NSObject, WKNavigationDel
         panel.canChooseFiles = true
         panel.canChooseDirectories = parameters.allowsDirectories
         panel.resolvesAliases = true
-        let allowedContentTypes = resolvedFileInputAllowedContentTypes(pendingFileInputAccept)
-        if !allowedContentTypes.isEmpty {
-            panel.allowedContentTypes = allowedContentTypes
-        }
+        // Allow arbitrary files (e.g. mp3) regardless of web input accept hints.
+        panel.allowedContentTypes = [.item]
 
         panel.begin { response in
             completionHandler(response == .OK ? panel.urls : nil)
@@ -6517,7 +6897,7 @@ private final class EmbeddedGatewayConsoleCoordinator: NSObject, WKNavigationDel
 
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
         NSSound.beep()
-        print("[EmbeddedGatewayConsoleView] download failed: \(error.localizedDescription)")
+        appLog("[EmbeddedGatewayConsoleView] download failed: \(error.localizedDescription)", level: .error)
     }
 }
 
