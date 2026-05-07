@@ -1817,6 +1817,17 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
             }
         }
     }
+
+    func insertPromptText(_ text: String, mode: PromptInsertionMode) {
+        guard let webView else { return }
+        let payload: [String: Any] = ["text": text, "mode": mode.rawValue]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript(
+            "window.__clawdPromptMemory && window.__clawdPromptMemory.insert(\(json));",
+            completionHandler: nil
+        )
+    }
 }
 
 @MainActor
@@ -1835,16 +1846,5 @@ final class EmbeddedGatewayConsoleStoreRegistry {
         guard let store = stores[username] else { return }
         store.invalidateLoadedURL()
         stores.removeValue(forKey: username)
-    }
-
-    func insertPromptText(_ text: String, mode: PromptInsertionMode) {
-        guard let webView else { return }
-        let payload: [String: Any] = ["text": text, "mode": mode.rawValue]
-        guard let data = try? JSONSerialization.data(withJSONObject: payload),
-              let json = String(data: data, encoding: .utf8) else { return }
-        webView.evaluateJavaScript(
-            "window.__clawdPromptMemory && window.__clawdPromptMemory.insert(\(json));",
-            completionHandler: nil
-        )
     }
 }
