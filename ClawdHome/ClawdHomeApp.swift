@@ -181,6 +181,7 @@ private let openClawQuickCommandSections: [(section: String, items: [OpenClawQui
     ("查询 / 诊断", [
         OpenClawQuickCommand(label: "版本查询", command: "openclaw --version"),
         OpenClawQuickCommand(label: "状态概览", command: "openclaw status"),
+        OpenClawQuickCommand(label: "模型状态", command: "openclaw models status --probe"),
         OpenClawQuickCommand(label: "已连设备", command: "openclaw devices list"),
         OpenClawQuickCommand(label: "系统体检", command: "openclaw doctor"),
         OpenClawQuickCommand(label: "安全审计", command: "openclaw security audit"),
