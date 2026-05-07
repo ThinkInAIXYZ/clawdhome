@@ -29,12 +29,14 @@ struct AddBotSheet: View {
     @State private var provisionProgress = ""
     @State private var provisionError: String?
     @State private var provisioner: (any IMBotProvisioner)?
+    @State private var channelFlow: ChannelOnboardingFlow?
 
     enum Step {
         case selectPlatform
         case configAccount     // 填 accountKey + displayName
         case provisioning      // 自动绑定（二维码流程）
         case manualToken       // 手动填表单
+        case channelOnboarding // 飞书/微信走维护终端 npx
         case done
     }
 
@@ -50,6 +52,15 @@ struct AddBotSheet: View {
                     provisioningView
                 case .manualToken:
                     manualTokenView
+                case .channelOnboarding:
+                    if let flow = channelFlow {
+                        FeishuChannelOnboardingSheet(
+                            flow: flow,
+                            displayName: username,
+                            username: username,
+                            entryMode: .initialBinding
+                        )
+                    }
                 case .done:
                     doneView
                 }
@@ -64,7 +75,8 @@ struct AddBotSheet: View {
                 }
             }
         }
-        .frame(minWidth: 480, minHeight: 360)
+        .frame(minWidth: step == .channelOnboarding ? 900 : 480,
+               minHeight: step == .channelOnboarding ? 500 : 360)
     }
 
     // MARK: - Step 1: select platform
@@ -74,7 +86,12 @@ struct AddBotSheet: View {
             List(IMPlatform.allCases, id: \.rawValue) { platform in
                 Button(action: {
                     selectedPlatform = platform
-                    step = .configAccount
+                    if let flow = channelOnboardingFlow(for: platform) {
+                        channelFlow = flow
+                        step = .channelOnboarding
+                    } else {
+                        step = .configAccount
+                    }
                 }) {
                     HStack {
                         Text(platform.displayName)
@@ -105,7 +122,7 @@ struct AddBotSheet: View {
                 }
                 HStack {
                     Text(L10n.k("add_bot.display_name", fallback: "显示名称"))
-                    TextField(L10n.k("add_bot.display_name_placeholder", fallback: "飞书工作账号"), text: $displayName)
+                    TextField(selectedPlatform.displayNamePlaceholder, text: $displayName)
                         .textFieldStyle(.roundedBorder)
                 }
             } header: {
@@ -349,6 +366,14 @@ struct AddBotSheet: View {
         else { return nil }
         let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func channelOnboardingFlow(for platform: IMPlatform) -> ChannelOnboardingFlow? {
+        switch platform {
+        case .feishu: return .feishu
+        case .wechat: return .weixin
+        default: return nil
+        }
     }
 
     private func buildAuthProfilesPayload() -> String {

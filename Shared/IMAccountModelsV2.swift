@@ -62,6 +62,19 @@ public enum IMPlatform: String, Codable, CaseIterable, Sendable {
         case .tlon:      return "Tlon"
         }
     }
+
+    /// 添加 Bot 表单中"显示名称"的 placeholder 示例
+    public var displayNamePlaceholder: String {
+        switch self {
+        case .feishu:    return "飞书工作账号"
+        case .wechat:    return "微信小助手"
+        case .slack:     return "Slack Bot"
+        case .discord:   return "Discord Bot"
+        case .telegram:  return "Telegram Bot"
+        case .whatsapp:  return "WhatsApp 商业号"
+        case .tlon:      return "Tlon Ship"
+        }
+    }
 }
 
 /// 账号 cardinality：1 个 IM 账号最多绑定多少个 agent / bot。

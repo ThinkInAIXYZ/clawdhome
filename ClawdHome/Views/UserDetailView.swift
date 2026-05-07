@@ -534,16 +534,29 @@ struct UserDetailView: View {
         }
         .onChange(of: selectedAgentId) { _, newId in
             guard let newId = newId else { return }
-            // 通过 JS 通知 OpenClaw Control UI 切换到对应 agent
+            // 通过 JS 通知 OpenClaw WebUI 切换到对应 agent 的会话
             // agentId 仅允许 [a-zA-Z0-9_-]，过滤非法字符防止 JS 注入
             let sanitized = newId.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
             guard !sanitized.isEmpty else { return }
+            // OpenClaw session key 格式: "agent:{agentId}:main"
+            let sessionKey = "agent:\(sanitized):main"
             let js = """
             (function() {
-                var sel = document.querySelector('.agents-select');
+                var sk = '\(sessionKey)';
+                var sel = document.querySelector('.chat-controls__session select');
                 if (sel) {
-                    sel.value = '\(sanitized)';
+                    if (!sel.querySelector('option[value=\"' + sk + '\"]')) {
+                        var opt = document.createElement('option');
+                        opt.value = sk;
+                        opt.textContent = sk;
+                        sel.appendChild(opt);
+                    }
+                    sel.value = sk;
                     sel.dispatchEvent(new Event('change', { bubbles: true }));
+                } else {
+                    var url = new URL(window.location.href);
+                    url.searchParams.set('session', sk);
+                    window.location.href = url.toString();
                 }
             })();
             """
