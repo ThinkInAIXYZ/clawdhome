@@ -30,7 +30,18 @@ struct CreateAgentSheet: View {
     }
 
     private var effectiveAgentId: String {
-        agentId.isEmpty ? name.lowercased().replacingOccurrences(of: " ", with: "_") : agentId
+        if !agentId.isEmpty { return agentId }
+        // 从名称生成 ID：取拼音/ASCII 字符，非 ASCII 字符用下划线替代
+        let base = name.lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+            .unicodeScalars
+            .map { CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-" ? String($0) : "" }
+            .joined()
+        // 如果全是非 ASCII（如纯中文），用 "agent" 前缀 + 时间戳后 4 位
+        if base.isEmpty || base.first?.isLetter != true {
+            return "agent_\(base.isEmpty ? String(Int(Date().timeIntervalSince1970) % 10000) : base)"
+        }
+        return String(base.prefix(32))
     }
 
     private var isValid: Bool {
