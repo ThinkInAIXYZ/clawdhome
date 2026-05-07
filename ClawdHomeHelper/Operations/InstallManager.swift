@@ -28,6 +28,7 @@ struct InstallManager {
     @discardableResult
     static func install(username: String, version: String?, logURL: URL? = nil) throws -> String {
         try ensureNpmBuildToolchainReady()
+        try normalizeNpmUserOwnership(username: username)
         let npmPath = try findNpmBinary()
         let packageArg = version.map { "openclaw@\($0)" } ?? "openclaw@latest"
         let prefix = npmGlobalDir(for: username)
@@ -64,14 +65,29 @@ struct InstallManager {
         guard let option = NpmRegistryOption.fromRegistryURL(registry) else {
             throw InstallError.unsupportedNpmRegistry(registry)
         }
+        try normalizeNpmUserOwnership(username: username)
         let npmPath = try findNpmBinary()
         let args = ["-u", username, "-H",
                     "env", sudoNodePath,
                     npmPath, "config", "set", "registry", option.rawValue, "--location=user"]
-        if let logURL {
-            _ = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
-        } else {
-            _ = try run("/usr/bin/sudo", args: args)
+        do {
+            if let logURL {
+                _ = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
+            } else {
+                _ = try run("/usr/bin/sudo", args: args)
+            }
+        } catch {
+            if isNpmPermissionError(error) {
+                // 历史 npm 版本会留下 root-owned ~/.npm 或 ~/.npmrc，修复后重试一次。
+                try normalizeNpmUserOwnership(username: username)
+                if let logURL {
+                    _ = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
+                } else {
+                    _ = try run("/usr/bin/sudo", args: args)
+                }
+            } else {
+                throw error
+            }
         }
         return option.rawValue
     }
@@ -139,6 +155,39 @@ struct InstallManager {
         if !status.clangAvailable {
             throw InstallError.xcodeToolchainNotReady(details: status.detail)
         }
+    }
+
+    private static func normalizeNpmUserOwnership(username: String) throws {
+        let home = "/Users/\(username)"
+        let npmCacheDir = "\(home)/.npm"
+        let npmrcPath = "\(home)/.npmrc"
+        let npmGlobal = npmGlobalDir(for: username)
+
+        if !FileManager.default.fileExists(atPath: npmCacheDir) {
+            try FileManager.default.createDirectory(
+                atPath: npmCacheDir,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+        }
+
+        if FileManager.default.fileExists(atPath: npmCacheDir) {
+            _ = try? run("/usr/sbin/chown", args: ["-R", username, npmCacheDir])
+        }
+        if FileManager.default.fileExists(atPath: npmrcPath) {
+            _ = try? run("/usr/sbin/chown", args: [username, npmrcPath])
+        }
+        if FileManager.default.fileExists(atPath: npmGlobal) {
+            _ = try? run("/usr/sbin/chown", args: ["-R", username, npmGlobal])
+        }
+    }
+
+    private static func isNpmPermissionError(_ error: Error) -> Bool {
+        guard case let ShellError.nonZeroExit(_, _, stderr) = error else { return false }
+        let normalized = stderr.lowercased()
+        return normalized.contains("eacces")
+            || normalized.contains("errno -13")
+            || normalized.contains("permission denied")
     }
 
     /// 查询 Xcode/CLT 状态，用于 UI 展示和安装前预检。

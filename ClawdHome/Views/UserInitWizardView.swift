@@ -107,6 +107,11 @@ private enum WizardChannelType: String {
     case weixin
 }
 
+private enum OpenclawVersionPreset: String {
+    case latest
+    case custom
+}
+
 private enum WizardXcodeHealthState {
     case checking
     case healthy
@@ -184,13 +189,14 @@ struct InitWizardState: Codable {
     var steps: [String: String] = [:]
     var stepErrors: [String: String] = [:]
     var npmRegistry: String?
+    var openclawVersion: String = "latest"
     var modelName: String = ""
     var channelType: String = ""
     var updatedAt: Date = Date()
     var completedAt: Date?
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, mode, active, currentStep, steps, stepErrors, npmRegistry, modelName, channelType, updatedAt, completedAt
+        case schemaVersion, mode, active, currentStep, steps, stepErrors, npmRegistry, openclawVersion, modelName, channelType, updatedAt, completedAt
     }
 
     init() {}
@@ -204,6 +210,7 @@ struct InitWizardState: Codable {
         steps = try c.decodeIfPresent([String: String].self, forKey: .steps) ?? [:]
         stepErrors = try c.decodeIfPresent([String: String].self, forKey: .stepErrors) ?? [:]
         npmRegistry = try c.decodeIfPresent(String.self, forKey: .npmRegistry)
+        openclawVersion = try c.decodeIfPresent(String.self, forKey: .openclawVersion) ?? "latest"
         modelName = try c.decodeIfPresent(String.self, forKey: .modelName) ?? ""
         channelType = try c.decodeIfPresent(String.self, forKey: .channelType) ?? ""
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
@@ -273,6 +280,8 @@ struct UserInitWizardView: View {
     @State private var wizardMode: InitWizardMode = .onboarding
     @State private var currentStep: InitStep? = nil
     @State private var selectedNpmRegistry: NpmRegistryOption = .defaultForInitialization
+    @State private var selectedOpenclawVersionPreset: OpenclawVersionPreset = .latest
+    @State private var customOpenclawVersion = ""
     @State private var showTerminal = false
     @State private var showAdvancedOptions = false
     @State private var wizardConn: WizardConnection? = nil
@@ -298,6 +307,20 @@ struct UserInitWizardView: View {
     @State private var isInstallingXcodeCLT = false
     @State private var isAcceptingXcodeLicense = false
     @State private var xcodeFixMessage: String? = nil
+
+    private var selectedOpenclawVersionForInstall: String? {
+        switch selectedOpenclawVersionPreset {
+        case .latest:
+            return nil
+        case .custom:
+            let value = customOpenclawVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : value
+        }
+    }
+
+    private var openclawVersionLabelForUI: String {
+        selectedOpenclawVersionForInstall ?? "latest"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -356,14 +379,14 @@ struct UserInitWizardView: View {
 
             Divider()
 
-            // ── 底部命令输出折叠条 ────────────────────────────────
+            // ── 底部日志输出折叠条 ────────────────────────────────
             Button {
                 withAnimation(.easeInOut(duration: 0.22)) { showTerminal.toggle() }
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: showTerminal ? "chevron.down" : "chevron.right")
                         .imageScale(.small)
-                    Text("命令输出")
+                    Text("日志输出")
                         .font(.caption).fontWeight(.medium)
                     Spacer()
                     if !showTerminal && ((currentStep == .basicEnvironment) || isApplyingModel || isStartingOpenclaw) {
@@ -469,6 +492,26 @@ struct UserInitWizardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 2)
+            }
+
+            GroupBox("OpenClaw 版本") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Picker("OpenClaw 版本", selection: $selectedOpenclawVersionPreset) {
+                        Text("latest").tag(OpenclawVersionPreset.latest)
+                        Text("指定版本").tag(OpenclawVersionPreset.custom)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+
+                    if selectedOpenclawVersionPreset == .custom {
+                        TextField("例如：0.5.2 / next / beta", text: $customOpenclawVersion)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    Text("初始化将安装版本：\(openclawVersionLabelForUI)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if isHydratingState {
@@ -687,7 +730,7 @@ struct UserInitWizardView: View {
 
     @ViewBuilder
     private var channelBindingList: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             channelBindingRow(
                 channel: .feishu,
                 title: "飞书扫码绑定",
@@ -699,7 +742,6 @@ struct UserInitWizardView: View {
                     value: "\(ChannelOnboardingFlow.feishu.rawValue):\(user.username)"
                 )
             }
-            Divider().padding(.leading, 36)
             channelBindingRow(
                 channel: .weixin,
                 title: "微信扫码绑定",
@@ -816,7 +858,7 @@ struct UserInitWizardView: View {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
                     Text("步骤失败").font(.title3).fontWeight(.semibold)
                 }
-                Text("请查看命令输出了解详情，然后重试或重新开始。")
+                Text("请查看日志输出了解详情，然后重试或重新开始。")
                     .font(.callout).foregroundStyle(.secondary)
             }
             if let message = latestFailureMessage {
@@ -1045,6 +1087,8 @@ struct UserInitWizardView: View {
         wizardMode = .onboarding
         currentStep = nil
         selectedNpmRegistry = .defaultForInitialization
+        selectedOpenclawVersionPreset = .latest
+        customOpenclawVersion = ""
         showTerminal = false
         wizardApiKey = ""
         isShowingApiKey = false
@@ -1062,7 +1106,13 @@ struct UserInitWizardView: View {
         resetWizardStateOnly()
         wizardConn = nil
         onSessionActiveChanged?(false)
-        Task { try? await helperClient.saveInitState(username: user.username, json: "{}") }
+        Task {
+            do {
+                try await helperClient.saveInitState(username: user.username, json: "{}")
+            } catch {
+                appendLog("[state] 重置初始化状态失败：\(error.localizedDescription)\n")
+            }
+        }
     }
 
     private func runInitSteps() async {
@@ -1105,7 +1155,12 @@ struct UserInitWizardView: View {
             ("设置 npm 安装源", {
                 try await conn.setNpmRegistry(username: user.username, registry: selectedNpmRegistry.rawValue)
             }),
-            ("安装 openclaw", { try await conn.installOpenclaw(username: user.username) }),
+            ("安装 openclaw (\(openclawVersionLabelForUI))", {
+                try await conn.installOpenclaw(
+                    username: user.username,
+                    version: selectedOpenclawVersionForInstall
+                )
+            }),
         ].compactMap { $0 }
 
         for item in autoSteps {
@@ -1115,6 +1170,14 @@ struct UserInitWizardView: View {
             } catch {
                 let message = error.localizedDescription
                 if message.contains("已有初始化命令正在运行") {
+                    let reason = "检测到已有初始化任务在运行，正在同步当前状态。"
+                    appendLog("[info] \(reason)\n")
+                    statuses[InitStep.basicEnvironment.rawValue] = .running
+                    user.initStep = InitStep.basicEnvironment.title
+                    currentStep = .basicEnvironment
+                    await persistState(activeOverride: true)
+                    onSessionActiveChanged?(true)
+                    await reconcileStateFromPersistence()
                     return
                 }
                 appendLog("❌ \(message)\n")
@@ -1566,13 +1629,18 @@ struct UserInitWizardView: View {
             }
         }
         state.npmRegistry = selectedNpmRegistry.rawValue
+        state.openclawVersion = openclawVersionLabelForUI
         state.modelName = selectedMinimaxModel.rawValue
         state.channelType = selectedChannel.rawValue
         state.updatedAt = Date()
         let done = (statuses[InitStep.finish.rawValue] ?? .pending) == .done
         state.active = activeOverride ?? (!done && currentStep != nil)
         state.completedAt = done ? Date() : nil
-        try? await helperClient.saveInitState(username: user.username, json: state.toJSON())
+        do {
+            try await helperClient.saveInitState(username: user.username, json: state.toJSON())
+        } catch {
+            appendLog("[state] 保存初始化状态失败：\(error.localizedDescription)\n")
+        }
     }
 
     private func loadSavedState() async {
@@ -1604,6 +1672,17 @@ struct UserInitWizardView: View {
             selectedNpmRegistry = option
         }
 
+        if isHydratingState {
+            let v = saved.openclawVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+            if v.isEmpty || v == "latest" {
+                selectedOpenclawVersionPreset = .latest
+                customOpenclawVersion = ""
+            } else {
+                selectedOpenclawVersionPreset = .custom
+                customOpenclawVersion = v
+            }
+        }
+
         // 仅在首次水合阶段回填模型草稿，避免轮询状态覆盖用户在界面上的实时选择。
         if isHydratingState, let model = MinimaxModel(rawValue: saved.modelName) {
             selectedMinimaxModel = model
@@ -1633,7 +1712,30 @@ struct UserInitWizardView: View {
             }
         }
 
-        if let step = InitStep.from(key: saved.currentStep) {
+        let hasRecoverableProgress = InitStep.allCases.contains { step in
+            switch restored[step.rawValue] ?? .pending {
+            case .pending: return false
+            default: return true
+            }
+        }
+
+        // 迁移旧脏状态：active=true 但所有步骤 pending，会导致 UI 误判为“正在初始化”。
+        if saved.active && !saved.isCompleted && !hasRecoverableProgress {
+            var repaired = saved
+            repaired.active = false
+            repaired.currentStep = nil
+            repaired.updatedAt = Date()
+            do {
+                try await helperClient.saveInitState(username: user.username, json: repaired.toJSON())
+            } catch {
+                appendLog("[state] 迁移旧初始化状态失败：\(error.localizedDescription)\n")
+            }
+        }
+
+        let isPrestartSession = !saved.isCompleted && !hasRecoverableProgress
+        if isPrestartSession {
+            currentStep = nil
+        } else if let step = InitStep.from(key: saved.currentStep) {
             if restored[step.rawValue] == nil {
                 restored[step.rawValue] = .running
             }
@@ -1655,16 +1757,11 @@ struct UserInitWizardView: View {
             xcodeEnvStatus = await helperClient.getXcodeEnvStatus()
         }
 
-        let hasRecoverableProgress = InitStep.allCases.contains { step in
-            switch restored[step.rawValue] ?? .pending {
-            case .pending: return false
-            default: return true
-            }
-        }
-        let effectiveActive = saved.active || (!saved.isCompleted && hasRecoverableProgress)
-        let hasAnyState = effectiveActive || saved.isCompleted
-        initiated = hasAnyState
-        onSessionActiveChanged?(effectiveActive)
+        let effectiveActive = !saved.isCompleted && (saved.active || hasRecoverableProgress) && !isPrestartSession
+        let hasAnyState = saved.isCompleted || effectiveActive || isPrestartSession
+        let sessionVisible = !saved.isCompleted && (effectiveActive || isPrestartSession)
+        initiated = effectiveActive
+        onSessionActiveChanged?(sessionVisible)
 
         guard hasAnyState else {
             user.initStep = nil
