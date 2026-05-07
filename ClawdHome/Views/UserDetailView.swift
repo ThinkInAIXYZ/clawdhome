@@ -3864,8 +3864,7 @@ private struct CronTabView: View {
 }
 
 private struct CronTabContent: View {
-    var store: GatewayCronStore
-    @State private var actionError: String?
+    let store: GatewayCronStore
 
     var body: some View {
         VStack(spacing: 0) {
@@ -4102,13 +4101,16 @@ private struct CronJobDetailPane: View {
         }
     }
 
-    private func timeText(ms: Int?) -> String {
-        guard let ms else { return "—" }
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
+    private static let dateFormatter: DateFormatter = {
         let fmt = DateFormatter()
         fmt.dateStyle = .medium
         fmt.timeStyle = .short
-        return fmt.string(from: date)
+        return fmt
+    }()
+
+    private func timeText(ms: Int?) -> String {
+        guard let ms else { return "—" }
+        return Self.dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(ms) / 1000))
     }
 }
 
