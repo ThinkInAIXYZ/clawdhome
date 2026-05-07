@@ -49,6 +49,7 @@ struct ModelCompat {
     let supportsStore: Bool
     let supportsDeveloperRole: Bool
     let supportsReasoningEffort: Bool
+    var thinkingFormat: String? = nil
 }
 
 // MARK: - 统一模型定义
@@ -89,11 +90,13 @@ struct ModelEntry: Identifiable {
             ]
         }
         if let compat {
-            config["compat"] = [
+            var compatDict: [String: Any] = [
                 "supportsStore": compat.supportsStore,
                 "supportsDeveloperRole": compat.supportsDeveloperRole,
                 "supportsReasoningEffort": compat.supportsReasoningEffort,
             ]
+            if let tf = compat.thinkingFormat { compatDict["thinkingFormat"] = tf }
+            config["compat"] = compatDict
         }
         return config
     }
@@ -112,6 +115,50 @@ struct ModelGroup: Identifiable {
 /// 格式：provider/model-id，与 openclaw config 写入格式一致
 /// ⚠️ 这是模型 (id, label, config) 的唯一源，其他文件应引用此数组而非重复定义
 let builtInModelGroups: [ModelGroup] = [
+    ModelGroup(id: "bailian", provider: "阿里云百炼", models: [
+        ModelEntry(id: "bailian/qwen3.6-plus", label: "Qwen3.6 Plus",
+                   reasoning: false, inputTypes: ["text", "image"],
+                   contextWindow: 1_000_000, maxTokens: 65536,
+                   cost: ModelCost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0),
+                   compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false, thinkingFormat: "qwen")),
+        ModelEntry(id: "bailian/qwen3.5-plus", label: "Qwen3.5 Plus",
+                   reasoning: false, inputTypes: ["text", "image"],
+                   contextWindow: 1_000_000, maxTokens: 65536,
+                   cost: ModelCost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0),
+                   compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false, thinkingFormat: "qwen")),
+        ModelEntry(id: "bailian/qwen3-max-2026-01-23", label: "Qwen3 Max",
+                   reasoning: false, inputTypes: ["text"],
+                   contextWindow: 262_144, maxTokens: 65536,
+                   cost: ModelCost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0),
+                   compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false, thinkingFormat: "qwen")),
+        ModelEntry(id: "bailian/qwen3-coder-next", label: "Qwen3 Coder Next",
+                   reasoning: false, inputTypes: ["text"],
+                   contextWindow: 262_144, maxTokens: 65536,
+                   cost: ModelCost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0)),
+        ModelEntry(id: "bailian/qwen3-coder-plus", label: "Qwen3 Coder Plus",
+                   reasoning: false, inputTypes: ["text"],
+                   contextWindow: 1_000_000, maxTokens: 65536,
+                   cost: ModelCost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0)),
+        ModelEntry(id: "bailian/MiniMax-M2.5", label: "MiniMax M2.5",
+                   reasoning: false, inputTypes: ["text"],
+                   contextWindow: 196_608, maxTokens: 32768,
+                   cost: ModelCost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0)),
+        ModelEntry(id: "bailian/glm-5", label: "GLM-5",
+                   reasoning: false, inputTypes: ["text"],
+                   contextWindow: 202_752, maxTokens: 16384,
+                   cost: ModelCost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0),
+                   compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false, thinkingFormat: "qwen")),
+        ModelEntry(id: "bailian/glm-4.7", label: "GLM-4.7",
+                   reasoning: false, inputTypes: ["text"],
+                   contextWindow: 202_752, maxTokens: 16384,
+                   cost: ModelCost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0),
+                   compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false, thinkingFormat: "qwen")),
+        ModelEntry(id: "bailian/kimi-k2.5", label: "Kimi K2.5",
+                   reasoning: false, inputTypes: ["text", "image"],
+                   contextWindow: 262_144, maxTokens: 32768,
+                   cost: ModelCost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0),
+                   compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false, thinkingFormat: "qwen")),
+    ]),
     ModelGroup(id: "moonshot", provider: "Moonshot（Kimi）", models: [
         ModelEntry(id: "moonshot/kimi-k2.6", label: "Kimi K2.6",
                    inputTypes: ["text", "image"],
@@ -153,6 +200,12 @@ let builtInModelGroups: [ModelGroup] = [
                    cost: ModelCost(input: 0.3, output: 1.2, cacheRead: 0.03, cacheWrite: 0.12)),
     ]),
     ModelGroup(id: "qiniu", provider: "Qiniu AI", models: [
+        ModelEntry(id: "qiniu/deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro",
+                   reasoning: true,
+                   compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false)),
+        ModelEntry(id: "qiniu/deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash",
+                   reasoning: true,
+                   compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false)),
         ModelEntry(id: "qiniu/deepseek-v3.2-251201", label: "DeepSeek V3.2",
                    reasoning: false,
                    compat: ModelCompat(supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false)),

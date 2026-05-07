@@ -19,7 +19,6 @@
 		0B88F32EFCC07BC3B59A465E /* GatewayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA77A80C488C3D16C1BD4243 /* GatewayClient.swift */; };
 		0E07E58A241BA58310F6443A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 38A912F0A5514717350027B5 /* Assets.xcassets */; };
 		0E9D058F70E41C9D8D9E2FBB /* FileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71156CAD7673A87034AF0D8 /* FileModels.swift */; };
-		11E36D7F3E8604EC77253D31 /* AccountKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2AF7BE5DA61BB38781D130C /* AccountKeychain.swift */; };
 		128DCAA688B24902AC319BB4 /* AppUpdateState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F2D77C8262C551CBD26BA2 /* AppUpdateState.swift */; };
 		136FC273887E88923B2A9D46 /* HermesQRBindingStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3E83E7E56811D071D7716FC /* HermesQRBindingStep.swift */; };
 		13E72438B5B5A0997D964566 /* HelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 467287AC8BE705E07CE3C366 /* HelperProtocol.swift */; };
@@ -368,7 +367,6 @@
 		9EFDF0452F0C6492C04DDB63 /* GlobalSecretsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSecretsStore.swift; sourceTree = "<group>"; };
 		A0680BCD6FCF288D2B143355 /* HelperSharedTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperSharedTypes.swift; sourceTree = "<group>"; };
 		A2377E2C629645068605ED7E /* HermesCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesCommand.swift; sourceTree = "<group>"; };
-		A2AF7BE5DA61BB38781D130C /* AccountKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountKeychain.swift; sourceTree = "<group>"; };
 		A2F39F27916E7B56B4688842 /* HelperClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperClient.swift; sourceTree = "<group>"; };
 		A3054CF3A88705201107FB7F /* HermesWizardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesWizardState.swift; sourceTree = "<group>"; };
 		A583A7B98571015C5E62789E /* ProviderKeySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderKeySheet.swift; sourceTree = "<group>"; };
@@ -640,7 +638,6 @@
 		9572E344E021584CF2DC9A63 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				A2AF7BE5DA61BB38781D130C /* AccountKeychain.swift */,
 				BADB9554D643220091AA3A3E /* AgentProfile.swift */,
 				F6BBA412ABBAFB1986020ADA /* AppAppearance.swift */,
 				45C19EA10CE619103184757E /* GatewayChannelModels.swift */,
@@ -1020,7 +1017,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				DFF6D9534DA4C03A269C2278 /* AILabView.swift in Sources */,
-				11E36D7F3E8604EC77253D31 /* AccountKeychain.swift in Sources */,
 				D23EBBF179753EEFDD97C0B2 /* AddBotSheet.swift in Sources */,
 				BD0432723571AEC02E2938BF /* AddProviderModelSheet.swift in Sources */,
 				4FCD2C3BFF60D4569A0E7DD0 /* AddUserSheet.swift in Sources */,

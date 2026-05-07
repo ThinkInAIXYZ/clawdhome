@@ -121,6 +121,13 @@ actor ModelPingService {
             return try await callOpenAI(base: "https://openrouter.ai", modelId: modelId.dropPrefix("openrouter/"), apiKey: apiKey, message: message)
         case "google":
             return try await callGoogle(modelId: modelId, apiKey: apiKey, message: message)
+        case "bailian":
+            return try await callOpenAI(
+                base: "https://coding.dashscope.aliyuncs.com/v1",
+                modelId: modelId.dropPrefix("bailian/"),
+                apiKey: apiKey,
+                message: message
+            )
         case "qiniu":
             return try await callOpenAI(
                 base: "https://api.qnaigc.com/v1",

@@ -15,6 +15,7 @@ struct ModelChainEntry: Identifiable, Equatable {
         let prefix = modelId.components(separatedBy: "/").first ?? modelId
         // 已知提供商的友好名映射
         switch prefix {
+        case "bailian": return "阿里云百炼"
         case "minimax": return "MiniMax"
         case "kimi-coding": return "Kimi Code"
         case "qiniu": return "Qiniu AI"
@@ -28,6 +29,7 @@ struct ModelChainEntry: Identifiable, Equatable {
 
 /// 内联添加表单的提供商选择
 enum AddModelProvider: String, CaseIterable, Identifiable {
+    case bailian = "bailian"
     case qiniu = "qiniu"
     case kimiCoding = "kimi-coding"
     case minimax = "minimax"
@@ -38,6 +40,7 @@ enum AddModelProvider: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .bailian: return "阿里云百炼"
         case .qiniu: return "Qiniu AI"
         case .kimiCoding: return "Kimi Code"
         case .minimax: return "MiniMax"
@@ -48,6 +51,7 @@ enum AddModelProvider: String, CaseIterable, Identifiable {
 
     var apiKeyPlaceholder: String {
         switch self {
+        case .bailian: return "sk-..."
         case .kimiCoding: return "sk-..."
         case .minimax: return "MiniMax API Key"
         case .qiniu: return "sk-..."
@@ -65,6 +69,7 @@ enum AddModelProvider: String, CaseIterable, Identifiable {
 
     var baseURL: String {
         switch self {
+        case .bailian: return "https://coding.dashscope.aliyuncs.com/v1"
         case .kimiCoding: return "https://api.kimi.com/coding/"
         case .minimax: return "https://api.minimaxi.com/anthropic"
         case .qiniu: return "https://api.qnaigc.com/v1"
@@ -76,7 +81,7 @@ enum AddModelProvider: String, CaseIterable, Identifiable {
     var apiType: String {
         switch self {
         case .kimiCoding, .minimax: return "anthropic-messages"
-        case .qiniu, .zai: return "openai-completions"
+        case .bailian, .qiniu, .zai: return "openai-completions"
         case .custom: return "openai-completions"
         }
     }
@@ -105,7 +110,7 @@ struct ModelPrioritySheet: View {
     @State private var showRestartConfirm = false
 
     // 添加表单状态
-    @State private var addProvider: AddModelProvider = .qiniu
+    @State private var addProvider: AddModelProvider = .bailian
     @State private var addSelectedModelId: String = ""
     @State private var addApiKey: String = ""
     @State private var addCustomBaseURL: String = "https://api.example.com/v1"

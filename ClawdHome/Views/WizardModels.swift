@@ -132,6 +132,7 @@ enum WizardXcodeHealthState {
 }
 
 enum WizardProvider: String, CaseIterable, Identifiable {
+    case bailian = "bailian"
     case kimiCoding = "kimi-coding"
     case minimax = "minimax"
     case qiniu = "qiniu"
@@ -142,6 +143,7 @@ enum WizardProvider: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
+        case .bailian:    return "阿里云百炼"
         case .kimiCoding: return "Kimi Code"
         case .minimax:    return "MiniMax"
         case .qiniu:      return "Qiniu AI"
@@ -152,6 +154,7 @@ enum WizardProvider: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
+        case .bailian:    return "Qwen / GLM / Kimi / MiniMax"
         case .kimiCoding: return "Kimi for Coding"
         case .minimax:    return L10n.k("wizard.provider.minimax.subtitle", fallback: "MiniMax M2.5 系列")
         case .qiniu:      return "DeepSeek / GLM / Kimi / Minimax"
@@ -162,6 +165,7 @@ enum WizardProvider: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .bailian:    return "cloud.fill"
         case .kimiCoding: return "k.circle"
         case .minimax:    return "m.circle"
         case .qiniu:      return "q.circle"
@@ -172,6 +176,7 @@ enum WizardProvider: String, CaseIterable, Identifiable {
 
     var apiKeyLabel: String {
         switch self {
+        case .bailian:    return "百炼 API Key"
         case .kimiCoding: return "Kimi Code API Key"
         case .minimax:    return "MiniMax API Key"
         case .qiniu:      return "Qiniu API Key"
@@ -182,6 +187,7 @@ enum WizardProvider: String, CaseIterable, Identifiable {
 
     var apiKeyPlaceholder: String {
         switch self {
+        case .bailian:    return "sk-..."
         case .kimiCoding: return "sk-..."
         case .minimax:    return L10n.k("wizard.provider.minimax.api_key.placeholder", fallback: "粘贴 MiniMax API Key")
         case .qiniu:      return "sk-..."
@@ -192,6 +198,7 @@ enum WizardProvider: String, CaseIterable, Identifiable {
 
     var consoleURL: String {
         switch self {
+        case .bailian:    return "https://bailian.console.aliyun.com/cn-beijing/?tab=plan#/efm/subscription/token-plan"
         case .kimiCoding: return "https://www.kimi.com/code/console"
         case .minimax:    return "https://platform.minimaxi.com/user-center/basic-information/interface-key"
         case .qiniu:      return "https://portal.qiniu.com/ai-inference/api-key?ref=clawdhome.app"
@@ -202,6 +209,7 @@ enum WizardProvider: String, CaseIterable, Identifiable {
 
     var consoleLinkTitle: String {
         switch self {
+        case .bailian:    return "百炼 Token Plan"
         case .kimiCoding: return L10n.k("wizard.provider.kimi.console", fallback: "Kimi Code 控制台")
         case .minimax:    return L10n.k("wizard.provider.minimax.console", fallback: "MiniMax 控制台")
         case .qiniu:      return L10n.k("wizard.provider.qiniu.console", fallback: "七牛 API Key")
@@ -212,10 +220,12 @@ enum WizardProvider: String, CaseIterable, Identifiable {
 
     var promotionURL: String? {
         switch self {
+        case .bailian:
+            return "https://www.aliyun.com/minisite/goods?userCode=vb7y6zwf"
         case .minimax:
             return "https://platform.minimaxi.com/subscribe/token-plan?code=BvYUzElSu4&source=link"
         case .qiniu:
-            return "https://www.qiniu.com/ai/promotion/invited?cps_key=1hdl63udiuyqa"
+            return "https://s.qiniu.com/vqEvYv"
         case .zai:
             return "https://www.bigmodel.cn/glm-coding?ic=BXQV5BQ8BB"
         default:
@@ -225,6 +235,8 @@ enum WizardProvider: String, CaseIterable, Identifiable {
 
     var promotionTitle: String? {
         switch self {
+        case .bailian:
+            return "🎁 新客 9 折优惠"
         case .minimax:
             return L10n.k("wizard.provider.minimax.promotion", fallback: "🎁 领取 9 折专属优惠")
         case .qiniu:

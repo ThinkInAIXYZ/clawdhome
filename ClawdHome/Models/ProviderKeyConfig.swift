@@ -38,6 +38,16 @@ struct ProviderKeyConfig: Identifiable {
 let supportedProviderKeys: [ProviderKeyConfig] = [
     // ── 直连 Provider ──────────────────────────────────────
     ProviderKeyConfig(
+        id: "bailian",
+        displayName: "阿里云百炼",
+        configPath: "models.providers.bailian.apiKey",
+        placeholder: "sk-...",
+        isUrlConfig: false, supportsOAuth: false,
+        sideConfigs: [
+            ("models.providers.bailian.api", .string("openai-completions")),
+            ("models.providers.bailian.baseUrl", .string("https://coding.dashscope.aliyuncs.com/v1")),
+        ]),
+    ProviderKeyConfig(
         id: "anthropic",
         displayName: "Anthropic",
         configPath: "models.providers.anthropic.apiKey",
