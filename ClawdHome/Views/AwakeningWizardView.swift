@@ -3,9 +3,15 @@
 
 import SwiftUI
 
+struct AwakeningExistingUser: Equatable {
+    let username: String
+    let fullName: String
+}
+
 struct AwakeningWizardView: View {
     let dna: AgentDNA
     @Binding var isPresented: Bool
+    let existingUsers: [AwakeningExistingUser]
     var onDismiss: (() -> Void)? = nil
     /// 正式唤醒回调 (username, fullName, description, soul, identity, userProfile)，由调用方负责创建用户并打开初始化向导
     var onAwaken: ((String, String, String, String, String, String) async throws -> Void)? = nil
@@ -14,6 +20,8 @@ struct AwakeningWizardView: View {
     @State private var displayName = ""
     @State private var osUsername = ""
     @State private var osUsernameError: String? = nil
+    @State private var displayNameError: String? = nil
+    @State private var osUsernameConflictError: String? = nil
     @State private var submitError: String? = nil
     @State private var isSubmitting = false
 
@@ -43,8 +51,10 @@ struct AwakeningWizardView: View {
                     case 2:
                         Step2View(
                             displayName: $displayName,
+                            displayNameError: $displayNameError,
                             osUsername: $osUsername,
-                            osUsernameError: $osUsernameError
+                            osUsernameError: $osUsernameError,
+                            osUsernameConflictError: $osUsernameConflictError
                         )
                     case 3:
                         Step3View(dna: dna, displayName: displayName, osUsername: osUsername)
@@ -161,6 +171,13 @@ struct AwakeningWizardView: View {
             }
             // 显示名预填充为角色名
             displayName = dna.name
+            validateStep2Realtime()
+        }
+        .onChange(of: displayName) { _, _ in
+            validateStep2Realtime()
+        }
+        .onChange(of: osUsername) { _, _ in
+            validateStep2Realtime()
         }
         .overlay {
             if isSubmitting {
@@ -192,6 +209,8 @@ struct AwakeningWizardView: View {
         case 2:
             return isValidOSUsername(osUsername)
                 && !displayName.trimmingCharacters(in: .whitespaces).isEmpty
+                && conflictErrorForDisplayName(displayName) == nil
+                && conflictErrorForUsername(osUsername) == nil
         case 3: return true
         default: return false
         }
@@ -200,11 +219,26 @@ struct AwakeningWizardView: View {
     func handleNext() {
         submitError = nil
         if step == 2 {
+            let trimmedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedDisplayName.isEmpty else {
+                displayNameError = "显示名不能为空"
+                return
+            }
             guard isValidOSUsername(osUsername) else {
                 osUsernameError = L10n.k("views.awakening_wizard_view.os_username_error", fallback: "以字母开头，只允许字母、数字、下划线")
                 return
             }
+            if let usernameConflict = conflictErrorForUsername(osUsername) {
+                osUsernameConflictError = usernameConflict
+                return
+            }
+            if let displayNameConflict = conflictErrorForDisplayName(displayName) {
+                displayNameError = displayNameConflict
+                return
+            }
+            displayNameError = nil
             osUsernameError = nil
+            osUsernameConflictError = nil
         }
         if step < 3 {
             step += 1
@@ -237,6 +271,48 @@ struct AwakeningWizardView: View {
     func isValidOSUsername(_ s: String) -> Bool {
         guard !s.isEmpty else { return false }
         return s.range(of: "^[a-zA-Z][a-zA-Z0-9_]*$", options: .regularExpression) != nil
+    }
+
+    private func validateStep2Realtime() {
+        let trimmedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedDisplayName.isEmpty {
+            displayNameError = nil
+        } else {
+            displayNameError = conflictErrorForDisplayName(displayName)
+        }
+
+        let trimmedUsername = osUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedUsername.isEmpty {
+            osUsernameError = nil
+            osUsernameConflictError = nil
+            return
+        }
+
+        if isValidOSUsername(trimmedUsername) {
+            osUsernameError = nil
+            osUsernameConflictError = conflictErrorForUsername(trimmedUsername)
+        } else {
+            osUsernameError = L10n.k("views.awakening_wizard_view.os_username_error", fallback: "以字母开头，只允许字母、数字、下划线")
+            osUsernameConflictError = nil
+        }
+    }
+
+    private func conflictErrorForDisplayName(_ value: String) -> String? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        if existingUsers.contains(where: { $0.fullName.caseInsensitiveCompare(normalized) == .orderedSame }) {
+            return "显示名“\(normalized)”已被使用，请换一个名字"
+        }
+        return nil
+    }
+
+    private func conflictErrorForUsername(_ value: String) -> String? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        if existingUsers.contains(where: { $0.username.caseInsensitiveCompare(normalized) == .orderedSame }) {
+            return "用户名 @\(normalized) 已存在，请换一个再试"
+        }
+        return nil
     }
 }
 
@@ -406,8 +482,10 @@ struct DNAFileEditor: View {
 
 struct Step2View: View {
     @Binding var displayName: String
+    @Binding var displayNameError: String?
     @Binding var osUsername: String
     @Binding var osUsernameError: String?
+    @Binding var osUsernameConflictError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -422,6 +500,11 @@ struct Step2View: View {
                 TextField(L10n.k("views.awakening_wizard_view.role_display_name", fallback: "角色显示名称"), text: $displayName)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 14))
+                if let err = displayNameError {
+                    Label(err, systemImage: "exclamationmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.red)
+                }
             }
 
             VStack(alignment: .leading, spacing: 5) {
@@ -431,9 +514,13 @@ struct Step2View: View {
                 TextField(L10n.k("views.awakening_wizard_view.system_username", fallback: "系统用户名"), text: $osUsername)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 14))
-                    .onChange(of: osUsername) { _ in osUsernameError = nil }
                 if let err = osUsernameError {
                     Label(err, systemImage: "exclamationmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.red)
+                }
+                if let conflict = osUsernameConflictError {
+                    Label(conflict, systemImage: "exclamationmark.circle.fill")
                         .font(.system(size: 11))
                         .foregroundColor(.red)
                 }

@@ -79,6 +79,51 @@ final class HelperClient {
         personaReadConnection?.remoteObjectProxy as? any ClawdHomeHelperProtocol
     }
 
+    private func requestWithTimeout<T>(
+        timeout: Duration,
+        timeoutMessage: String,
+        operation: @escaping (@escaping (T) -> Void) -> Void
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                await withCheckedContinuation { continuation in
+                    operation { value in
+                        continuation.resume(returning: value)
+                    }
+                }
+            }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw HelperError.operationFailed(timeoutMessage)
+            }
+            defer { group.cancelAll() }
+            guard let value = try await group.next() else {
+                throw HelperError.operationFailed(timeoutMessage)
+            }
+            return value
+        }
+    }
+
+    private func isGatewayRunningQuickly(username: String) async -> Bool {
+        guard let proxy = controlProxy else { return false }
+        do {
+            let (running, _): (Bool, Int32) = try await requestWithTimeout(
+                timeout: .seconds(3),
+                timeoutMessage: L10n.k(
+                    "services.helper_client.gateway_status_timeout",
+                    fallback: "读取 Gateway 状态超时"
+                )
+            ) { completion in
+                proxy.getGatewayStatus(username: username) { running, pid in
+                    completion((running, pid))
+                }
+            }
+            return running
+        } catch {
+            return false
+        }
+    }
+
     // MARK: - 用户管理
 
     func createUser(username: String, fullName: String, password: String) async throws {
@@ -192,8 +237,23 @@ final class HelperClient {
 
     func startGateway(username: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
-        let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
-            proxy.startGateway(username: username) { ok, msg in cont.resume(returning: (ok, msg)) }
+        let (ok, msg): (Bool, String?)
+        do {
+            (ok, msg) = try await requestWithTimeout(
+                timeout: .seconds(25),
+                timeoutMessage: L10n.k(
+                    "services.helper_client.gateway_start_timeout",
+                    fallback: "启动 Gateway 超时，请检查 Helper 日志后重试"
+                )
+            ) { completion in
+                proxy.startGateway(username: username) { ok, msg in
+                    completion((ok, msg))
+                }
+            }
+        } catch {
+            // 某些场景下（例如 XPC 回调丢失）请求会超时，但 gateway 已经实际拉起。
+            if await isGatewayRunningQuickly(username: username) { return }
+            throw error
         }
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
@@ -266,9 +326,9 @@ final class HelperClient {
 
     // MARK: - 用户环境初始化
 
-    private static func hasLocalNodeBinary() -> Bool {
-        let candidates = ["/usr/local/bin/node", "/opt/homebrew/bin/node", "/usr/bin/node"]
-        return candidates.contains { FileManager.default.isExecutableFile(atPath: $0) }
+    private static func hasLocalNodeBinary(username: String) -> Bool {
+        let userNode = "/Users/\(username)/.brew/bin/node"
+        return FileManager.default.isExecutableFile(atPath: userNode)
     }
 
     /// 安装 Node.js（输出实时写入 /tmp/clawdhome-init-<username>.log）
@@ -280,8 +340,8 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
-    /// Node.js 是否已安装就绪（用于控制 npm 相关操作）
-    func isNodeInstalled() async -> Bool {
+    /// 指定用户 Node.js 是否已安装就绪（用于控制 npm 相关操作）
+    func isNodeInstalled(username: String) async -> Bool {
         guard let proxy = controlProxy else { return false }
         return await withCheckedContinuation { cont in
             let lock = NSLock()
@@ -295,13 +355,13 @@ final class HelperClient {
                 cont.resume(returning: value)
             }
 
-            proxy.isNodeInstalled { value in
+            proxy.isNodeInstalled(username: username) { value in
                 resolve(value)
             }
 
             // 兼容旧版 Helper（未实现 isNodeInstalled 回调）导致的悬挂
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.2) {
-                resolve(Self.hasLocalNodeBinary())
+                resolve(Self.hasLocalNodeBinary(username: username))
             }
         }
     }

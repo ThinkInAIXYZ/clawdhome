@@ -8,8 +8,10 @@ import SystemConfiguration
 struct InstallManager {
 
     /// sudo -H 会 reset PATH；openclaw 是 node shebang 脚本，需要显式传 PATH
-    /// 优先 /usr/local/bin（NodeDownloader 安装路径），再回退 Homebrew
-    static let sudoNodePath = "PATH=/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+    /// 必须优先使用目标用户隔离环境（~/.brew + ~/.npm-global），避免全局 Node/npm 串用。
+    static func sudoNodePath(for username: String) -> String {
+        "PATH=\(ConfigWriter.buildNodePath(username: username))"
+    }
 
     /// 用户 npm 全局目录（结构：bin/ lib/node_modules/）
     static func npmGlobalDir(for username: String) -> String {
@@ -29,7 +31,7 @@ struct InstallManager {
     static func install(username: String, version: String?, logURL: URL? = nil) throws -> String {
         try ensureNpmBuildToolchainReady()
         try normalizeNpmUserOwnership(username: username)
-        let npmPath = try findNpmBinary()
+        let npmPath = try findNpmBinary(for: username)
         let packageArg = version.map { "openclaw@\($0)" } ?? "openclaw@latest"
         let prefix = npmGlobalDir(for: username)
         // 安装前预修正 .openclaw 所有权，避免存量 root-owned 文件阻断新版本启动
@@ -38,8 +40,9 @@ struct InstallManager {
             _ = try? run("/usr/sbin/chown", args: ["-R", username, openclawDirPre])
         }
         let args = ["-u", username, "-H",
-                    "env", sudoNodePath,
+                    "env", sudoNodePath(for: username),
                     npmPath, "install", "-g", "--prefix", prefix,
+                    "--include=optional",
                     "--loglevel", "verbose",
                     packageArg]
         let output: String
@@ -66,9 +69,9 @@ struct InstallManager {
             throw InstallError.unsupportedNpmRegistry(registry)
         }
         try normalizeNpmUserOwnership(username: username)
-        let npmPath = try findNpmBinary()
+        let npmPath = try findNpmBinary(for: username)
         let args = ["-u", username, "-H",
-                    "env", sudoNodePath,
+                    "env", sudoNodePath(for: username),
                     npmPath, "config", "set", "registry", option.rawValue, "--location=user"]
         do {
             if let logURL {
@@ -94,11 +97,11 @@ struct InstallManager {
 
     /// 获取指定用户当前 npm 安装源（优先用户级配置）
     static func getNpmRegistry(username: String) -> String {
-        guard let npmPath = try? findNpmBinary() else {
+        guard let npmPath = try? findNpmBinary(for: username) else {
             return NpmRegistryOption.npmOfficial.rawValue
         }
         let args = ["-u", username, "-H",
-                    "env", sudoNodePath,
+                    "env", sudoNodePath(for: username),
                     npmPath, "config", "get", "registry", "--location=user"]
         let raw = (try? run("/usr/bin/sudo", args: args)) ?? NpmRegistryOption.npmOfficial.rawValue
         if let option = NpmRegistryOption.fromRegistryURL(raw) {
@@ -124,20 +127,38 @@ struct InstallManager {
         //    避免将管理机上的全局安装版本错误地报告为用户已安装版本
         let userBin = "\(npmGlobalBin(for: username))/openclaw"
         if FileManager.default.isExecutableFile(atPath: userBin) {
-            return try? run("/usr/bin/sudo", args: ["-u", username, "-H", "env", sudoNodePath, userBin, "--version"])
+            return try? run("/usr/bin/sudo", args: ["-u", username, "-H", "env", sudoNodePath(for: username), userBin, "--version"])
         }
         return nil
     }
 
     // MARK: - 内部工具
 
-    static func findNpmBinary() throws -> String {
-        let candidates = ["/usr/local/bin/npm", "/opt/homebrew/bin/npm", "/usr/bin/npm"]
+    static func findNpmBinary(for username: String) throws -> String {
+        let home = "/Users/\(username)"
+        let brewRoot = "\(home)/.brew"
+        var candidates = [
+            "\(brewRoot)/bin/npm",
+            "\(brewRoot)/opt/node/bin/npm",
+            "\(brewRoot)/opt/node@24/bin/npm",
+            "\(brewRoot)/opt/node@22/bin/npm",
+            "\(brewRoot)/opt/node@20/bin/npm",
+            "\(brewRoot)/opt/node@18/bin/npm",
+        ]
+        let cellar = "\(brewRoot)/Cellar"
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: cellar) {
+            let nodeFormulae = entries.filter { $0 == "node" || $0.hasPrefix("node@") }.sorted()
+            for formula in nodeFormulae {
+                let formulaDir = "\(cellar)/\(formula)"
+                if let versions = try? FileManager.default.contentsOfDirectory(atPath: formulaDir).sorted(by: >) {
+                    for version in versions {
+                        candidates.append("\(formulaDir)/\(version)/bin/npm")
+                    }
+                }
+            }
+        }
         for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
             return path
-        }
-        if let path = try? run("/usr/bin/which", args: ["npm"]), !path.isEmpty {
-            return path.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         throw InstallError.npmNotFound
     }

@@ -84,39 +84,21 @@ struct ConfigWriter {
 
     // MARK: - 内部工具
 
-    /// 查找 openclaw 二进制：优先用户私有 npm-global，再找系统路径
+    /// 查找 openclaw 二进制：仅允许用户私有 npm-global，禁止回退系统全局路径
     static func findOpenclawBinary(for username: String) throws -> String {
-        let candidates = [
-            "\(InstallManager.npmGlobalBin(for: username))/openclaw",  // npm 全局安装位置
-            "/opt/homebrew/bin/openclaw",
-            "/usr/local/bin/openclaw",
-        ]
+        let candidates = ["\(InstallManager.npmGlobalBin(for: username))/openclaw"]
         for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
             return path
-        }
-        if let path = try? run("/usr/bin/which", args: ["openclaw"]),
-           !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return path.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         throw ConfigError.openclawNotFound
     }
 
     /// 构建包含 node 的 PATH 环境变量（供 GatewayManager 等模块共用）
     static func buildNodePath(username: String) -> String {
-        // 找到 node 所在目录（Homebrew arm64 / x86）
-        let nodeDir: String
-        if FileManager.default.isExecutableFile(atPath: "/opt/homebrew/bin/node") {
-            nodeDir = "/opt/homebrew/bin"
-        } else if FileManager.default.isExecutableFile(atPath: "/usr/local/bin/node") {
-            nodeDir = "/usr/local/bin"
-        } else {
-            nodeDir = "/opt/homebrew/bin"  // 兜底
-        }
-        // 同时加入用户 npm-global/bin（openclaw 二进制位置）以及系统路径
+        // 仅包含用户隔离环境（~/.npm-global + ~/.brew）与基础系统命令目录。
         return [
             InstallManager.npmGlobalBin(for: username),
             "/Users/\(username)/.brew/bin",
-            nodeDir,
             "/usr/bin", "/bin"
         ].joined(separator: ":")
     }
@@ -124,5 +106,49 @@ struct ConfigWriter {
 
 enum ConfigError: LocalizedError {
     case openclawNotFound
-    var errorDescription: String? { "未找到 openclaw 二进制文件" }
+    case isolatedNpxNotFound
+    var errorDescription: String? {
+        switch self {
+        case .openclawNotFound:
+            return "未找到 openclaw 二进制文件"
+        case .isolatedNpxNotFound:
+            return "未找到隔离用户环境 npx（仅允许 ~/.brew 下的 npx）"
+        }
+    }
+}
+
+extension ConfigWriter {
+    /// 查找隔离用户环境 npx：
+    /// 仅允许 ~/.brew 下的 npx，避免回退到宿主机 /usr/local/bin/npx 造成版本串用。
+    static func findIsolatedNpxBinary(for username: String) throws -> String {
+        let home = "/Users/\(username)"
+        let brewRoot = "\(home)/.brew"
+
+        var candidates: [String] = [
+            "\(brewRoot)/bin/npx",
+            "\(brewRoot)/opt/node/bin/npx",
+            "\(brewRoot)/opt/node@24/bin/npx",
+            "\(brewRoot)/opt/node@22/bin/npx",
+            "\(brewRoot)/opt/node@20/bin/npx",
+            "\(brewRoot)/opt/node@18/bin/npx",
+        ]
+
+        let cellar = "\(brewRoot)/Cellar"
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: cellar) {
+            let nodeFormulae = entries.filter { $0 == "node" || $0.hasPrefix("node@") }.sorted()
+            for formula in nodeFormulae {
+                let formulaDir = "\(cellar)/\(formula)"
+                if let versions = try? FileManager.default.contentsOfDirectory(atPath: formulaDir).sorted(by: >) {
+                    for version in versions {
+                        candidates.append("\(formulaDir)/\(version)/bin/npx")
+                    }
+                }
+            }
+        }
+
+        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
+            return path
+        }
+        throw ConfigError.isolatedNpxNotFound
+    }
 }

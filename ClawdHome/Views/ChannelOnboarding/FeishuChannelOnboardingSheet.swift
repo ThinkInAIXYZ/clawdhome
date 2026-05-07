@@ -379,6 +379,8 @@ private struct ChannelOnboardingWindowTitleBinder: NSViewRepresentable {
 private struct ChannelOnboardingWindowLevelBinder: NSViewRepresentable {
     final class Coordinator {
         var didActivate = false
+        var didScheduleUnpin = false
+        var didUnpin = false
     }
 
     func makeCoordinator() -> Coordinator {
@@ -401,8 +403,22 @@ private struct ChannelOnboardingWindowLevelBinder: NSViewRepresentable {
 
     private func apply(window: NSWindow?, context: Context) {
         guard let window else { return }
-        if window.level != .floating {
+        if context.coordinator.didUnpin {
+            if window.level != .normal {
+                window.level = .normal
+            }
+        } else if window.level != .floating {
             window.level = .floating
+        }
+        if !context.coordinator.didScheduleUnpin {
+            context.coordinator.didScheduleUnpin = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak window] in
+                guard let window else { return }
+                context.coordinator.didUnpin = true
+                if window.level == .floating {
+                    window.level = .normal
+                }
+            }
         }
         guard !context.coordinator.didActivate else { return }
         context.coordinator.didActivate = true
