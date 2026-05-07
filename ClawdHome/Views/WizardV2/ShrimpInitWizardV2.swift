@@ -522,15 +522,8 @@ struct ShrimpInitWizardV2: View {
 
     private var configModelView: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ProviderModelConfigCore(user: user) { _ in
-                    advance()
-                }
-
-                Button(L10n.k("wizard.model_config.skip", fallback: "稍后配置")) {
-                    advance()
-                }
-                .buttonStyle(.bordered)
+            ModelConfigWizard(user: user, embedded: true) {
+                advance()
             }
             .padding(20)
         }
