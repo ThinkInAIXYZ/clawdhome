@@ -109,6 +109,12 @@ build: bump-build
 		CURRENT_PROJECT_VERSION="$$BUILD_NO" \
 		INFOPLIST_KEY_CFBundleShortVersionString="$$MARKETING_VERSION" \
 		INFOPLIST_KEY_CFBundleVersion="$$BUILD_NO" \
+		build 2>&1 | grep -E "error:|BUILD (SUCCEEDED|FAILED)"; \
+	xcodebuild \
+		-project $(PROJECT) \
+		-scheme ClawdHomeCLI \
+		-destination "platform=macOS" \
+		-configuration Debug \
 		build 2>&1 | grep -E "error:|BUILD (SUCCEEDED|FAILED)"
 
 build-helper: bump-build
@@ -135,7 +141,18 @@ build-release: bump-build
 		INFOPLIST_KEY_CFBundleShortVersionString="$$MARKETING_VERSION" \
 		INFOPLIST_KEY_CFBundleVersion="$$BUILD_NO" \
 		ARCHS="$(BUILD_ARCHS)" \
-		ONLY_ACTIVE_ARCH=NO
+		ONLY_ACTIVE_ARCH=NO && \
+	echo "构建 ClawdHomeCLI..." && \
+	xcodebuild \
+		-project $(PROJECT) \
+		-scheme ClawdHomeCLI \
+		-configuration Release \
+		-destination "generic/platform=macOS" \
+		CLAWDHOME_MARKETING_VERSION_OVERRIDE="$$MARKETING_VERSION" \
+		CLAWDHOME_BUILD_NUMBER_OVERRIDE="$$BUILD_NO" \
+		ARCHS="$(BUILD_ARCHS)" \
+		ONLY_ACTIVE_ARCH=NO \
+		build
 
 # ── 安装 / 卸载 ───────────────────────────────────────────────────────────────
 

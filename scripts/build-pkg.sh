@@ -238,6 +238,56 @@ if [ "$SKIP_BUILD" = false ]; then
   mkdir -p "$EXPORT_DIR"
   cp -r "$ARCHIVE_PATH/Products/Applications/${APP_NAME}.app" "$EXPORT_DIR/"
   ok "构建完成：$EXPORT_DIR/${APP_NAME}.app"
+
+  # 额外构建 CLI 工具
+  log "构建 ClawdHomeCLI..."
+  CLI_BUILD_ARGS=(
+    -project "$REPO_ROOT/${APP_NAME}.xcodeproj"
+    -scheme "ClawdHomeCLI"
+    -configuration "$CONFIGURATION"
+    -destination "generic/platform=macOS"
+    ARCHS="$PKG_ARCHS"
+    ONLY_ACTIVE_ARCH=NO
+    CLAWDHOME_MARKETING_VERSION_OVERRIDE="$BUILD_MARKETING_VERSION"
+    CLAWDHOME_BUILD_NUMBER_OVERRIDE="$BUILD_NUMBER"
+  )
+  if [ "$SIGN_APP" = true ]; then
+    CLI_BUILD_ARGS+=(
+      DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
+      CODE_SIGN_STYLE=Manual
+      CODE_SIGN_IDENTITY="$APP_SIGN_IDENTITY"
+      OTHER_CODE_SIGN_FLAGS="--timestamp"
+    )
+  else
+    CLI_BUILD_ARGS+=(
+      CODE_SIGN_IDENTITY=-
+      CODE_SIGNING_REQUIRED=NO
+      CODE_SIGNING_ALLOWED=NO
+    )
+  fi
+  run_xcodebuild "$REPO_ROOT/build/logs/xcodebuild-cli.log" build "${CLI_BUILD_ARGS[@]}"
+
+  # 将 CLI 二进制嵌入 App bundle
+  CLI_BINARY=$(find "$REPO_ROOT/build" -path "*/Release/ClawdHomeCLI" -not -path "*.xcarchive*" 2>/dev/null | head -1)
+  if [ -z "$CLI_BINARY" ]; then
+    # Release 模式下可能在 DerivedData 中
+    CLI_BINARY=$(find ~/Library/Developer/Xcode/DerivedData/ClawdHome-*/Build/Products/Release/ClawdHomeCLI 2>/dev/null | head -1)
+  fi
+  if [ -n "$CLI_BINARY" ] && [ -f "$CLI_BINARY" ]; then
+    cp "$CLI_BINARY" "$EXPORT_DIR/${APP_NAME}.app/Contents/MacOS/clawdhome-cli"
+    chmod +x "$EXPORT_DIR/${APP_NAME}.app/Contents/MacOS/clawdhome-cli"
+    ok "CLI 已嵌入 App bundle"
+
+    # CLI 嵌入后需要重新签名整个 app bundle（archive 签名在嵌入前完成，嵌入后封印失效）
+    if [ "$SIGN_APP" = true ]; then
+      log "重新签名 app bundle（CLI 嵌入后）..."
+      codesign --force --deep --sign "$APP_SIGN_IDENTITY" --timestamp \
+        "$EXPORT_DIR/${APP_NAME}.app"
+      ok "app bundle 重新签名完成"
+    fi
+  else
+    echo "⚠️  未找到 ClawdHomeCLI 二进制，跳过 CLI 嵌入"
+  fi
 else
   log "跳过构建，使用已有：$EXPORT_DIR/${APP_NAME}.app"
   [ -d "$EXPORT_DIR/${APP_NAME}.app" ] || fail "未找到 $EXPORT_DIR/${APP_NAME}.app，请先构建"
@@ -352,6 +402,15 @@ xattr -cr "/Applications/${APP_NAME}.app" 2>/dev/null || true
 
 # 注册并启动 Helper daemon
 launchctl bootstrap system "\$PLIST" 2>/dev/null || true
+
+# 安装 CLI 命令行工具（symlink 到 /usr/local/bin）
+CLI_SOURCE="/Applications/${APP_NAME}.app/Contents/MacOS/clawdhome-cli"
+CLI_LINK="/usr/local/bin/clawdhome"
+if [ -f "\$CLI_SOURCE" ]; then
+  mkdir -p /usr/local/bin
+  ln -sf "\$CLI_SOURCE" "\$CLI_LINK"
+  echo "CLI 已安装: \$CLI_LINK"
+fi
 
 echo "ClawdHome 安装完成"
 exit 0
