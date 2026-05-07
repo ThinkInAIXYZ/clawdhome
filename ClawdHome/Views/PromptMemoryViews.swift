@@ -11,6 +11,7 @@ struct PromptMemoryOverlay: View {
     let username: String?
     let currentInput: String
     let requestedQuery: String?
+    var requestedMenuToken: Int = 0
     let onConsumeRequest: () -> Void
     let onInsert: (String, PromptInsertionMode) -> Void
 
@@ -30,6 +31,7 @@ struct PromptMemoryOverlay: View {
     @State private var bubbleDragOffset: CGSize = .zero
     @State private var bubbleDragMoved = false
     @State private var bubbleHovered = false
+    @State private var handledMenuToken = 0
 
     var body: some View {
         GeometryReader { proxy in
@@ -67,6 +69,15 @@ struct PromptMemoryOverlay: View {
                 suggestions = []
             }
             onConsumeRequest()
+        }
+        .onChange(of: requestedMenuToken) { _, value in
+            guard value > 0, value != handledMenuToken else { return }
+            handledMenuToken = value
+            query = currentInput
+            withAnimation(panelAnimation) {
+                activeSurface = .menu
+                suggestions = []
+            }
         }
         .onChange(of: store.quickNoteText) { _, value in
             if value != noteDraft {
