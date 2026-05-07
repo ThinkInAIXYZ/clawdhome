@@ -65,8 +65,8 @@ enum NpmRegistryOption: String, CaseIterable, Codable {
 
     var title: String {
         switch self {
-        case .taobaoMirror: return "淘宝加速"
-        case .npmOfficial: return "npm 官方"
+        case .taobaoMirror: return String(localized: "npm.registry.taobao", defaultValue: "淘宝加速")
+        case .npmOfficial: return String(localized: "npm.registry.official", defaultValue: "npm 官方")
         }
     }
 

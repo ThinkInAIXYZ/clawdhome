@@ -822,6 +822,72 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
         }
     }
 
+    func repairHomebrewPermission(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        let logURL = initLogURL(username: username)
+        let nodePath = ConfigWriter.buildNodePath(username: username)
+        let home = "/Users/\(username)"
+        let profilePath = "\(home)/.zprofile"
+        let installScript = "mkdir -p \"$HOME/.brew\" && curl -L https://github.com/Homebrew/brew/tarball/master | tar xz --strip 1 -C \"$HOME/.brew\""
+        let requiredExports = [
+            "export PATH=\"$HOME/.brew/bin:$PATH\"",
+            "export HOMEBREW_PREFIX=\"$HOME/.brew\"",
+            "export HOMEBREW_CELLAR=\"$HOME/.brew/Cellar\"",
+            "export HOMEBREW_REPOSITORY=\"$HOME/.brew\"",
+        ]
+
+        func appendLog(_ msg: String) {
+            if let fh = FileHandle(forWritingAtPath: logURL.path) {
+                fh.seekToEndOfFile()
+                fh.write(Data(msg.utf8))
+                fh.closeFile()
+            }
+        }
+
+        do {
+            appendLog("\n▶ 修复 Homebrew 权限（普通用户目录安装）\n")
+            appendLog("$ \(installScript)\n")
+            _ = try runAsUser(
+                username: username,
+                nodePath: nodePath,
+                command: "/bin/sh",
+                args: ["-lc", installScript]
+            )
+            appendLog("✓ 已完成 ~/.brew 安装/更新\n")
+
+            let existing = (try? String(contentsOfFile: profilePath, encoding: .utf8)) ?? ""
+            let missingExports = requiredExports.filter { !existing.contains($0) }
+            if !missingExports.isEmpty {
+                var appendBlock = "\n"
+                if !existing.contains("# user-local homebrew") {
+                    appendBlock += "# user-local homebrew\n"
+                }
+                appendBlock += missingExports.joined(separator: "\n") + "\n"
+                let data = Data(appendBlock.utf8)
+                if FileManager.default.fileExists(atPath: profilePath) {
+                    if let fh = FileHandle(forWritingAtPath: profilePath) {
+                        fh.seekToEndOfFile()
+                        fh.write(data)
+                        fh.closeFile()
+                    }
+                } else {
+                    try data.write(to: URL(fileURLWithPath: profilePath))
+                }
+                try run("/usr/sbin/chown", args: [username, profilePath])
+                appendLog("✓ 已将 ~/.brew 环境变量写入 ~/.zprofile\n")
+            } else {
+                appendLog("✓ ~/.zprofile 已包含 ~/.brew 环境变量配置\n")
+            }
+
+            // 防御性修正：避免历史 root 执行导致目录归属错误
+            _ = try? run("/usr/sbin/chown", args: ["-R", "\(username):\(username)", "\(home)/.brew"])
+            reply(true, nil)
+        } catch {
+            helperLog("修复 Homebrew 权限失败 @\(username): \(error.localizedDescription)", level: .warn)
+            appendLog("❌ 修复 Homebrew 权限失败：\(error.localizedDescription)\n")
+            reply(false, error.localizedDescription)
+        }
+    }
+
     func setNpmRegistry(username: String, registry: String,
                         withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("设置 npm 源 @\(username): \(registry)")

@@ -58,7 +58,7 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Gateway") {
+            Section(L10n.k("views.settings_view.gateway", fallback: "Gateway")) {
                 Toggle(L10n.k("views.settings_view.autostart_all_gateway_on_boot", fallback: "开机自动启动所有虾的 Gateway"), isOn: $gatewayAutostart)
                     .onChange(of: gatewayAutostart) { _, newValue in
                         Task { try? await helperClient.setGatewayAutostart(enabled: newValue) }

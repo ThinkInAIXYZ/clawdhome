@@ -13,7 +13,7 @@ struct SecurityAuditView: View {
     var body: some View {
         TabView {
             GatewayLogTab(users: pool.users.filter { !$0.isAdmin })
-                .tabItem { Label("Gateway", systemImage: "server.rack") }
+                .tabItem { Label(L10n.k("auto.security_audit_view.gateway", fallback: "Gateway 日志"), systemImage: "server.rack") }
 
             CommandLogTab(users: pool.users.filter { !$0.isAdmin })
                 .tabItem { Label(L10n.k("auto.security_audit_view.command_history", fallback: "指令记录"), systemImage: "message") }

@@ -34,7 +34,7 @@ struct ConfigEditorSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } header: {
-                    Text("API Key")
+                    Text(L10n.k("views.config_editor_sheet.api_key", fallback: "API Key"))
                 }
 
                 Section {

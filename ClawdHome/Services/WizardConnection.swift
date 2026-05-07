@@ -42,6 +42,16 @@ final class WizardConnection {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.wizard_connection.unknown_error", fallback: "未知错误")) }
     }
 
+    func repairHomebrewPermission(username: String) async throws {
+        guard let proxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
+            proxy.repairHomebrewPermission(username: username) { ok, msg in
+                cont.resume(returning: (ok, msg))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.wizard_connection.unknown_error", fallback: "未知错误")) }
+    }
+
     func setNpmRegistry(username: String, registry: String) async throws {
         guard let proxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in

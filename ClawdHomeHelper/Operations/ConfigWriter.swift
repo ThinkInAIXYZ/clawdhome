@@ -115,6 +115,7 @@ struct ConfigWriter {
         // 同时加入用户 npm-global/bin（openclaw 二进制位置）以及系统路径
         return [
             InstallManager.npmGlobalBin(for: username),
+            "/Users/\(username)/.brew/bin",
             nodeDir,
             "/usr/bin", "/bin"
         ].joined(separator: ":")

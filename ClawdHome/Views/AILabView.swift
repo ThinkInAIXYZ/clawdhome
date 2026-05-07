@@ -51,7 +51,7 @@ struct AILabView: View {
             }
             .padding(24)
         }
-        .navigationTitle("AI Lab")
+        .navigationTitle(L10n.k("auto.content_view.ai_lab", fallback: "AI 实验室"))
     }
 }
 

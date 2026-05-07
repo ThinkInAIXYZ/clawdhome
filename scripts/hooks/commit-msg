@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# commit-msg hook — 校验 Conventional Commits 格式
+#
+# 安装：make install-hooks
+# 或手动：cp scripts/hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+
+MSG_FILE="$1"
+MSG=$(head -1 "$MSG_FILE")
+
+# 跳过 merge commit
+if echo "$MSG" | grep -qE "^Merge "; then
+  exit 0
+fi
+
+# 跳过 fixup/squash commit
+if echo "$MSG" | grep -qE "^(fixup|squash)! "; then
+  exit 0
+fi
+
+# 跳过 revert commit
+if echo "$MSG" | grep -qE "^Revert "; then
+  exit 0
+fi
+
+# 校验 Conventional Commits 格式
+PATTERN="^(feat|fix|chore|docs|refactor|perf|style|test|ci|build)(\([a-zA-Z0-9_-]+\))?!?: .+"
+
+if ! echo "$MSG" | grep -qE "$PATTERN"; then
+  echo ""
+  echo "❌ commit message 不符合 Conventional Commits 格式"
+  echo ""
+  echo "格式：<type>(<scope>): <subject>"
+  echo ""
+  echo "type 必须是以下之一："
+  echo "  feat     新功能（触发 minor bump）"
+  echo "  fix      修复 bug（触发 patch bump）"
+  echo "  chore    构建/工具/依赖等杂项"
+  echo "  docs     文档更新"
+  echo "  refactor 重构（不改变功能）"
+  echo "  perf     性能优化（触发 patch bump）"
+  echo "  style    代码格式"
+  echo "  test     测试"
+  echo "  ci       CI/CD 配置"
+  echo "  build    构建系统"
+  echo ""
+  echo "示例："
+  echo "  feat: Add user authentication"
+  echo "  fix(gateway): Handle timeout error"
+  echo "  chore(deps): Update dependencies"
+  echo "  feat!: Redesign settings UI (BREAKING)"
+  echo ""
+  echo "你的 commit message："
+  echo "  $MSG"
+  echo ""
+  exit 1
+fi

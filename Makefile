@@ -7,12 +7,9 @@ SCHEME_HLP := ClawdHomeHelper
 INFO_PLIST := ClawdHome/Info.plist
 PLIST      := /usr/libexec/PlistBuddy
 
-.PHONY: help bump-build build build-helper build-release install-helper uninstall-helper pkg pkg-skip-build release release-notes clean version i18n i18n-check
+.PHONY: help bump-build build build-helper build-release install-helper uninstall-helper pkg pkg-skip-build release release-dry-run changelog version-next install-hooks clean version i18n i18n-check
 
-RELEASE_NOTES_MODE ?= edit
 WEBSITE_DIR ?= ../clawdhome_website
-WEBSITE_API_VERSION ?= $(WEBSITE_DIR)/api/version.json
-WEBSITE_DOWNLOAD_DIR ?= $(WEBSITE_DIR)/download
 
 help:
 	@echo "可用目标："
@@ -21,13 +18,15 @@ help:
 	@echo "  build-release    递增 Build 号后 Release 归档构建"
 	@echo "  bump-build       仅递增 Build 号（不构建）"
 	@echo "  version          显示当前版本和 Build 号"
+	@echo "  version-next     预览下一个语义化版本号"
+	@echo "  changelog        预览将生成的 CHANGELOG 内容"
 	@echo "  install-helper   安装 Helper 到系统（需要 sudo）"
 	@echo "  uninstall-helper 卸载 Helper（需要 sudo）"
 	@echo "  pkg              打包 .pkg 安装包"
 	@echo "  pkg-skip-build   跳过构建直接打包"
-	@echo "  release          一键发布：生成 pkg + 同步 version.json + 编辑 release_notes"
-	@echo "  release-notes    基于 git 提交草拟并编辑 release_notes/release_notes_en"
-	@echo "                   模式：RELEASE_NOTES_MODE=edit|auto|ai|skip（默认 edit）"
+	@echo "  release          一键发布：changelog + tag + pkg + GitHub Release"
+	@echo "  release-dry-run  预览发布流程（不执行）"
+	@echo "  install-hooks    安装 git commit-msg hook"
 	@echo "  run-release      直接运行 build/export 里的 Release 包（无需安装）"
 	@echo "  install-pkg      安装最新 pkg 到 /Applications（需要 sudo）"
 	@echo "  log-helper       实时跟踪 Helper 日志（/tmp/clawdhome-helper.log）"
@@ -41,7 +40,14 @@ help:
 version:
 	@V=$$($(PLIST) -c "Print CFBundleShortVersionString" $(INFO_PLIST)); \
 	 B=$$(git rev-list --count HEAD 2>/dev/null || echo 0); \
-	 echo "版本：$$V  Git 提交数：$$B"
+	 TAG=$$(bash scripts/semver.sh --current 2>/dev/null || echo "无 tag"); \
+	 echo "Info.plist 版本：$$V  Git 提交数：$$B  当前 tag：$$TAG"
+
+version-next:
+	@bash scripts/semver.sh
+
+changelog:
+	@bash scripts/changelog.sh --stdout
 
 bump-build:
 	@echo "Build 号由 git 提交数自动决定，无需手动递增（当前：$$(git rev-list --count HEAD)）"
@@ -92,42 +98,11 @@ pkg-skip-build:
 	bash scripts/build-pkg.sh --skip-build
 	@open dist/
 
-release-notes:
-	@VERSION=$$(awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' "$(WEBSITE_API_VERSION)"); \
-	bash scripts/update-release-notes.sh --version "$$VERSION" --mode "$(RELEASE_NOTES_MODE)"
+release:
+	bash scripts/release.sh
 
-release: bump-build
-	@set -e; \
-	bash scripts/build-pkg.sh; \
-	PKG=$$(ls -t dist/ClawdHome-*.pkg 2>/dev/null | head -1); \
-	[ -n "$$PKG" ] || (echo "❌ 未找到 dist/ClawdHome-*.pkg"; exit 1); \
-	PKG_NAME=$$(basename "$$PKG"); \
-	VERSION=$${PKG_NAME#ClawdHome-}; \
-	VERSION=$${VERSION%.pkg}; \
-	bash scripts/verify-pkg-version.sh "$$PKG" "$$VERSION"; \
-	bash scripts/update-release-notes.sh --version "$$VERSION" --mode "$(RELEASE_NOTES_MODE)"; \
-	JSON_VERSION=$$(awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' "$(WEBSITE_API_VERSION)"); \
-	mkdir -p "$(WEBSITE_DOWNLOAD_DIR)"; \
-	cp -f "$$PKG" "$(WEBSITE_DOWNLOAD_DIR)/ClawdHome-$$VERSION.pkg"; \
-	chmod 644 "$(WEBSITE_DOWNLOAD_DIR)/ClawdHome-$$VERSION.pkg"; \
-	cp -f "$$PKG" "$(WEBSITE_DOWNLOAD_DIR)/ClawdHome-latest.pkg"; \
-	chmod 644 "$(WEBSITE_DOWNLOAD_DIR)/ClawdHome-latest.pkg"; \
-	bash scripts/verify-pkg-version.sh "$(WEBSITE_DOWNLOAD_DIR)/ClawdHome-$$VERSION.pkg" "$$VERSION"; \
-	bash scripts/verify-pkg-version.sh "$(WEBSITE_DOWNLOAD_DIR)/ClawdHome-latest.pkg" "$$VERSION"; \
-	[ "$$JSON_VERSION" = "$$VERSION" ] || echo "⚠️  version.json 与 pkg 版本不一致：json=$$JSON_VERSION pkg=$$VERSION"; \
-	echo ""; \
-	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
-	echo "✅ release 完成"; \
-	echo "  pkg：$$PKG"; \
-	echo "  download：$(WEBSITE_DOWNLOAD_DIR)/ClawdHome-$$VERSION.pkg"; \
-	echo "  version.json：$(WEBSITE_API_VERSION) -> $$JSON_VERSION"; \
-	echo "  release_notes 模式：$(RELEASE_NOTES_MODE)"; \
-	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
-	echo ""; \
-	echo "下一步（更新线上网站）："; \
-	echo "  cd $(WEBSITE_DIR) && make deploy"; \
-	echo "如果还更新了 Caddy 配置："; \
-	echo "  cd $(WEBSITE_DIR) && make deploy-all"
+release-dry-run:
+	bash scripts/release.sh --dry-run
 
 # ── 运行 ──────────────────────────────────────────────────────────────────────
 
@@ -156,6 +131,13 @@ log-app:
 clean:
 	rm -rf build/ dist/
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME_APP) clean -quiet
+
+# ── Git Hooks ────────────────────────────────────────────────────────────────
+
+install-hooks:
+	@cp scripts/hooks/commit-msg .git/hooks/commit-msg
+	@chmod +x .git/hooks/commit-msg
+	@echo "✅ commit-msg hook 已安装"
 
 # ── i18n ──────────────────────────────────────────────────────────────────────
 

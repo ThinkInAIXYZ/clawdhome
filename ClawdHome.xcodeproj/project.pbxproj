@@ -582,7 +582,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "BUILD_NUM=$(git -C \"${SRCROOT}\" rev-list --count HEAD 2>/dev/null || echo 0)\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion ${BUILD_NUM}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\n/usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString 1.1.${BUILD_NUM}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\n";
+			shellScript = "BUILD_NUM=$(git -C \"${SRCROOT}\" rev-list --count HEAD 2>/dev/null || echo 0)\nSEMVER=$(git -C \"${SRCROOT}\" describe --tags --match \"v*\" --abbrev=0 2>/dev/null | sed 's/^v//')\n[ -z \"$SEMVER\" ] && SEMVER=\"0.0.${BUILD_NUM}\"\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion ${BUILD_NUM}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\n/usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString ${SEMVER}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\n";
 		};
 		217CF341688DD108EF049819 /* Embed Helper into App Bundle */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -621,7 +621,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "BUILD_NUM=$(git -C \"${SRCROOT}\" rev-list --count HEAD 2>/dev/null || echo 0)\nOUT=\"${SRCROOT}/ClawdHomeHelper/GeneratedVersion.swift\"\necho \"// Auto-generated — do not edit\" > \"$OUT\"\necho \"let kHelperVersion = \\\"1.1.${BUILD_NUM}\\\"\" >> \"$OUT\"\n";
+			shellScript = "BUILD_NUM=$(git -C \"${SRCROOT}\" rev-list --count HEAD 2>/dev/null || echo 0)\nSEMVER=$(git -C \"${SRCROOT}\" describe --tags --match \"v*\" --abbrev=0 2>/dev/null | sed 's/^v//')\n[ -z \"$SEMVER\" ] && SEMVER=\"0.0.${BUILD_NUM}\"\nOUT=\"${SRCROOT}/ClawdHomeHelper/GeneratedVersion.swift\"\necho \"// Auto-generated — do not edit\" > \"$OUT\"\necho \"let kHelperVersion = \\\"${SEMVER}\\\"\" >> \"$OUT\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

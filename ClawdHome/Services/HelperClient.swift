@@ -335,6 +335,17 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
+    /// 修复普通用户 Homebrew 安装权限（安装到 ~/.brew，并写入环境变量）
+    func repairHomebrewPermission(username: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = await withCheckedContinuation { cont in
+            proxy.repairHomebrewPermission(username: username) { ok, msg in
+                cont.resume(returning: (ok, msg))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
     /// 设置 npm 安装源（写入用户级 ~/.npmrc）
     func setNpmRegistry(username: String, registry: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }

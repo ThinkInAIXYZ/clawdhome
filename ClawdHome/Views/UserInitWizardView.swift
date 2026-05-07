@@ -306,6 +306,7 @@ struct UserInitWizardView: View {
     @State private var xcodeEnvStatus: XcodeEnvStatus? = nil
     @State private var isInstallingXcodeCLT = false
     @State private var isAcceptingXcodeLicense = false
+    @State private var isRepairingHomebrewPermission = false
     @State private var xcodeFixMessage: String? = nil
 
     private var selectedOpenclawVersionForInstall: String? {
@@ -918,7 +919,7 @@ struct UserInitWizardView: View {
                 Text(L10n.k("views.user_init_wizard_view.development_environment_repair", fallback: "开发环境修复"))
                     .font(.subheadline).fontWeight(.medium)
                 Spacer()
-                if isInstallingXcodeCLT || isAcceptingXcodeLicense {
+                if isInstallingXcodeCLT || isAcceptingXcodeLicense || isRepairingHomebrewPermission {
                     ProgressView().scaleEffect(0.6)
                 }
                 Button(L10n.k("views.user_init_wizard_view.refreshstatus", fallback: "刷新状态")) { Task { await refreshXcodeEnvStatus() } }
@@ -947,19 +948,25 @@ struct UserInitWizardView: View {
                     Task { await installXcodeCommandLineToolsFromWizard() }
                 }
                 .buttonStyle(.bordered)
-                .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+                .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense || isRepairingHomebrewPermission)
 
                 Button(isAcceptingXcodeLicense ? L10n.k("views.user_init_wizard_view.processing", fallback: "处理中…") : L10n.k("views.user_init_wizard_view.xcode", fallback: "同意 Xcode 许可")) {
                     Task { await acceptXcodeLicenseFromWizard() }
                 }
                 .buttonStyle(.bordered)
-                .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+                .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense || isRepairingHomebrewPermission)
+
+                Button(isRepairingHomebrewPermission ? L10n.k("views.user_init_wizard_view.processing", fallback: "处理中…") : L10n.k("wizard.base_env.repair_homebrew_permission", fallback: "修复 Homebrew 权限")) {
+                    Task { await repairHomebrewPermissionFromWizard() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense || isRepairingHomebrewPermission)
 
                 Button(L10n.k("views.user_init_wizard_view.open_software_update", fallback: "打开软件更新")) {
                     openSoftwareUpdate()
                 }
                 .buttonStyle(.bordered)
-                .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense)
+                .disabled(isInstallingXcodeCLT || isAcceptingXcodeLicense || isRepairingHomebrewPermission)
             }
 
             if let msg = xcodeFixMessage, !msg.isEmpty {
@@ -1153,6 +1160,15 @@ struct UserInitWizardView: View {
         await persistState()
         onSessionActiveChanged?(true)
 
+        appendLog("\n▶ 修复 Homebrew 权限（可选）\n")
+        do {
+            try await conn.repairHomebrewPermission(username: user.username)
+            appendLog("✓ Homebrew 权限修复已完成\n")
+        } catch {
+            // best-effort：失败不阻断初始化
+            appendLog("⚠️ Homebrew 权限修复失败（已跳过，不影响初始化）：\(error.localizedDescription)\n")
+        }
+
         let autoSteps: [(title: String, run: () async throws -> Void)] = [
             (L10n.k("views.user_init_wizard_view.node_js", fallback: "安装 Node.js"), { try await conn.installNode(username: user.username, nodeDistURL: nodeDistURL) }),
             (L10n.k("views.user_init_wizard_view.configuration_npm_directory", fallback: "配置 npm 目录"), { try await conn.setupNpmEnv(username: user.username) }),
@@ -1251,6 +1267,19 @@ struct UserInitWizardView: View {
         }
         await refreshXcodeEnvStatus()
         isAcceptingXcodeLicense = false
+    }
+
+    private func repairHomebrewPermissionFromWizard() async {
+        isRepairingHomebrewPermission = true
+        xcodeFixMessage = nil
+        do {
+            try await helperClient.repairHomebrewPermission(username: user.username)
+            xcodeFixMessage = L10n.k("wizard.base_env.repair_homebrew_permission_done", fallback: "Homebrew 权限修复完成：已安装/更新 ~/.brew，并写入 ~/.zprofile 环境变量。")
+        } catch {
+            xcodeFixMessage = error.localizedDescription
+        }
+        await refreshXcodeEnvStatus()
+        isRepairingHomebrewPermission = false
     }
 
     private func openSoftwareUpdate() {
