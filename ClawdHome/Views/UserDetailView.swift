@@ -4090,10 +4090,10 @@ private enum DirectQiniuModel: String, CaseIterable, Identifiable {
 
     var alias: String {
         switch self {
-        case .deepseekV32: return "DeepSeek V3.2"
         case .glm5: return "GLM 5"
         case .kimiK25: return "Kimi K2.5"
         case .minimaxM25: return "Minimax M2.5"
+        case .deepseekV32: return "DeepSeek V3.2"
         }
     }
 

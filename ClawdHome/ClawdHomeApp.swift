@@ -299,6 +299,23 @@ private struct MaintenanceTerminalWindowContent: View {
         let elapsed = max(0, Int(now.timeIntervalSince(runStartedAt)))
         return String(format: "%02d:%02d", elapsed / 60, elapsed % 60)
     }
+    private var sanitizedOutput: String {
+        stripANSIEscapeSequences(outputBuffer)
+    }
+    private var latestAuthorizeURL: URL? {
+        extractURLs(from: sanitizedOutput).last(where: { url in
+            let abs = url.absoluteString.lowercased()
+            return abs.contains("github.com/login/device") || abs.contains("/oauth/authorize")
+        })
+    }
+    private var latestDeviceCode: String? {
+        let pattern = #"(?mi)^\s*Code:\s*([A-Z0-9-]{4,})\s*$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let ns = sanitizedOutput as NSString
+        let all = regex.matches(in: sanitizedOutput, range: NSRange(location: 0, length: ns.length))
+        guard let last = all.last, last.numberOfRanges >= 2 else { return nil }
+        return ns.substring(with: last.range(at: 1))
+    }
 
     @ViewBuilder
     private var topBar: some View {
@@ -357,6 +374,7 @@ private struct MaintenanceTerminalWindowContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             topBar
+            authAssistBar
             terminalPanel
             statusBar
             resourceUsageBar
@@ -378,6 +396,42 @@ private struct MaintenanceTerminalWindowContent: View {
             appLog("[maintenance-window] closed user=\(request.username) index=\(request.index) title=\(request.title)")
         }
         .frame(minWidth: 760, minHeight: 480)
+    }
+
+    @ViewBuilder
+    private var authAssistBar: some View {
+        if latestAuthorizeURL != nil || latestDeviceCode != nil {
+            HStack(spacing: 10) {
+                Label("授权辅助", systemImage: "key.horizontal")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let url = latestAuthorizeURL {
+                    Button("打开授权页") { _ = NSWorkspace.shared.open(url) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    Text(url.absoluteString)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                if let code = latestDeviceCode {
+                    Button("复制验证码") { copyText(code, success: "验证码已复制。") }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    Text(code)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+        }
     }
 
     @ViewBuilder
@@ -448,9 +502,30 @@ private struct MaintenanceTerminalWindowContent: View {
             statusText = L10n.k("app.clawd_home_app.no_output_to_copy", fallback: "暂无可复制的命令输出。")
             return
         }
+        copyText(text, success: L10n.k("app.clawd_home_app.output_copied", fallback: "命令输出已复制。"))
+    }
+
+    private func copyText(_ text: String, success: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        statusText = L10n.k("app.clawd_home_app.output_copied", fallback: "命令输出已复制。")
+        statusText = success
+    }
+
+    private func stripANSIEscapeSequences(_ text: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"\u{001B}\[[0-?]*[ -/]*[@-~]"#) else { return text }
+        let range = NSRange(location: 0, length: (text as NSString).length)
+        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+    }
+
+    private func extractURLs(from text: String) -> [URL] {
+        guard let regex = try? NSRegularExpression(pattern: #"https?://[^\s"'<>)]+"#) else { return [] }
+        let ns = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+        return matches.compactMap { match in
+            let raw = ns.substring(with: match.range)
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?"))
+            return URL(string: raw)
+        }
     }
 
     @ViewBuilder
