@@ -126,8 +126,35 @@ Build numbers are **auto-derived** from git commit count (`git rev-list --count 
 | `/var/lib/clawdhome/cache/` | Helper installation cache (homebrew, nodejs) — root only |
 | `/var/lib/clawdhome/models/` | Local AI models (omlx) — root only |
 | `/Users/Shared/ClawdHome/` | Cross-user shared file space (public folder, per-shrimp vaults) |
+| `~<shrimp>/.clawdhome/` | Per-Shrimp ClawdHome config directory (runtime declaration, future per-shrimp settings) |
+| `~<shrimp>/.clawdhome/runtime.json` | Runtime type anchor: `{"runtime":"hermes"}` or `{"runtime":"openclaw"}` — written on install, read by identification engine; absent → falls back to openclaw detection |
 | `~<shrimp>/.openclaw/` | Per-Shrimp OpenClaw config and data |
 | `~<shrimp>/.npm-global/` | Per-Shrimp npm global install directory |
+| `~<shrimp>/.hermes/` | Per-Shrimp Hermes Agent main profile (HERMES_HOME) |
+| `~<shrimp>/.hermes/profiles/<id>/` | Named Hermes profile (independent HERMES_HOME) |
+| `~<shrimp>/.hermes/[profiles/<id>/].clawdhome_wizard_state.json` | Per-profile team wizard progress bitmap |
+| `/var/lib/clawdhome/<shrimp>-hermes-autostart.json` | Per-profile Hermes autostart whitelist |
+| `/Library/LaunchDaemons/ai.clawdhome.hermes.<shrimp>[.<id>].plist` | Per-profile Hermes gateway launchd unit |
+
+## Hermes Multi-Profile / Team Wizard
+
+A single Shrimp can host multiple Hermes profiles (agent personas), each living in its own isolated HERMES_HOME with independent `config.yaml` / `.env` / gateway process / sessions / skills / memories / cron / logs. The `main` profile maps to `~<shrimp>/.hermes/` itself; named profiles live under `~<shrimp>/.hermes/profiles/<id>/`. This mirrors hermes-agent's native profile model — `hermes -p <id> ...` and `hermes profile list/use` work as documented upstream.
+
+**Key invariants**:
+- Each profile = one launchd unit. Label rule: `main` retains the legacy `ai.clawdhome.hermes.<shrimp>` (backward compatible); named profiles append `.<id>`.
+- Boot autostart is gated by both the per-Shrimp sentinel `/var/lib/clawdhome/<shrimp>-autostart-disabled` and the per-profile whitelist `/var/lib/clawdhome/<shrimp>-hermes-autostart.json`. Whitelist file missing ⇒ falls back to `["main"]` (backward compatible).
+- A profile creation via `HermesProfileManager.createProfile` automatically adds it to the whitelist (default-on); `removeProfile` strips it. Users can opt out per profile via the "开机启动" toggle on each card in `HermesDetailView`.
+- IM bindings write to the profile's `.env`. Token-based platforms (Telegram/Slack/Discord/feishu/wecom/dingtalk/email/signal/matrix/mattermost) take a form; QR-based platforms (whatsapp/weixin) launch `MaintenanceTerminalSession` running `hermes -p <id> <subcmd>` for scan-to-pair, with a 5-minute deferred fallback if the user closes the terminal early.
+
+**Entry point**: `HermesDetailView` sidebar → "团队初始化" button opens `HermesTeamWizard` (6 steps: install → members → shared LLM config → IM bindings → gateway start → summary). The wizard persists per-profile progress and resumes from the first incomplete step on reopen.
+
+**Design references**:
+- `docs/plans/2026-04-25-hermes-team-wizard-design.md` — full design (decisions D1-D12, data layout, XPC contracts, plist templates, error codes, UI sketches)
+- `docs/plans/2026-04-25-hermes-team-wizard-tasks.md` — 21-task breakdown across 6 PRs
+
+**Known follow-ups** (deliberately out of the multi-profile workflow scope):
+- i18n: new Hermes UI views still use raw CJK literals (~116 unique strings); a separate PR will migrate them to `L10n.k(...)` / `L10n.f(...)` and clear the project's pre-existing i18n debt in `AddProviderModelSheet` / `ShrimpInitWizardV2` / `ShrimpSettingsV2View`.
+- `hermes-intentional-stop` sentinel: hermes intentionally does **not** mirror OpenClaw's intentional-stop mechanism — autostart is whitelist-driven (D7).
 
 ## Conventions
 

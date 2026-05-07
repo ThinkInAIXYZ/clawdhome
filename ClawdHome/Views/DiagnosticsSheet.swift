@@ -5,6 +5,7 @@ import SwiftUI
 
 struct DiagnosticsSheet: View {
     let user: ManagedUser
+    let engineHint: String?
     /// 全部检查完成后回调（用于更新状态行的摘要）
     var onCompleted: ((DiagnosticsResult) -> Void)? = nil
 
@@ -218,7 +219,11 @@ struct DiagnosticsSheet: View {
             for group in groupOrder {
                 taskGroup.addTask {
                     let items = await client.runDiagnosticGroup(
-                        username: username, group: group, fix: fix)
+                        username: username,
+                        group: group,
+                        fix: fix,
+                        engine: engineHint
+                    )
                     return (group, items)
                 }
             }

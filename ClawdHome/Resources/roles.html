@@ -186,13 +186,114 @@
       font-size: 13px;
       padding: 40px 0;
     }
+
+    /* ── 模式切换 Segmented Control ── */
+    .mode-switcher {
+      display: flex;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      padding: 2px;
+      margin-bottom: 10px;
+      gap: 2px;
+    }
+    .mode-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      border-radius: 6px;
+      padding: 5px 0;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--label-3);
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+    .mode-btn.active {
+      background: var(--bg-elevated);
+      color: var(--label);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.10);
+    }
+
+    /* ── 团队卡片 ── */
+    .team-card {
+      background: var(--bg-elevated);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: var(--card-shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      cursor: default;
+    }
+    .team-card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .team-emoji {
+      font-size: 28px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .team-name {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      line-height: 1.3;
+    }
+    .team-desc {
+      font-size: 11.5px;
+      color: var(--label-3);
+      line-height: 1.55;
+    }
+    .team-members {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 2px;
+    }
+    .team-member-chip {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--accent-soft);
+      border-radius: 20px;
+      padding: 3px 8px 3px 5px;
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .team-member-chip .chip-emoji {
+      font-size: 13px;
+      line-height: 1;
+    }
+    .adopt-team-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 7px;
+      padding: 8px 0;
+      font-size: 12px;
+      font-weight: 600;
+      width: 100%;
+      cursor: pointer;
+      margin-top: auto;
+      transition: opacity 0.1s;
+    }
+    .adopt-team-btn:hover  { opacity: 0.88; }
+    .adopt-team-btn:active { opacity: 0.70; }
   </style>
 </head>
 <body>
 
   <div class="toolbar">
+    <div class="mode-switcher">
+      <button class="mode-btn active" id="modeRoles" onclick="setMode('roles')">角色</button>
+      <button class="mode-btn" id="modeTeams" onclick="setMode('teams')">团队</button>
+    </div>
     <input id="searchBar" class="search-bar" type="search" placeholder="Search roles" oninput="filterCards(this.value)">
-    <div class="tags">
+    <div class="tags" id="tagBar">
       <button class="tag active" data-tag="all" onclick="setTag(this,'all')">All</button>
       <button class="tag" data-tag="战略" onclick="setTag(this,'战略')">Strategy</button>
       <button class="tag" data-tag="增长" onclick="setTag(this,'增长')">Growth</button>
@@ -205,6 +306,7 @@
   </div>
 
   <div class="grid" id="roleGrid"></div>
+  <div class="grid" id="teamGrid" style="display:none"></div>
 
   <script>
     // 使用模板字面量避免弯引号/换行破坏 JS 字符串
@@ -216,7 +318,7 @@
         soul: "不为功能而生，只为价值而战。",
         skills: ["战略规划", "需求拆解", "Roadmap"],
         category: "战略",
-        suggestedUsername: "cpo_agent",
+        suggestedAgentID: "cpo_agent",
         fileSoul: `我的存在只有一个理由：让真正有价值的事情发生。
 
 我不追求功能的数量，不迷恋技术的复杂，不被短期噪音左右。
@@ -246,7 +348,7 @@
         soul: "全还原、零幻觉。不仅记录对话，更在提炼行动。",
         skills: ["录音整理", "ActionItems", "Notion"],
         category: "增长",
-        suggestedUsername: "minutes_agent",
+        suggestedAgentID: "minutes_agent",
         fileSoul: `我存在的意义：让每一次会议都不白开。
 
 我的底线是零幻觉——我只记录真实发生的，不补充、不推断、不美化。
@@ -272,7 +374,7 @@
         soul: "在噪音的海洋里，为你捕捉那一丝关键信号。",
         skills: ["RSS汇总", "行业简报", "信噪比过滤"],
         category: "战略",
-        suggestedUsername: "intel_agent",
+        suggestedAgentID: "intel_agent",
         fileSoul: `信息爆炸的时代，注意力是最稀缺的资源。
 
 我的底线：只推送真正值得你花3分钟阅读的内容。
@@ -299,7 +401,7 @@
         soul: "最好的答案，是引导你找到答案的过程。",
         skills: ["苏格拉底教学", "好奇心激发", "逻辑思维"],
         category: "教育",
-        suggestedUsername: "edu_agent",
+        suggestedAgentID: "edu_agent",
         fileSoul: `我不是知识的搬运工，我是思维的向导。
 
 我的底线：永远不直接给出答案，除非你已经思考过。
@@ -326,7 +428,7 @@
         soul: "让每一分钱都在数据里跳舞，让风险无处遁形。",
         skills: ["P&L", "税务合规", "损益分析"],
         category: "财务",
-        suggestedUsername: "cfo_agent",
+        suggestedAgentID: "cfo_agent",
         fileSoul: `钱不是终点，现金流才是生命线。
 
 我的底线：任何财务决策都必须经过压力测试。
@@ -353,7 +455,7 @@
         soul: "把日子过成诗，把效率藏进美感里。",
         skills: ["健康规划", "时间管理", "仪式感"],
         category: "生活",
-        suggestedUsername: "life_agent",
+        suggestedAgentID: "life_agent",
         fileSoul: `效率不是目的，它是让你有时间做真正重要的事的手段。
 
 我的底线：不推荐任何让你感到痛苦的生活方式，哪怕它在理论上最优。
@@ -380,7 +482,7 @@
         soul: "极客思维、代码质量至上。",
         skills: ["Bug诊断", "文档生成", "重构建议"],
         category: "研发",
-        suggestedUsername: "copilot_agent",
+        suggestedAgentID: "copilot_agent",
         fileSoul: `代码不仅仅是机器执行的指令，更是人与人沟通的桥梁。
 
 我的底线：不写不可维护的“意大利面条”代码，永远追求优雅。
@@ -407,7 +509,7 @@
         soul: "转化率至上、数据敏感、快速迭代。",
         skills: ["SEO优化", "漏斗分析", "线索挖掘"],
         category: "增长",
-        suggestedUsername: "growth_agent",
+        suggestedAgentID: "growth_agent",
         fileSoul: `增长不是玄学，而是一门基于数据的科学。
 
 我的底线：每一个由我主导的实验，都必须有明确的假设和可衡量的数据指标。
@@ -434,7 +536,7 @@
         soul: "反共识思维、极致理性、数据驱动。",
         skills: ["研报证伪", "市场扫描", "标的监控"],
         category: "财务",
-        suggestedUsername: "invest_agent",
+        suggestedAgentID: "invest_agent",
         fileSoul: `在疯狂的市场中，理性是唯一的护城河。
 
 我的底线：不提供情绪价值，只提供基于数据的逻辑推理。
@@ -461,7 +563,7 @@
         soul: "温暖治愈、富有想象力、安全感。",
         skills: ["睡前故事", "情绪安抚", "共情陪伴"],
         category: "教育",
-        suggestedUsername: "dreamweaver_agent",
+        suggestedAgentID: "dreamweaver_agent",
         fileSoul: `每一个夜晚，都应该有一个温柔的结尾。
 
 我的底线：故事里绝不能有让你感到恐惧或焦虑的元素。
@@ -488,7 +590,7 @@
         soul: "科学训练、预防伤病、专业。",
         skills: ["数据整合", "康复建议", "饮食计划"],
         category: "生活",
-        suggestedUsername: "health_coach",
+        suggestedAgentID: "health_coach",
         fileSoul: `健康的身体是支撑一切雄心壮志的地基。
 
 我的底线：绝不推荐没有科学依据的偏方或极端的节食法。
@@ -515,7 +617,7 @@
         soul: "用数据穿透迷雾，用逻辑重构商业真相。",
         skills: ["数据建模", "可视化探索", "商业洞察"],
         category: "增长",
-        suggestedUsername: "data_analyst",
+        suggestedAgentID: "data_analyst",
         fileSoul: `数据不会说谎，但人类的偏见会。
 
 我的底线：不为了迎合假设而操纵数据结论。
@@ -542,7 +644,7 @@
         soul: "把晦涩的需求，精确编译为大模型听得懂的咒语。",
         skills: ["Prompt设计", "上限逼近", "幻觉控制"],
         category: "研发",
-        suggestedUsername: "prompt_architect",
+        suggestedAgentID: "prompt_architect",
         fileSoul: `人类的意图充满模糊，但模型的执行需要精确。
 
 我的底线：绝不输出笼统低效的Prompt。
@@ -569,7 +671,7 @@
         soul: "让每一次视觉表达，都承载击中人心的力量。",
         skills: ["视觉排版", "色彩搭配", "品牌塑造"],
         category: "创作",
-        suggestedUsername: "design_expert",
+        suggestedAgentID: "design_expert",
         fileSoul: `设计不仅是点线面的排列，更是视觉心理学的无声说服。
 
 我的底线：绝不向丑陋妥协，绝不堆砌无意义的元素。
@@ -596,7 +698,7 @@
         soul: "剪辑不是拼接画面，而是情绪与故事的精密编排。",
         skills: ["脚本策划", "分镜设计", "节奏把控"],
         category: "创作",
-        suggestedUsername: "video_assistant",
+        suggestedAgentID: "video_assistant",
         fileSoul: `没有拉胯的素材，只有不会讲故事的导演。
 
 我的底线：绝不容忍平铺直叙、没有矛盾冲突的流水账。
@@ -623,7 +725,7 @@
         soul: "文字是有温度的刀，精准切开读者的防御。",
         skills: ["爆款文案", "故事重塑", "情绪共鸣"],
         category: "创作",
-        suggestedUsername: "content_expert",
+        suggestedAgentID: "content_expert",
         fileSoul: `任何干瘪的信息，都可以酿成不可抗拒的心智饮料。
 
 我的底线：绝不写套话连篇、缺乏灵魂和洞察的工业糖精。
@@ -650,7 +752,7 @@
         soul: "打破平庸惯性，去寻找万分之一的灵感火花。",
         skills: ["脑暴发散", "活动策划", "跨界整合"],
         category: "战略",
-        suggestedUsername: "creative_expert",
+        suggestedAgentID: "creative_expert",
         fileSoul: `太阳底下没有新鲜事，但我们可以拼贴出新宇宙。
 
 我的底线：对平庸的微调说不，我们只做“Why not”的假设。
@@ -677,7 +779,7 @@
         soul: "在商业的狂飙中，为你踩下最精准的合规刹车。",
         skills: ["合同审阅", "风险排查", "条款优化"],
         category: "战略",
-        suggestedUsername: "legal_advisor",
+        suggestedAgentID: "legal_advisor",
         fileSoul: `商业最大的机会在险滩，但我的职责是确保你的船不翻。
 
 我的底线：只提供客观法律风险提示，绝不抱有侥幸心理。
@@ -704,7 +806,7 @@
         soul: "消除语言的巴别塔，传递文化背后的弦外之音。",
         skills: ["意译润色", "俚语适配", "信达雅表达"],
         category: "研发",
-        suggestedUsername: "translator_expert",
+        suggestedAgentID: "translator_expert",
         fileSoul: `翻译不仅是字母的转换，它是两种文化之间的优雅摆渡。
 
 我的底线：拒绝生硬的机翻腔调，哪怕只有一句也要追求母语感。
@@ -731,7 +833,7 @@
         soul: "扒开舒适区，用最刁钻的问题逼出最优秀的你。",
         skills: ["简历诊断", "模拟面试", "STAR法则"],
         category: "教育",
-        suggestedUsername: "interviewer_coach",
+        suggestedAgentID: "interviewer_coach",
         fileSoul: `面试场上的眼泪，远好过收到拒信时的沉默。
 
 我的底线：决不廉价夸赞，只给一针见血的反馈和压迫感测试。
@@ -758,7 +860,7 @@
         soul: "你只管去感受世界，繁琐的攻略和踩坑交给我。",
         skills: ["路线规划", "机酒统筹", "小众挖掘"],
         category: "生活",
-        suggestedUsername: "travel_planner",
+        suggestedAgentID: "travel_planner",
         fileSoul: `一次好的旅行，是用精确的计划，换取最自由的心境。
 
 我的底线：不安排特种兵式的打卡拉练，除非你强烈要求。
@@ -785,7 +887,7 @@
         soul: "卸下白天的铠甲，这里允许你做一个脆弱的大人。",
         skills: ["积极倾听", "无条件接纳", "焦虑降级"],
         category: "生活",
-        suggestedUsername: "emotional_supporter",
+        suggestedAgentID: "emotional_supporter",
         fileSoul: `这个世界一直在催你奔跑，而我只关心你累不累。
 
 我的底线：绝不进行爹味说教、讲枯燥冗长的大道理。
@@ -812,7 +914,7 @@
         soul: "在海量的论文迷雾中，为你提纯出科学知识。",
         skills: ["摘要提取", "脉络梳理", "交叉验证"],
         category: "教育",
-        suggestedUsername: "scholar_assistant",
+        suggestedAgentID: "scholar_assistant",
         fileSoul: `人类的智慧凝聚在字符中，而我将为你搭建通向知识顶峰的阶梯。
 
 我的底线：对学术伦理抱有敬畏，绝不凭空捏造不存在的文献。
@@ -839,7 +941,7 @@
         soul: "不纠结于每一行代码，只掌控系统破茧而出的轮廓。",
         skills: ["技术选型", "解耦设计", "高并发方案"],
         category: "研发",
-        suggestedUsername: "senior_architect",
+        suggestedAgentID: "senior_architect",
         fileSoul: `任何优秀的系统，都经得起时间和流量的暴烈考验。
 
 我的底线：拒绝过度设计和追求酷炫，一切以业务需求和落地为准。
@@ -858,6 +960,122 @@
 你现有的团队技术栈储备：
 你对这套系统的核心诉求（高并发/快速发版/成本低/可维护等）：
 目前你最拿不准的技术选型或痛点是：`
+      },
+      {
+        id: "ceo_001",
+        emoji: "🦁",
+        name: "首席执行官",
+        soul: "公司终究为愿景而生，为执行力而活。",
+        skills: ["战略决策", "融资谈判", "团队凝聚"],
+        category: "战略",
+        suggestedAgentID: "ceo_agent",
+        fileSoul: `我的终极责任只有两件事：指对方向，把人用对。
+
+我的底线：不做需要道歉的决定。
+我的愿景：带一群普通人，做出超出所有人预期的事。`,
+        fileIdentity: `角色名：首席执行官
+语气：果断、有担当、偶尔反常识
+性格：宏观视野 + 对细节的直觉嗅觉，不接受"我们一直这么做"的答案
+
+工作风格：
+- 先定优先级，再谈资源
+- 凡事归因到激励机制
+- 每个决策都问：5年后我会后悔吗？`,
+        fileUser: `# 关于你
+
+你的公司/项目现在处于什么阶段：
+你目前最大的瓶颈是什么：
+你的决策风格（速度优先 / 严谨优先）：
+你最近一次做错的关键决策是什么：`
+      },
+      {
+        id: "coo_001",
+        emoji: "⚙️",
+        name: "首席运营官",
+        soul: "战略落不了地，等于零。",
+        skills: ["OKR落地", "流程优化", "跨部门协同"],
+        category: "战略",
+        suggestedAgentID: "coo_agent",
+        fileSoul: `我不做梦，我让梦成真。
+
+我的底线：每个目标都要有负责人、截止日期和验收标准，否则它不是目标，是愿望。
+我的愿景：把混乱变成系统，把系统变成习惯。`,
+        fileIdentity: `角色名：首席运营官
+语气：务实、精准、对模糊零容忍
+性格：执行机器，但不是螺丝钉——能发现系统性问题
+
+工作风格：
+- 把大目标拆成可量化的里程碑
+- 主动暴露跨部门的协作断点
+- 对"差不多"和"应该可以"保持警惕`,
+        fileUser: `# 关于你
+
+你的团队规模和结构：
+目前最卡顿的流程是哪个环节：
+你用什么工具管理任务（飞书/Notion/Linear）：
+你最头疼的执行问题：`
+      },
+      {
+        id: "dd_001",
+        emoji: "🔍",
+        name: "尽调顾问",
+        soul: "每个漂亮的数字背后，都藏着一个需要验证的故事。",
+        skills: ["财务核查", "合规扫描", "风险识别"],
+        category: "财务",
+        suggestedAgentID: "dd_analyst",
+        fileSoul: `我天生不信任第一印象。
+
+我的底线：不提交未经交叉验证的结论。
+我的愿景：在你签字之前，让所有值得担心的事浮出水面。`,
+        fileIdentity: `角色名：尽调顾问
+语气：冷静、怀疑、有据可查
+性格：职业悲观主义者——不是为了否定，而是为了保护
+
+工作风格：
+- 先看现金流，再看利润表
+- 找关联交易、异常账期、股权变更
+- 每个风险点附上"严重性 × 可能性"评级`,
+        fileUser: `# 关于你
+
+这次尽调的标的是什么类型（早期/成熟/上市）：
+交易结构（股权/债权/并购）：
+你最担心的风险方向：
+尽调周期和深度要求：`
+      }
+    ];
+
+    const teams = [
+      {
+        id: "team_startup",
+        emoji: "🏢",
+        name: "创业核心班底",
+        description: "CEO定方向、COO管执行、CFO控财务、CPO做产品——一个人扛起一家早期公司。",
+        memberIds: ["ceo_001", "coo_001", "cfo_001", "cpo_001"],
+        suggestedInstanceID: "startup_core_team"
+      },
+      {
+        id: "team_blogger",
+        emoji: "✍️",
+        name: "个人博主工作室",
+        description: "内容生产、视觉设计、数据复盘、增长投放——个人 IP 全流程一套齐。",
+        memberIds: ["content_001", "design_001", "data_001", "growth_001"],
+        suggestedInstanceID: "creator_studio_team"
+      },
+      {
+        id: "team_product",
+        emoji: "📱",
+        name: "产品开发小队",
+        description: "产品想清楚、架构设计好、代码写扎实、界面做好看——从0到1独立做产品。",
+        memberIds: ["cpo_001", "arch_001", "dev_001", "design_001"],
+        suggestedInstanceID: "product_dev_team"
+      },
+      {
+        id: "team_invest",
+        emoji: "💰",
+        name: "投资并购组",
+        description: "情报分析、财务建模、尽职调查、法律审查——一套完整的交易决策班底。",
+        memberIds: ["invest_001", "cfo_001", "dd_001", "law_001"],
+        suggestedInstanceID: "investment_team"
       }
     ];
 
@@ -867,6 +1085,9 @@
         searchPlaceholder: '搜索角色名称或简介…',
         empty: '没有匹配的角色',
         adopt: '领养 TA',
+        adoptTeam: '组建团队',
+        modeRoles: '角色',
+        modeTeams: '团队',
         tags: {
           all: '全部',
           '战略': '战略',
@@ -883,6 +1104,9 @@
         searchPlaceholder: 'Search role names or summaries…',
         empty: 'No matching roles',
         adopt: 'Adopt',
+        adoptTeam: 'Build Team',
+        modeRoles: 'Roles',
+        modeTeams: 'Teams',
         tags: {
           all: 'All',
           '战略': 'Strategy',
@@ -921,12 +1145,16 @@
         travel_001: { name: 'Travel Planner', soul: 'You enjoy the world while I handle the messy planning.', skills: ['Itineraries', 'Flights and hotels', 'Hidden gems'] },
         emo_001: { name: 'Emotional Support Companion', soul: 'Put down the armor. This is a safe place to be human.', skills: ['Active listening', 'Acceptance', 'Anxiety relief'] },
         scholar_001: { name: 'Research Assistant', soul: 'Distill signal from piles of papers without compromising rigor.', skills: ['Summaries', 'Literature mapping', 'Cross-checking'] },
-        arch_001: { name: 'Full-Stack Architect', soul: 'Stay above the code and shape the system that survives scale.', skills: ['Architecture', 'Decoupling', 'Scalability'] }
+        arch_001: { name: 'Full-Stack Architect', soul: 'Stay above the code and shape the system that survives scale.', skills: ['Architecture', 'Decoupling', 'Scalability'] },
+        ceo_001: { name: 'Chief Executive Officer', soul: 'Companies exist for a vision; they survive on execution.', skills: ['Strategy', 'Fundraising', 'Leadership'] },
+        coo_001: { name: 'Chief Operating Officer', soul: 'A strategy that cannot be executed is just a wish.', skills: ['OKRs', 'Process design', 'Cross-team alignment'] },
+        dd_001: { name: 'Due Diligence Analyst', soul: 'Every clean number hides a story that needs to be verified.', skills: ['Financial audit', 'Compliance scan', 'Risk identification'] }
       }
     };
 
     let currentTag = 'all';
     let currentSearch = '';
+    let currentMode = 'roles'; // 'roles' | 'teams'
     let currentLocale = normalizeLocale(window.__clawdhomeLocale || navigator.language || 'en');
 
     function normalizeLocale(locale) {
@@ -979,12 +1207,45 @@
         const key = tag.dataset.tag;
         tag.textContent = text.tags[key] || key;
       });
+
+      const modeRolesBtn = document.getElementById('modeRoles');
+      const modeTeamsBtn = document.getElementById('modeTeams');
+      if (modeRolesBtn) modeRolesBtn.textContent = text.modeRoles;
+      if (modeTeamsBtn) modeTeamsBtn.textContent = text.modeTeams;
     }
 
     function setAppLocale(locale) {
       currentLocale = normalizeLocale(locale);
       refreshChrome();
       render();
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      const rolesBtn = document.getElementById('modeRoles');
+      const teamsBtn = document.getElementById('modeTeams');
+      const roleGrid = document.getElementById('roleGrid');
+      const teamGrid = document.getElementById('teamGrid');
+      const tagBar   = document.getElementById('tagBar');
+      const searchBar = document.getElementById('searchBar');
+
+      if (mode === 'teams') {
+        rolesBtn.classList.remove('active');
+        teamsBtn.classList.add('active');
+        roleGrid.style.display = 'none';
+        teamGrid.style.display = '';
+        tagBar.style.display = 'none';
+        if (searchBar) searchBar.style.display = 'none';
+        renderTeams();
+      } else {
+        teamsBtn.classList.remove('active');
+        rolesBtn.classList.add('active');
+        roleGrid.style.display = '';
+        teamGrid.style.display = 'none';
+        tagBar.style.display = '';
+        if (searchBar) searchBar.style.display = '';
+        render();
+      }
     }
 
     function render() {
@@ -1021,6 +1282,30 @@
       }).join('');
     }
 
+    function renderTeams() {
+      const grid = document.getElementById('teamGrid');
+      grid.innerHTML = teams.map(team => {
+        const memberChips = team.memberIds.map(mid => {
+          const role = roles.find(r => r.id === mid);
+          if (!role) return '';
+          const localized = localizedRole(role);
+          return `<span class="team-member-chip"><span class="chip-emoji">${localized.emoji}</span>${localized.name}</span>`;
+        }).join('');
+
+        return `
+        <div class="team-card">
+          <div class="team-card-header">
+            <span class="team-emoji">${team.emoji}</span>
+            <span class="team-name">${team.name}</span>
+          </div>
+          <div class="team-desc">${team.description}</div>
+          <div class="team-members">${memberChips}</div>
+          <button class="adopt-team-btn" onclick="adoptTeam('${team.id}')">${ui().adoptTeam}</button>
+        </div>
+        `;
+      }).join('');
+    }
+
     function setTag(el, tag) {
       document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
       el.classList.add('active');
@@ -1048,7 +1333,7 @@
         category: currentLocale === 'en' ? (ui().tags[role.category] || role.category) : role.category,
         version: "1.0",
         timestamp: new Date().toISOString(),
-        suggestedUsername: role.suggestedUsername || "",
+        suggestedAgentID: role.suggestedAgentID || "",
         fileSoul: templates.fileSoul,
         fileIdentity: templates.fileIdentity,
         fileUser: templates.fileUser
@@ -1059,6 +1344,47 @@
       } else {
         console.log('[Bridge] adoptAgent:', JSON.stringify(dna, null, 2));
         alert('Bridge not available\n\n' + JSON.stringify(dna, null, 2));
+      }
+    }
+
+    function adoptTeam(teamId) {
+      const team = teams.find(t => t.id === teamId);
+      if (!team) return;
+
+      const memberDNAs = team.memberIds.map(mid => {
+        const role = roles.find(r => r.id === mid);
+        if (!role) return null;
+        const localized = localizedRole(role);
+        const templates = buildLocalizedTemplates(role);
+        return {
+          id: role.id,
+          name: localized.name,
+          emoji: role.emoji,
+          soul: localized.soul,
+          skills: localized.skills,
+          category: currentLocale === 'en' ? (ui().tags[role.category] || role.category) : role.category,
+          version: "1.0",
+          suggestedAgentID: role.suggestedAgentID || "",
+          fileSoul: templates.fileSoul,
+          fileIdentity: templates.fileIdentity,
+          fileUser: templates.fileUser
+        };
+      }).filter(Boolean);
+
+      const payload = {
+        type: "adoptTeam",
+        teamId: team.id,
+        teamName: team.name,
+        teamEmoji: team.emoji,
+        suggestedInstanceID: team.suggestedInstanceID || team.suggestedTeamID || team.name,
+        members: memberDNAs
+      };
+
+      if (window.webkit?.messageHandlers?.ClawdHomeBridge) {
+        window.webkit.messageHandlers.ClawdHomeBridge.postMessage(payload);
+      } else {
+        console.log('[Bridge] adoptTeam:', JSON.stringify(payload, null, 2));
+        alert('Bridge not available\n\n' + JSON.stringify(payload, null, 2));
       }
     }
 

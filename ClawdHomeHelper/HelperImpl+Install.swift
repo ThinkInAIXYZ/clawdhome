@@ -145,12 +145,12 @@ extension ClawdHomeHelperImpl {
     // MARK: 用户环境初始化
 
     /// 初始化日志路径，world-readable，供 app 实时读取
-    private func initLogURL(username: String) -> URL {
+    func initLogURL(username: String) -> URL {
         let path = "/tmp/clawdhome-init-\(username).log"
         // 确保文件存在且 world-readable（Helper 以 root 运行）
         if !FileManager.default.fileExists(atPath: path) {
             FileManager.default.createFile(atPath: path, contents: nil,
-                attributes: [.posixPermissions: 0o644])
+                attributes: [.posixPermissions: 0o666])
         }
         return URL(fileURLWithPath: path)
     }
@@ -354,55 +354,6 @@ extension ClawdHomeHelperImpl {
 
     func repairHomebrewPermission(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
         let logURL = initLogURL(username: username)
-        let nodePath = ConfigWriter.buildNodePath(username: username)
-        let home = "/Users/\(username)"
-        let profilePath = "\(home)/.zprofile"
-        let sharedCacheRoot = "/var/lib/clawdhome/cache"
-        let homebrewCacheDir = "\(sharedCacheRoot)/homebrew"
-        let installScript = """
-        set -e
-        BREW_ROOT="$HOME/.brew"
-        CACHE_DIR="/var/lib/clawdhome/cache/homebrew"
-        CACHE_TAR="$CACHE_DIR/brew-master.tar.gz"
-        PART_TAR="$CACHE_TAR.part.$USER.$$"
-        BREW_TARBALL_URL="https://github.com/Homebrew/brew/tarball/master"
-        CACHE_TTL_SECONDS=$((30 * 24 * 60 * 60))
-        NOW_TS="$(date +%s)"
-
-        mkdir -p "$BREW_ROOT" "$CACHE_DIR"
-
-        extract_cached_tar() {
-          tar -xzf "$CACHE_TAR" --strip 1 -C "$BREW_ROOT"
-        }
-
-        cache_fresh="0"
-        if [ -s "$CACHE_TAR" ]; then
-          CACHE_MTIME="$(stat -f %m "$CACHE_TAR" 2>/dev/null || echo 0)"
-          CACHE_AGE=$((NOW_TS - CACHE_MTIME))
-          if [ "$CACHE_AGE" -le "$CACHE_TTL_SECONDS" ] && [ "$CACHE_MTIME" -gt 0 ]; then
-            cache_fresh="1"
-            echo "✓ 使用 Homebrew 本地缓存（30 天内）：$CACHE_TAR"
-            if ! extract_cached_tar; then
-              echo "⚠ Homebrew 缓存损坏，删除后重新下载"
-              rm -f "$CACHE_TAR"
-              cache_fresh="0"
-            fi
-          else
-            echo "ℹ Homebrew 缓存已过期（>${CACHE_TTL_SECONDS}s），重新下载"
-            rm -f "$CACHE_TAR"
-          fi
-        fi
-
-        if [ "$cache_fresh" != "1" ]; then
-          rm -f "$PART_TAR"
-          echo "⬇ 下载 Homebrew 到缓存..."
-          curl --fail --show-error -L --connect-timeout 10 --max-time 180 --retry 2 --retry-delay 2 "$BREW_TARBALL_URL" -o "$PART_TAR"
-          mv "$PART_TAR" "$CACHE_TAR"
-          echo "✓ Homebrew 缓存写入完成"
-          extract_cached_tar
-        fi
-        """
-        let requiredExports = UserEnvContract.zprofileRequiredExports()
 
         func appendLog(_ msg: String) {
             if let fh = FileHandle(forWritingAtPath: logURL.path) {
@@ -420,54 +371,7 @@ extension ClawdHomeHelperImpl {
         }
 
         do {
-            // 共享缓存目录给多用户初始化复用：所有用户可写，避免"第一只虾创建后其余用户不可写"。
-            try FileManager.default.createDirectory(
-                atPath: homebrewCacheDir,
-                withIntermediateDirectories: true,
-                attributes: nil
-            )
-            _ = try? FilePermissionHelper.chmod(sharedCacheRoot, mode: "1777")
-            _ = try? FilePermissionHelper.chmod(homebrewCacheDir, mode: "1777")
-
-            appendLog("\n▶ 修复 Homebrew 权限（普通用户目录安装）\n")
-            appendLog("$ \(installScript)\n")
-            let output = try runAsUser(
-                username: username,
-                nodePath: nodePath,
-                command: "/bin/sh",
-                args: ["-lc", installScript]
-            )
-            if !output.isEmpty {
-                appendLog(output.hasSuffix("\n") ? output : "\(output)\n")
-            }
-            appendLog("✓ 已完成 ~/.brew 安装/更新\n")
-
-            let existing = (try? String(contentsOfFile: profilePath, encoding: .utf8)) ?? ""
-            let missingExports = requiredExports.filter { !existing.contains($0) }
-            if !missingExports.isEmpty {
-                var appendBlock = "\n"
-                if !existing.contains("# user-local homebrew") {
-                    appendBlock += "# user-local homebrew\n"
-                }
-                appendBlock += missingExports.joined(separator: "\n") + "\n"
-                let data = Data(appendBlock.utf8)
-                if FileManager.default.fileExists(atPath: profilePath) {
-                    if let fh = FileHandle(forWritingAtPath: profilePath) {
-                        fh.seekToEndOfFile()
-                        fh.write(data)
-                        fh.closeFile()
-                    }
-                } else {
-                    try data.write(to: URL(fileURLWithPath: profilePath))
-                }
-                try FilePermissionHelper.chown(profilePath, owner: username)
-                appendLog("✓ 已将 ~/.brew 环境变量写入 ~/.zprofile\n")
-            } else {
-                appendLog("✓ ~/.zprofile 已包含 ~/.brew 环境变量配置\n")
-            }
-
-            // 防御性修正：避免历史 root 执行导致目录归属错误
-            _ = try? FilePermissionHelper.chownRecursive("\(home)/.brew", owner: username)
+            try HomebrewRepairManager.repair(username: username, logURL: logURL)
             reply(true, nil)
         } catch {
             helperLog("修复 Homebrew 权限失败 @\(username): \(error.localizedDescription)", level: .warn)
@@ -1031,5 +935,131 @@ extension ClawdHomeHelperImpl {
             return "\(base)#token=\(token)"
         }
         return base
+    }
+}
+
+// MARK: - Shared Homebrew Repair
+
+enum HomebrewRepairManager {
+
+    static func repair(username: String, logURL: URL?) throws {
+        let home = UserEnvContract.home(username: username)
+        let profilePath = "\(home)/.zprofile"
+        let sharedCacheRoot = "/var/lib/clawdhome/cache"
+        let homebrewCacheDir = "\(sharedCacheRoot)/homebrew"
+        let nodePath = ConfigWriter.buildNodePath(username: username)
+
+        let installScript = """
+        set -e
+        BREW_ROOT="$HOME/.brew"
+        CACHE_DIR="/var/lib/clawdhome/cache/homebrew"
+        CACHE_TAR="$CACHE_DIR/brew-master.tar.gz"
+        PART_TAR="$CACHE_TAR.part.$USER.$$"
+        BREW_TARBALL_URL="https://github.com/Homebrew/brew/tarball/master"
+        CACHE_TTL_SECONDS=$((30 * 24 * 60 * 60))
+        NOW_TS="$(date +%s)"
+
+        mkdir -p "$BREW_ROOT" "$CACHE_DIR"
+
+        extract_cached_tar() {
+          tar -xzf "$CACHE_TAR" --strip 1 -C "$BREW_ROOT"
+        }
+
+        cache_fresh="0"
+        if [ -s "$CACHE_TAR" ]; then
+          CACHE_MTIME="$(stat -f %m "$CACHE_TAR" 2>/dev/null || echo 0)"
+          CACHE_AGE=$((NOW_TS - CACHE_MTIME))
+          if [ "$CACHE_AGE" -le "$CACHE_TTL_SECONDS" ] && [ "$CACHE_MTIME" -gt 0 ]; then
+            cache_fresh="1"
+            echo "✓ 使用 Homebrew 本地缓存（30 天内）：$CACHE_TAR"
+            if ! extract_cached_tar; then
+              echo "⚠ Homebrew 缓存损坏，删除后重新下载"
+              rm -f "$CACHE_TAR"
+              cache_fresh="0"
+            fi
+          else
+            echo "ℹ Homebrew 缓存已过期（>${CACHE_TTL_SECONDS}s），重新下载"
+            rm -f "$CACHE_TAR"
+          fi
+        fi
+
+        if [ "$cache_fresh" != "1" ]; then
+          rm -f "$PART_TAR"
+          echo "⬇ 下载 Homebrew 到缓存..."
+          curl --fail --show-error -L --connect-timeout 10 --max-time 180 --retry 2 --retry-delay 2 "$BREW_TARBALL_URL" -o "$PART_TAR"
+          mv "$PART_TAR" "$CACHE_TAR"
+          echo "✓ Homebrew 缓存写入完成"
+          extract_cached_tar
+        fi
+        """
+
+        func appendLog(_ message: String) {
+            guard let logURL else { return }
+            if let fh = FileHandle(forWritingAtPath: logURL.path) {
+                fh.seekToEndOfFile()
+                fh.write(Data(message.utf8))
+                fh.closeFile()
+            }
+        }
+
+        // 共享缓存目录给多用户初始化复用：所有用户可写，避免"第一只虾创建后其余用户不可写"。
+        try FileManager.default.createDirectory(
+            atPath: homebrewCacheDir,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        _ = try? FilePermissionHelper.chmod(sharedCacheRoot, mode: "1777")
+        _ = try? FilePermissionHelper.chmod(homebrewCacheDir, mode: "1777")
+
+        appendLog("\n▶ 修复 Homebrew 权限（普通用户目录安装）\n")
+        appendLog("$ \(installScript)\n")
+
+        let envArgs = UserEnvContract
+            .orderedRuntimeEnvironment(username: username, nodePath: nodePath)
+            .map { "\($0.0)=\($0.1)" }
+        let runArgs = ["-n", "-u", username, "-H", "/usr/bin/env"]
+            + envArgs
+            + ["/bin/sh", "-lc", installScript]
+
+        let output: String
+        if let logURL {
+            output = try runLogging("/usr/bin/sudo", args: runArgs, logURL: logURL)
+        } else {
+            output = try run("/usr/bin/sudo", args: runArgs)
+        }
+        if !output.isEmpty {
+            appendLog(output.hasSuffix("\n") ? output : "\(output)\n")
+        }
+        appendLog("✓ 已完成 ~/.brew 安装/更新\n")
+
+        let existing = (try? String(contentsOfFile: profilePath, encoding: .utf8)) ?? ""
+        let requiredExports = UserEnvContract.zprofileRequiredExports()
+        let missingExports = requiredExports.filter { !existing.contains($0) }
+        if !missingExports.isEmpty {
+            var appendBlock = "\n"
+            if !existing.contains("# user-local homebrew") {
+                appendBlock += "# user-local homebrew\n"
+            }
+            appendBlock += missingExports.joined(separator: "\n") + "\n"
+            let data = Data(appendBlock.utf8)
+            if FileManager.default.fileExists(atPath: profilePath) {
+                if let fh = FileHandle(forWritingAtPath: profilePath) {
+                    fh.seekToEndOfFile()
+                    fh.write(data)
+                    fh.closeFile()
+                }
+            } else {
+                try data.write(to: URL(fileURLWithPath: profilePath))
+            }
+            try FilePermissionHelper.chown(profilePath, owner: username)
+            appendLog("✓ 已将 ~/.brew 环境变量写入 ~/.zprofile\n")
+        } else {
+            appendLog("✓ ~/.zprofile 已包含 ~/.brew 环境变量配置\n")
+        }
+
+        // 防御性修正：避免历史 root 执行导致目录归属错误
+        _ = try? FilePermissionHelper.chownRecursive("\(home)/.brew", owner: username)
+        // 确保 owner 对目录有 traverse 权限、对可执行文件有执行权限（修复 exit 126）
+        _ = try? FilePermissionHelper.chmodSymbolicRecursive("\(home)/.brew", expr: "u+rwX")
     }
 }

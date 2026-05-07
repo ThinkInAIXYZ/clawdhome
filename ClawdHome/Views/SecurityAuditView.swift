@@ -163,9 +163,12 @@ private struct GatewayLogTab: View {
         guard let user = selectedUser else { return }
         isLoading = true
         defer { isLoading = false }
+        let relativePath = user.prefersHermesRuntime
+            ? ".hermes/logs/gateway.log"
+            : ".openclaw/logs/gateway.log"
         let data = (try? await helperClient.readFile(
             username: user.username,
-            relativePath: ".openclaw/logs/gateway.log"
+            relativePath: relativePath
         )) ?? Data()
         entries = GatewayLogEntry.parse(data: data)
     }

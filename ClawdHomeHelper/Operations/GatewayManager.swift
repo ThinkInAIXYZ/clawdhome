@@ -136,7 +136,7 @@ struct GatewayManager {
                 }
                 Thread.sleep(forTimeInterval: 0.5)
                 try writePlist(newPlist, to: plistPath)
-                try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
+                try bootstrapSystem(label: label, plistPath: plistPath)
             } else if existingPlist != newPlist {
                 helperLog("[GatewayManager] START_STEP: plist 变更，bootout 后重新 bootstrap @\(username)")
                 if (try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])) == nil {
@@ -144,7 +144,7 @@ struct GatewayManager {
                 }
                 Thread.sleep(forTimeInterval: 0.5)
                 try writePlist(newPlist, to: plistPath)
-                try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
+                try bootstrapSystem(label: label, plistPath: plistPath)
             } else {
                 helperLog("[GatewayManager] START_STEP: plist 未变，kickstart 重启 @\(username)")
                 if (try? run("/bin/launchctl", args: ["kickstart", "system/\(label)"])) == nil {
@@ -154,7 +154,7 @@ struct GatewayManager {
         } else {
             helperLog("[GatewayManager] START_STEP: 首次注册，bootstrap @\(username)")
             try writePlist(newPlist, to: plistPath)
-            try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
+            try bootstrapSystem(label: label, plistPath: plistPath)
         }
 
         guard let startedPID = waitForGatewayRunning(username: username, uid: uid, timeout: 8) else {
@@ -164,15 +164,38 @@ struct GatewayManager {
         }
 
         cleanupOrphanGateways(username: username, keepPID: startedPID)
-        Thread.sleep(forTimeInterval: 0.8)
-        let stabilizedStatus = status(username: username, uid: uid)
-        if !stabilizedStatus.running || stabilizedStatus.pid <= 0 {
+
+        // 稳定性检查：容忍首次启动时进程短暂退出后被 launchd 拉回来
+        // 轮询最多 6 秒（覆盖 ThrottleInterval 3s + 余量），连续 0.8s 存活视为稳定
+        let stabilityDeadline = Date().addingTimeInterval(6)
+        var lastAliveTime: Date?
+        var stabilized = false
+        while Date() < stabilityDeadline {
+            let st = status(username: username, uid: uid)
+            if st.running, st.pid > 0 {
+                if let alive = lastAliveTime, Date().timeIntervalSince(alive) >= 0.8 {
+                    stabilized = true
+                    break
+                }
+                if lastAliveTime == nil { lastAliveTime = Date() }
+            } else {
+                lastAliveTime = nil  // 进程消失，重置计时
+            }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        // 循环结束后再做一次最终检查（可能刚好卡在边界）
+        if !stabilized {
+            let finalStatus = status(username: username, uid: uid)
+            stabilized = finalStatus.running && finalStatus.pid > 0
+        }
+        if !stabilized {
             let err = GatewayError.startVerificationFailed(reason: "启动后进程未保持存活，疑似循环重启")
             helperLog("[GatewayManager] START_FAIL: \(err.localizedDescription) @\(username)", level: .error)
             throw err
         }
 
-        helperLog("[GatewayManager] START_OK: port=\(resolvedPort) label=\(label) pid=\(stabilizedStatus.pid) @\(username)")
+        let finalPid = status(username: username, uid: uid).pid
+        helperLog("[GatewayManager] START_OK: port=\(resolvedPort) label=\(label) pid=\(finalPid) @\(username)")
     }
 
     private static func writePlist(_ content: String, to path: String) throws {
@@ -502,6 +525,8 @@ struct GatewayManager {
             <true/>
             <key>KeepAlive</key>
             <true/>
+            <key>ThrottleInterval</key>
+            <integer>3</integer>
             <key>StandardErrorPath</key>
             <string>\(logPath)</string>
             <key>StandardOutPath</key>
@@ -518,6 +543,40 @@ struct GatewayManager {
             .replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "\"", with: "&quot;")
             .replacingOccurrences(of: "'", with: "&apos;")
+    }
+
+    private static func bootstrapSystem(label: String, plistPath: String) throws {
+        var lastError: Error?
+        for attempt in 1...3 {
+            do {
+                try run("/bin/launchctl", args: ["bootstrap", "system", plistPath])
+                return
+            } catch {
+                lastError = error
+                guard shouldRetryBootstrap(error), attempt < 3 else { throw error }
+
+                let lintResult = (try? run("/usr/bin/plutil", args: ["-lint", plistPath])) ?? "(plutil failed)"
+                let printResult = (try? run("/bin/launchctl", args: ["print", "system/\(label)"])) ?? "(service not found)"
+                helperLog(
+                    "[GatewayManager] START_WARN: bootstrap attempt \(attempt)/3 失败，准备重试 label=\(label) plist=\(plistPath) lint=\(clampLog(lintResult)) print=\(clampLog(printResult))",
+                    level: .warn
+                )
+
+                _ = try? run("/bin/launchctl", args: ["bootout", "system/\(label)"])
+                Thread.sleep(forTimeInterval: 0.5 * Double(attempt))
+            }
+        }
+        if let lastError { throw lastError }
+    }
+
+    private static func shouldRetryBootstrap(_ error: Error) -> Bool {
+        guard case let ShellError.nonZeroExit(command, status, _) = error else { return false }
+        return status == 5 && command.contains("/bin/launchctl bootstrap system ")
+    }
+
+    private static func clampLog(_ text: String, max: Int = 240) -> String {
+        guard text.count > max else { return text }
+        return String(text.prefix(max)) + "...(truncated)"
     }
 
     /// openclaw CLI 可能包含 ANSI 控制码或包裹文本，这里做鲁棒解析。

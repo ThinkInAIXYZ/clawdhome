@@ -82,8 +82,11 @@ enum PersonaSelection: Hashable {
 
 struct CharacterDefTabView: View {
     let username: String
+    var agentId: String? = nil       // nil = default agent（使用默认 workspace）
+    var agentLabel: String? = nil    // 显示用的标签（如 "🎯 项目经理"）
 
     @Environment(HelperClient.self) private var helperClient
+    @Environment(GatewayHub.self) private var gatewayHub
 
     // 编辑器状态
     @State private var selection: PersonaSelection = .file(.soul)
@@ -118,49 +121,116 @@ struct CharacterDefTabView: View {
     // 读取错误（离线等）
     @State private var loadError: String? = nil
 
-    var body: some View {
-        HSplitView {
-            // 左侧侧边栏
-            PersonaFileSidebarView(
-                selection: $selection,
-                editorContents: editorContents,
-                savedContents: savedContents,
-                existsOnDisk: existsOnDisk,
-                memoryLogFiles: memoryLogFiles,
-                memoryLogExpanded: $memoryLogExpanded,
-                onSelect: { sel in handleSelect(sel) }
-            )
-            .frame(minWidth: 160, idealWidth: 190, maxWidth: 220)
+    // 删除当前角色
+    @State private var showDeleteAgentConfirm: Bool = false
 
-            // 右侧主区域
-            switch selection {
-            case .file(let file):
-                PersonaEditorAreaView(
-                    username: username,
-                    selectedFile: file,
-                    content: Binding(
-                        get: { editorContents[file] ?? "" },
-                        set: { editorContents[file] = $0 }
-                    ),
-                    isLoading: isLoading,
-                    isSaving: isSaving,
-                    isDirty: isDirty(file),
-                    fileExistsOnDisk: existsOnDisk[file] ?? false,
-                    gitInitFailed: gitInitFailed,
-                    lastCommitFailed: lastCommitFailed,
-                    loadError: loadError,
-                    historyRefreshToken: historyRefreshToken,
-                    onSave: { Task { await save(file: file) } },
-                    onDiscard: { discardEdits(file: file) },
-                    onRestored: { Task { await reloadAfterRestore() } }
+    /// 是否为非默认 agent
+    private var isNonDefaultAgent: Bool {
+        if let id = agentId, id != "main", !id.isEmpty { return true }
+        return false
+    }
+
+    /// 根据 agentId 计算文件的相对路径
+    private func relPath(for file: PersonaFile) -> String {
+        if let agentId = agentId, agentId != "main", !agentId.isEmpty {
+            return ".openclaw/workspace-\(agentId)/\(file.rawValue)"
+        }
+        return file.relPath  // 默认路径
+    }
+
+    /// 根据 agentId 计算记忆日志目录路径
+    private var memoryLogDirPath: String {
+        if let agentId = agentId, agentId != "main", !agentId.isEmpty {
+            return ".openclaw/workspace-\(agentId)/memory"
+        }
+        return ".openclaw/workspace/memory"
+    }
+
+    /// 根据 agentId 计算记忆日志文件路径
+    private func memoryLogRelPath(_ name: String) -> String {
+        return "\(memoryLogDirPath)/\(name)"
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Agent 标签标题
+            if let label = agentLabel {
+                HStack(spacing: 6) {
+                    Text(L10n.f("persona.agent.header", fallback: "角色定义 — %@", label))
+                        .font(.headline)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.bar)
+                Divider()
+            }
+
+            HSplitView {
+                // 左侧侧边栏
+                PersonaFileSidebarView(
+                    selection: $selection,
+                    editorContents: editorContents,
+                    savedContents: savedContents,
+                    existsOnDisk: existsOnDisk,
+                    memoryLogFiles: memoryLogFiles,
+                    memoryLogExpanded: $memoryLogExpanded,
+                    onSelect: { sel in handleSelect(sel) }
                 )
-            case .memoryLog(let name):
-                PersonaMemoryLogView(
-                    filename: name,
-                    content: memoryLogContent,
-                    isLoading: isLoading,
-                    loadError: loadError
-                )
+                .frame(minWidth: 160, idealWidth: 190, maxWidth: 220)
+
+                // 右侧主区域
+                switch selection {
+                case .file(let file):
+                    PersonaEditorAreaView(
+                        username: username,
+                        selectedFile: file,
+                        relPath: relPath(for: file),
+                        content: Binding(
+                            get: { editorContents[file] ?? "" },
+                            set: { editorContents[file] = $0 }
+                        ),
+                        isLoading: isLoading,
+                        isSaving: isSaving,
+                        isDirty: isDirty(file),
+                        fileExistsOnDisk: existsOnDisk[file] ?? false,
+                        gitInitFailed: gitInitFailed || isNonDefaultAgent,
+                        lastCommitFailed: lastCommitFailed,
+                        loadError: loadError,
+                        historyRefreshToken: historyRefreshToken,
+                        onSave: { Task { await save(file: file) } },
+                        onDiscard: { discardEdits(file: file) },
+                        onRestored: { Task { await reloadAfterRestore() } }
+                    )
+                case .memoryLog(let name):
+                    PersonaMemoryLogView(
+                        filename: name,
+                        content: memoryLogContent,
+                        isLoading: isLoading,
+                        loadError: loadError
+                    )
+                }
+            }
+
+            // 删除当前角色（仅对非默认 agent 显示）
+            if isNonDefaultAgent {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Button(role: .destructive) {
+                        showDeleteAgentConfirm = true
+                    } label: {
+                        Label(L10n.k("persona.agent.delete", fallback: "删除当前角色"), systemImage: "trash")
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+
+                    Text(L10n.k("persona.agent.delete.hint", fallback: "删除后将清除该角色的 workspace、会话历史和渠道绑定"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
         }
         .task {
@@ -211,6 +281,14 @@ struct CharacterDefTabView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: saveToast)
         .animation(.easeInOut(duration: 0.3), value: showRestoreToast)
+        .alert(L10n.k("persona.agent.delete.alert.title", fallback: "删除角色"), isPresented: $showDeleteAgentConfirm) {
+            Button(L10n.k("persona.agent.delete.alert.cancel", fallback: "取消"), role: .cancel) {}
+            Button(L10n.k("persona.agent.delete.alert.confirm", fallback: "确认删除"), role: .destructive) {
+                Task { await deleteCurrentAgent() }
+            }
+        } message: {
+            Text(L10n.k("persona.agent.delete.alert.message", fallback: "确定要删除此角色吗？此操作不可撤销。"))
+        }
     }
 
     // MARK: - 私有方法
@@ -244,11 +322,13 @@ struct CharacterDefTabView: View {
     }
 
     private func initGitAndLoadFirstFile() async {
-        // 初始化 git repo（静默，失败只显示 banner）
-        do {
-            try await helperClient.initPersonaGitRepo(username: username)
-        } catch {
-            gitInitFailed = true
+        // 非默认 agent 跳过 git 初始化（独立 workspace 暂不支持 git 历史）
+        if !isNonDefaultAgent {
+            do {
+                try await helperClient.initPersonaGitRepo(username: username)
+            } catch {
+                gitInitFailed = true
+            }
         }
         await loadFile(.soul)
         // 同时加载记忆日志列表
@@ -259,7 +339,7 @@ struct CharacterDefTabView: View {
         do {
             let entries = try await helperClient.listDirectory(
                 username: username,
-                relativePath: ".openclaw/workspace/memory"
+                relativePath: memoryLogDirPath
             )
             memoryLogFiles = entries
                 .filter { !$0.isDirectory && $0.name.hasSuffix(".md") }
@@ -277,7 +357,7 @@ struct CharacterDefTabView: View {
         do {
             let data = try await helperClient.readFile(
                 username: username,
-                relativePath: ".openclaw/workspace/memory/\(name)"
+                relativePath: memoryLogRelPath(name)
             )
             memoryLogContent = String(data: data, encoding: .utf8) ?? ""
         } catch {
@@ -296,7 +376,7 @@ struct CharacterDefTabView: View {
         loadError = nil
         defer { isLoading = false }
         do {
-            let data = try await helperClient.readFile(username: username, relativePath: file.relPath)
+            let data = try await helperClient.readFile(username: username, relativePath: relPath(for: file))
             let text = String(data: data, encoding: .utf8) ?? ""
             editorContents[file] = text
             savedContents[file] = text
@@ -330,19 +410,21 @@ struct CharacterDefTabView: View {
 
         do {
             // 1. 写文件
-            try await helperClient.writeFile(username: username, relativePath: file.relPath, data: data)
+            try await helperClient.writeFile(username: username, relativePath: relPath(for: file), data: data)
             savedContents[file] = newContent
             existsOnDisk[file] = true
 
-            // 2. git commit（静默降级，写文件已成功）
-            let isoDate = ISO8601DateFormatter().string(from: Date())
-            let commitMsg = L10n.f("views.persona_def.commit_message", fallback: "更新 %@ — %@", file.rawValue, isoDate)
-            do {
-                try await helperClient.commitPersonaFile(username: username, filename: file.rawValue, message: commitMsg)
-                // 刷新历史面板
-                historyRefreshToken += 1
-            } catch {
-                lastCommitFailed = true
+            // 2. git commit（非默认 agent 跳过，静默降级，写文件已成功）
+            if !isNonDefaultAgent {
+                let isoDate = ISO8601DateFormatter().string(from: Date())
+                let commitMsg = L10n.f("views.persona_def.commit_message", fallback: "更新 %@ — %@", file.rawValue, isoDate)
+                do {
+                    try await helperClient.commitPersonaFile(username: username, filename: file.rawValue, message: commitMsg)
+                    // 刷新历史面板
+                    historyRefreshToken += 1
+                } catch {
+                    lastCommitFailed = true
+                }
             }
 
             // 显示保存成功 toast
@@ -386,6 +468,17 @@ struct CharacterDefTabView: View {
         showRestoreToast = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             showRestoreToast = false
+        }
+    }
+
+    private func deleteCurrentAgent() async {
+        guard let agentId = agentId else { return }
+        do {
+            // 通过 Gateway RPC 删除（自动清理配置 + workspace + sessions，无需 restart）
+            try await gatewayHub.agentsDelete(username: username, agentId: agentId)
+            // 删除后的 UI 刷新由 UserDetailView 的 onChange 处理
+        } catch {
+            loadError = error.localizedDescription
         }
     }
 }
@@ -601,6 +694,7 @@ private struct PersonaMemoryLogView: View {
 private struct PersonaEditorAreaView: View {
     let username: String
     let selectedFile: PersonaFile
+    var relPath: String                // 由父视图传入的参数化路径
     @Binding var content: String
 
     let isLoading: Bool
@@ -730,7 +824,7 @@ private struct PersonaEditorAreaView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(selectedFile.rawValue)
                     .font(.headline)
-                Text("~/\(selectedFile.relPath)")
+                Text("~/\(relPath)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

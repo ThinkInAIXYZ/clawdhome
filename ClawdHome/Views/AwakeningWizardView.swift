@@ -158,7 +158,7 @@ struct AwakeningWizardView: View {
             editedSoul     = dna.fileSoul     ?? ""
             editedIdentity = dna.fileIdentity ?? ""
             editedUser     = dna.fileUser     ?? ""
-            if let suggested = dna.suggestedUsername, !suggested.isEmpty {
+            if let suggested = dna.suggestedAgentID, !suggested.isEmpty {
                 osUsername = suggested
             }
             displayName = dna.name

@@ -53,6 +53,8 @@ enum UserEnvContract {
             "export HOMEBREW_REPOSITORY=\"$HOME/.brew\"",
             "export NPM_CONFIG_PREFIX=\"$HOME/.npm-global\"",
             "export npm_config_prefix=\"$HOME/.npm-global\"",
+            "export NPM_CONFIG_CACHE=\"/var/lib/clawdhome/cache/npm\"",
+            "export npm_config_cache=\"/var/lib/clawdhome/cache/npm\"",
             "export NPM_CONFIG_USERCONFIG=\"$HOME/.npmrc\"",
             "export npm_config_userconfig=\"$HOME/.npmrc\"",
             "export PATH=\"$HOME/.npm-global/bin:$PATH\"",

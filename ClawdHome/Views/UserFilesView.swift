@@ -171,7 +171,12 @@ private struct TextEditSheetView: View {
             CodeEditorView(text: $content, showFind: $showFind)
                 .clipped()
         }
-        .frame(width: 750, height: 500)
+        .frame(
+            minWidth: 750,
+            idealWidth: 920,
+            minHeight: 500,
+            idealHeight: 680
+        )
         .onChange(of: content) { _, newValue in
             validateJSON(newValue)
         }
@@ -382,6 +387,8 @@ struct UserFilesView: View {
     let users: [ManagedUser]
     /// 嵌入单用户 Tab 时传入，自动选中并隐藏用户选择器
     var preselectedUser: ManagedUser? = nil
+    /// 浏览作用域：用户 Home 或某个运行时目录
+    var scope: UserFilesScope = .home
     /// 仅用于详情页预选用户模式：按天记忆每个用户在文件页的最后目录
     private static var preselectedDailyPathByUser: [String: (dayKey: String, path: String)] = [:]
 
@@ -398,6 +405,8 @@ struct UserFilesView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?      // 目录加载失败
     @State private var operationError: String?    // 上传/删除等操作失败（独立 banner）
+    @State private var sortField: FileSortField = .name
+    @State private var sortAscending = true
 
     // 文本编辑器（用 item 模式保证状态原子性）
     @State private var textEditState: TextEditState?
@@ -413,10 +422,10 @@ struct UserFilesView: View {
     @State private var renameTarget: FileEntry?
     @State private var renameText = ""          // 不含后缀的编辑值
     @State private var renameExt = ""           // 原始后缀（含点），若目录则为空
-    /// 仅在“默认自动进入 .openclaw”场景启用不存在时回退到 home
-    @State private var shouldFallbackMissingOpenClaw = false
+    /// 仅在“默认自动进入运行时 home”场景启用不存在时回退到用户 home
+    @State private var shouldFallbackMissingRuntimeHome = false
 
-    // 显示隐藏文件（默认开启，.openclaw 等隐藏目录是主要管理对象）
+    // 显示隐藏文件（默认开启，隐藏运行时目录是主要管理对象）
     @State private var showHidden = true
 
     // 上传进度
@@ -450,19 +459,52 @@ struct UserFilesView: View {
     }
 
     // 快速入口（相对于 home 的路径）—— 用户 Home 单独渲染为头像按钮
-    private let quickAccessItems: [(label: String, icon: String, path: String)] = [
-        ("🦞 Home", "externaldrive",  ".openclaw"),
-    ]
+    private var quickAccessItems: [(title: String, icon: String, path: String)] {
+        guard UserFilesRuntimePolicy.shouldShowRuntimeHomeShortcut(scope: scope),
+              let title = scope.shortcutTitle,
+              let runtime = scope.runtime else {
+            return []
+        }
+        return [(title, "externaldrive", runtime.relativeHomePath)]
+    }
+
+    private var defaultRelativePath: String {
+        scope.rootRelativePath
+    }
+
+    private var runtimeHome: ManagedHomeRuntime? {
+        scope.runtime
+    }
+
+    private var displayedPath: String {
+        guard let runtimeHome else { return currentPath }
+        guard currentPath == runtimeHome.relativeHomePath || currentPath.hasPrefix(runtimeHome.relativeHomePath + "/") else {
+            return currentPath
+        }
+        let suffix = String(currentPath.dropFirst(runtimeHome.relativeHomePath.count))
+        return suffix.hasPrefix("/") ? String(suffix.dropFirst()) : suffix
+    }
 
     // 面包屑：路径组件
     private var breadcrumbs: [String] {
-        currentPath.isEmpty ? [] : currentPath.components(separatedBy: "/")
+        displayedPath.isEmpty ? [] : displayedPath.components(separatedBy: "/")
     }
 
     // 从 ID 反查选中条目
     private var selectedEntry: FileEntry? {
+        guard selectedEntryIDs.count == 1 else { return nil }
         guard let id = selectedEntryIDs.first else { return nil }
-        return entries.first { $0.id == id }
+        return sortedEntries.first { $0.id == id }
+    }
+
+    private var selectedEntries: [FileEntry] {
+        sortedEntries.filter { selectedEntryIDs.contains($0.id) }
+    }
+
+    private var sortedEntries: [FileEntry] {
+        entries
+            .filter(shouldDisplayEntry)
+            .sorted(by: shouldComeBefore)
     }
 
     var body: some View {
@@ -565,11 +607,21 @@ struct UserFilesView: View {
                 textEditState = nil
             }
         }
-        .alert(L10n.k("auto.user_files_view.delete", fallback: "确认删除"), isPresented: $showDeleteConfirm, presenting: selectedEntry) { entry in
+        .alert(L10n.k("auto.user_files_view.delete", fallback: "确认删除"), isPresented: $showDeleteConfirm) {
             Button(L10n.k("auto.user_files_view.delete", fallback: "删除"), role: .destructive) { Task { await deleteSelected() } }
             Button(L10n.k("auto.user_files_view.cancel", fallback: "取消"), role: .cancel) {}
-        } message: { entry in
-            Text(L10n.f("views.user_files_view.text_f797a8c4", fallback: "删除「%@」？此操作不可撤销。", String(describing: entry.name)))
+        } message: {
+            if selectedEntries.count <= 1, let entry = selectedEntries.first {
+                Text(L10n.f("views.user_files_view.text_f797a8c4", fallback: "删除「%@」？此操作不可撤销。", String(describing: entry.name)))
+            } else {
+                Text(
+                    L10n.f(
+                        "views.user_files_view.confirm_delete_multiple",
+                        fallback: "删除已选中的 %d 项？此操作不可撤销。",
+                        selectedEntries.count
+                    )
+                )
+            }
         }
         .alert(L10n.k("auto.user_files_view.folder", fallback: "新建文件夹"), isPresented: $showNewFolderAlert) {
             TextField(L10n.k("auto.user_files_view.foldername", fallback: "文件夹名称"), text: $newFolderName)
@@ -594,15 +646,15 @@ struct UserFilesView: View {
         .onChange(of: selectedUser) { _, user in
             guard preselectedUser == nil else { return }
             if user != nil {
-                currentPath = ".openclaw"
-                shouldFallbackMissingOpenClaw = true
+                currentPath = defaultRelativePath
+                shouldFallbackMissingRuntimeHome = !defaultRelativePath.isEmpty
                 selectedEntryIDs = []
                 showHidden = true
                 Task { await loadDirectory() }
             }
         }
         .onAppear {
-            // 嵌入详情 Tab 时：仅首次进入该用户文件页自动跳到 .openclaw
+            // 嵌入详情 Tab 时：仅首次进入该用户文件页自动跳到显式指定的运行时目录
             if let pre = preselectedUser {
                 activatePreselectedUser(pre)
             }
@@ -658,6 +710,28 @@ struct UserFilesView: View {
             }
             .disabled(selectedUser == nil)
 
+            Menu {
+                Picker(L10n.k("views.user_files_view.sort_by", fallback: "排序方式"), selection: $sortField) {
+                    Text(L10n.k("auto.user_files_view.name", fallback: "名称")).tag(FileSortField.name)
+                    Text(L10n.k("auto.user_files_view.size", fallback: "大小")).tag(FileSortField.size)
+                    Text(L10n.k("auto.user_files_view.modified_at", fallback: "修改时间")).tag(FileSortField.modifiedAt)
+                }
+                Divider()
+                Button {
+                    sortAscending.toggle()
+                } label: {
+                    Label(
+                        sortAscending
+                            ? L10n.k("views.user_files_view.ascending", fallback: "升序")
+                            : L10n.k("views.user_files_view.descending", fallback: "降序"),
+                        systemImage: sortAscending ? "arrow.up" : "arrow.down"
+                    )
+                }
+            } label: {
+                Label(L10n.k("views.user_files_view.sort", fallback: "排序"), systemImage: "arrow.up.arrow.down")
+            }
+            .disabled(selectedUser == nil)
+
             // 下载（选中文件时激活）
             Button {
                 Task { await downloadSelected() }
@@ -687,10 +761,19 @@ struct UserFilesView: View {
             Button {
                 showDeleteConfirm = true
             } label: {
-                Label(L10n.k("auto.user_files_view.delete", fallback: "删除"), systemImage: "trash")
-                    .foregroundStyle(selectedEntry != nil ? .red : .secondary)
+                Label(
+                    selectedEntries.count > 1
+                        ? L10n.f(
+                            "views.user_files_view.delete_count",
+                            fallback: "删除（%d）",
+                            selectedEntries.count
+                        )
+                        : L10n.k("auto.user_files_view.delete", fallback: "删除"),
+                    systemImage: "trash"
+                )
+                .foregroundStyle(!selectedEntries.isEmpty ? .red : .secondary)
             }
-            .disabled(selectedEntry == nil)
+            .disabled(selectedEntries.isEmpty)
         }
     }
 
@@ -722,15 +805,24 @@ struct UserFilesView: View {
                 ForEach(quickAccessItems, id: \.path) { item in
                     Button {
                         currentPath = item.path
-                        shouldFallbackMissingOpenClaw = false
+                        shouldFallbackMissingRuntimeHome = false
                         selectedEntryIDs = []
                         Task { await loadDirectory() }
                     } label: {
-                        Label(item.label, systemImage: item.icon)
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.quaternary, in: Capsule())
+                        HStack(spacing: 5) {
+                            if runtimeHome == .hermes {
+                                HermesLogoMark()
+                                    .frame(width: 12, height: 12)
+                            } else {
+                                OpenClawLogoMark()
+                                    .frame(width: 12, height: 12)
+                            }
+                            Label(item.title, systemImage: item.icon)
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary, in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(selectedUser == nil)
@@ -745,9 +837,22 @@ struct UserFilesView: View {
 
     private var breadcrumbBar: some View {
         HStack(spacing: 4) {
-            Button("🏠 Home") {
-                currentPath = ""
+            Button {
+                currentPath = defaultRelativePath
                 Task { await loadDirectory() }
+            } label: {
+                HStack(spacing: 4) {
+                    if runtimeHome == .hermes {
+                        HermesLogoMark()
+                            .frame(width: 12, height: 12)
+                    } else if runtimeHome == .openclaw {
+                        OpenClawLogoMark()
+                            .frame(width: 12, height: 12)
+                    } else {
+                        Text("🏠")
+                    }
+                    Text(scope.shortcutTitle ?? "Home")
+                }
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
@@ -757,7 +862,7 @@ struct UserFilesView: View {
                     .foregroundStyle(.secondary)
                 Button(crumb) {
                     // 跳到面包屑某一层
-                    currentPath = breadcrumbs[0...idx].joined(separator: "/")
+                    currentPath = actualPath(forDisplayedPath: breadcrumbs[0...idx].joined(separator: "/"))
                     Task { await loadDirectory() }
                 }
                 .buttonStyle(.plain)
@@ -795,7 +900,7 @@ struct UserFilesView: View {
     }
 
     private var fileList: some View {
-        Table(entries, selection: $selectedEntryIDs) {
+        Table(sortedEntries, selection: $selectedEntryIDs) {
             TableColumn(L10n.k("auto.user_files_view.name", fallback: "名称")) { entry in
                 HStack(spacing: 6) {
                     Image(systemName: entry.isDirectory ? "folder.fill" : fileIcon(for: entry.name))
@@ -940,9 +1045,9 @@ struct UserFilesView: View {
         }
         // AppKit 桥接：自动获焦 + 原生双击进目录（不干扰 Table 选中）
         .background(
-            TableSetup { [entries] row in
-                guard row < entries.count else { return }
-                let entry = entries[row]
+            TableSetup { [sortedEntries] row in
+                guard row < sortedEntries.count else { return }
+                let entry = sortedEntries[row]
                 if entry.isDirectory {
                     navigateInto(entry)
                 } else {
@@ -1013,10 +1118,72 @@ struct UserFilesView: View {
         byteFormatter.string(fromByteCount: bytes)
     }
 
+    private enum FileSortField: String, CaseIterable {
+        case name
+        case size
+        case modifiedAt
+    }
+
+    private func shouldComeBefore(_ lhs: FileEntry, _ rhs: FileEntry) -> Bool {
+        if lhs.isDirectory != rhs.isDirectory {
+            return lhs.isDirectory
+        }
+
+        let ordering: ComparisonResult
+        switch sortField {
+        case .name:
+            ordering = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+        case .size:
+            if lhs.size != rhs.size {
+                ordering = lhs.size < rhs.size ? .orderedAscending : .orderedDescending
+            } else {
+                ordering = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            }
+        case .modifiedAt:
+            let lDate = lhs.modifiedAt ?? .distantPast
+            let rDate = rhs.modifiedAt ?? .distantPast
+            if lDate != rDate {
+                ordering = lDate < rDate ? .orderedAscending : .orderedDescending
+            } else {
+                ordering = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            }
+        }
+
+        let primaryAscending: Bool
+        switch ordering {
+        case .orderedAscending:
+            primaryAscending = true
+        case .orderedDescending:
+            primaryAscending = false
+        case .orderedSame:
+            primaryAscending = lhs.path < rhs.path
+        }
+        return sortAscending ? primaryAscending : !primaryAscending
+    }
+
     private func navigateInto(_ entry: FileEntry) {
         currentPath = entry.path
         selectedEntryIDs = []
         Task { await loadDirectory() }
+    }
+
+    private func shouldDisplayEntry(_ entry: FileEntry) -> Bool {
+        !UserFilesRuntimePolicy.shouldHideEntryFromRootHomeList(
+            name: entry.name,
+            isDirectory: entry.isDirectory,
+            scope: scope,
+            currentPath: currentPath
+        )
+    }
+
+    private func actualPath(forDisplayedPath displayedPath: String) -> String {
+        guard let runtimeHome else {
+            return displayedPath
+        }
+        guard !displayedPath.isEmpty else {
+            return runtimeHome.relativeHomePath
+        }
+        return "\(runtimeHome.relativeHomePath)/\(displayedPath)"
     }
 
     private static func dayKey(for date: Date = Date()) -> String {
@@ -1025,9 +1192,18 @@ struct UserFilesView: View {
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 
+    private func preselectedPathStorageKey(for username: String) -> String {
+        switch scope {
+        case .home:
+            return "\(username)|home"
+        case .runtime(let runtime):
+            return "\(username)|\(runtime.rawValue)"
+        }
+    }
+
     private func recordCurrentPathForToday(_ path: String) {
         guard let user = selectedUser, preselectedUser != nil else { return }
-        Self.preselectedDailyPathByUser[user.username] = (Self.dayKey(), path)
+        Self.preselectedDailyPathByUser[preselectedPathStorageKey(for: user.username)] = (Self.dayKey(), path)
     }
 
     private func activatePreselectedUser(_ pre: ManagedUser) {
@@ -1036,13 +1212,14 @@ struct UserFilesView: View {
         showHidden = true
 
         let today = Self.dayKey()
-        if let saved = Self.preselectedDailyPathByUser[pre.username], saved.dayKey == today {
+        let storageKey = preselectedPathStorageKey(for: pre.username)
+        if let saved = Self.preselectedDailyPathByUser[storageKey], saved.dayKey == today {
             currentPath = saved.path
-            shouldFallbackMissingOpenClaw = false
+            shouldFallbackMissingRuntimeHome = false
         } else {
-            currentPath = ".openclaw"
-            shouldFallbackMissingOpenClaw = true
-            Self.preselectedDailyPathByUser[pre.username] = (today, ".openclaw")
+            currentPath = defaultRelativePath
+            shouldFallbackMissingRuntimeHome = !defaultRelativePath.isEmpty
+            Self.preselectedDailyPathByUser[storageKey] = (today, defaultRelativePath)
         }
         Task { await loadDirectory() }
     }
@@ -1061,14 +1238,14 @@ struct UserFilesView: View {
                 relativePath: requestedPath,
                 showHidden: showHidden
             )
-            if requestedPath == ".openclaw" {
-                shouldFallbackMissingOpenClaw = false
+            if requestedPath == runtimeHome?.relativeHomePath {
+                shouldFallbackMissingRuntimeHome = false
             }
             recordCurrentPathForToday(requestedPath)
         } catch {
-            // .openclaw 不存在时，自动回退到用户 home 目录
-            if requestedPath == ".openclaw" && shouldFallbackMissingOpenClaw {
-                shouldFallbackMissingOpenClaw = false
+            // 默认运行时目录不存在时，自动回退到用户 home 目录
+            if requestedPath == runtimeHome?.relativeHomePath && shouldFallbackMissingRuntimeHome {
+                shouldFallbackMissingRuntimeHome = false
                 currentPath = ""
                 do {
                     entries = try await helperClient.listDirectory(
@@ -1232,14 +1409,53 @@ struct UserFilesView: View {
     }
 
     private func deleteSelected() async {
-        guard let user = selectedUser, let entry = selectedEntry else { return }
-        do {
-            try await helperClient.deleteItem(username: user.username, relativePath: entry.path)
-            selectedEntryIDs = []
-            await loadDirectory()
-        } catch {
-            operationError = error.localizedDescription
+        guard let user = selectedUser, !selectedEntries.isEmpty else { return }
+
+        let targets = topLevelDeleteTargets(from: selectedEntries)
+        var failures: [String] = []
+
+        for entry in targets {
+            do {
+                try await helperClient.deleteItem(username: user.username, relativePath: entry.path)
+            } catch {
+                failures.append("\(entry.name): \(error.localizedDescription)")
+            }
         }
+
+        selectedEntryIDs = []
+        await loadDirectory()
+
+        if !failures.isEmpty {
+            let head = failures.prefix(2).joined(separator: "；")
+            operationError = failures.count > 2
+                ? L10n.f(
+                    "views.user_files_view.delete_partial_failed_count",
+                    fallback: "%@；等 %@ 项删除失败",
+                    String(describing: head),
+                    String(describing: failures.count)
+                )
+                : head
+        }
+    }
+
+    private func topLevelDeleteTargets(from candidates: [FileEntry]) -> [FileEntry] {
+        let sorted = candidates.sorted { lhs, rhs in
+            let lCount = lhs.path.split(separator: "/").count
+            let rCount = rhs.path.split(separator: "/").count
+            if lCount != rCount { return lCount < rCount }
+            return lhs.path < rhs.path
+        }
+
+        var chosen: [FileEntry] = []
+        for entry in sorted {
+            let shouldSkip = chosen.contains { parent in
+                entry.path != parent.path && entry.path.hasPrefix(parent.path + "/")
+            }
+            if !shouldSkip {
+                chosen.append(entry)
+            }
+        }
+        return chosen
     }
 
     private func openTextEditor() async {
@@ -1313,7 +1529,8 @@ struct UserFilesView: View {
         let payload = maintenanceWindowRegistry.makePayload(
             username: user.username,
             title: L10n.k("auto.user_files_view.file", fallback: "文件管理终端"),
-            command: ["zsh", "-lc", "cd '\(escaped)' && exec /bin/zsh -l"]
+            command: ["zsh", "-lc", "cd '\(escaped)' && exec /bin/zsh -l"],
+            engine: user.prefersHermesRuntime ? .hermes : .openclaw
         )
         openWindow(id: "maintenance-terminal", value: payload)
     }

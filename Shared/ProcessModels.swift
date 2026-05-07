@@ -160,25 +160,47 @@ enum ProcessBulkActionResolver {
 }
 
 enum ProcessEmergencyFreezeResolver {
+    enum Runtime: Sendable {
+        case openclaw
+        case hermes
+    }
+
     static func resolveTargets(processes: [ProcessEntry]) -> [ProcessEntry] {
+        resolveTargets(processes: processes, runtime: .openclaw)
+    }
+
+    static func resolveTargets(processes: [ProcessEntry], runtime: Runtime) -> [ProcessEntry] {
         let filtered = processes.filter { $0.pid > 1 }
-        return filtered.sorted(by: isPreferredKillOrder)
+        return filtered.sorted { isPreferredKillOrder($0, $1, runtime: runtime) }
     }
 
     /// 暂停冻结仅作用于 openclaw 相关进程，避免挂起用户其他工作负载
     static func resolvePauseTargets(processes: [ProcessEntry]) -> [ProcessEntry] {
+        resolvePauseTargets(processes: processes, runtime: .openclaw)
+    }
+
+    static func resolvePauseTargets(processes: [ProcessEntry], runtime: Runtime) -> [ProcessEntry] {
         processes
-            .filter { $0.pid > 1 && isOpenclawRelated($0) }
+            .filter { $0.pid > 1 && isRuntimeRelated($0, runtime: runtime) }
             .sorted { $0.pid < $1.pid }
     }
 
-    private static func isPreferredKillOrder(_ lhs: ProcessEntry, _ rhs: ProcessEntry) -> Bool {
-        let lhsOpenclaw = isOpenclawRelated(lhs)
-        let rhsOpenclaw = isOpenclawRelated(rhs)
-        if lhsOpenclaw != rhsOpenclaw {
-            return lhsOpenclaw
+    private static func isPreferredKillOrder(_ lhs: ProcessEntry, _ rhs: ProcessEntry, runtime: Runtime) -> Bool {
+        let lhsRuntime = isRuntimeRelated(lhs, runtime: runtime)
+        let rhsRuntime = isRuntimeRelated(rhs, runtime: runtime)
+        if lhsRuntime != rhsRuntime {
+            return lhsRuntime
         }
         return lhs.pid < rhs.pid
+    }
+
+    static func isRuntimeRelated(_ process: ProcessEntry, runtime: Runtime) -> Bool {
+        switch runtime {
+        case .openclaw:
+            return isOpenclawRelated(process)
+        case .hermes:
+            return isHermesRelated(process)
+        }
     }
 
     static func isOpenclawRelated(_ process: ProcessEntry) -> Bool {
@@ -188,6 +210,18 @@ enum ProcessEmergencyFreezeResolver {
             return true
         }
         if cmdline.contains("openclaw") {
+            return true
+        }
+        return false
+    }
+
+    static func isHermesRelated(_ process: ProcessEntry) -> Bool {
+        let name = process.name.lowercased()
+        let cmdline = process.cmdline.lowercased()
+        if name.contains("hermes") {
+            return true
+        }
+        if cmdline.contains("hermes") {
             return true
         }
         return false

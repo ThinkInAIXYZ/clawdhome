@@ -86,6 +86,329 @@
         }
       }
     },
+    "agent.create.form.agent_id": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent ID"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent ID"
+          }
+        }
+      }
+    },
+    "agent.create.form.agent_id.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave empty to auto-generate from name. Only lowercase letters, digits, underscores, and hyphens allowed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "留空则根据名称自动生成。仅限小写字母、数字、下划线和短横线。"
+          }
+        }
+      }
+    },
+    "agent.create.form.agent_id.preview": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actual ID: "
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实际 ID："
+          }
+        }
+      }
+    },
+    "agent.create.form.basic_info": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Basic Info"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "基本信息"
+          }
+        }
+      }
+    },
+    "agent.create.form.emoji": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emoji Icon"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emoji 图标"
+          }
+        }
+      }
+    },
+    "agent.create.form.identifier": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identifier"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标识符"
+          }
+        }
+      }
+    },
+    "agent.create.form.model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model (Optional)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型（可选）"
+          }
+        }
+      }
+    },
+    "agent.create.form.model.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave empty to use the default model. Example: claude-sonnet-4-20250514"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "留空则使用默认模型。例如：claude-sonnet-4-20250514"
+          }
+        }
+      }
+    },
+    "agent.create.form.model_config": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model Configuration"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型配置"
+          }
+        }
+      }
+    },
+    "agent.create.form.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent Name"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "角色名称"
+          }
+        }
+      }
+    },
+    "agent.create.from_market": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose from Market"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从角色市场选择"
+          }
+        }
+      }
+    },
+    "agent.create.from_market.desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse preset agent templates and get started quickly"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浏览预设角色模板，快速上手"
+          }
+        }
+      }
+    },
+    "agent.create.from_scratch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create from Scratch"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从零创建"
+          }
+        }
+      }
+    },
+    "agent.create.from_scratch.desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Customize every detail of the agent"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义角色的所有细节"
+          }
+        }
+      }
+    },
+    "agent.create.manual.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create Agent"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建角色"
+          }
+        }
+      }
+    },
+    "agent.create.market_coming_soon.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent market is under development, stay tuned!"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "角色市场正在开发中，敬请期待！"
+          }
+        }
+      }
+    },
+    "agent.create.market_coming_soon.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coming Soon"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即将推出"
+          }
+        }
+      }
+    },
+    "agent.create.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a new specialized agent to your shrimp"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为你的虾添加一个新的专业角色"
+          }
+        }
+      }
+    },
+    "agent.create.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Agent"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建角色"
+          }
+        }
+      }
+    },
     "app.channel.invalid_params": {
       "comment": "",
       "extractionState": "stale",
@@ -6341,6 +6664,23 @@
         }
       }
     },
+    "common.action.ok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "好的"
+          }
+        }
+      }
+    },
     "common.action.rerun": {
       "extractionState": "stale",
       "localizations": {
@@ -8701,6 +9041,125 @@
         }
       }
     },
+    "persona.agent.delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Current Agent"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除当前角色"
+          }
+        }
+      }
+    },
+    "persona.agent.delete.alert.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        }
+      }
+    },
+    "persona.agent.delete.alert.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm Delete"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确认删除"
+          }
+        }
+      }
+    },
+    "persona.agent.delete.alert.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Are you sure you want to delete this agent? This action cannot be undone."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确定要删除此角色吗？此操作不可撤销。"
+          }
+        }
+      }
+    },
+    "persona.agent.delete.alert.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Agent"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除角色"
+          }
+        }
+      }
+    },
+    "persona.agent.delete.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleting will remove the agent's workspace, session history, and channel bindings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除后将清除该角色的 workspace、会话历史和渠道绑定"
+          }
+        }
+      }
+    },
+    "persona.agent.header": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent Definition — %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "角色定义 — %@"
+          }
+        }
+      }
+    },
     "persona.diff.added": {
       "extractionState": "manual",
       "localizations": {
@@ -10434,6 +10893,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "接受 license 失败"
+          }
+        }
+      }
+    },
+    "services.helper_client.agent_create_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to create agent"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建 agent 失败"
+          }
+        }
+      }
+    },
+    "services.helper_client.agent_remove_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to remove agent"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除 agent 失败"
           }
         }
       }
@@ -15941,6 +16434,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅你和这只虾可访问"
+          }
+        }
+      }
+    },
+    "user.detail.sidebar.agent_section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current Agent"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前角色"
+          }
+        }
+      }
+    },
+    "user.detail.sidebar.instance_section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instance"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实例"
           }
         }
       }

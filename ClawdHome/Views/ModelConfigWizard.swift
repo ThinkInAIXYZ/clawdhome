@@ -1,14 +1,32 @@
 // ClawdHome/Views/ModelConfigWizard.swift
-// 统一模型配置向导：模型池管理 + 添加/编辑模型 + Provider 配置 + CLI 执行
+// 统一模型配置向导：模型池管理 + 添加/编辑模型 + Provider 配置 + RPC 执行
 
 import SwiftUI
 
 // MARK: - 主视图（Overview）
 
 struct ModelConfigWizard: View {
+    /// 呈现模式 — 决定标题栏 / 底部按钮 / 宽度等差异
+    enum Presentation {
+        case standalone     // 独立窗口（详情页打开）：titleBar + 480 固定宽 + 无下一步
+        case wizardStep     // 向导嵌入步骤：embeddedHeader + 自适应宽 + 下一步/跳过
+        case settingsPane   // 设置面板 tab 嵌入：embeddedHeader + 自适应宽 + 无下一步
+    }
+
     let user: ManagedUser
-    var embedded: Bool = false
+    var presentation: Presentation = .standalone
     var onDone: (() -> Void)? = nil
+
+    /// 标题栏（标题+完成按钮）— 仅独立窗口
+    private var showsTitleBar: Bool { presentation == .standalone }
+    /// 嵌入式 header（subheading + hint）— 向导和设置面板都用
+    private var showsEmbeddedHeader: Bool { presentation != .standalone }
+    /// 底部"下一步/跳过"— 仅向导步骤
+    private var showsWizardFooter: Bool { presentation == .wizardStep }
+    /// 固定宽度（独立窗口需要 480 等比；其他模式自适应父容器）
+    private var fixedWidth: CGFloat? { presentation == .standalone ? 480 : nil }
+    /// "添加模型"用主按钮（独立窗口/设置面板里这是主操作；向导里要让位给"下一步"）
+    private var addButtonIsProminent: Bool { presentation != .wizardStep }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(HelperClient.self) private var helperClient
@@ -21,8 +39,9 @@ struct ModelConfigWizard: View {
 
     // Sheet 状态
     @State private var showAddModel = false
-    @State private var showFallbackManager = false
+    @State private var isSavingOrder = false
     @State private var editingModel: String? = nil  // 非 nil 时弹出编辑 sheet
+
 
     /// 模型池 = 主模型 + 备用模型
     private var modelPool: [String] {
@@ -34,40 +53,96 @@ struct ModelConfigWizard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !embedded { titleBar }
+            if showsTitleBar { titleBar }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if embedded {
-                        embeddedHeader
+            if showsEmbeddedHeader {
+                // ── 嵌入式 header（向导 / 设置面板共用） ──
+                embeddedHeader
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if isLoadingStatus {
+                    Spacer()
+                    HStack {
+                        ProgressView().scaleEffect(0.7)
+                        Text(L10n.k("auto.model_config_wizard.loading", fallback: "加载中…"))
+                            .font(.callout).foregroundStyle(.secondary)
                     }
-
-                    modelPoolSection
-
-                    actionButtons
-
-                    if embedded {
-                        embeddedFooter
+                    Spacer()
+                } else if modelPool.isEmpty {
+                    // ── 空状态：居中引导 ──
+                    Spacer()
+                    VStack(spacing: 12) {
+                        Image(systemName: "cpu")
+                            .font(.system(size: 32))
+                            .foregroundStyle(.tertiary)
+                        Text(L10n.k("auto.model_config_wizard.no_models_yet", fallback: "还没有配置模型"))
+                            .font(.callout).foregroundStyle(.secondary)
+                        Text(L10n.k("auto.model_config_wizard.add_model_cta_hint", fallback: "添加 AI 模型以启用对话能力"))
+                            .font(.caption).foregroundStyle(.tertiary)
+                        Button {
+                            showAddModel = true
+                        } label: {
+                            Label(L10n.k("model.config.add_model", fallback: "添加模型"), systemImage: "plus.circle")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.top, 4)
+                    }
+                    .frame(maxWidth: .infinity)
+                    Spacer()
+                } else {
+                    // ── 有模型：列表 + 操作按钮 ──
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            modelListView
+                            actionButtons
+                        }
+                        .padding(.top, 12)
+                        .padding(.bottom, 16)
                     }
                 }
-                .padding(embedded ? 0 : 16)
+
+                if showsWizardFooter {
+                    Divider()
+                    embeddedFooter
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 14)
+                }
+            } else {
+                // ── 独立窗口模式（从详情页打开） ──
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        modelPoolSection
+                        actionButtons
+                    }
+                    .padding(16)
+                }
             }
         }
-        .frame(width: embedded ? nil : 480)
+        .frame(width: fixedWidth)
         .task { await loadStatus() }
         .sheet(isPresented: $showAddModel) {
-            ModelAddSheet(
-                user: user,
-                currentDefault: currentDefault,
-                currentFallbacks: currentFallbacks,
-                dynamicModelGroups: dynamicModelGroups
-            ) {
-                Task { await loadStatus() }
+            VStack(spacing: 0) {
+                HStack {
+                    Text(L10n.k("model.config.add_model", fallback: "添加模型"))
+                        .font(.headline)
+                    Spacer()
+                    Button(L10n.k("auto.model_config_wizard.cancel", fallback: "取消")) {
+                        showAddModel = false
+                    }
+                    .keyboardShortcut(.escape)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                Divider()
+                ScrollView {
+                    ProviderModelConfigCore(user: user) { _ in
+                        showAddModel = false
+                        Task { await loadStatus() }
+                    }
+                    .padding(16)
+                }
             }
-            .environment(helperClient)
-        }
-        .sheet(isPresented: $showFallbackManager) {
-            FallbackManagerSheet(username: user.username, fallbacks: $currentFallbacks)
+            .frame(width: 460, height: 500)
         }
         .sheet(item: editingModelBinding) { item in
             ModelEditSheet(
@@ -105,7 +180,7 @@ struct ModelConfigWizard: View {
     @ViewBuilder
     private var embeddedHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(L10n.k("auto.model_config_wizard.configurationmodels", fallback: "配置模型"), systemImage: "cpu")
+            Label(L10n.k("auto.model_config_wizard.model_configuration", fallback: "模型配置"), systemImage: "cpu")
                 .font(.subheadline).fontWeight(.semibold)
                 .foregroundStyle(.secondary)
             Text(L10n.k("auto.model_config_wizard.ai_models_models", fallback: "添加要使用的 AI 模型，最后添加的自动成为主模型。"))
@@ -116,13 +191,13 @@ struct ModelConfigWizard: View {
     @ViewBuilder
     private var embeddedFooter: some View {
         HStack(spacing: 12) {
-            Button(L10n.k("auto.model_config_wizard.doneconfiguration", fallback: "完成配置")) {
+            Button(L10n.k("common.next", fallback: "下一步")) {
                 onDone?()
             }
             .buttonStyle(.borderedProminent)
             .disabled(currentDefault == nil)
 
-            Button(L10n.k("auto.model_config_wizard.configuration", fallback: "跳过配置")) {
+            Button(L10n.k("wizard.model_config.skip_step", fallback: "跳过")) {
                 onDone?()
             }
             .buttonStyle(.bordered)
@@ -132,6 +207,7 @@ struct ModelConfigWizard: View {
 
     // MARK: - Model Pool Section
 
+    /// 独立窗口模式：含加载/空/列表三态
     @ViewBuilder
     private var modelPoolSection: some View {
         if isLoadingStatus {
@@ -144,7 +220,7 @@ struct ModelConfigWizard: View {
             VStack(spacing: 8) {
                 Image(systemName: "cpu")
                     .font(.largeTitle).foregroundStyle(.tertiary)
-                Text(L10n.k("auto.model_config_wizard.configurationmodels", fallback: "还没有配置模型"))
+                Text(L10n.k("auto.model_config_wizard.no_models_yet", fallback: "还没有配置模型"))
                     .font(.callout).foregroundStyle(.secondary)
                 Text(L10n.k("auto.model_config_wizard.modelsconfiguration", fallback: "点击下方「添加模型」开始配置"))
                     .font(.caption).foregroundStyle(.tertiary)
@@ -152,17 +228,25 @@ struct ModelConfigWizard: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 20)
         } else {
-            VStack(spacing: 0) {
-                ForEach(Array(modelPool.enumerated()), id: \.element) { idx, modelId in
-                    modelRow(modelId: modelId, index: idx)
-                    if idx < modelPool.count - 1 {
-                        Divider().padding(.leading, 14)
-                    }
-                }
-            }
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            modelListView
         }
+    }
+
+    /// 模型列表（支持拖动排序）
+    @ViewBuilder
+    private var modelListView: some View {
+        List {
+            ForEach(Array(modelPool.enumerated()), id: \.element) { idx, modelId in
+                modelRow(modelId: modelId, index: idx)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+            }
+            .onMove(perform: moveModelInPool)
+        }
+        .listStyle(.plain)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .frame(minHeight: CGFloat(modelPool.count * 52))
     }
 
     @ViewBuilder
@@ -192,7 +276,7 @@ struct ModelConfigWizard: View {
 
             Spacer()
 
-            Text(isPrimary ? L10n.k("auto.model_config_wizard.models", fallback: "主模型") : L10n.f("model.config.fallback_index", fallback: "备用 %@", String(index)))
+            Text(isPrimary ? L10n.k("model.config.primary", fallback: "主模型") : L10n.f("model.config.fallback_index", fallback: "备用 %@", String(index)))
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -205,18 +289,18 @@ struct ModelConfigWizard: View {
     @ViewBuilder
     private var actionButtons: some View {
         HStack(spacing: 10) {
-            Button {
-                showAddModel = true
-            } label: {
-                Label(L10n.k("auto.model_config_wizard.models", fallback: "添加模型"), systemImage: "plus.circle")
-            }
-            .buttonStyle(.borderedProminent)
-
-            if currentFallbacks.count > 1 {
+            if addButtonIsProminent {
                 Button {
-                    showFallbackManager = true
+                    showAddModel = true
                 } label: {
-                    Label(L10n.k("auto.model_config_wizard.manage_fallback_order", fallback: "管理备用顺序"), systemImage: "arrow.up.arrow.down")
+                    Label(L10n.k("model.config.add_model", fallback: "添加模型"), systemImage: "plus.circle")
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                Button {
+                    showAddModel = true
+                } label: {
+                    Label(L10n.k("model.config.add_model", fallback: "添加模型"), systemImage: "plus.circle")
                 }
                 .buttonStyle(.bordered)
             }
@@ -249,6 +333,45 @@ struct ModelConfigWizard: View {
             dynamicModelGroups = models
         }
         isLoadingStatus = false
+    }
+
+    // MARK: - 拖动排序
+
+    private func moveModelInPool(from source: IndexSet, to destination: Int) {
+        var pool = modelPool
+        pool.move(fromOffsets: source, toOffset: destination)
+        currentDefault = pool.first
+        currentFallbacks = Array(pool.dropFirst())
+        Task { await saveModelOrder() }
+    }
+
+    private func saveModelOrder() async {
+        guard let primary = currentDefault else { return }
+        isSavingOrder = true
+        defer { isSavingOrder = false }
+
+        var modelPatch: [String: Any] = ["primary": primary]
+        if !currentFallbacks.isEmpty {
+            modelPatch["fallbacks"] = currentFallbacks
+        }
+
+        do {
+            let (_, baseHash) = try await gatewayHub.configGetFull(username: user.username)
+            try await gatewayHub.configPatch(
+                username: user.username,
+                patch: ["agents": ["defaults": ["model": modelPatch]]],
+                baseHash: baseHash,
+                note: "ClawdHome: reorder model priority"
+            )
+        } catch {
+            // Gateway 未连接时回退到直写
+            try? await helperClient.setConfigDirectJSON(
+                username: user.username,
+                path: "agents.defaults.model",
+                valueJSON: (try? JSONSerialization.data(withJSONObject: modelPatch))
+                    .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+            )
+        }
     }
 
     // MARK: - Helpers
@@ -286,8 +409,22 @@ struct ModelAddSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(HelperClient.self) private var helperClient
+    @Environment(GatewayHub.self) private var gatewayHub
+    @Environment(GlobalModelStore.self) private var modelStore
 
     enum Step { case selectModel, providerSetup, executing, result }
+    enum ConfigSource: String, CaseIterable, Identifiable {
+        case existing
+        case new
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .existing: return L10n.k("wizard.model_config.source.existing", fallback: "已有配置")
+            case .new: return L10n.k("wizard.model_config.source.new", fallback: "新增配置")
+            }
+        }
+    }
     enum CustomCompatibility: String, CaseIterable, Identifiable {
         case openai
         case anthropic
@@ -331,6 +468,9 @@ struct ModelAddSheet: View {
     @State private var step: Step = .selectModel
 
     // Step 1: Select
+    @State private var configSource: ConfigSource = .new
+    @State private var selectedTemplateID: UUID? = nil
+    @State private var selectedTemplateModelID: String = ""
     @State private var filter = ""
     @State private var selectedModel = ""
     @State private var useCustom = false
@@ -373,6 +513,9 @@ struct ModelAddSheet: View {
     }
 
     private var chosenModel: String {
+        if usingExistingTemplate {
+            return selectedTemplateModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         if useCustom {
             guard !resolvedCustomModelId.isEmpty else { return "" }
             return "\(effectiveCustomProviderId)/\(resolvedCustomModelId)"
@@ -382,6 +525,22 @@ struct ModelAddSheet: View {
 
     private var activeModelGroups: [ModelGroup] {
         dynamicModelGroups ?? builtInModelGroups
+    }
+
+    private var availableTemplates: [ProviderTemplate] {
+        modelStore.providers.filter { !$0.modelIds.isEmpty }
+    }
+
+    private var selectedTemplate: ProviderTemplate? {
+        if let id = selectedTemplateID,
+           let matched = availableTemplates.first(where: { $0.id == id }) {
+            return matched
+        }
+        return availableTemplates.first
+    }
+
+    private var usingExistingTemplate: Bool {
+        configSource == .existing && !availableTemplates.isEmpty
     }
 
     var body: some View {
@@ -401,6 +560,9 @@ struct ModelAddSheet: View {
             }
         }
         .frame(width: 460, height: 500)
+        .onAppear {
+            syncTemplateSelection()
+        }
     }
 
     // MARK: - Title Bar
@@ -408,7 +570,7 @@ struct ModelAddSheet: View {
     @ViewBuilder
     private var addSheetTitleBar: some View {
         HStack {
-            Text(L10n.k("auto.model_config_wizard.models", fallback: "添加模型"))
+            Text(L10n.k("model.config.add_model", fallback: "添加模型"))
                 .font(.headline)
             Spacer()
             switch step {
@@ -433,37 +595,53 @@ struct ModelAddSheet: View {
 
     @ViewBuilder
     private var selectModelView: some View {
-        HStack(spacing: 8) {
-            if useCustom {
-                VStack(alignment: .leading, spacing: 8) {
-                    TextField(L10n.k("wizard.model_config.custom_provider_id_placeholder", fallback: "providerId (可选 custom-provider-id)"), text: $customProviderId)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(.body, design: .monospaced))
-                    TextField("modelId (custom-model-id)", text: $customModelId)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(.body, design: .monospaced))
-                }
-            } else {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField(L10n.k("auto.model_config_wizard.searchmodels", fallback: "搜索模型…"), text: $filter)
-                    .textFieldStyle(.plain)
-                if !filter.isEmpty {
-                    Button { filter = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).font(.caption)
-                    }.buttonStyle(.plain)
+        if modelStore.hasTemplate {
+            Picker(L10n.k("wizard.model_config.source", fallback: "配置来源"), selection: $configSource) {
+                ForEach(ConfigSource.allCases) { source in
+                    Text(source.title).tag(source)
                 }
             }
-            Button(useCustom ? L10n.k("auto.model_config_wizard.choose_from_list", fallback: "从清单选") : L10n.k("auto.model_config_wizard.input", fallback: "手动输入")) {
-                useCustom.toggle()
-                filter = ""; selectedModel = ""
+            .pickerStyle(.segmented)
+            .onChange(of: configSource) { _, _ in
+                syncTemplateSelection()
             }
-            .buttonStyle(.bordered).font(.caption)
         }
 
-        if useCustom {
-            customModelGuidance
+        if usingExistingTemplate {
+            existingTemplateSelector
         } else {
-            selectModelList
+            HStack(spacing: 8) {
+                if useCustom {
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField(L10n.k("wizard.model_config.custom_provider_id_placeholder", fallback: "providerId (可选 custom-provider-id)"), text: $customProviderId)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                        TextField("modelId (custom-model-id)", text: $customModelId)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                    }
+                } else {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField(L10n.k("auto.model_config_wizard.searchmodels", fallback: "搜索模型…"), text: $filter)
+                        .textFieldStyle(.plain)
+                    if !filter.isEmpty {
+                        Button { filter = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).font(.caption)
+                        }.buttonStyle(.plain)
+                    }
+                }
+                Button(useCustom ? L10n.k("auto.model_config_wizard.choose_from_list", fallback: "从清单选") : L10n.k("auto.model_config_wizard.input", fallback: "手动输入")) {
+                    useCustom.toggle()
+                    filter = ""; selectedModel = ""
+                }
+                .buttonStyle(.bordered).font(.caption)
+            }
+
+            if useCustom {
+                customModelGuidance
+            } else {
+                selectModelList
+            }
         }
 
         HStack {
@@ -481,6 +659,51 @@ struct ModelAddSheet: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(chosenModel.isEmpty)
+        }
+    }
+
+    @ViewBuilder
+    private var existingTemplateSelector: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                Picker(
+                    L10n.k("wizard.model_config.existing_channel", fallback: "全局渠道"),
+                    selection: Binding<UUID?>(
+                        get: { selectedTemplate?.id },
+                        set: { newValue in
+                            selectedTemplateID = newValue
+                            syncTemplateSelection()
+                        }
+                    )
+                ) {
+                    ForEach(availableTemplates) { template in
+                        Text(template.displayNameWithAlias).tag(Optional(template.id))
+                    }
+                }
+                .pickerStyle(.menu)
+
+                if let template = selectedTemplate {
+                    Picker(
+                        L10n.k("wizard.model_config.existing_model", fallback: "模型"),
+                        selection: $selectedTemplateModelID
+                    ) {
+                        ForEach(template.modelIds, id: \.self) { modelID in
+                            Text(modelLabel(for: modelID)).tag(modelID)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: selectedTemplateModelID) { _, newValue in
+                        selectedModel = newValue
+                    }
+
+                    Text(L10n.k("wizard.model_config.existing_hint", fallback: "将复用该全局渠道的模型与凭据配置。"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } label: {
+            Label(L10n.k("views.model_picker_sheet.global_model_pool", fallback: "来自全局模型池"), systemImage: "tray.full")
+                .font(.caption)
         }
     }
 
@@ -559,7 +782,7 @@ struct ModelAddSheet: View {
                     }
                 }
                 if groups.isEmpty {
-                    Text(L10n.k("auto.model_config_wizard.models", fallback: "无匹配模型")).font(.caption).foregroundStyle(.secondary).padding()
+                    Text(L10n.k("model.config.no_matching_models", fallback: "无匹配模型")).font(.caption).foregroundStyle(.secondary).padding()
                 }
             }
         }
@@ -603,8 +826,8 @@ struct ModelAddSheet: View {
                 .buttonStyle(.bordered)
             Spacer()
             Button(L10n.k("auto.model_config_wizard.execute", fallback: "执行")) {
-                // Provider 已配置，直接执行模型切换命令
-                buildAndExecute(providerCommands: [])
+                // Provider 已配置，直接通过 configPatch 切换模型
+                buildAndExecute(includeProviderConfig: false)
             }
             .buttonStyle(.borderedProminent)
         }
@@ -760,7 +983,7 @@ struct ModelAddSheet: View {
                 // Custom provider already configured — can skip or update
                 Button(L10n.k("auto.model_config_wizard.add_directly", fallback: "直接添加")) {
                     providerErrorMsg = ""
-                    buildAndExecute(providerCommands: [])
+                    buildAndExecute(includeProviderConfig: false)
                 }
                 .buttonStyle(.bordered)
             }
@@ -771,10 +994,7 @@ struct ModelAddSheet: View {
                         providerErrorMsg = err
                         return
                     }
-                    // 所有 provider 字段合并为单条 JSON-object 命令
-                    // 分字段写入会因 provider 对象不完整而导致 Zod 验证失败
-                    let provCmds = providerConfig.map { buildProviderJSONCommand(config: $0) } ?? []
-                    buildAndExecute(providerCommands: provCmds)
+                    buildAndExecute(includeProviderConfig: true)
                 }
             }
             .buttonStyle(.borderedProminent)
@@ -795,12 +1015,19 @@ struct ModelAddSheet: View {
         if executionDone {
             HStack {
                 Spacer()
-                Button(L10n.k("auto.model_config_wizard.done", fallback: "完成")) {
-                    onComplete?()
-                    dismiss()
+                if allSuccess {
+                    Button(L10n.k("auto.model_config_wizard.done", fallback: "完成")) {
+                        onComplete?()
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.return)
+                } else {
+                    Button(L10n.k("auto.model_config_wizard.back", fallback: "返回")) {
+                        step = .providerSetup
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.return)
             }
         }
     }
@@ -810,15 +1037,13 @@ struct ModelAddSheet: View {
         HStack(spacing: 8) {
             statusIcon(cmd.status)
             VStack(alignment: .leading, spacing: 2) {
-                Text("$ openclaw \(cmd.display)")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
+                Text(cmd.label)
+                    .font(.callout)
                 if !cmd.output.isEmpty && cmd.status == .failed {
                     Text(cmd.output)
                         .font(.system(.caption2, design: .monospaced))
                         .foregroundStyle(.red)
-                        .lineLimit(3)
+                        .textSelection(.enabled)
                 }
             }
             Spacer()
@@ -956,63 +1181,160 @@ struct ModelAddSheet: View {
             // Pre-fill sideConfig (api is auto, only baseUrl editable)
             sideValues[baseUrlPath] = existingUrl ?? ""
         }
+
+        if usingExistingTemplate, let template = selectedTemplate {
+            let secretKey = "\(template.providerGroupId):\(template.name)"
+            if let secret = GlobalSecretsStore.shared.value(
+                for: secretKey,
+                fallbackProvider: template.providerGroupId
+            ), !secret.isEmpty {
+                apiKeyInput = secret
+            }
+
+            if template.providerGroupId == "custom" {
+                if let providerId = template.customProviderId, !providerId.isEmpty {
+                    customProviderId = providerId
+                }
+                if let baseURL = template.customBaseURL, !baseURL.isEmpty {
+                    customBaseURL = baseURL
+                    sideValues["models.providers.\(provider).baseUrl"] = baseURL
+                }
+                if let apiType = template.customAPIType, !apiType.isEmpty {
+                    customCompatibility = apiType.contains("anthropic") ? .anthropic : .openai
+                }
+            }
+
+            if apiKeyInput.isEmpty, !providerReady {
+                providerErrorMsg = L10n.k("wizard.model_config.existing_missing_key", fallback: "所选已有配置未设置 API Key")
+            }
+        }
         isCheckingProvider = false
     }
 
-    private func buildAndExecute(providerCommands: [(display: String, args: [String])]) {
+    /// 通过 gateway JSON-RPC config.patch 一次性写入所有配置变更。
+    /// config.patch 使用 JSON Merge Patch 语义（深度合并），只更新指定字段，
+    /// 不会覆盖 provider 的 models 数组等未提及的字段。
+    /// Gateway 收到 patch 后自动热重载配置，无需手动重启。
+    private func buildAndExecute(includeProviderConfig: Bool = false) {
         step = .executing
         commands = []
         executionDone = false
         allSuccess = true
 
-        // 1. Provider commands (sideConfigs first, then apiKey)
-        for cmd in providerCommands {
-            commands.append(CommandRun(display: cmd.display, args: cmd.args))
+        var patch: [String: Any] = [:]
+
+        // 1. Provider 配置（apiKey, api, baseUrl 等）
+        if includeProviderConfig, let config = providerConfig {
+            let providerFields = buildProviderFields(config: config)
+            if !providerFields.isEmpty {
+                let provider = config.id
+                commands.append(CommandRun(
+                    label: L10n.f("model.exec.configure_provider", fallback: "配置 %@ 凭据", config.displayName)
+                ))
+                patch["models"] = ["providers": [provider: providerFields]]
+            }
         }
 
-        // 2. Reorder: old primary → first fallback
+        // 2. 模型切换（主模型 + 备用列表）
+        var modelPatch: [String: Any] = ["primary": chosenModel]
         if let oldDefault = currentDefault {
             let newFallbacks = [oldDefault] + currentFallbacks
-            let jsonArray = "[" + newFallbacks.map { "\"\($0)\"" }.joined(separator: ",") + "]"
+            modelPatch["fallbacks"] = newFallbacks
+            let oldLabel = activeModelGroups.flatMap(\.models).first { $0.id == oldDefault }?.label ?? oldDefault
             commands.append(CommandRun(
-                display: "config set agents.defaults.model.fallbacks [\(newFallbacks.count) models]",
-                args: ["config", "set", "agents.defaults.model.fallbacks", jsonArray]
+                label: L10n.f("model.exec.demote_to_fallback", fallback: "将 %@ 设为备用", oldLabel)
             ))
         }
-
-        // 3. Set new primary
+        let newModelLabel = activeModelGroups.flatMap(\.models).first { $0.id == chosenModel }?.label ?? chosenModel
         commands.append(CommandRun(
-            display: "config set agents.defaults.model.primary \(chosenModel)",
-            args: ["config", "set", "agents.defaults.model.primary", chosenModel]
+            label: L10n.f("model.exec.set_primary", fallback: "设置主模型：%@", newModelLabel)
         ))
+        patch["agents"] = ["defaults": ["model": modelPatch]]
 
-        Task { await executeCommands() }
+        Task { await executePatch(patch) }
     }
 
-    private func executeCommands() async {
-        for i in commands.indices {
-            commands[i].status = .running
-            let (ok, out) = await helperClient.runOpenclawCommand(
-                username: user.username,
-                args: commands[i].args
-            )
-            commands[i].output = out
-            commands[i].status = ok ? .success : .failed
-            if !ok { allSuccess = false }
+    /// 优先走 WebSocket config.patch（含 hash 重试）；Gateway 未连接时回退到本地直写
+    private func executePatch(_ patch: [String: Any]) async {
+        for i in commands.indices { commands[i].status = .running }
+        do {
+            do {
+                try await executePatchViaGateway(patch, maxRetries: 2)
+            } catch {
+                guard isGatewayConnectivityError(error) else { throw error }
+                // 回退：本地直写 + 重启 gateway
+                let cfg = await helperClient.getConfigJSON(username: user.username)
+                try await applyPatchDirect(patch, existingConfig: cfg)
+                try await helperClient.restartGateway(username: user.username)
+            }
+            for i in commands.indices { commands[i].status = .success }
+        } catch {
+            for i in commands.indices { commands[i].status = .failed }
+            if let last = commands.indices.last {
+                commands[last].output = error.localizedDescription
+            }
+            allSuccess = false
         }
         executionDone = true
     }
 
+    /// 通过 Gateway RPC 执行 configPatch，hash 冲突时自动重试
+    private func executePatchViaGateway(_ patch: [String: Any], maxRetries: Int) async throws {
+        var lastError: Error?
+        for _ in 0...maxRetries {
+            do {
+                let (_, baseHash) = try await gatewayHub.configGetFull(username: user.username)
+                try await gatewayHub.configPatch(
+                    username: user.username,
+                    patch: patch,
+                    baseHash: baseHash,
+                    note: "ClawdHome: add model \(chosenModel)"
+                )
+                return
+            } catch let error as GatewayClientError {
+                if case .requestFailed = error {
+                    // hash mismatch 等请求级错误，重试
+                    lastError = error
+                    try? await Task.sleep(for: .milliseconds(200))
+                    continue
+                }
+                throw error
+            }
+        }
+        throw lastError ?? GatewayClientError.requestFailed(code: nil, message: "config.patch retries exhausted")
+    }
+
+    /// Gateway 掉线时，按 merge-patch 语义在本地合成并直写变更的顶层键
+    private func applyPatchDirect(_ patch: [String: Any], existingConfig: [String: Any]) async throws {
+        let merged = mergeJSON(base: existingConfig, patch: patch)
+        for key in patch.keys.sorted() {
+            guard let value = merged[key] else { continue }
+            try await helperClient.setConfigDirect(username: user.username, path: key, value: value)
+        }
+    }
+
+    private func mergeJSON(base: [String: Any], patch: [String: Any]) -> [String: Any] {
+        var result = base
+        for (key, patchValue) in patch {
+            if patchValue is NSNull {
+                result.removeValue(forKey: key)
+                continue
+            }
+            if let patchObject = patchValue as? [String: Any] {
+                let baseObject = result[key] as? [String: Any] ?? [:]
+                result[key] = mergeJSON(base: baseObject, patch: patchObject)
+            } else {
+                result[key] = patchValue
+            }
+        }
+        return result
+    }
+
     // MARK: - Helpers
 
-    /// 将 provider 所有字段合并为单条 JSON-object config set 命令
-    /// openclaw config set 每次写入都做完整 Zod 验证，分字段写入会因 provider 对象不完整而失败
-    private func buildProviderJSONCommand(
-        config: ProviderKeyConfig
-    ) -> [(display: String, args: [String])] {
+    /// 构建 provider 配置字段（用于 configPatch 深度合并，只包含变更字段）
+    private func buildProviderFields(config: ProviderKeyConfig) -> [String: Any] {
         let provider = config.id
-        let providerPath = "models.providers.\(provider)"
-
         var fields: [String: Any] = [:]
 
         // sideConfigs（api, baseUrl 等）
@@ -1028,7 +1350,6 @@ struct ModelAddSheet: View {
             }
         }
 
-        // apiKey / URL（取 configPath 最后一个分量作为字段名）
         if isCustomProvider {
             customProviderInput = CustomProviderConfigInput(
                 baseUrl: sideValues["models.providers.\(provider).baseUrl"] ?? customBaseURL,
@@ -1044,26 +1365,34 @@ struct ModelAddSheet: View {
             fields[fieldName] = keyValue
         }
 
-        guard !fields.isEmpty else { return [] }
-
-        // 序列化为 JSON（按 key 排序保证确定性）
-        guard let data = try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]),
-              let jsonStr = String(data: data, encoding: .utf8) else { return [] }
-
-        // 显示字符串：对 apiKey 做 mask
-        var displayFields = fields
-        if let apiKeyField = config.configPath.components(separatedBy: ".").last,
-           let v = displayFields[apiKeyField] as? String, !config.isUrlConfig {
-            displayFields[apiKeyField] = maskKey(v)
+        // 某些 provider（如 kimi-coding）要求 provider.models 必填；缺失会导致 config 校验失败。
+        if let providerModels = providerModelsForPatch(providerId: provider), !providerModels.isEmpty {
+            fields["models"] = providerModels
         }
-        let displayStr = (try? JSONSerialization.data(
-            withJSONObject: displayFields, options: [.sortedKeys])
-        ).flatMap { String(data: $0, encoding: .utf8) } ?? "{…}"
 
-        return [(
-            display: "config set \(providerPath) \(displayStr)",
-            args: ["config", "set", providerPath, jsonStr]
-        )]
+        return fields
+    }
+
+    /// 生成 models.providers.<id>.models 的最小合法数组，避免 provider schema 校验失败
+    private func providerModelsForPatch(providerId: String) -> [[String: Any]]? {
+        if isCustomProvider {
+            let modelId = resolvedCustomModelId
+            guard !modelId.isEmpty else { return nil }
+            let displayModel = modelId
+            return [[
+                "id": modelId,
+                "name": displayModel,
+                "reasoning": true,
+                "input": ["text", "image"],
+                "cost": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0],
+                "contextWindow": 262_144,
+                "maxTokens": 32_768,
+            ]]
+        }
+
+        let providerModels = builtInModels(for: providerId).map(\.providerModelConfig)
+        guard !providerModels.isEmpty else { return nil }
+        return providerModels
     }
 
     private func filteredGroups(_ text: String) -> [ModelGroup] {
@@ -1088,6 +1417,37 @@ struct ModelAddSheet: View {
     private func maskKey(_ key: String) -> String {
         guard key.count > 8 else { return "***" }
         return String(key.prefix(4)) + "…" + String(key.suffix(4))
+    }
+
+    private func syncTemplateSelection() {
+        guard !availableTemplates.isEmpty else {
+            configSource = .new
+            selectedTemplateID = nil
+            selectedTemplateModelID = ""
+            return
+        }
+        if selectedTemplateID == nil,
+           selectedModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           customModelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            configSource = .existing
+        }
+        if selectedTemplateID == nil || availableTemplates.contains(where: { $0.id == selectedTemplateID }) == false {
+            selectedTemplateID = availableTemplates.first?.id
+        }
+        guard let template = selectedTemplate else { return }
+        if !template.modelIds.contains(selectedTemplateModelID) {
+            selectedTemplateModelID = template.modelIds.first ?? ""
+        }
+        if configSource == .existing {
+            selectedModel = selectedTemplateModelID
+            useCustom = false
+        }
+    }
+
+    private func modelLabel(for modelID: String) -> String {
+        activeModelGroups
+            .flatMap(\.models)
+            .first(where: { $0.id == modelID })?.label ?? modelID
     }
 
     /// L10n.k("views.model_config_wizard.configuration", fallback: "应用配置")按钮禁用条件
@@ -1162,10 +1522,10 @@ struct ModelAddSheet: View {
 
 // MARK: - Command Run Model
 
+/// 视觉进度项（仅用于展示，实际执行通过单次 configPatch）
 struct CommandRun: Identifiable {
     let id = UUID()
-    let display: String
-    let args: [String]
+    let label: String       // 用户友好描述
     var status: Status = .pending
     var output: String = ""
 
@@ -1216,7 +1576,9 @@ struct ModelEditSheet: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Text(isPrimary ? L10n.k("auto.model_config_wizard.models", fallback: "当前为主模型") : L10n.k("auto.model_config_wizard.models", fallback: "当前为备用模型"))
+                Text(isPrimary
+                     ? L10n.k("model.config.current_primary", fallback: "当前为主模型")
+                     : L10n.k("model.config.current_fallback", fallback: "当前为备用模型"))
                     .font(.caption).foregroundStyle(.tertiary)
 
                 if isBusy {
@@ -1236,14 +1598,14 @@ struct ModelEditSheet: View {
                 Divider()
 
                 if !isPrimary {
-                    Button(L10n.k("auto.model_config_wizard.models", fallback: "设为主模型")) {
+                    Button(L10n.k("model.config.set_as_primary", fallback: "设为主模型")) {
                         Task { await promoteToDefault() }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(isBusy)
                 }
 
-                Button(L10n.k("auto.model_config_wizard.models", fallback: "移除模型")) {
+                Button(L10n.k("auto.model_config_wizard.remove_model", fallback: "移除模型")) {
                     Task { await removeModel() }
                 }
                 .buttonStyle(.bordered)
@@ -1317,5 +1679,124 @@ struct ModelEditSheet: View {
         onComplete?()
         try? await Task.sleep(for: .milliseconds(600))
         dismiss()
+    }
+}
+
+// MARK: - ModelPicker
+
+/// 从 shrimp 模型池中挑选一个模型 ID 的下拉选择器。
+///
+/// 用于 agent 主模型 / 备用模型选择。设计要点：
+/// - selection 为空字符串时表示"继承全局默认"（区分于 nil）
+/// - selection 不在池里时显示 ⚠️ 失效标识，提示用户重选（不静默丢失原值）
+/// - 数据源优先 gateway runtime（动态发现的已配置模型），fallback 到 builtInModelGroups
+struct ModelPicker: View {
+    let username: String
+    @Binding var selection: String
+    /// 允许选"继承全局默认"（agent 主模型一般 true；备用模型槽 false）
+    var allowsInheritDefault: Bool = true
+
+    @Environment(GatewayHub.self) private var gatewayHub
+    @Environment(HelperClient.self) private var helperClient
+
+    @State private var modelGroups: [ModelGroup] = []
+    @State private var inheritedDefault: String? = nil
+    @State private var hasLoaded = false
+
+    private var allModels: [ModelEntry] {
+        modelGroups.flatMap(\.models)
+    }
+
+    private var isSelectionValid: Bool {
+        if selection.isEmpty { return true }
+        return allModels.contains { $0.id == selection }
+    }
+
+    private var inheritedDefaultLabel: String {
+        guard let inherited = inheritedDefault, !inherited.isEmpty else {
+            return L10n.k("model_picker.inherit.unset", fallback: "继承全局默认（未设置）")
+        }
+        let label = allModels.first { $0.id == inherited }?.label ?? inherited
+        return L10n.f("model_picker.inherit.with_value", fallback: "继承全局默认（%@）", label)
+    }
+
+    private var selectedLabel: String {
+        if selection.isEmpty {
+            return inheritedDefaultLabel
+        }
+        if let entry = allModels.first(where: { $0.id == selection }) {
+            return entry.label
+        }
+        return L10n.f("model_picker.invalid", fallback: "⚠️ %@（已失效）", selection)
+    }
+
+    var body: some View {
+        Menu {
+            if allowsInheritDefault {
+                Button {
+                    selection = ""
+                } label: {
+                    Text(inheritedDefaultLabel)
+                }
+                Divider()
+            }
+
+            if hasLoaded && allModels.isEmpty {
+                Text(L10n.k("model_picker.empty", fallback: "模型池为空，请先去「模型」tab 添加"))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(modelGroups) { group in
+                    Section(group.provider) {
+                        ForEach(group.models, id: \.id) { entry in
+                            Button(entry.label) {
+                                selection = entry.id
+                            }
+                        }
+                    }
+                }
+            }
+
+            // selection 失效时，给个"清空回到继承"的快捷
+            if !isSelectionValid {
+                Divider()
+                Button(L10n.k("model_picker.clear_invalid", fallback: "清除失效选择，回到继承默认"), role: .destructive) {
+                    selection = ""
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(selectedLabel)
+                    .lineLimit(1)
+                    .foregroundStyle(isSelectionValid ? Color.primary : Color.red)
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .foregroundStyle(.secondary)
+                    .font(.caption2)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .task { await loadModels() }
+    }
+
+    private func loadModels() async {
+        async let statusTask = helperClient.getModelsStatus(username: username)
+        async let modelsTask = gatewayHub.modelsList(username: username)
+        let (status, models) = await (statusTask, modelsTask)
+        if let status {
+            inheritedDefault = status.resolvedDefault ?? status.defaultModel
+        }
+        modelGroups = models ?? []
+        hasLoaded = true
     }
 }
