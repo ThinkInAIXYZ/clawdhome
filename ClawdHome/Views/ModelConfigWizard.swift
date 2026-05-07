@@ -349,6 +349,7 @@ struct ModelAddSheet: View {
     @State private var isCheckingProvider = false
     @State private var isCustomProvider = false  // 未知 provider → OpenAI 兼容模式
     @State private var providerErrorMsg = ""
+    @State private var showAdvancedSide = false  // 已知 provider 的高级设置折叠状态
 
     // Step 3: Executing
     @State private var commands: [CommandRun] = []
@@ -611,9 +612,14 @@ struct ModelAddSheet: View {
     @ViewBuilder
     private func providerInputForm(_ config: ProviderKeyConfig) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(L10n.f("views.model_config_wizard.text_1dc29306", fallback: "%@ 配置", String(describing: config.displayName)), systemImage: isCustomProvider ? "link" : "key.fill")
-                .font(.subheadline).fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+            Label(
+                isCustomProvider
+                    ? L10n.f("views.model_config_wizard.text_1dc29306", fallback: "%@ 配置", effectiveCustomProviderId)
+                    : L10n.f("views.model_config_wizard.text_1dc29306", fallback: "%@ 配置", String(describing: config.displayName)),
+                systemImage: isCustomProvider ? "link" : "key.fill"
+            )
+            .font(.subheadline).fontWeight(.semibold)
+            .foregroundStyle(.secondary)
 
             if !providerErrorMsg.isEmpty {
                 Text(providerErrorMsg)
@@ -630,9 +636,9 @@ struct ModelAddSheet: View {
 
             if isCustomProvider {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("compatibility")
+                    Text(L10n.k("wizard.model_config.api_protocol", fallback: "接口协议"))
                         .font(.caption).foregroundStyle(.secondary)
-                    Picker("compatibility", selection: $customCompatibility) {
+                    Picker(L10n.k("wizard.model_config.api_protocol", fallback: "接口协议"), selection: $customCompatibility) {
                         ForEach(CustomCompatibility.allCases) { mode in
                             Text(mode.displayName).tag(mode)
                         }
@@ -640,9 +646,9 @@ struct ModelAddSheet: View {
                     .pickerStyle(.segmented)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("auth-choice")
+                    Text(L10n.k("wizard.model_config.auth_method", fallback: "认证方式"))
                         .font(.caption).foregroundStyle(.secondary)
-                    Picker("auth-choice", selection: $customAuthChoice) {
+                    Picker(L10n.k("wizard.model_config.auth_method", fallback: "认证方式"), selection: $customAuthChoice) {
                         ForEach(CustomAuthChoice.allCases) { choice in
                             Text(choice.displayName).tag(choice)
                         }
@@ -652,18 +658,52 @@ struct ModelAddSheet: View {
             }
 
             // sideConfigs (baseUrl etc.; skip `.api` — auto-set, not user-editable)
-            ForEach(config.sideConfigs.compactMap { side -> (key: String, value: String)? in
-                guard case .string(let value) = side.value else { return nil }
-                guard !side.key.hasSuffix(".api") else { return nil }
-                return (side.key, value)
-            }, id: \.key) { side in
-                let label = side.key.components(separatedBy: ".").last ?? side.key
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(isCustomProvider ? "Base URL" : label)
-                        .font(.caption).foregroundStyle(.secondary)
-                    TextField(side.value, text: sideBinding(for: side.key, default: side.value))
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(.body, design: .monospaced))
+            // 自定义 provider: Base URL 必填，直接展示；已知 provider: 预填默认值，折叠到高级设置
+            if isCustomProvider {
+                let baseUrlEntries = config.sideConfigs.compactMap { side -> (key: String, value: String)? in
+                    guard case .string(let value) = side.value else { return nil }
+                    guard !side.key.hasSuffix(".api") else { return nil }
+                    return (side.key, value)
+                }
+                ForEach(baseUrlEntries, id: \.key) { side in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Base URL")
+                            .font(.caption).foregroundStyle(.secondary)
+                        TextField(side.value, text: sideBinding(for: side.key, default: side.value))
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                    }
+                }
+            } else {
+                let knownSideEntries = config.sideConfigs.compactMap { side -> (key: String, value: String)? in
+                    guard case .string(let value) = side.value else { return nil }
+                    guard !side.key.hasSuffix(".api") else { return nil }
+                    return (side.key, value)
+                }
+                if !knownSideEntries.isEmpty {
+                    DisclosureGroup(
+                        isExpanded: $showAdvancedSide,
+                        content: {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(knownSideEntries, id: \.key) { side in
+                                    let label = side.key.components(separatedBy: ".").last ?? side.key
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(label)
+                                            .font(.caption).foregroundStyle(.secondary)
+                                        TextField(side.value, text: sideBinding(for: side.key, default: side.value))
+                                            .textFieldStyle(.roundedBorder)
+                                            .font(.system(.body, design: .monospaced))
+                                    }
+                                }
+                            }
+                            .padding(.top, 6)
+                        },
+                        label: {
+                            Text(L10n.k("wizard.model_config.advanced_settings", fallback: "高级设置"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    )
                 }
             }
 
