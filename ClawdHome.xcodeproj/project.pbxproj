@@ -35,6 +35,7 @@
 		18454F2283EC4E5E627584DE /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62AE0CAFA22F67436019A51 /* BackupModels.swift */; };
 		1A9602934F0304C7AA1905A6 /* FileInputAcceptFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC4D03808505276353A3AD2 /* FileInputAcceptFilter.swift */; };
 		1BEAF513D61007FDC9394FFF /* ModelDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21010714E9E3C485F8F95B10 /* ModelDetailView.swift */; };
+		1CED2CBF329329B97F77FEFF /* UnixHTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D840800176C46190E9991E /* UnixHTTPClient.swift */; };
 		1D4EDB9DB0495FE0EFA54FE4 /* ClawPoolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67AB0A69D9F15FA551CD2FFE /* ClawPoolView.swift */; };
 		1D89B835DEDF080130A04031 /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62AE0CAFA22F67436019A51 /* BackupModels.swift */; };
 		1EF1D1156BEAC282AC695473 /* DaemonSetupBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8FE553DC729ACE5F8E46933 /* DaemonSetupBanner.swift */; };
@@ -118,8 +119,10 @@
 		7334B8F99215A7B9F95F5DEC /* HermesPendingBindingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC3A7281B970E8EFA6FCAD2B /* HermesPendingBindingsSheet.swift */; };
 		744E5B64F5A52793EFAED3AC /* UserInitPresentationRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */; };
 		7686487709FBD85014989A10 /* HermesAutostartList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95EC78AB0531DB2D03762D85 /* HermesAutostartList.swift */; };
+		798645D6DCD032E8CDA08701 /* LLMWikiNotesCenterStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F05D394D640E63DF296126D8 /* LLMWikiNotesCenterStore.swift */; };
 		7A11F882D706844DD3EF518F /* WizardConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C409AF7F1CC045A211F7F27E /* WizardConnection.swift */; };
 		7A19BA1D08E439220F09D5CD /* CloneClawSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A692ECF0806042C37B632CB /* CloneClawSheet.swift */; };
+		7C1714E174DB7F15CA05C333 /* NotesCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A66434FD4A65D126B76D684 /* NotesCenterView.swift */; };
 		7C6F9710AD100210ABE9D075 /* CLIConfigStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC953D5E3DFF20B87A053D04 /* CLIConfigStep.swift */; };
 		7D0B2DAB8F9133C3EDAEA400 /* SessionsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB940018E9820EB6455FA34C /* SessionsTabView.swift */; };
 		7F1931508A7DA6D48319500F /* ShellRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6C76557D6C46315D058A794 /* ShellRunner.swift */; };
@@ -142,19 +145,24 @@
 		8DF359DE93EFFFFA2E49695F /* Charts.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2BD15AFBF24DE05D57194904 /* Charts.framework */; };
 		8E42CC7896C536E4FA02A426 /* UpdateCheckPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34938F121B712D4BEADB0796 /* UpdateCheckPolicy.swift */; };
 		8E9250B96F709346BC0A1158 /* UserAdoptionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */; };
+		91AC68C67A272D4D81A2A599 /* WikiHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D3368C009A027CADE32535C /* WikiHostView.swift */; };
 		925380A57BBAA972A1078DF0 /* ProviderKeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABBB28C4048F9B2A39AE099C /* ProviderKeychainStore.swift */; };
+		9433F61620C28741C3AD5D57 /* KnowledgeBaseSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664B03B539E04D8CC3DE0EE0 /* KnowledgeBaseSocketClient.swift */; };
 		9685174F8F965C6D07F8FBCB /* LocalAITab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956F579AD39B5454F51944DB /* LocalAITab.swift */; };
 		96C93E87A53551D90828E5D1 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = C825A0B24BA99AE396353C83 /* SwiftTerm */; };
 		992878A27E071D7380C32E95 /* PluginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2038621764DEFC3C43FEA05 /* PluginManager.swift */; };
 		9D0ACACEC481AC2EB8C42F2A /* ProcessTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFF0576AB6D5F27AC6E68E92 /* ProcessTabView.swift */; };
 		9D6B268A8115D86664724753 /* VoiceLibraryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBF03DABAB9FAB6E33B46BDE /* VoiceLibraryTab.swift */; };
+		9E44B6BAD620E553E108BCB9 /* LLMWikiRuntimeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D984EDDB037428BAFAD0DE05 /* LLMWikiRuntimeManager.swift */; };
 		9E7081ED0038EE8867ADADD5 /* SkillsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9430E6625C0F220F9051F31 /* SkillsTabView.swift */; };
+		9E78D90B2637D22528ECD954 /* LLMWikiModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 011BEA60E69D55D35D77D9F3 /* LLMWikiModels.swift */; };
 		A17E7AB99A51E1819E434548 /* FormatUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C86690A71173471BC77C57 /* FormatUtils.swift */; };
 		A19DC0FB0FB2383088C47E80 /* UserFilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A623F9F0DFBC22F900B5ACED /* UserFilesView.swift */; };
 		A2C1B14359C6417A10EADA1F /* AppAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6BBA412ABBAFB1986020ADA /* AppAppearance.swift */; };
 		A3581A320A78854BFF6B234D /* ModelPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E294E274D560257BC77114C /* ModelPickerSheet.swift */; };
 		A6188B820368B96D0C17F1F6 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C8CA7E043030EBA6AECA81CC /* SystemConfiguration.framework */; };
 		A6667FA9E8B0C2C35B9BB6C0 /* OpenclawConfigSerializerV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEA3246D788EC5F1AE06F4F /* OpenclawConfigSerializerV2.swift */; };
+		A7293DAA9DA7F73D3B168FBA /* LLMWikiAppStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 467610790A53F7FE788D9EDB /* LLMWikiAppStateStore.swift */; };
 		A74D7C244C8DC0ECFAE9A55B /* HealthCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CB22903A652976B892FA384 /* HealthCheck.swift */; };
 		A78B8054BE8C76489EEBCA77 /* AppUpdateBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94D002A8E22C08FDDD74BE18 /* AppUpdateBanner.swift */; };
 		A8BE1B4D2DCDE54C8F63CBF2 /* ClawdHomeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AF76BC505A9925D08297CB1 /* ClawdHomeApp.swift */; };
@@ -169,15 +177,19 @@
 		B45B188B70EB3363A5969F16 /* DirectProviderConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB4CB51EC92B102C97A3DAF4 /* DirectProviderConfig.swift */; };
 		B57160D717A6898E887EADDD /* CloneClawModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */; };
 		B81D3332811AFA345F523E3D /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E5226083EF9356F8C51363 /* AppLogger.swift */; };
+		B9BCABC8E69C44E8662342EC /* LLMWikiModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 011BEA60E69D55D35D77D9F3 /* LLMWikiModels.swift */; };
+		B9C67A7C20ABAE813F9F5B81 /* LLMWikiModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 011BEA60E69D55D35D77D9F3 /* LLMWikiModels.swift */; };
 		BB1B829AD74CEC55CAA80BF1 /* HermesDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CED3398200712E64635E9F4A /* HermesDetailView.swift */; };
 		BC5CEE02450C97178238E88A /* UserDirectoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1B997BD537C60950ED9DD3 /* UserDirectoryService.swift */; };
 		BCD7B492044FEED6A2D492CF /* ShrimpInitWizardV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67CAB911E8CA15AEFAEA037C /* ShrimpInitWizardV2.swift */; };
 		BD0432723571AEC02E2938BF /* AddProviderModelSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F559F8DF4F4C0D9025810C7 /* AddProviderModelSheet.swift */; };
 		BD523BF37E409AB6FA1D6D27 /* UpgradeConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800B6FF59BBD8AF1F7721480 /* UpgradeConfirmSheet.swift */; };
+		BDFD3F0F9CAFA15D026E7D2C /* LLMWikiStoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E275410A268E76B2B9AF11E5 /* LLMWikiStoreService.swift */; };
 		BE20A437ADC0E25426EC7750 /* FeishuChannelOnboardingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40305CC98880248434C11684 /* FeishuChannelOnboardingSheet.swift */; };
 		C11B2113E212A1BBC279EC49 /* UserFileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAD293FACB59B2F45FF9D4A /* UserFileManager.swift */; };
 		C1D0DF6E8649DB1726E57E86 /* OpenclawConfigSerializerV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEA3246D788EC5F1AE06F4F /* OpenclawConfigSerializerV2.swift */; };
 		C1D80403CCA910757BC41012 /* FilePermissionHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44A9E4389475CA9623EA4CD0 /* FilePermissionHelper.swift */; };
+		C5FC85BF159DE33C22E3623A /* LLMWikiHostCommandDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8408DB2FF4495A7908F68D6 /* LLMWikiHostCommandDispatcher.swift */; };
 		C72DF5FEB4906D0AA459139E /* UserDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46E3226FB170F1C35BB73B5 /* UserDetailView.swift */; };
 		C745EB73F505520BE75D6E88 /* GeneratedVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */; };
 		C77B4F6939884B36F73EB45C /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1879663548E380CB2414733A /* BackupManager.swift */; };
@@ -215,6 +227,7 @@
 		E31BC807CD66ED973B4DDB0B /* HelperImpl+Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE60C673397402540C236C95 /* HelperImpl+Diagnostics.swift */; };
 		E6FF122DB4FEB06A401BFC96 /* AgentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F115A85A4379CCBE8899FDB8 /* AgentManager.swift */; };
 		E7E82F61DD2D204B321B1710 /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62AE0CAFA22F67436019A51 /* BackupModels.swift */; };
+		E9BD93709607E2DDD7CF319D /* LlmWikiManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45BEFED25D7A23031141469E /* LlmWikiManager.swift */; };
 		EAE109F85C1B6AE01667DC15 /* HermesIMPlatforms.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7A075B154CD7DCEB68CB3 /* HermesIMPlatforms.swift */; };
 		EBE0317E6293A88D48C9397B /* HermesWizardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3054CF3A88705201107FB7F /* HermesWizardState.swift */; };
 		ED40DBD9596B50649987B59A /* FallbackManagerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D5AE60DA0449BC16B42DAA /* FallbackManagerSheet.swift */; };
@@ -229,6 +242,7 @@
 		F7301DCF176A07CEF3E14128 /* UserAdoptionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */; };
 		F7840BAD3978447C9CF012D5 /* AgentListEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7642815724059E4D93CC56E0 /* AgentListEditor.swift */; };
 		F7E5A9A08C640A5E7684F7B1 /* UserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */; };
+		F9D37FDFF4AB33E41F7EF4D0 /* HelperImpl+LlmWiki.swift in Sources */ = {isa = PBXBuildFile; fileRef = A624E03895D160852CD27CE9 /* HelperImpl+LlmWiki.swift */; };
 		FB35463F40D9D7B9C7166E4E /* OpenDirectory.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 05980B1012E839BAA33AD8CE /* OpenDirectory.framework */; };
 		FBCAA5C027073F120856AC08 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6474BB5EEF5B87B65666E978 /* NetworkModels.swift */; };
 		FC9E4F1ABDB750EFB88AFA36 /* UserDetailWindowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54777C27B432E10D49786DE9 /* UserDetailWindowLayout.swift */; };
@@ -247,12 +261,14 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		011BEA60E69D55D35D77D9F3 /* LLMWikiModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMWikiModels.swift; sourceTree = "<group>"; };
 		01DAC10B65138DAA2DE36A20 /* MaintenanceTerminalSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceTerminalSession.swift; sourceTree = "<group>"; };
 		0511A43DA0C20592D7181ABD /* RoleMarketView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoleMarketView.swift; sourceTree = "<group>"; };
 		05980B1012E839BAA33AD8CE /* OpenDirectory.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = OpenDirectory.framework; sourceTree = "<group>"; };
 		0600D2F59788F6F8E907084B /* CreateAgentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAgentSheet.swift; sourceTree = "<group>"; };
 		09AC66C79FE1B7EABAA7A9EE /* ConfigCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigCommand.swift; sourceTree = "<group>"; };
 		0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInitPresentationRouting.swift; sourceTree = "<group>"; };
+		0A66434FD4A65D126B76D684 /* NotesCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesCenterView.swift; sourceTree = "<group>"; };
 		0B045F82432FF233FDA7D7F5 /* AgentBotListEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBotListEditor.swift; sourceTree = "<group>"; };
 		0BCB213B1B4677F1FBAC5433 /* SecurityAuditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityAuditView.swift; sourceTree = "<group>"; };
 		0DFA0D3288E6276A9630CE4B /* AppLockScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockScreen.swift; sourceTree = "<group>"; };
@@ -291,8 +307,10 @@
 		443602BDE6B91F5B0D62E1E4 /* EmbeddedGatewayConsole.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddedGatewayConsole.swift; sourceTree = "<group>"; };
 		44A9E4389475CA9623EA4CD0 /* FilePermissionHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePermissionHelper.swift; sourceTree = "<group>"; };
 		451BD17BA16A789AB35460D1 /* onboard.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = onboard.html; sourceTree = "<group>"; };
+		45BEFED25D7A23031141469E /* LlmWikiManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LlmWikiManager.swift; sourceTree = "<group>"; };
 		45C19EA10CE619103184757E /* GatewayChannelModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayChannelModels.swift; sourceTree = "<group>"; };
 		467287AC8BE705E07CE3C366 /* HelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperProtocol.swift; sourceTree = "<group>"; };
+		467610790A53F7FE788D9EDB /* LLMWikiAppStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMWikiAppStateStore.swift; sourceTree = "<group>"; };
 		46BB2187C1CBAE602D47A53E /* IMAccountModelsV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IMAccountModelsV2.swift; sourceTree = "<group>"; };
 		48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserAdoptionFlow.swift; sourceTree = "<group>"; };
 		48D89D26AB1F2A1F57A4C957 /* InitCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InitCommand.swift; sourceTree = "<group>"; };
@@ -324,6 +342,7 @@
 		6474BB5EEF5B87B65666E978 /* NetworkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkModels.swift; sourceTree = "<group>"; };
 		6482AE0816A0181D42B69AB4 /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
 		6499789FC14381687CB547E1 /* IMBotProvisioner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IMBotProvisioner.swift; sourceTree = "<group>"; };
+		664B03B539E04D8CC3DE0EE0 /* KnowledgeBaseSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeBaseSocketClient.swift; sourceTree = "<group>"; };
 		67AB0A69D9F15FA551CD2FFE /* ClawPoolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawPoolView.swift; sourceTree = "<group>"; };
 		67B0925580BD2EF371BC98D4 /* WizardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardModels.swift; sourceTree = "<group>"; };
 		67CAB911E8CA15AEFAEA037C /* ShrimpInitWizardV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrimpInitWizardV2.swift; sourceTree = "<group>"; };
@@ -357,6 +376,7 @@
 		9BC44BB879E689F76FD08BB2 /* ClawdHomeCLI */ = {isa = PBXFileReference; includeInIndex = 0; path = ClawdHomeCLI; sourceTree = BUILT_PRODUCTS_DIR; };
 		9C19F01A93D19BBDF5814CC6 /* DiagnosticsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsSheet.swift; sourceTree = "<group>"; };
 		9CB22903A652976B892FA384 /* HealthCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCheck.swift; sourceTree = "<group>"; };
+		9D3368C009A027CADE32535C /* WikiHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WikiHostView.swift; sourceTree = "<group>"; };
 		9EFDF0452F0C6492C04DDB63 /* GlobalSecretsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSecretsStore.swift; sourceTree = "<group>"; };
 		A0680BCD6FCF288D2B143355 /* HelperSharedTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperSharedTypes.swift; sourceTree = "<group>"; };
 		A2377E2C629645068605ED7E /* HermesCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesCommand.swift; sourceTree = "<group>"; };
@@ -365,6 +385,7 @@
 		A3054CF3A88705201107FB7F /* HermesWizardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesWizardState.swift; sourceTree = "<group>"; };
 		A583A7B98571015C5E62789E /* ProviderKeySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderKeySheet.swift; sourceTree = "<group>"; };
 		A623F9F0DFBC22F900B5ACED /* UserFilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserFilesView.swift; sourceTree = "<group>"; };
+		A624E03895D160852CD27CE9 /* HelperImpl+LlmWiki.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+LlmWiki.swift"; sourceTree = "<group>"; };
 		A8FE553DC729ACE5F8E46933 /* DaemonSetupBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaemonSetupBanner.swift; sourceTree = "<group>"; };
 		A9430E6625C0F220F9051F31 /* SkillsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillsTabView.swift; sourceTree = "<group>"; };
 		AB7E5FF24A0246F866BFF996 /* DashboardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardModels.swift; sourceTree = "<group>"; };
@@ -400,6 +421,7 @@
 		C5A39CB77EAD5FD2A03768D4 /* ClawdHomeHelper */ = {isa = PBXFileReference; includeInIndex = 0; path = ClawdHomeHelper; sourceTree = BUILT_PRODUCTS_DIR; };
 		C82D2957B3849E370E6D64F1 /* HelperImpl+UserGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+UserGateway.swift"; sourceTree = "<group>"; };
 		C8CA7E043030EBA6AECA81CC /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = SystemConfiguration.framework; sourceTree = "<group>"; };
+		C9D840800176C46190E9991E /* UnixHTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnixHTTPClient.swift; sourceTree = "<group>"; };
 		CAA3C56D1FE192B7799A3FDC /* GatewayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayManager.swift; sourceTree = "<group>"; };
 		CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedVersion.swift; sourceTree = "<group>"; };
 		CED3398200712E64635E9F4A /* HermesDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesDetailView.swift; sourceTree = "<group>"; };
@@ -408,12 +430,15 @@
 		D43A99B25B70AE3C7A8C23AB /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D6C76557D6C46315D058A794 /* ShellRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellRunner.swift; sourceTree = "<group>"; };
 		D816568C199A8844EC29A4B0 /* InstanceCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstanceCommand.swift; sourceTree = "<group>"; };
+		D8408DB2FF4495A7908F68D6 /* LLMWikiHostCommandDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMWikiHostCommandDispatcher.swift; sourceTree = "<group>"; };
+		D984EDDB037428BAFAD0DE05 /* LLMWikiRuntimeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMWikiRuntimeManager.swift; sourceTree = "<group>"; };
 		DA495FBE50F338DEF7A55573 /* ConnectionCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionCollector.swift; sourceTree = "<group>"; };
 		DBF03DABAB9FAB6E33B46BDE /* VoiceLibraryTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceLibraryTab.swift; sourceTree = "<group>"; };
 		DC0DC69D82EDF1233E53C335 /* AgentModelEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentModelEditSheet.swift; sourceTree = "<group>"; };
 		DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserListView.swift; sourceTree = "<group>"; };
 		DFD718E7777280D5BC94DE0D /* UserPasswordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPasswordStore.swift; sourceTree = "<group>"; };
 		DFEA3246D788EC5F1AE06F4F /* OpenclawConfigSerializerV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenclawConfigSerializerV2.swift; sourceTree = "<group>"; };
+		E275410A268E76B2B9AF11E5 /* LLMWikiStoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMWikiStoreService.swift; sourceTree = "<group>"; };
 		E46E3226FB170F1C35BB73B5 /* UserDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDetailView.swift; sourceTree = "<group>"; };
 		E8D30C318D8605B241FB8378 /* IMAccountListEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IMAccountListEditor.swift; sourceTree = "<group>"; };
 		E9D81E7B672B2A82591FEF1B /* GatewayCronStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayCronStore.swift; sourceTree = "<group>"; };
@@ -427,6 +452,7 @@
 		EFC4D03808505276353A3AD2 /* FileInputAcceptFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileInputAcceptFilter.swift; sourceTree = "<group>"; };
 		EFF0576AB6D5F27AC6E68E92 /* ProcessTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessTabView.swift; sourceTree = "<group>"; };
 		F00BA42C0EC4C8B25A8BFCE7 /* HelperImpl+Files.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Files.swift"; sourceTree = "<group>"; };
+		F05D394D640E63DF296126D8 /* LLMWikiNotesCenterStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMWikiNotesCenterStore.swift; sourceTree = "<group>"; };
 		F115A85A4379CCBE8899FDB8 /* AgentManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentManager.swift; sourceTree = "<group>"; };
 		F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneClawModels.swift; sourceTree = "<group>"; };
 		F15483BD5BB3DE26EC5C82BB /* Stable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Stable.xcstrings; sourceTree = "<group>"; };
@@ -507,9 +533,16 @@
 				FD98DD90A8AB1C5CAF9681D2 /* GatewaySkillsStore.swift */,
 				A2F39F27916E7B56B4688842 /* HelperClient.swift */,
 				6499789FC14381687CB547E1 /* IMBotProvisioner.swift */,
+				664B03B539E04D8CC3DE0EE0 /* KnowledgeBaseSocketClient.swift */,
+				467610790A53F7FE788D9EDB /* LLMWikiAppStateStore.swift */,
+				D8408DB2FF4495A7908F68D6 /* LLMWikiHostCommandDispatcher.swift */,
+				F05D394D640E63DF296126D8 /* LLMWikiNotesCenterStore.swift */,
+				D984EDDB037428BAFAD0DE05 /* LLMWikiRuntimeManager.swift */,
+				E275410A268E76B2B9AF11E5 /* LLMWikiStoreService.swift */,
 				9363CE8F8DF377157FAE1D71 /* ModelPingService.swift */,
 				ABBB28C4048F9B2A39AE099C /* ProviderKeychainStore.swift */,
 				AF5F77D9351528C6DEEFC633 /* ShrimpPool.swift */,
+				C9D840800176C46190E9991E /* UnixHTTPClient.swift */,
 				5177F3CC658EC613A8D76CF1 /* UpdateChecker.swift */,
 				34938F121B712D4BEADB0796 /* UpdateCheckPolicy.swift */,
 				6E1B997BD537C60950ED9DD3 /* UserDirectoryService.swift */,
@@ -609,6 +642,7 @@
 				F00BA42C0EC4C8B25A8BFCE7 /* HelperImpl+Files.swift */,
 				89DB8110D061B70D84B4392F /* HelperImpl+Hermes.swift */,
 				6CC9E8292B772B2D7305F978 /* HelperImpl+Install.swift */,
+				A624E03895D160852CD27CE9 /* HelperImpl+LlmWiki.swift */,
 				591172964025C5CCE5E2A000 /* HelperImpl+Plugin.swift */,
 				C82D2957B3849E370E6D64F1 /* HelperImpl+UserGateway.swift */,
 				B82A9FF38295968F2C08B29B /* HelperLogging.swift */,
@@ -653,6 +687,7 @@
 				467287AC8BE705E07CE3C366 /* HelperProtocol.swift */,
 				A0680BCD6FCF288D2B143355 /* HelperSharedTypes.swift */,
 				46BB2187C1CBAE602D47A53E /* IMAccountModelsV2.swift */,
+				011BEA60E69D55D35D77D9F3 /* LLMWikiModels.swift */,
 				EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */,
 				58D6A0A3A03533CF7E7AC045 /* ManagedUserDisplayName.swift */,
 				6474BB5EEF5B87B65666E978 /* NetworkModels.swift */,
@@ -714,6 +749,7 @@
 				F6385281719FDB35F18456F6 /* HermesInstaller.swift */,
 				A3054CF3A88705201107FB7F /* HermesWizardState.swift */,
 				F9091EC70CE63EDC745444F7 /* InstallManager.swift */,
+				45BEFED25D7A23031141469E /* LlmWikiManager.swift */,
 				B9DBC78DA4D1FFD0EB50D466 /* LocalLLMManager.swift */,
 				EB4BFDC6320B7C035E22C884 /* NodeDownloader.swift */,
 				5C63492C6F439FBCA71D8BF5 /* NStatCollector.swift */,
@@ -776,6 +812,7 @@
 				4E294E274D560257BC77114C /* ModelPickerSheet.swift */,
 				ED27F46F57A2556B2A4A6512 /* ModelPrioritySheet.swift */,
 				54673332FA3CBD020381CD20 /* NetworkPolicyView.swift */,
+				0A66434FD4A65D126B76D684 /* NotesCenterView.swift */,
 				77787365CF9FCFC1BABE9B81 /* PersonaDefView.swift */,
 				EFF0576AB6D5F27AC6E68E92 /* ProcessTabView.swift */,
 				6DACAEF3ABEDBC65F590466B /* QuickFileTransfer.swift */,
@@ -792,6 +829,7 @@
 				DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */,
 				B60647F2C674DA123E7DA59A /* UserPasswordSheet.swift */,
 				B2FCA2FCC5FE69859F138BFD /* VaultFilesView.swift */,
+				9D3368C009A027CADE32535C /* WikiHostView.swift */,
 				60E2BC3AA8DD32C2E7B370D0 /* WizardComponents.swift */,
 				67B0925580BD2EF371BC98D4 /* WizardModels.swift */,
 				0836569296D71804D39AAEE4 /* ChannelOnboarding */,
@@ -855,6 +893,8 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2F0889EC57489C033AD535BB /* Build configuration list for PBXNativeTarget "ClawdHome" */;
 			buildPhases = (
+				18C75666D7BFE33E50678F61 /* Build Embedded LLM Wiki Runtime */,
+				349A8E9B2F8AF15379EB8D32 /* Build Embedded LLM Wiki Frontend */,
 				58F5F81CFA617EFD078BCC5B /* Sources */,
 				F74CA61F326D96469E1A4D1B /* Resources */,
 				CBDE9FD33BA5CFBDA763506A /* Frameworks */,
@@ -894,7 +934,6 @@
 				};
 			};
 			buildConfigurationList = B46EBA0D85074DCA05238407 /* Build configuration list for PBXProject "ClawdHome" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -908,6 +947,7 @@
 				74F355130984997690AD4FDF /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 849301842B00AAF8E21D222B /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -934,6 +974,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		18C75666D7BFE33E50678F61 /* Build Embedded LLM Wiki Runtime */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Embedded LLM Wiki Runtime";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "bash \"${SRCROOT}/scripts/build-embedded-llmwiki-runtime.sh\"\n";
+		};
 		1E11B3E365C4A88CB25B517A /* Inject Git Build Number */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -971,6 +1030,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "# DEBUG 模式下跳过嵌入 helper，避免 SMAppService 检测到 app bundle 中的\n# helper 变化后自动替换正在运行的 /Library/PrivilegedHelperTools/ 二进制。\n# 开发阶段使用 make install-helper 手动管理 helper。\nif [ \"${CONFIGURATION}\" = \"Debug\" ]; then\n  echo \"⏭ DEBUG: skip embedding helper (use 'make install-helper' instead)\"\n  exit 0\nfi\nDEST=\"${CODESIGNING_FOLDER_PATH}/Contents/Library/LaunchDaemons\"\nmkdir -p \"$DEST\"\ncp \"${BUILT_PRODUCTS_DIR}/ClawdHomeHelper\" \"$DEST/ClawdHomeHelper\"\nchmod +x \"$DEST/ClawdHomeHelper\"\ncp \"${SRCROOT}/Resources/ai.clawdhome.mac.helper.plist\" \"$DEST/\"\n";
+		};
+		349A8E9B2F8AF15379EB8D32 /* Build Embedded LLM Wiki Frontend */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Embedded LLM Wiki Frontend";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "bash \"${SRCROOT}/scripts/build-embedded-llmwiki-frontend.sh\"\n";
 		};
 		A99DCFF1121F876C8AFAB831 /* Generate Helper Version */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -1074,8 +1152,15 @@
 				2CF7C0595A716DFF0C0584B0 /* IMAccountListEditor.swift in Sources */,
 				15908189FA6D0E6D5A51F417 /* IMAccountModelsV2.swift in Sources */,
 				83A90CD423D6367CB0BDF071 /* IMBotProvisioner.swift in Sources */,
+				9433F61620C28741C3AD5D57 /* KnowledgeBaseSocketClient.swift in Sources */,
 				6B6B8E332776101B198630AC /* L10n.swift in Sources */,
 				42784EA2B3A334AF6AF8E881 /* LLMManagerTab.swift in Sources */,
+				A7293DAA9DA7F73D3B168FBA /* LLMWikiAppStateStore.swift in Sources */,
+				C5FC85BF159DE33C22E3623A /* LLMWikiHostCommandDispatcher.swift in Sources */,
+				B9C67A7C20ABAE813F9F5B81 /* LLMWikiModels.swift in Sources */,
+				798645D6DCD032E8CDA08701 /* LLMWikiNotesCenterStore.swift in Sources */,
+				9E44B6BAD620E553E108BCB9 /* LLMWikiRuntimeManager.swift in Sources */,
+				BDFD3F0F9CAFA15D026E7D2C /* LLMWikiStoreService.swift in Sources */,
 				DDC38ED579B3E862A571B156 /* LocalAIModels.swift in Sources */,
 				9685174F8F965C6D07F8FBCB /* LocalAITab.swift in Sources */,
 				315C6CEC2A97C5D4E9AB211A /* LogViewerSheet.swift in Sources */,
@@ -1091,6 +1176,7 @@
 				A9B78E60A9F1EBB090E30958 /* ModelsStatus.swift in Sources */,
 				FBCAA5C027073F120856AC08 /* NetworkModels.swift in Sources */,
 				EFB354F72C60BB435A62D4B4 /* NetworkPolicyView.swift in Sources */,
+				7C1714E174DB7F15CA05C333 /* NotesCenterView.swift in Sources */,
 				A6667FA9E8B0C2C35B9BB6C0 /* OpenclawConfigSerializerV2.swift in Sources */,
 				8DA5C8174C08A39388CA8388 /* PersonaDefView.swift in Sources */,
 				0473E31023503AFC1874A775 /* PortAllocator.swift in Sources */,
@@ -1110,6 +1196,7 @@
 				9E7081ED0038EE8867ADADD5 /* SkillsTabView.swift in Sources */,
 				E0ED6F92E9AE39B2FEDD39E7 /* TTSManagerTab.swift in Sources */,
 				2372A09285FD2D12851D0C62 /* TerminalLogView.swift in Sources */,
+				1CED2CBF329329B97F77FEFF /* UnixHTTPClient.swift in Sources */,
 				8E42CC7896C536E4FA02A426 /* UpdateCheckPolicy.swift in Sources */,
 				4853C793D4CFACBA2205144A /* UpdateChecker.swift in Sources */,
 				BD523BF37E409AB6FA1D6D27 /* UpgradeConfirmSheet.swift in Sources */,
@@ -1127,6 +1214,7 @@
 				DE12D55597459F084D76A461 /* VaultFilesView.swift in Sources */,
 				9D6B268A8115D86664724753 /* VoiceLibraryTab.swift in Sources */,
 				CF9F809B95CDA2464FC36087 /* VoiceProfile.swift in Sources */,
+				91AC68C67A272D4D81A2A599 /* WikiHostView.swift in Sources */,
 				645CD594F1E088E7A3515D0D /* WizardComponents.swift in Sources */,
 				7A11F882D706844DD3EF518F /* WizardConnection.swift in Sources */,
 				864844DC8AC7F16874F7E23F /* WizardModels.swift in Sources */,
@@ -1154,6 +1242,7 @@
 				71FD8244EBA4F5B39CF3F171 /* IMAccountModelsV2.swift in Sources */,
 				7242D9D28CCCC79B1DA5EAF2 /* InitCommand.swift in Sources */,
 				45A1AE95E1BB2122B2B05A66 /* InstanceCommand.swift in Sources */,
+				9E78D90B2637D22528ECD954 /* LLMWikiModels.swift in Sources */,
 				5F3A658D7E11C06F8F4F62D0 /* LocalAIModels.swift in Sources */,
 				D492D8603E31FF510215DA25 /* ManagedUserDisplayName.swift in Sources */,
 				29F70411C52A922AF79A99AD /* NetworkModels.swift in Sources */,
@@ -1196,6 +1285,7 @@
 				03A2120E2AF19C2CCA7879D4 /* HelperImpl+Files.swift in Sources */,
 				F038BD4755FE71793AC88B55 /* HelperImpl+Hermes.swift in Sources */,
 				216EF3466C80CC7E95B4DFDD /* HelperImpl+Install.swift in Sources */,
+				F9D37FDFF4AB33E41F7EF4D0 /* HelperImpl+LlmWiki.swift in Sources */,
 				DC1080E7F788244710F5833E /* HelperImpl+Plugin.swift in Sources */,
 				CB096E3233B4F7D7AC19486C /* HelperImpl+UserGateway.swift in Sources */,
 				0449D4859584DB3CBA25245B /* HelperLogging.swift in Sources */,
@@ -1209,6 +1299,8 @@
 				EBE0317E6293A88D48C9397B /* HermesWizardState.swift in Sources */,
 				5A9570E544EE11988AAA01BC /* IMAccountModelsV2.swift in Sources */,
 				7038876B62DAABF3E0D5672A /* InstallManager.swift in Sources */,
+				B9BCABC8E69C44E8662342EC /* LLMWikiModels.swift in Sources */,
+				E9BD93709607E2DDD7CF319D /* LlmWikiManager.swift in Sources */,
 				46AE452761C8D472CAEA4D2D /* LocalAIModels.swift in Sources */,
 				5FF1FC550784127BA01FA09D /* LocalLLMManager.swift in Sources */,
 				CC20BDD4E3F835E079B27B26 /* MaintenanceTerminalSession.swift in Sources */,
