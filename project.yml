@@ -81,10 +81,24 @@ targets:
     preBuildScripts:
       - name: "Generate Helper Version"
         script: |
-          BUILD_NUM=$(git -C "${SRCROOT}" rev-list --count HEAD 2>/dev/null || echo 0)
+          BUILD_NUM="${CLAWDHOME_BUILD_NUMBER_OVERRIDE:-${CURRENT_PROJECT_VERSION:-}}"
+          if [ -z "$BUILD_NUM" ]; then
+            BUILD_NUM=$(git -C "${SRCROOT}" rev-list --count HEAD 2>/dev/null || echo 0)
+          fi
+          MARKETING_VER="${CLAWDHOME_MARKETING_VERSION_OVERRIDE:-${MARKETING_VERSION:-}}"
+          if [ -z "$MARKETING_VER" ]; then
+            MARKETING_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "${SRCROOT}/ClawdHome/Info.plist" 2>/dev/null || true)
+          fi
+          if [ -n "$MARKETING_VER" ] && [ -n "$BUILD_NUM" ]; then
+            HELPER_VER="${MARKETING_VER} (${BUILD_NUM})"
+          elif [ -n "$MARKETING_VER" ]; then
+            HELPER_VER="${MARKETING_VER}"
+          else
+            HELPER_VER="${BUILD_NUM}"
+          fi
           OUT="${SRCROOT}/ClawdHomeHelper/GeneratedVersion.swift"
           echo "// Auto-generated — do not edit" > "$OUT"
-          echo "let kHelperVersion = \"1.1.${BUILD_NUM}\"" >> "$OUT"
+          echo "let kHelperVersion = \"${HELPER_VER}\"" >> "$OUT"
         basedOnDependencyAnalysis: false
         outputFiles:
           - $(SRCROOT)/ClawdHomeHelper/GeneratedVersion.swift
