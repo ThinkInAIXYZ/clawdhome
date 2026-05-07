@@ -3852,19 +3852,33 @@ private struct GatewayProbeModifier: ViewModifier {
     }
 }
 
-// MARK: - 定时任务 Tab
+// MARK: - Cron Tab
 
 private struct CronTabView: View {
     let username: String
-    @State private var runId = 0
+    @Environment(GatewayHub.self) private var hub
+
+    var body: some View {
+        CronTabContent(store: hub.cronStore(for: username))
+    }
+}
+
+private struct CronTabContent: View {
+    let store: GatewayCronStore
 
     var body: some View {
         VStack(spacing: 0) {
+            // 顶栏
             HStack {
                 Text(L10n.k("user.detail.auto.scheduled_tasks", fallback: "定时任务"))
                     .font(.headline)
                 Spacer()
-                Button { runId += 1 } label: {
+                if store.isLoading {
+                    ProgressView().scaleEffect(0.7).frame(width: 20, height: 20)
+                }
+                Button {
+                    Task { await store.refresh() }
+                } label: {
                     Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
@@ -3874,20 +3888,259 @@ private struct CronTabView: View {
 
             Divider()
 
-            // .id(runId) 变化时 SwiftUI 重建视图，触发新一次命令执行
-            CommandOutputPanel(username: username, args: ["cron", "list"])
-                .id(runId)
+            if let err = store.error {
+                ContentUnavailableView(err, systemImage: "exclamationmark.triangle")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if store.jobs.isEmpty && !store.isLoading {
+                ContentUnavailableView(
+                    L10n.k("user.detail.cron.no_jobs", fallback: "暂无定时任务"),
+                    systemImage: "clock",
+                    description: Text(L10n.k("user.detail.cron.no_jobs_hint", fallback: "等待 Gateway 连接后自动加载"))
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                HSplitView {
+                    // 左栏：任务列表
+                    List(store.jobs, selection: Binding(
+                        get: { store.selectedJobId },
+                        set: { store.selectedJobId = $0 }
+                    )) { job in
+                        CronJobListRow(job: job)
+                            .tag(job.id)
+                    }
+                    .listStyle(.sidebar)
+                    .frame(minWidth: 180, idealWidth: 220, maxWidth: 260)
 
-            Divider()
-
-            HStack(spacing: 8) {
-                Image(systemName: "info.circle").foregroundStyle(.secondary).font(.caption)
-                Text(L10n.k("user.detail.auto.u_2018_openclaw_cron_add_u_2019_u", fallback: "使用 \u{2018}openclaw cron add\u{2019} 或 \u{2018}openclaw cron remove\u{2019} 管理定时任务"))
-                    .font(.caption).foregroundStyle(.secondary)
+                    // 右栏：详情
+                    if let jobId = store.selectedJobId,
+                       let job = store.jobs.first(where: { $0.id == jobId }) {
+                        CronJobDetailPane(job: job, store: store)
+                    } else {
+                        ContentUnavailableView(
+                            L10n.k("user.detail.cron.select_job", fallback: "选择一个任务"),
+                            systemImage: "clock"
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
             }
-            .padding(.horizontal, 16).padding(.vertical, 7)
         }
-        .onAppear { runId += 1 }
+        .task { await store.refresh() }
+    }
+}
+
+private struct CronJobListRow: View {
+    let job: GatewayCronJob
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Circle()
+                    .fill(job.enabled ? Color.green : Color.secondary.opacity(0.5))
+                    .frame(width: 7, height: 7)
+                Text(job.name)
+                    .font(.subheadline).fontWeight(.medium)
+                    .lineLimit(1)
+                Spacer()
+                if let next = job.state.nextRunAtMs {
+                    Text(relativeTime(ms: next))
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 4) {
+                CronTagBadge(job.sessionTarget)
+                CronTagBadge(job.wakeMode)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func relativeTime(ms: Int) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
+        let diff = date.timeIntervalSinceNow
+        if diff < 0 { return L10n.k("user.detail.cron.expired", fallback: "已过期") }
+        if diff < 60 { return "< 1m" }
+        let mins = Int(diff / 60)
+        if mins < 60 { return "in \(mins)m" }
+        let hrs = mins / 60
+        if hrs < 24 { return "in \(hrs)h" }
+        return "in \(hrs / 24)d"
+    }
+}
+
+private struct CronTagBadge: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text)
+            .font(.caption2)
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+            .foregroundStyle(.secondary)
+    }
+}
+
+private struct CronJobDetailPane: View {
+    let job: GatewayCronJob
+    let store: GatewayCronStore
+    @State private var isRunning = false
+    @State private var showRemoveConfirm = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                // 头部
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(job.name).font(.title3).fontWeight(.semibold)
+                        Text(job.id).font(.caption).foregroundStyle(.tertiary).textSelection(.enabled)
+                    }
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { job.enabled },
+                        set: { _ in Task { try? await store.toggleEnabled(job: job) } }
+                    ))
+                    .toggleStyle(.switch).labelsHidden()
+                    Button(L10n.k("user.detail.cron.run", fallback: "Run")) {
+                        isRunning = true
+                        Task {
+                            defer { isRunning = false }
+                            try? await store.run(jobId: job.id)
+                        }
+                    }
+                    .disabled(isRunning)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                .padding(16)
+
+                Divider()
+
+                // 详情字段
+                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 8) {
+                    CronDetailGridRow(label: "Schedule", value: scheduleText)
+                    CronDetailGridRow(label: "Auto-delete", value: job.deleteAfterRun == true ? "after success" : "—")
+                    CronDetailGridRow(label: "Session", value: job.sessionTarget)
+                    CronDetailGridRow(label: "Wake", value: job.wakeMode)
+                    CronDetailGridRow(label: "Next run", value: timeText(ms: job.state.nextRunAtMs))
+                    CronDetailGridRow(label: "Last run", value: timeText(ms: job.state.lastRunAtMs))
+                    if let status = job.state.lastStatus {
+                        CronDetailGridRow(label: "Last status", value: status)
+                    }
+                }
+                .padding(16)
+
+                Divider()
+
+                // Payload
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Payload")
+                        .font(.caption).foregroundStyle(.secondary).textCase(.uppercase)
+                        .padding(.horizontal, 16).padding(.top, 16)
+                    Text(payloadText)
+                        .font(.callout)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.textBackgroundColor).opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 16).padding(.bottom, 16)
+                }
+
+                Divider()
+
+                // Run history
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Run history")
+                            .font(.subheadline).fontWeight(.medium)
+                        Spacer()
+                        Button {
+                            Task { await store.refreshRuns(jobId: job.id) }
+                        } label: {
+                            Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.plain).foregroundStyle(.secondary).font(.caption)
+                    }
+
+                    if store.runEntries.isEmpty {
+                        Text("No run log entries yet.")
+                            .font(.caption).foregroundStyle(.tertiary)
+                    } else {
+                        VStack(spacing: 2) {
+                            ForEach(store.runEntries) { entry in
+                                CronRunEntryRow(entry: entry)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+            }
+        }
+        .task(id: job.id) {
+            await store.refreshRuns(jobId: job.id)
+        }
+    }
+
+    private var scheduleText: String {
+        switch job.schedule {
+        case let .at(at): return "at \(at)"
+        case let .every(ms, _):
+            let secs = ms / 1000
+            if secs < 60 { return "every \(secs)s" }
+            if secs < 3600 { return "every \(secs / 60)m" }
+            return "every \(secs / 3600)h"
+        case let .cron(expr, tz):
+            return tz.map { "cron: \(expr) (\($0))" } ?? "cron: \(expr)"
+        }
+    }
+
+    private var payloadText: String {
+        switch job.payload {
+        case let .systemEvent(text): return text
+        case let .agentTurn(message, _, _, _, _, _, _): return message
+        }
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateStyle = .medium
+        fmt.timeStyle = .short
+        return fmt
+    }()
+
+    private func timeText(ms: Int?) -> String {
+        guard let ms else { return "—" }
+        return Self.dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(ms) / 1000))
+    }
+}
+
+private struct CronDetailGridRow: View {
+    let label: String
+    let value: String
+    var body: some View {
+        GridRow {
+            Text(label).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
+            Text(value).textSelection(.enabled)
+        }
+    }
+}
+
+private struct CronRunEntryRow: View {
+    let entry: GatewayCronRunLogEntry
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(entry.status == "ok" ? Color.green : Color.red)
+                .frame(width: 6, height: 6)
+            Text(entry.action).font(.caption)
+            if let dur = entry.durationMs {
+                Text("\(dur)ms").font(.caption2).foregroundStyle(.tertiary)
+            }
+            Spacer()
+            Text(Date(timeIntervalSince1970: TimeInterval(entry.ts) / 1000), style: .time)
+                .font(.caption2).foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 2)
     }
 }
 
@@ -3895,15 +4148,28 @@ private struct CronTabView: View {
 
 private struct SkillsTabView: View {
     let username: String
-    @State private var runId = 0
+    @Environment(GatewayHub.self) private var hub
+
+    var body: some View {
+        SkillsTabContent(store: hub.skillsStore(for: username))
+    }
+}
+
+private struct SkillsTabContent: View {
+    let store: GatewaySkillsStore
 
     var body: some View {
         VStack(spacing: 0) {
+            // 顶栏
             HStack {
-                Text(L10n.k("user.detail.auto.skills_title", fallback: "技能"))
-                    .font(.headline)
+                Text("Skills").font(.headline)
                 Spacer()
-                Button { runId += 1 } label: {
+                if store.isLoading {
+                    ProgressView().scaleEffect(0.7).frame(width: 20, height: 20)
+                }
+                Button {
+                    Task { await store.refresh() }
+                } label: {
                     Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
@@ -3913,19 +4179,93 @@ private struct SkillsTabView: View {
 
             Divider()
 
-            CommandOutputPanel(username: username, args: ["skills", "list"])
-                .id(runId)
-
-            Divider()
-
-            HStack(spacing: 8) {
-                Image(systemName: "info.circle").foregroundStyle(.secondary).font(.caption)
-                Text(L10n.k("user.detail.auto.u_2018_openclaw_skills_install_name_u_2019", fallback: "使用 \u{2018}openclaw skills install <name>\u{2019} 安装，\u{2018}openclaw skills remove <name>\u{2019} 卸载"))
-                    .font(.caption).foregroundStyle(.secondary)
+            if let err = store.error {
+                ContentUnavailableView(err, systemImage: "exclamationmark.triangle")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if store.skills.isEmpty && !store.isLoading {
+                ContentUnavailableView(
+                    L10n.k("user.detail.skills.no_skills", fallback: "暂无 Skills"),
+                    systemImage: "star.leadinghalf.filled"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(store.skills) { skill in
+                    SkillItemRow(skill: skill, store: store)
+                }
+                .listStyle(.plain)
             }
-            .padding(.horizontal, 16).padding(.vertical, 10)
         }
-        .onAppear { runId += 1 }
+        .task { await store.refresh() }
+    }
+}
+
+private struct SkillItemRow: View {
+    let skill: GatewaySkillStatus
+    let store: GatewaySkillsStore
+    @State private var showRemoveConfirm = false
+
+    private var isPending: Bool { store.pendingOps[skill.skillKey] != nil }
+    private var pendingLabel: String { store.pendingOps[skill.skillKey] ?? "" }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // 状态指示
+            Circle()
+                .fill(skill.eligible ? Color.green : Color.orange)
+                .frame(width: 8, height: 8)
+
+            // 名称 + 描述
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    if let emoji = skill.emoji {
+                        Text(emoji)
+                    }
+                    Text(skill.name)
+                        .font(.subheadline).fontWeight(.medium)
+                    if skill.always {
+                        CronTagBadge("always-on")
+                    }
+                    if !skill.missing.isEmpty {
+                        CronTagBadge("⚠️ missing")
+                    }
+                }
+                Text(skill.description)
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+
+            Spacer()
+
+            // 操作按钮区
+            if isPending {
+                HStack(spacing: 4) {
+                    ProgressView().scaleEffect(0.7)
+                    Text(pendingLabel).font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                HStack(spacing: 6) {
+                    if !skill.disabled {
+                        Button(L10n.k("user.detail.skills.update", fallback: "更新")) {
+                            Task { try? await store.update(skillKey: skill.skillKey) }
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                    }
+                    Button(L10n.k("user.detail.skills.remove", fallback: "卸载")) {
+                        showRemoveConfirm = true
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                    .confirmationDialog(
+                        L10n.f("user.detail.skills.remove_confirm", fallback: "卸载 %@？", skill.name),
+                        isPresented: $showRemoveConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button(L10n.k("user.detail.skills.remove", fallback: "卸载"), role: .destructive) {
+                            Task { try? await store.remove(skillKey: skill.skillKey) }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -5419,7 +5759,7 @@ private struct KimiMinimaxModelConfigPanel: View {
                     }
 
                     if isRestartingGateway {
-                        Label("正在重启 Gateway，配置将在重启后生效…", systemImage: "arrow.triangle.2.circlepath")
+                        Label(L10n.k("user.detail.cron.restarting_gateway", fallback: "正在重启 Gateway，配置将在重启后生效…"), systemImage: "arrow.triangle.2.circlepath")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
