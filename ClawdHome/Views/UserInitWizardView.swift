@@ -500,7 +500,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         case .minimax:    return "MiniMax"
         case .qiniu:      return "Qiniu AI"
         case .zai:        return "智谱 Z.AI"
-        case .custom:     return "Custom Provider"
+        case .custom:     return "自定义"
         }
     }
 
@@ -510,7 +510,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         case .minimax:    return L10n.k("wizard.provider.minimax.subtitle", fallback: "MiniMax M2.5 系列")
         case .qiniu:      return "DeepSeek / GLM / Kimi / Minimax"
         case .zai:        return "GLM系列模型"
-        case .custom:     return "OpenAI / Anthropic compatible"
+        case .custom:     return "OpenAI / Anthropic 兼容"
         }
     }
 
@@ -530,7 +530,7 @@ private enum WizardProvider: String, CaseIterable, Identifiable {
         case .minimax:    return "MiniMax API Key"
         case .qiniu:      return "Qiniu API Key"
         case .zai:        return "智谱 API Key"
-        case .custom:     return "Custom API Key"
+        case .custom:     return "自定义 API Key"
         }
     }
 
@@ -762,6 +762,10 @@ struct UserInitWizardView: View {
     @State private var customModelAlias = ""
     @State private var customBaseURL = ""
     @State private var customCompatibility: CustomCompatibility = .openai
+    @State private var customModelSuggestions: [String] = []
+    @State private var isFetchingCustomModels = false
+    @State private var customModelFetchMessage: String? = nil
+    @State private var customModelFetchError: String? = nil
     @State private var isShowingApiKey = false
     @State private var minimaxApiKey = ""  // 保留用于持久化反序列化兼容
     @State private var selectedMinimaxModel: MinimaxModel = .m27
@@ -1021,6 +1025,9 @@ struct UserInitWizardView: View {
             } else if customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 customBaseURL = "https://api.example.com/v1"
             }
+            customModelSuggestions = []
+            customModelFetchMessage = nil
+            customModelFetchError = nil
             resetModelValidationState(clearCredential: true)
         }
         .onChange(of: selectedWizardAuthMethod) { _, _ in
@@ -1449,10 +1456,7 @@ struct UserInitWizardView: View {
                 if provider == .custom {
                     VStack(alignment: .leading, spacing: 8) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(L10n.k("wizard.custom.api_compatibility", fallback: "API 兼容（默认 OpenAI）"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Picker("custom-compatibility", selection: $customCompatibility) {
+                            Picker(L10n.k("wizard.custom.compatibility_picker", fallback: "兼容类型"), selection: $customCompatibility) {
                                 ForEach(CustomCompatibility.allCases) { item in
                                     Text(item.title).tag(item)
                                 }
@@ -1460,68 +1464,107 @@ struct UserInitWizardView: View {
                             .pickerStyle(.segmented)
                         }
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Base URL")
+                            Text(L10n.k("wizard.custom.base_url", fallback: "Base URL"))
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.primary)
                             TextField("https://api.example.com/v1", text: $customBaseURL)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(.body, design: .monospaced))
                         }
+                        if selectedWizardAuthMethod == .apiKey {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 8) {
+                                    Group {
+                                        if isShowingApiKey {
+                                            TextField(provider.apiKeyPlaceholder, text: $wizardApiKey)
+                                        } else {
+                                            SecureField(provider.apiKeyPlaceholder, text: $wizardApiKey)
+                                        }
+                                    }
+                                    .textFieldStyle(.roundedBorder)
+
+                                    Button {
+                                        isShowingApiKey.toggle()
+                                    } label: {
+                                        Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .help(isShowingApiKey ? L10n.k("views.user_init_wizard_view.hide", fallback: "隐藏") : L10n.k("views.user_init_wizard_view.show", fallback: "显示"))
+                                }
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L10n.k("wizard.custom.secret_reference", fallback: "密钥引用"))
+                                    .font(.caption)
+                                    .foregroundStyle(.primary)
+                                TextField("env:VAR / ${VAR} / provider:account", text: $customSecretReference)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(.body, design: .monospaced))
+                            }
+                        }
                         VStack(alignment: .leading, spacing: 4) {
                             Text(L10n.k("wizard.custom.model_id", fallback: "模型ID"))
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.primary)
                             TextField(L10n.k("wizard.custom.model_id_placeholder", fallback: "例如 gpt-4.1 / claude-3-7-sonnet"), text: $customModelId)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(.body, design: .monospaced))
+                            HStack(spacing: 8) {
+                                Button(isFetchingCustomModels ? "拉取中…" : "从 API 拉取列表") {
+                                    Task { await fetchCustomModelsForWizard() }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .disabled(isFetchingCustomModels || customBaseURLTrimmed.isEmpty)
+
+                                if !customModelSuggestions.isEmpty {
+                                    Picker(L10n.k("wizard.custom.suggested_models", fallback: "可选模型"), selection: $customModelId) {
+                                        ForEach(customModelSuggestions, id: \.self) { item in
+                                            Text(item).tag(item)
+                                        }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .controlSize(.small)
+                                }
+                            }
+                            if let customModelFetchMessage {
+                                Text(customModelFetchMessage)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let customModelFetchError {
+                                Text(customModelFetchError)
+                                    .font(.caption2)
+                                    .foregroundStyle(.red)
+                            }
                         }
                         VStack(alignment: .leading, spacing: 4) {
                             Text(L10n.k("wizard.custom.model_alias", fallback: "模型ID别名"))
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.primary)
                             TextField(L10n.k("wizard.custom.model_alias_placeholder", fallback: "例如：自定义 GPT-4.1"), text: $customModelAlias)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.body)
                         }
                     }
-                }
-
-                if selectedWizardAuthMethod == .apiKey {
-                    VStack(spacing: 6) {
-                        HStack(spacing: 8) {
-                            Group {
-                                if isShowingApiKey {
-                                    TextField(provider.apiKeyPlaceholder, text: $wizardApiKey)
-                                } else {
-                                    SecureField(provider.apiKeyPlaceholder, text: $wizardApiKey)
-                                }
+                } else if selectedWizardAuthMethod == .apiKey {
+                    HStack(spacing: 8) {
+                        Group {
+                            if isShowingApiKey {
+                                TextField(provider.apiKeyPlaceholder, text: $wizardApiKey)
+                            } else {
+                                SecureField(provider.apiKeyPlaceholder, text: $wizardApiKey)
                             }
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 13))
-
-                            Button {
-                                isShowingApiKey.toggle()
-                            } label: {
-                                Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.secondary)
-                            .help(isShowingApiKey ? L10n.k("views.user_init_wizard_view.hide", fallback: "隐藏") : L10n.k("views.user_init_wizard_view.show", fallback: "显示"))
                         }
-                        Rectangle()
-                            .fill(Color.secondary.opacity(0.25))
-                            .frame(height: 1)
-                    }
-                    .padding(.horizontal, 2)
-                    .padding(.vertical, 4)
-                } else if provider == .custom {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("secret reference")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        TextField("env:VAR / ${VAR} / provider:account", text: $customSecretReference)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.body, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+
+                        Button {
+                            isShowingApiKey.toggle()
+                        } label: {
+                            Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
+                        }
+                        .buttonStyle(.bordered)
+                        .help(isShowingApiKey ? L10n.k("views.user_init_wizard_view.hide", fallback: "隐藏") : L10n.k("views.user_init_wizard_view.show", fallback: "显示"))
                     }
                 }
             }
@@ -2066,6 +2109,10 @@ struct UserInitWizardView: View {
         customModelAlias = ""
         customBaseURL = ""
         customCompatibility = .openai
+        customModelSuggestions = []
+        isFetchingCustomModels = false
+        customModelFetchMessage = nil
+        customModelFetchError = nil
         selectedMinimaxModel = .m27
         selectedQiniuModel = .deepseekV32
         selectedZAIModel = .glm5
@@ -2559,11 +2606,7 @@ struct UserInitWizardView: View {
     private func resolvedCustomAPIKeyValue() -> String {
         switch selectedWizardAuthMethod {
         case .apiKey:
-            let direct = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            if direct.isEmpty {
-                return "${CUSTOM_API_KEY}"
-            }
-            return direct
+            return CustomModelConfigUtils.resolvedAPIKey(wizardApiKey)
         case .secretReference:
             let raw = customSecretReference.trimmingCharacters(in: .whitespacesAndNewlines)
             if raw.hasPrefix("env:") {
@@ -2571,6 +2614,40 @@ struct UserInitWizardView: View {
                 return "${\(envName)}"
             }
             return raw
+        }
+    }
+
+    private func fetchCustomModelsForWizard() async {
+        guard !customBaseURLTrimmed.isEmpty else {
+            customModelFetchError = "请先填写有效的 Base URL"
+            customModelFetchMessage = nil
+            return
+        }
+
+        isFetchingCustomModels = true
+        customModelFetchError = nil
+        customModelFetchMessage = nil
+        defer { isFetchingCustomModels = false }
+
+        do {
+            var apiKey: String? = nil
+            if selectedWizardAuthMethod == .apiKey {
+                apiKey = wizardApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            let ids = try await CustomModelConfigUtils.fetchModelIDs(baseURL: customBaseURLTrimmed, apiKey: apiKey)
+            if ids.isEmpty {
+                customModelSuggestions = []
+                customModelFetchMessage = "已请求成功，但未解析到可用模型 ID（该接口可能不支持标准 list）"
+                return
+            }
+
+            customModelSuggestions = ids
+            if customModelIdTrimmed.isEmpty, let first = ids.first {
+                customModelId = first
+            }
+            customModelFetchMessage = "已拉取 \(ids.count) 个模型"
+        } catch {
+            customModelFetchError = error.localizedDescription
         }
     }
 
