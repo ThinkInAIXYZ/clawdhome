@@ -1,7 +1,8 @@
 // ClawdHome/Views/CreateAgentSheet.swift
-// 新建 Agent 弹窗：选择来源 → 从零创建表单
+// 新建 Agent 弹窗：选择来源 → 从零创建表单 / 从角色市场导入
 
 import SwiftUI
+import WebKit
 
 struct CreateAgentSheet: View {
     let username: String
@@ -17,9 +18,14 @@ struct CreateAgentSheet: View {
     @State private var modelPrimary = ""
     @State private var isCreating = false
     @State private var error: String?
-    @State private var showMarketAlert = false
 
-    enum Step { case chooseSource, createManual }
+    // 角色市场相关状态
+    @State private var selectedDNA: AgentDNA?
+    @State private var dnaAgentId = ""
+    @State private var marketCoordinator = RoleMarketCoordinator()
+    @State private var isMarketPageLoaded = false
+
+    enum Step { case chooseSource, createManual, fromMarket, confirmDNA }
 
     // MARK: - 校验
 
@@ -44,6 +50,26 @@ struct CreateAgentSheet: View {
         return String(base.prefix(32))
     }
 
+    /// DNA 导入时的 agent ID
+    private var effectiveDNAAgentId: String {
+        if !dnaAgentId.isEmpty { return dnaAgentId }
+        guard let dna = selectedDNA else { return "" }
+        let base = dna.id.lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+            .unicodeScalars
+            .map { CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-" ? String($0) : "" }
+            .joined()
+        if base.isEmpty || base.first?.isLetter != true {
+            return "agent_\(base.isEmpty ? String(Int(Date().timeIntervalSince1970) % 10000) : base)"
+        }
+        return String(base.prefix(32))
+    }
+
+    private var dnaAgentIdValid: Bool {
+        let id = effectiveDNAAgentId
+        return id.range(of: #"^[a-z][a-z0-9_-]{0,31}$"#, options: .regularExpression) != nil
+    }
+
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty && agentIdValid
     }
@@ -57,15 +83,17 @@ struct CreateAgentSheet: View {
                 chooseSourceView
             case .createManual:
                 createManualView
+            case .fromMarket:
+                fromMarketView
+            case .confirmDNA:
+                confirmDNAView
             }
         }
-        .padding(24)
-        .frame(width: 420)
-        .alert(L10n.k("agent.create.market_coming_soon.title", fallback: "即将推出"), isPresented: $showMarketAlert) {
-            Button(L10n.k("common.action.ok", fallback: "好的"), role: .cancel) {}
-        } message: {
-            Text(L10n.k("agent.create.market_coming_soon.message", fallback: "角色市场正在开发中，敬请期待！"))
-        }
+        .padding(step == .fromMarket ? 0 : 24)
+        .frame(
+            width: step == .fromMarket ? 700 : 420,
+            height: step == .fromMarket ? 520 : nil
+        )
     }
 
     // MARK: - 模式1：选择来源
@@ -84,7 +112,9 @@ struct CreateAgentSheet: View {
             VStack(spacing: 12) {
                 // 从角色市场选择
                 Button {
-                    showMarketAlert = true
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        step = .fromMarket
+                    }
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "storefront")
@@ -245,6 +275,178 @@ struct CreateAgentSheet: View {
         }
     }
 
+    // MARK: - 模式3：角色市场浏览
+
+    private var fromMarketView: some View {
+        VStack(spacing: 0) {
+            // 顶栏：返回 + 标题
+            HStack {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        step = .chooseSource
+                    }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+
+                Text(L10n.k("agent.create.from_market", fallback: "从角色市场选择"))
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                Spacer()
+
+                Button(L10n.k("common.action.cancel", fallback: "取消")) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+
+            Divider()
+
+            // 内嵌 WebView
+            ZStack {
+                CreateAgentMarketWebView(coordinator: marketCoordinator)
+                    .opacity(isMarketPageLoaded ? 1 : 0)
+                    .animation(.easeIn(duration: 0.25), value: isMarketPageLoaded)
+
+                if !isMarketPageLoaded {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text(L10n.k("agent.create.market_loading", fallback: "加载角色市场..."))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onAppear {
+            marketCoordinator.onAdoptAgent = { dna in
+                self.selectedDNA = dna
+                // 根据 DNA 预填 agent ID
+                let base = dna.id.lowercased()
+                    .replacingOccurrences(of: " ", with: "_")
+                    .unicodeScalars
+                    .map { CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-" ? String($0) : "" }
+                    .joined()
+                self.dnaAgentId = String(base.prefix(32))
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    step = .confirmDNA
+                }
+            }
+            marketCoordinator.onPageLoaded = {
+                withAnimation {
+                    self.isMarketPageLoaded = true
+                }
+            }
+        }
+    }
+
+    // MARK: - 模式4：DNA 确认/预览
+
+    private var confirmDNAView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let dna = selectedDNA {
+                // 标题 + 返回
+                HStack {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            step = .fromMarket
+                        }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+
+                    Text(L10n.k("agent.create.confirm_import.title", fallback: "导入角色"))
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                }
+                .padding(.bottom, 16)
+
+                // DNA 信息卡片
+                HStack(spacing: 12) {
+                    Text(dna.emoji)
+                        .font(.system(size: 36))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(dna.name)
+                            .font(.headline)
+                        Text(dna.soul)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.blue.opacity(0.06))
+                )
+                .padding(.bottom, 12)
+
+                // Persona 文件预览
+                if let soul = dna.fileSoul, !soul.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("SOUL.md", systemImage: "doc.text")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+                        Text(String(soul.prefix(200)) + (soul.count > 200 ? "..." : ""))
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(4)
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.primary.opacity(0.03))
+                    )
+                    .padding(.bottom, 8)
+                }
+
+                // Agent ID 输入
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.k("agent.create.form.agent_id", fallback: "Agent ID"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("agent_id", text: $dnaAgentId)
+                        .textFieldStyle(.roundedBorder)
+                    Text(L10n.k("agent.create.form.agent_id.preview", fallback: "实际 ID：") + effectiveDNAAgentId)
+                        .font(.caption)
+                        .foregroundColor(dnaAgentIdValid ? .secondary : .red)
+                }
+                .padding(.bottom, 8)
+
+                // 错误提示
+                if let error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .padding(.bottom, 8)
+                }
+
+                Spacer()
+
+                // 按钮
+                HStack {
+                    Spacer()
+                    Button(L10n.k("common.action.cancel", fallback: "取消")) { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                    Button(L10n.k("agent.create.confirm_import.action", fallback: "导入为角色")) {
+                        Task { await importFromDNA(dna) }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!dnaAgentIdValid || isCreating)
+                }
+            }
+        }
+    }
+
     // MARK: - 创建逻辑
 
     private func createAgent() async {
@@ -268,5 +470,102 @@ struct CreateAgentSheet: View {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    // MARK: - 从 DNA 导入
+
+    private func importFromDNA(_ dna: AgentDNA) async {
+        isCreating = true
+        defer { isCreating = false }
+
+        let id = effectiveDNAAgentId
+
+        let profile = AgentProfile(
+            id: id,
+            name: dna.name,
+            emoji: dna.emoji,
+            modelPrimary: nil,
+            workspacePath: nil,
+            isDefault: false
+        )
+
+        do {
+            // 1. 创建 agent 配置 + workspace 目录
+            try await helperClient.createAgent(username: username, config: profile)
+
+            // 2. 写入 persona 文件到 agent workspace
+            let wsDir = ".openclaw/workspace-\(id)"
+            if let soul = dna.fileSoul, !soul.isEmpty {
+                try? await helperClient.writeFile(username: username, relativePath: "\(wsDir)/SOUL.md", data: soul.data(using: .utf8) ?? Data())
+            }
+            if let identity = dna.fileIdentity, !identity.isEmpty {
+                try? await helperClient.writeFile(username: username, relativePath: "\(wsDir)/IDENTITY.md", data: identity.data(using: .utf8) ?? Data())
+            }
+            if let user = dna.fileUser, !user.isEmpty {
+                try? await helperClient.writeFile(username: username, relativePath: "\(wsDir)/USER.md", data: user.data(using: .utf8) ?? Data())
+            }
+
+            // 3. 重启 gateway 使新 agent 生效
+            try? await helperClient.restartGateway(username: username)
+
+            onCreated?(profile)
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - 独立的角色市场 WebView（不复用全局缓存，避免冲突）
+
+private struct CreateAgentMarketWebView: NSViewRepresentable {
+    let coordinator: RoleMarketCoordinator
+
+    func makeCoordinator() -> RoleMarketCoordinator { coordinator }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let localeIdentifier = resolvedMarketLocaleIdentifier()
+        let config = WKWebViewConfiguration()
+        let localeLiteral = jsonStringLiteral(localeIdentifier)
+        let bootstrap = "window.__clawdhomeLocale = \(localeLiteral);"
+        let script = WKUserScript(source: bootstrap, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        config.userContentController.addUserScript(script)
+        config.userContentController.add(context.coordinator, name: "ClawdHomeBridge")
+
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
+        webView.setValue(false, forKey: "drawsBackground")
+
+        if let url = Bundle.main.url(forResource: "roles", withExtension: "html") {
+            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        }
+
+        return webView
+    }
+
+    func updateNSView(_ nsView: WKWebView, context: Context) {}
+
+    // 解析当前 locale 标识符
+    private func resolvedMarketLocaleIdentifier() -> String {
+        let selected = UserDefaults.standard.string(forKey: "appLanguage") ?? AppLanguage.system.rawValue
+        guard let appLanguage = AppLanguage(rawValue: selected) else { return "en" }
+        switch appLanguage {
+        case .english: return "en"
+        case .chineseSimplified: return "zh-CN"
+        case .system:
+            let preferred = Locale.preferredLanguages.first?.lowercased() ?? "en"
+            return preferred.hasPrefix("zh") ? "zh-CN" : "en"
+        }
+    }
+
+    // 安全转义 JS 字符串字面量
+    private func jsonStringLiteral(_ value: String) -> String {
+        let data = try? JSONSerialization.data(withJSONObject: [value], options: [])
+        guard let data,
+              let encoded = String(data: data, encoding: .utf8),
+              encoded.count >= 2 else {
+            return "\"en\""
+        }
+        return String(encoded.dropFirst().dropLast())
     }
 }
