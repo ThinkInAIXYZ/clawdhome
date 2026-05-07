@@ -4,6 +4,7 @@
 //   - ClawdHome App 自身版本（官网 API）→ 提示管理员升级 App
 
 import AppKit
+import Darwin
 import Foundation
 import Observation
 
@@ -92,6 +93,7 @@ final class UpdateChecker {
         guard let url = URL(string: Self.openclawApiURL) else { return }
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
         req.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        req.setValue(buildUpdateUserAgent(), forHTTPHeaderField: "User-Agent")
 
         do {
             let (data, _) = try await URLSession.shared.data(for: req)
@@ -142,7 +144,8 @@ final class UpdateChecker {
 
     func checkApp() async {
         guard let url = URL(string: Self.appApiURL) else { return }
-        let req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
+        req.setValue(buildUpdateUserAgent(), forHTTPHeaderField: "User-Agent")
         do {
             let (data, _) = try await URLSession.shared.data(for: req)
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
@@ -296,6 +299,63 @@ final class UpdateChecker {
                 NSApp.terminate(nil)
             }
         }
+    }
+
+    private func buildUpdateUserAgent() -> String {
+        let osVersion = Self.systemVersionString()
+        let arch = Self.cpuArchitecture()
+        let cpuModel = Self.cpuModel()
+        let memory = Self.physicalMemoryString()
+        let build = currentAppBuild
+        return "ClawdHome/\(currentAppVersion) (\(build); macOS \(osVersion); \(arch); \(cpuModel); RAM \(memory))"
+    }
+
+    private var currentAppBuild: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
+    }
+
+    private static func systemVersionString() -> String {
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        return "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+    }
+
+    private static func cpuArchitecture() -> String {
+        var uts = utsname()
+        guard uname(&uts) == 0 else { return "unknown-arch" }
+        let capacity = MemoryLayout.size(ofValue: uts.machine)
+        return withUnsafePointer(to: &uts.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: capacity) {
+                String(cString: $0)
+            }
+        }
+    }
+
+    private static func cpuModel() -> String {
+        if let brand = sysctlString("machdep.cpu.brand_string"), !brand.isEmpty {
+            return brand
+        }
+        if let model = sysctlString("hw.model"), !model.isEmpty {
+            return model
+        }
+        return "unknown-cpu"
+    }
+
+    private static func physicalMemoryString() -> String {
+        let bytes = ProcessInfo.processInfo.physicalMemory
+        guard bytes > 0 else { return "unknown" }
+        let gib = Double(bytes) / 1_073_741_824.0
+        if gib >= 10 {
+            return "\(Int(gib.rounded()))GB"
+        }
+        return String(format: "%.1fGB", gib)
+    }
+
+    private static func sysctlString(_ name: String) -> String? {
+        var size: Int = 0
+        guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
+        var buffer = [CChar](repeating: 0, count: size)
+        guard sysctlbyname(name, &buffer, &size, nil, 0) == 0 else { return nil }
+        return String(cString: buffer)
     }
 
     enum UpdateError: LocalizedError {

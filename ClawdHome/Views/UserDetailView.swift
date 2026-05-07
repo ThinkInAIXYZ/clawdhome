@@ -214,8 +214,6 @@ struct UserDetailView: View {
     @State private var refreshStatusNeedsRerun = false
     @State private var refreshStatusGeneration: UInt64 = 0
     @State private var forceOnboardingAtEntry = false
-    @State private var shouldTemporarilyPinTopmost = false
-    @State private var topmostPulseTask: Task<Void, Never>? = nil
     private var isSelf: Bool { user.username == NSUserName() }
 
     /// HTTP probe + launchctl 综合判断是否运行中（任一来源确认即为 true）
@@ -301,15 +299,12 @@ struct UserDetailView: View {
         tabbedContent
         .navigationTitle(user.fullName.isEmpty ? user.username : user.fullName)
         .navigationSubtitle("@\(user.username)")
-        .background(UserDetailWindowLevelBinder(elevated: shouldTemporarilyPinTopmost))
+        .background(UserDetailWindowLevelBinder(elevated: shouldPinWindowTopmost))
         .onAppear {
             descriptionDraft = user.profileDescription
             if pool.consumeNeedsOnboarding(username: user.username) {
                 forceOnboardingAtEntry = true
                 versionChecked = false
-            }
-            if shouldPinWindowTopmost {
-                triggerTopmostPulse()
             }
         }
         .onChange(of: user.username) { _, _ in
@@ -325,26 +320,8 @@ struct UserDetailView: View {
             gatewayURL = nil
         }
         .onDisappear {
-            topmostPulseTask?.cancel()
-            topmostPulseTask = nil
-            shouldTemporarilyPinTopmost = false
             gatewayURLTokenPollTask?.cancel()
             gatewayURLTokenPollTask = nil
-        }
-        .onChange(of: shouldPinWindowTopmost) { _, newValue in
-            guard newValue else { return }
-            triggerTopmostPulse()
-        }
-    }
-
-    private func triggerTopmostPulse() {
-        topmostPulseTask?.cancel()
-        shouldTemporarilyPinTopmost = true
-        topmostPulseTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            guard !Task.isCancelled else { return }
-            shouldTemporarilyPinTopmost = false
-            topmostPulseTask = nil
         }
     }
 
@@ -998,24 +975,27 @@ struct UserDetailView: View {
             Text(L10n.k("user.detail.auto.configuration", fallback: "配置")).font(.headline)
             Divider().opacity(0.55)
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(L10n.k("user.detail.auto.model_configuration", fallback: "模型配置")).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
-                    if let def = defaultModel {
-                        Text(def)
-                            .font(.caption).foregroundStyle(.secondary)
-                            .lineLimit(1).truncationMode(.middle)
-                        if !fallbackModels.isEmpty {
-                            Text(L10n.f("views.user_detail_view.text_daa9c1c7", fallback: "+ %@ 备用", String(describing: fallbackModels.count)))
-                                .font(.caption).foregroundStyle(.tertiary)
+                HStack(alignment: .top, spacing: 8) {
+                    Text(L10n.k("user.detail.auto.model_configuration", fallback: "模型配置"))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 80, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let def = defaultModel {
+                            Text("当前：\(def)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else {
+                            Text(L10n.k("user.detail.auto.configuration", fallback: "未配置"))
+                                .foregroundStyle(.tertiary)
                         }
-                    } else {
-                        Text(L10n.k("user.detail.auto.configuration", fallback: "未配置")).foregroundStyle(.tertiary)
                     }
                     Spacer()
                     Button(L10n.k("user.detail.auto.manage", fallback: "管理")) { showModelConfig = true }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
-                        .disabled(!helperClient.isConnected)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                    .disabled(!helperClient.isConnected)
                 }
                 Divider()
                 HStack {
@@ -4157,12 +4137,16 @@ private enum DirectZAIModel: String, CaseIterable, Identifiable {
     }
 }
 
+private let userDetailModelConfigMaintenanceContext = "user-detail-model-config"
+
 private struct KimiMinimaxModelConfigPanel: View {
     let user: ManagedUser
     var onApplied: (() -> Void)? = nil
 
+    @Environment(\.openWindow) private var openWindow
     @Environment(HelperClient.self) private var helperClient
     @Environment(GatewayHub.self) private var gatewayHub
+    @Environment(MaintenanceWindowRegistry.self) private var maintenanceWindowRegistry
 
     @State private var isLoading = true
     @State private var isSaving = false
@@ -4174,6 +4158,26 @@ private struct KimiMinimaxModelConfigPanel: View {
     @State private var isShowingApiKey = false
     @State private var saveMessage: String? = nil
     @State private var saveError: String? = nil
+    @State private var currentDefaultModel: String? = nil
+    @State private var currentFallbackModels: [String] = []
+    @State private var configMode: ConfigMode = .builtinUI
+    @State private var activeModelConfigTerminalToken: String? = nil
+
+    private enum ConfigMode: String, CaseIterable, Identifiable {
+        case builtinUI
+        case cliMore
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .builtinUI: return "内置 UI"
+            case .cliMore: return "更多模型（命令行）"
+            }
+        }
+    }
+
+    private var isCurrentModelSupportedByUI: Bool {
+        isModelSupportedInDirectUI(currentDefaultModel)
+    }
 
     private var apiKeyBinding: Binding<String> {
         Binding(
@@ -4190,9 +4194,31 @@ private struct KimiMinimaxModelConfigPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(L10n.k("user.detail.auto.configurationmodels_api_key_kimi_minimax", fallback: "直接配置模型与 API Key（当前支持 Kimi / MiniMax / 七牛 AI）"))
+            Text(L10n.k("user.detail.model_config.builtin_ui_title", fallback: "内置模型配置（Kimi / MiniMax / Qiniu / Z.AI）"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+            if let currentDefaultModel {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("当前：\(currentDefaultModel)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(
+                        currentFallbackModels.isEmpty
+                        ? "降级：无"
+                        : "降级：\(currentFallbackModels.joined(separator: " · "))"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    Text("回退模型建议在命令行中管理。")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
 
             if isLoading {
                 HStack(spacing: 8) {
@@ -4202,146 +4228,174 @@ private struct KimiMinimaxModelConfigPanel: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Picker("Provider", selection: $selectedProvider) {
-                    ForEach(DirectProviderChoice.allCases) { provider in
-                        Text(provider.title).tag(provider)
+                Picker("配置方式", selection: $configMode) {
+                    ForEach(ConfigMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
 
-                VStack(alignment: .leading, spacing: 6) {
+                if configMode == .cliMore {
                     HStack(spacing: 6) {
-                        Text(selectedProvider.apiKeyLabel)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Spacer()
-                        if let promotionTitle = selectedProvider.promotionTitle,
-                           let promotionURL = selectedProvider.promotionURL {
+                        Label("更多模型", systemImage: "terminal")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("通过命令行交互配置，支持完整模型与回退策略。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("打开命令行配置") {
+                        openModelConfigTerminal()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                } else {
+                    if !isCurrentModelSupportedByUI {
+                        Label("当前模型来自“更多模型（命令行）”，可在下方切换到内置 UI 支持模型。", systemImage: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                    Picker("Provider", selection: $selectedProvider) {
+                        ForEach(DirectProviderChoice.allCases) { provider in
+                            Text(provider.title).tag(provider)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Text(selectedProvider.apiKeyLabel)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Spacer()
+                            if let promotionTitle = selectedProvider.promotionTitle,
+                               let promotionURL = selectedProvider.promotionURL {
+                                Button {
+                                    if let url = URL(string: promotionURL) {
+                                        NSWorkspace.shared.open(url)
+                                    }
+                                } label: {
+                                    Label(promotionTitle, systemImage: "gift")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(Color.accentColor)
+                            }
                             Button {
-                                if let url = URL(string: promotionURL) {
+                                if let url = URL(string: selectedProvider.consoleURL) {
                                     NSWorkspace.shared.open(url)
                                 }
                             } label: {
-                                Label(promotionTitle, systemImage: "gift")
+                                Label(selectedProvider.consoleTitle, systemImage: "arrow.up.right.square")
                                     .font(.caption)
                             }
                             .buttonStyle(.borderless)
                             .foregroundStyle(Color.accentColor)
                         }
-                        Button {
-                            if let url = URL(string: selectedProvider.consoleURL) {
-                                NSWorkspace.shared.open(url)
+
+                        HStack(spacing: 8) {
+                            Group {
+                                if isShowingApiKey {
+                                    TextField(selectedProvider.apiKeyPlaceholder, text: apiKeyBinding)
+                                } else {
+                                    SecureField(selectedProvider.apiKeyPlaceholder, text: apiKeyBinding)
+                                }
                             }
-                        } label: {
-                            Label(selectedProvider.consoleTitle, systemImage: "arrow.up.right.square")
-                                .font(.caption)
+                            .textFieldStyle(.roundedBorder)
+
+                            Button {
+                                isShowingApiKey.toggle()
+                            } label: {
+                                Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
+                            }
+                            .buttonStyle(.bordered)
+                            .help(isShowingApiKey ? L10n.k("user.detail.auto.hide", fallback: "隐藏") : L10n.k("user.detail.auto.show", fallback: "显示"))
                         }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(Color.accentColor)
                     }
 
-                    HStack(spacing: 8) {
-                        Group {
-                            if isShowingApiKey {
-                                TextField(selectedProvider.apiKeyPlaceholder, text: apiKeyBinding)
-                            } else {
-                                SecureField(selectedProvider.apiKeyPlaceholder, text: apiKeyBinding)
+                    if selectedProvider == .minimax {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(L10n.k("user.detail.auto.minimax_models", fallback: "MiniMax 模型"))
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedMinimaxModel) {
+                                ForEach(DirectMinimaxModel.allCases) { model in
+                                    Text(model.providerName).tag(model)
+                                }
                             }
+                            .pickerStyle(.menu)
+                            Text(selectedMinimaxModel.rawValue)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
                         }
-                        .textFieldStyle(.roundedBorder)
+                    } else if selectedProvider == .qiniu {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Qiniu AI 模型")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedQiniuModel) {
+                                ForEach(DirectQiniuModel.allCases) { model in
+                                    Text(model.alias).tag(model)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            Text(selectedQiniuModel.rawValue)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if selectedProvider == .zai {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("智谱 Z.AI 模型")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedZAIModel) {
+                                ForEach(DirectZAIModel.allCases) { model in
+                                    Text(model.alias).tag(model)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            Text(selectedZAIModel.rawValue)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L10n.k("user.detail.auto.kimi_models", fallback: "Kimi 当前固定模型"))
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Text("kimi-coding/k2p5")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
 
-                        Button {
-                            isShowingApiKey.toggle()
-                        } label: {
-                            Image(systemName: isShowingApiKey ? "eye.slash" : "eye")
+                    if let saveMessage {
+                        Label(saveMessage, systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
+
+                    if let saveError {
+                        Label(saveError, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    HStack {
+                        Button(L10n.k("user.detail.auto.reload", fallback: "重新读取")) {
+                            Task { await loadCurrentState() }
                         }
                         .buttonStyle(.bordered)
-                        .help(isShowingApiKey ? L10n.k("user.detail.auto.hide", fallback: "隐藏") : L10n.k("user.detail.auto.show", fallback: "显示"))
-                    }
-                }
+                        .disabled(isSaving)
 
-                if selectedProvider == .minimax {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L10n.k("user.detail.auto.minimax_models", fallback: "MiniMax 模型"))
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedMinimaxModel) {
-                            ForEach(DirectMinimaxModel.allCases) { model in
-                                Text(model.providerName).tag(model)
-                            }
+                        Spacer()
+
+                        Button(isSaving ? L10n.k("user.detail.auto.save", fallback: "保存中…") : L10n.k("user.detail.auto.save", fallback: "保存并应用")) {
+                            Task { await applyConfig() }
                         }
-                        .pickerStyle(.menu)
-                        Text(selectedMinimaxModel.rawValue)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isSaving || !canApply)
                     }
-                } else if selectedProvider == .qiniu {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Qiniu AI 模型")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedQiniuModel) {
-                            ForEach(DirectQiniuModel.allCases) { model in
-                                Text(model.alias).tag(model)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        Text(selectedQiniuModel.rawValue)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                } else if selectedProvider == .zai {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("智谱 Z.AI 模型")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Picker(L10n.k("user.detail.auto.models", fallback: "模型"), selection: $selectedZAIModel) {
-                            ForEach(DirectZAIModel.allCases) { model in
-                                Text(model.alias).tag(model)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        Text(selectedZAIModel.rawValue)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(L10n.k("user.detail.auto.kimi_models", fallback: "Kimi 当前固定模型"))
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Text("kimi-coding/k2p5")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if let saveMessage {
-                    Label(saveMessage, systemImage: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                }
-
-                if let saveError {
-                    Label(saveError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-
-                HStack {
-                    Button(L10n.k("user.detail.auto.reload", fallback: "重新读取")) {
-                        Task { await loadCurrentState() }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isSaving)
-
-                    Spacer()
-
-                    Button(isSaving ? L10n.k("user.detail.auto.save", fallback: "保存中…") : L10n.k("user.detail.auto.save", fallback: "保存并应用")) {
-                        Task { await applyConfig() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isSaving || !canApply)
                 }
             }
         }
@@ -4352,6 +4406,31 @@ private struct KimiMinimaxModelConfigPanel: View {
         .task {
             await loadCurrentState()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .maintenanceTerminalWindowClosed)) { notification in
+            guard let userInfo = notification.userInfo,
+                  let token = userInfo["token"] as? String,
+                  let context = userInfo["context"] as? String,
+                  context == userDetailModelConfigMaintenanceContext,
+                  token == activeModelConfigTerminalToken else { return }
+            activeModelConfigTerminalToken = nil
+            Task {
+                await loadCurrentState()
+                onApplied?()
+            }
+        }
+    }
+
+    private func openModelConfigTerminal() {
+        let completionToken = UUID().uuidString
+        activeModelConfigTerminalToken = completionToken
+        let payload = maintenanceWindowRegistry.makePayload(
+            username: user.username,
+            title: L10n.k("wizard.model_config.command.window_title", fallback: "模型配置命令行"),
+            command: ["openclaw", "configure", "--section", "model"],
+            completionToken: completionToken,
+            completionContext: userDetailModelConfigMaintenanceContext
+        )
+        openWindow(id: "maintenance-terminal", value: payload)
     }
 
     private func loadCurrentState() async {
@@ -4361,6 +4440,13 @@ private struct KimiMinimaxModelConfigPanel: View {
         saveError = nil
 
         let config = await helperClient.getConfigJSON(username: user.username)
+        if let status = await helperClient.getModelsStatus(username: user.username) {
+            currentDefaultModel = status.resolvedDefault ?? status.defaultModel
+            currentFallbackModels = status.fallbacks
+        } else {
+            currentDefaultModel = currentPrimaryModel(from: config)
+            currentFallbackModels = []
+        }
         if let primary = currentPrimaryModel(from: config) {
             if primary.hasPrefix("minimax/") {
                 selectedProvider = .minimax
@@ -4723,4 +4809,13 @@ private struct KimiMinimaxModelConfigPanel: View {
         let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
         try await helperClient.writeFile(username: user.username, relativePath: relativePath, data: data)
     }
+}
+
+private func isModelSupportedInDirectUI(_ modelId: String?) -> Bool {
+    guard let modelId, !modelId.isEmpty else { return true }
+    if modelId.hasPrefix("kimi-coding/") { return true }
+    if DirectMinimaxModel(rawValue: modelId) != nil { return true }
+    if DirectQiniuModel(rawValue: modelId) != nil { return true }
+    if DirectZAIModel(rawValue: modelId) != nil { return true }
+    return false
 }
