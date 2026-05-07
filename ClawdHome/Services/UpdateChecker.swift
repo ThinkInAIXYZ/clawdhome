@@ -25,7 +25,7 @@ final class UpdateChecker {
     private static let udKeyLatestVersion     = "updateChecker.latestVersion"
     private static let udKeyLatestReleaseURL  = "updateChecker.latestReleaseURL"
     private static let openclawApiURL         = "https://api.github.com/repos/openclaw/openclaw/releases/latest"
-    /// openclaw 发布节奏较快，缓存 24h 会导致“当天发版当天看不到”。
+    /// openclaw 发布节奏较快，缓存 24h 会导致"当天发版当天看不到"。
     /// 采用 1h 节流 + 后台轮询，兼顾及时性和 GitHub API 负载。
     private let openclawCacheInterval: TimeInterval = 3600
 
@@ -62,7 +62,7 @@ final class UpdateChecker {
     private static let appApiURL            = "https://clawdhome.app/api/version.json"
     private let appCacheInterval: TimeInterval = 24 * 3600
 
-    // MARK: - 初始化（从缓存恢复，避免启动时显示L10n.k("services.update_checker.text_f013ea9d", fallback: "加载中")）
+    // MARK: - 初始化（从缓存恢复，避免启动时显示"加载中"）
 
     init() {
         // openclaw 缓存
@@ -173,7 +173,7 @@ final class UpdateChecker {
         guard let url = URL(string: Self.appApiURL) else { return }
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
         req.setValue(buildUpdateUserAgent(), forHTTPHeaderField: "User-Agent")
-        req.setValue(Self.preferredSystemLanguage(), forHTTPHeaderField: "X-ClawdHome-System-Language")
+        req.setValue(buildClientHeader(), forHTTPHeaderField: "X-ClawdHome-Client")
         do {
             let (data, _) = try await URLSession.shared.data(for: req)
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
@@ -370,9 +370,28 @@ final class UpdateChecker {
         let arch = Self.cpuArchitecture()
         let cpuModel = Self.cpuModel()
         let memory = Self.physicalMemoryString()
-        let build = currentAppBuild
         let language = Self.preferredSystemLanguage()
-        return "ClawdHome/\(currentAppVersion) (\(build); macOS \(osVersion); \(arch); \(cpuModel); RAM \(memory); lang \(language))"
+        return "ClawdHome/\(currentAppVersion) (macOS \(osVersion); \(arch); \(cpuModel); \(memory); \(language))"
+    }
+
+    private func buildClientHeader() -> String {
+        let appVersion = currentAppVersion
+        let language = Self.preferredSystemLanguage()
+        let cpu = Self.cpuModel().replacingOccurrences(of: ";", with: ",")
+        let clientID = Self.readClientID()
+        return "id=\(clientID); app=\(appVersion); lang=\(language); os=\(Self.systemVersionString()); arch=\(Self.cpuArchitecture()); cpu=\(cpu); ram=\(Self.physicalMemoryString())"
+    }
+
+    /// 读取 helper 写入的持久 UUID（只读，644 权限，app 可访问）
+    private static func readClientID() -> String {
+        let path = "/var/lib/clawdhome/client-id"
+        if let id = try? String(contentsOfFile: path, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !id.isEmpty {
+            return id
+        }
+        // helper 尚未初始化时临时用 UUID，不持久化（以免与 helper 的 ID 冲突）
+        return "unset"
     }
 
     private var currentAppBuild: String {
@@ -454,7 +473,7 @@ final class UpdateChecker {
         users.filter { needsUpdate($0.openclawVersion) }.count
     }
 
-    /// 逐段比较版本号（支持 "YYYY.M.DL10n.k("services.update_checker.text_ed4b80bf", fallback: " 和 ")1.0.180" 两种格式）
+    /// 逐段比较版本号（支持 "YYYY.M.D" 和 "1.0.180" 两种格式）
     private func compareVersions(_ a: String, _ b: String) -> ComparisonResult {
         let av = a.split(separator: ".").compactMap { Int($0) }
         let bv = b.split(separator: ".").compactMap { Int($0) }

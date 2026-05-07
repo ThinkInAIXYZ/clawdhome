@@ -13,9 +13,9 @@ struct CustomProviderFormFields: View {
     @Binding var providerId: String
 
     /// API Key 占位文字
-    var apiKeyPlaceholder: String = "留空则尝试使用 CUSTOM_API_KEY"
+    var apiKeyPlaceholder: String = L10n.k("views.custom_provider.api_key_placeholder", fallback: "留空则尝试使用 CUSTOM_API_KEY")
     /// 模型 ID 占位文字
-    var modelIdPlaceholder: String = "输入模型 ID（例如 gpt-4.1 / claude-3-7-sonnet）"
+    var modelIdPlaceholder: String = L10n.k("views.custom_provider.model_id_placeholder", fallback: "输入模型 ID（例如 gpt-4.1 / claude-3-7-sonnet）")
 
     /// 是否显示兼容类型选择器（ModelPrioritySheet 需要，UserDetailView 已有独立的）
     var showCompatibilityPicker: Bool = true
@@ -83,7 +83,7 @@ struct CustomProviderFormFields: View {
                 .font(.system(.body, design: .monospaced))
 
             HStack(spacing: 8) {
-                Button(isFetchingModels ? "拉取中…" : "从 API 拉取列表") {
+                Button(isFetchingModels ? L10n.k("views.custom_provider.fetching", fallback: "拉取中…") : L10n.k("views.custom_provider.fetch_from_api", fallback: "从 API 拉取列表")) {
                     Task { await fetchModels() }
                 }
                 .buttonStyle(.bordered)
@@ -134,7 +134,7 @@ struct CustomProviderFormFields: View {
     private func fetchModels() async {
         let trimmedURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedURL.isEmpty else {
-            fetchError = "请先填写有效的 Base URL"
+            fetchError = L10n.k("views.custom_provider.invalid_base_url", fallback: "请先填写有效的 Base URL")
             fetchMessage = nil
             return
         }
@@ -152,14 +152,14 @@ struct CustomProviderFormFields: View {
             )
             if ids.isEmpty {
                 modelSuggestions = []
-                fetchMessage = "已请求成功，但未解析到可用模型 ID（该接口可能不支持标准 list）"
+                fetchMessage = L10n.k("views.custom_provider.no_models_found", fallback: "已请求成功，但未解析到可用模型 ID（该接口可能不支持标准 list）")
                 return
             }
             modelSuggestions = ids
             if modelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let first = ids.first {
                 modelId = first
             }
-            fetchMessage = "已拉取 \(ids.count) 个模型"
+            fetchMessage = L10n.f("views.custom_provider.models_fetched", fallback: "已拉取 %d 个模型", ids.count)
         } catch {
             fetchError = error.localizedDescription
         }

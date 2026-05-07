@@ -65,6 +65,22 @@ extension View {
     }
 }
 
+struct OpenClawLogoMark: View {
+    var body: some View {
+        Image("OpenClawLogo")
+            .resizable()
+            .scaledToFit()
+    }
+}
+
+struct HermesLogoMark: View {
+    var body: some View {
+        Image("HermesLogo")
+            .resizable()
+            .scaledToFit()
+    }
+}
+
 struct GatewayActivationCard: View {
     let progress: Double
     let isAnimating: Bool
@@ -108,8 +124,8 @@ struct GatewayActivationCard: View {
                     .shadow(color: Color.accentColor.opacity(0.14), radius: 28, x: 0, y: 14)
                     .frame(width: 160, height: 160)
 
-                Text("🦞")
-                    .font(.system(size: 68))
+                OpenClawLogoMark()
+                    .frame(width: 68, height: 68)
                     .offset(y: isShrimpLifted ? -5 : 5)
                     .scaleEffect(isShrimpLifted ? 1.03 : 0.98)
             }
@@ -225,8 +241,8 @@ struct EnvironmentSetupWaitingCard: View {
                         }
 
                         ZStack {
-                            Text("🦞")
-                                .font(.system(size: 48))
+                            OpenClawLogoMark()
+                                .frame(width: 48, height: 48)
                                 .offset(x: -2, y: isSceneLifted ? -6 : 6)
                                 .scaleEffect(isSceneLifted ? 1.03 : 0.98)
 

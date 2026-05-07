@@ -13,9 +13,13 @@ enum GatewayStartDiagnosis {
 @Observable
 final class HelperClient {
     private var controlConnection: NSXPCConnection?
+    /// 维护终端专用连接，避免与通用控制操作互相阻塞导致 PTY 轮询超时
+    private var maintenanceConnection: NSXPCConnection?
     /// Gateway 生命周期操作专用连接，避免与通用控制调用互相阻塞
     private var gatewayConnection: NSXPCConnection?
     private var dashboardConnection: NSXPCConnection?
+    /// 详情页/列表页首屏元数据读取专用连接，避免与控制通道串行阻塞
+    private var metadataConnection: NSXPCConnection?
     /// 专用于长时间安装/升级操作，避免阻塞 controlConnection 上的其他 XPC 调用
     private var installConnection: NSXPCConnection?
     /// 文件管理专用连接，避免与控制操作互相阻塞
@@ -101,8 +105,10 @@ final class HelperClient {
         guard connectionGeneration == generation else { return }
         switch label {
         case "control": controlConnection = nil
+        case "maintenance": maintenanceConnection = nil
         case "gateway": gatewayConnection = nil
         case "dashboard": dashboardConnection = nil
+        case "metadata": metadataConnection = nil
         case "install": installConnection = nil
         case "file": fileConnection = nil
         case "process": processConnection = nil
@@ -137,16 +143,20 @@ final class HelperClient {
 
         // 先清理旧连接
         controlConnection?.invalidate()
+        maintenanceConnection?.invalidate()
         gatewayConnection?.invalidate()
         dashboardConnection?.invalidate()
+        metadataConnection?.invalidate()
         installConnection?.invalidate()
         fileConnection?.invalidate()
         processConnection?.invalidate()
         personaReadConnection?.invalidate()
 
         controlConnection = makeConnection(label: "control", generation: gen, affectsConnectivity: true)
+        maintenanceConnection = makeConnection(label: "maintenance", generation: gen)
         gatewayConnection = makeConnection(label: "gateway", generation: gen)
         dashboardConnection = makeConnection(label: "dashboard", generation: gen)
+        metadataConnection = makeConnection(label: "metadata", generation: gen)
         installConnection = makeConnection(label: "install", generation: gen)
         fileConnection = makeConnection(label: "file", generation: gen)
         processConnection = makeConnection(label: "process", generation: gen)
@@ -158,8 +168,10 @@ final class HelperClient {
         connectionGeneration &+= 1
         verifyInFlightGeneration = nil
         controlConnection?.invalidate(); controlConnection = nil
+        maintenanceConnection?.invalidate(); maintenanceConnection = nil
         gatewayConnection?.invalidate(); gatewayConnection = nil
         dashboardConnection?.invalidate(); dashboardConnection = nil
+        metadataConnection?.invalidate(); metadataConnection = nil
         installConnection?.invalidate(); installConnection = nil
         fileConnection?.invalidate(); fileConnection = nil
         processConnection?.invalidate(); processConnection = nil
@@ -203,7 +215,7 @@ final class HelperClient {
                         level: .warn
                     )
                 }
-                // 超时类失败在长阻塞任务（如 install/diagnostics）期间可能是“假断连”。
+                // 超时类失败在长阻塞任务（如 install/diagnostics）期间可能是"假断连"。
                 // 若当前已连接，则保持连接状态，避免 maintainConnection 触发重连风暴。
                 if connected {
                     self.isConnected = true
@@ -301,11 +313,25 @@ final class HelperClient {
         return proxyWithLogging(gatewayConnection)
     }
 
+    private var maintenanceProxy: (any ClawdHomeHelperProtocol)? {
+        if maintenanceConnection == nil, isConnected {
+            maintenanceConnection = makeConnection(label: "maintenance", generation: connectionGeneration)
+        }
+        return proxyWithLogging(maintenanceConnection)
+    }
+
     private var dashboardProxy: (any ClawdHomeHelperProtocol)? {
         if dashboardConnection == nil, isConnected {
             dashboardConnection = makeConnection(label: "dashboard", generation: connectionGeneration)
         }
         return proxyWithLogging(dashboardConnection)
+    }
+
+    private var metadataProxy: (any ClawdHomeHelperProtocol)? {
+        if metadataConnection == nil, isConnected {
+            metadataConnection = makeConnection(label: "metadata", generation: connectionGeneration)
+        }
+        return proxyWithLogging(metadataConnection)
     }
 
     private var installProxy: (any ClawdHomeHelperProtocol)? {
@@ -383,7 +409,7 @@ final class HelperClient {
         let effectiveSeconds = XPCTimeoutPolicy.effectiveTimeoutSeconds(requested: requestedSeconds)
         return try await requestWithTimeout(
             timeout: timeout,
-            timeoutMessage: "XPC 调用超时（\(effectiveSeconds)s，基础 \(requestedSeconds)s + 冗余 \(effectiveSeconds - requestedSeconds)s）",
+            timeoutMessage: L10n.f("services.helper_client.xpc_timeout", fallback: "XPC 调用超时（%ds，基础 %ds + 冗余 %ds）", effectiveSeconds, requestedSeconds, effectiveSeconds - requestedSeconds),
             operation: operation
         )
     }
@@ -420,7 +446,7 @@ final class HelperClient {
         let (ok, msg): (Bool, String?) = try await xpcCall { done in
             proxy.setupVault(username: username) { ok, msg in done((ok, msg)) }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? "Vault 初始化失败") }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.vault_init_failed", fallback: "Vault 初始化失败")) }
     }
 
     /// 删除用户（由 Helper 以 root 执行）
@@ -631,16 +657,317 @@ final class HelperClient {
     // MARK: - 版本查询
 
     /// 查询指定用户已安装的 openclaw 版本，未安装返回 nil
-    func getOpenclawVersion(username: String) async -> String? {
-        guard let proxy = controlProxy else { return nil }
+    func getOpenclawVersion(
+        username: String,
+        timeout: Duration = HelperClient.xpcDefaultTimeout
+    ) async -> String? {
+        guard let proxy = metadataProxy else { return nil }
         do {
-            let v: String = try await xpcCall { done in
+            let v: String = try await xpcCall(timeout: timeout) { done in
                 proxy.getOpenclawVersion(username: username) { version in
                     done(version)
                 }
             }
             return v.isEmpty ? nil : v
         } catch { return nil }
+    }
+
+    // MARK: - Hermes Agent 引擎
+
+    /// 为指定用户安装 Hermes Agent（通过 Helper 调用官方 install.sh）
+    func installHermes(username: String, version: String? = nil) async throws {
+        guard let proxy = installProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.installHermes(username: username, version: version) { ok, msg in
+                done((ok, msg))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "Hermes 安装失败") }
+    }
+
+    /// 取消正在进行的 Hermes 安装
+    func cancelHermesInstall(username: String) async {
+        guard let proxy = controlProxy else { return }
+        _ = try? await xpcCall { (done: @escaping (Bool) -> Void) in
+            proxy.cancelHermesInstall(username: username) { done($0) }
+        }
+    }
+
+    /// 查询指定用户已安装的 Hermes 版本，未安装返回 nil
+    func getHermesVersion(
+        username: String,
+        timeout: Duration = HelperClient.xpcDefaultTimeout
+    ) async -> String? {
+        guard let proxy = metadataProxy else { return nil }
+        do {
+            let v: String = try await xpcCall(timeout: timeout) { done in
+                proxy.getHermesVersion(username: username) { version in done(version) }
+            }
+            return v.isEmpty ? nil : v
+        } catch { return nil }
+    }
+
+    /// 启动 Hermes gateway（profile-aware）
+    func startHermesGateway(username: String, profileID: String) async throws {
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.startHermesGateway(username: username, profileID: profileID) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "Hermes 启动失败") }
+    }
+
+    /// 启动 Hermes gateway（main profile，向后兼容）
+    func startHermesGateway(username: String) async throws {
+        try await startHermesGateway(username: username, profileID: "main")
+    }
+
+    /// 停止 Hermes gateway（profile-aware）
+    func stopHermesGateway(username: String, profileID: String) async throws {
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.stopHermesGateway(username: username, profileID: profileID) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? "Hermes 停止失败") }
+    }
+
+    /// 停止 Hermes gateway（main profile，向后兼容）
+    func stopHermesGateway(username: String) async throws {
+        try await stopHermesGateway(username: username, profileID: "main")
+    }
+
+    /// 查询 Hermes gateway 状态（profile-aware）
+    func getHermesGatewayStatus(username: String, profileID: String) async -> (running: Bool, pid: Int32) {
+        guard let proxy = controlProxy else { return (false, -1) }
+        do {
+            return try await xpcCall { done in
+                proxy.getHermesGatewayStatus(username: username, profileID: profileID) { running, pid in
+                    done((running, pid))
+                }
+            }
+        } catch { return (false, -1) }
+    }
+
+    /// 查询 Hermes gateway 状态（main profile，向后兼容）
+    func getHermesGatewayStatus(username: String) async -> (running: Bool, pid: Int32) {
+        await getHermesGatewayStatus(username: username, profileID: "main")
+    }
+
+    /// 卸载 Hermes gateway plist（profile-aware）
+    func uninstallHermesGateway(username: String, profileID: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else {
+            return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
+        }
+        do {
+            return try await xpcCall { done in
+                proxy.uninstallHermesGateway(username: username, profileID: profileID) { ok, err in
+                    done((ok, err))
+                }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 应用 Hermes 初始化配置（profile-aware）
+    func applyHermesInitConfig(username: String, profileID: String, payloadJSON: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else {
+            return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
+        }
+        do {
+            return try await xpcCall { done in
+                proxy.applyHermesInitConfig(username: username, profileID: profileID, payloadJSON: payloadJSON) { ok, err in
+                    done((ok, err))
+                }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 应用 Hermes 初始化配置（main profile，向后兼容）
+    func applyHermesInitConfig(username: String, payloadJSON: String) async -> (Bool, String?) {
+        await applyHermesInitConfig(username: username, profileID: "main", payloadJSON: payloadJSON)
+    }
+
+    /// 读取 Hermes 初始化摘要（profile-aware）
+    func getHermesInitSummary(username: String, profileID: String) async -> String? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            return try await xpcCall { done in
+                proxy.getHermesInitSummary(username: username, profileID: profileID) { json in
+                    done(json)
+                }
+            }
+        } catch { return nil }
+    }
+
+    /// 读取 Hermes 初始化摘要（main profile，向后兼容）
+    func getHermesInitSummary(username: String) async -> String? {
+        await getHermesInitSummary(username: username, profileID: "main")
+    }
+
+    /// 校验 Hermes 初始化配置（profile-aware），Bool 仅表示 RPC 是否成功执行
+    func validateHermesInitConfig(username: String, profileID: String) async -> (Bool, String)? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            return try await xpcCall { done in
+                proxy.validateHermesInitConfig(username: username, profileID: profileID) { ok, report in
+                    done((ok, report))
+                }
+            }
+        } catch { return nil }
+    }
+
+    /// 校验 Hermes 初始化配置（main profile，向后兼容）
+    func validateHermesInitConfig(username: String) async -> (Bool, String)? {
+        await validateHermesInitConfig(username: username, profileID: "main")
+    }
+
+    /// 列出 Hermes profiles（映射为 [AgentProfile]，main=default profile）
+    func listHermesProfiles(username: String) async throws -> [AgentProfile] {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (json, err): (String?, String?) = try await xpcCall { done in
+            proxy.listHermesProfiles(username: username) { j, e in
+                done((j, e))
+            }
+        }
+        if let err { throw HelperError.operationFailed(err) }
+        guard let json, let data = json.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([AgentProfile].self, from: data)) ?? []
+    }
+
+    /// 创建/更新 Hermes profile（id="main" 时更新 default profile 元信息）
+    func createHermesProfile(username: String, config: AgentProfile) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let configJSON = String(data: try JSONEncoder().encode(config), encoding: .utf8) ?? "{}"
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.createHermesProfile(username: username, configJSON: configJSON) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? "创建 Hermes profile 失败") }
+    }
+
+    /// 获取当前 Hermes 活跃 profile（返回 profile id；默认 "main"）
+    func getHermesActiveProfile(username: String) async -> String {
+        guard let proxy = controlProxy else { return "main" }
+        do {
+            let value: String = try await xpcCall { done in
+                proxy.getHermesActiveProfile(username: username) { done($0) }
+            }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "main" : trimmed
+        } catch {
+            return "main"
+        }
+    }
+
+    /// 设置 Hermes 活跃 profile（profileID: main 或命名 profile）
+    func setHermesActiveProfile(username: String, profileID: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.setHermesActiveProfile(username: username, profileID: profileID) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? "切换 Hermes profile 失败") }
+    }
+
+    /// 删除 Hermes profile（不允许删除 main）
+    func removeHermesProfile(username: String, profileID: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.removeHermesProfile(username: username, profileID: profileID) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? "删除 Hermes profile 失败") }
+    }
+
+    // MARK: - Hermes 自启白名单（F2）
+
+    /// 读取指定用户的 Hermes profile 自启白名单（JSON 字符串）
+    /// 失败或未连接时返回 nil
+    func getHermesAutostartWhitelist(username: String) async -> String? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            return try await xpcCall { done in
+                proxy.getHermesAutostartWhitelist(username: username) { json in done(json) }
+            }
+        } catch { return nil }
+    }
+
+    /// 设置指定 profile 的开机自启开关（enabled=true 加入白名单，false 移除）
+    func setHermesAutostartProfile(username: String, profileID: String, enabled: Bool) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.setHermesAutostartProfile(username: username, profileID: profileID, enabled: enabled) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? "设置 Hermes 自启失败") }
+    }
+
+    // MARK: - Hermes IM 绑定（PR-3）
+
+    /// 写入 IM 平台 token 到 profile 的 .env；失败返回 (false, errorMessage)
+    func applyHermesIMBinding(username: String, profileID: String, payloadJSON: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else {
+            return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
+        }
+        do {
+            return try await xpcCall { done in
+                proxy.applyHermesIMBinding(username: username, profileID: profileID, payloadJSON: payloadJSON) { ok, err in
+                    done((ok, err))
+                }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 执行 hermes doctor，返回结构化 JSON 字符串（{ok, platforms, raw}）
+    func runHermesDoctor(username: String, profileID: String) async -> String {
+        guard let proxy = controlProxy else {
+            return #"{"ok":false,"platforms":{},"raw":"not_connected"}"#
+        }
+        do {
+            return try await xpcCall(timeout: HelperClient.xpcDefaultTimeout) { done in
+                proxy.runHermesDoctor(username: username, profileID: profileID) { json in done(json) }
+            }
+        } catch {
+            return #"{"ok":false,"platforms":{},"raw":"xpc_timeout"}"#
+        }
+    }
+
+    // MARK: - Hermes 向导进度位图（PR-3）
+
+    /// 读取进度位图 JSON；文件不存在时返回默认骨架
+    func getHermesWizardState(username: String, profileID: String) async -> String? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            return try await xpcCall { done in
+                proxy.getHermesWizardState(username: username, profileID: profileID) { json in done(json) }
+            }
+        } catch { return nil }
+    }
+
+    /// 以 deep-merge 方式更新进度位图
+    func updateHermesWizardState(username: String, profileID: String, patchJSON: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else {
+            return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
+        }
+        do {
+            return try await xpcCall { done in
+                proxy.updateHermesWizardState(username: username, profileID: profileID, patchJSON: patchJSON) { ok, err in
+                    done((ok, err))
+                }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 清空进度位图（重置为骨架）
+    func clearHermesWizardState(username: String, profileID: String) async -> Bool {
+        guard let proxy = controlProxy else { return false }
+        do {
+            return try await xpcCall { done in
+                proxy.clearHermesWizardState(username: username, profileID: profileID) { ok in done(ok) }
+            }
+        } catch { return false }
     }
 
     // MARK: - 用户环境初始化
@@ -675,7 +1002,7 @@ final class HelperClient {
     /// 指定用户 Node.js 是否已安装就绪（用于控制 npm 相关操作）
     /// 注意：保留手动兜底机制，兼容旧版 Helper 回调丢失的情况
     func isNodeInstalled(username: String) async -> Bool {
-        guard let proxy = controlProxy else { return false }
+        guard let proxy = metadataProxy else { return false }
         return await withCheckedContinuation { cont in
             let lock = NSLock()
             var resolved = false
@@ -781,7 +1108,7 @@ final class HelperClient {
 
     /// 读取 npm 安装源（优先用户级配置）
     func getNpmRegistry(username: String) async -> String {
-        guard let proxy = controlProxy else { return NpmRegistryOption.npmOfficial.rawValue }
+        guard let proxy = metadataProxy else { return NpmRegistryOption.npmOfficial.rawValue }
         do {
             return try await xpcCall { done in
                 proxy.getNpmRegistry(username: username) { done($0) }
@@ -810,7 +1137,7 @@ final class HelperClient {
 
     /// 读取向导进度 JSON（文件不存在返回空字符串）
     func loadInitState(username: String) async -> String {
-        guard let proxy = controlProxy else { return "" }
+        guard let proxy = metadataProxy else { return "" }
         do {
             return try await xpcCall { done in
                 proxy.loadInitState(username: username) { done($0) }
@@ -994,12 +1321,53 @@ final class HelperClient {
 
     /// 返回用户 gateway 的访问 URL
     func getGatewayURL(username: String) async -> String {
-        guard let proxy = gatewayProxy else { return "" }
-        do {
-            return try await xpcCall { done in
+        func requestURL(using proxy: any ClawdHomeHelperProtocol, timeout: Duration) async throws -> String {
+            try await xpcCall(timeout: timeout) { done in
                 proxy.getGatewayURL(username: username) { done($0) }
             }
-        } catch { return "" }
+        }
+
+        // 第 1 次：走 gateway 专用通道（快路径）
+        if let proxy = gatewayProxy,
+           let url = try? await requestURL(using: proxy, timeout: .seconds(6)),
+           !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return url
+        }
+
+        // 自愈：gateway 通道可能进入“半卡死”状态，重建后重试 1 次
+        appLog("[HelperClient] getGatewayURL gateway channel timeout/failure, rebuild and retry @\(username)", level: .warn)
+        gatewayConnection?.invalidate()
+        gatewayConnection = nil
+        if isConnected {
+            gatewayConnection = makeConnection(label: "gateway", generation: connectionGeneration)
+        }
+        if let proxy = gatewayProxy,
+           let url = try? await requestURL(using: proxy, timeout: .seconds(6)),
+           !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return url
+        }
+
+        // 兜底：改走 control 通道，避免单一子通道故障导致 UI 白屏
+        if let proxy = controlProxy,
+           let url = try? await requestURL(using: proxy, timeout: .seconds(6)),
+           !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            appLog("[HelperClient] getGatewayURL fallback to control channel succeeded @\(username)", level: .warn)
+            return url
+        }
+
+        // 终极自愈：若所有通道均失败，重建整套 XPC 连接后再试一次。
+        // 目标：覆盖“App 重启无效、仅 Helper 子通道卡死”的情况，避免用户必须手动重启 Helper。
+        appLog("[HelperClient] getGatewayURL all channels failed, reconnecting helper channels @\(username)", level: .error)
+        connect(reason: "getGatewayURL self-heal reconnect @\(username)")
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        if let proxy = controlProxy,
+           let url = try? await requestURL(using: proxy, timeout: .seconds(6)),
+           !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            appLog("[HelperClient] getGatewayURL recovered after full reconnect @\(username)", level: .warn)
+            return url
+        }
+
+        return ""
     }
 
     // MARK: - 仪表盘
@@ -1124,6 +1492,13 @@ final class HelperClient {
     func setConfigDirect(username: String, path: String, value: Any) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
         let valueJSON = try serializeJSONValue(value)
+        try await setConfigDirectJSON(username: username, path: path, valueJSON: valueJSON)
+    }
+
+    /// 直接写入 ~/.openclaw/openclaw.json 指定 dot-path（不启动 CLI）
+    /// valueJSON 必须是合法 JSON（可为 fragment）
+    func setConfigDirectJSON(username: String, path: String, valueJSON: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = try await xpcCall { done in
             proxy.setConfigDirect(username: username, path: path, valueJSON: valueJSON) { ok, msg in
                 done((ok, msg))
@@ -1172,6 +1547,10 @@ final class HelperClient {
     func applySavedProxySettingsIfAny(username: String) async throws {
         let defaults = UserDefaults.standard
         let enabled = defaults.bool(forKey: "proxyEnabled")
+        // 未启用代理时，新用户无任何代理设置需清除，直接返回。
+        // 这也避免了对无活跃 launchd 会话的新用户执行 launchctl asuser，防止进程挂起。
+        guard enabled else { return }
+
         let scheme = (defaults.string(forKey: "proxyScheme") ?? "http").trimmingCharacters(in: .whitespacesAndNewlines)
         let host = (defaults.string(forKey: "proxyHost") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let port = (defaults.string(forKey: "proxyPort") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1179,19 +1558,15 @@ final class HelperClient {
         let proxyUsername = (defaults.string(forKey: "proxyUsername") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let proxyPassword = (defaults.string(forKey: "proxyPassword") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
-        var proxyValue = ""
-        if enabled {
-            guard !host.isEmpty, Int(port) != nil else { return }
-            let auth = proxyUsername.isEmpty ? "" : "\(proxyUsername):\(proxyPassword)@"
-            proxyValue = "\(scheme)://\(auth)\(host):\(port)"
-        }
-        let noProxyValue = enabled ? noProxy : ""
+        guard !host.isEmpty, Int(port) != nil else { return }
+        let auth = proxyUsername.isEmpty ? "" : "\(proxyUsername):\(proxyPassword)@"
+        let proxyValue = "\(scheme)://\(auth)\(host):\(port)"
 
         try await applyProxySettings(
             username: username,
-            enabled: enabled,
+            enabled: true,
             proxyURL: proxyValue,
-            noProxy: noProxyValue,
+            noProxy: noProxy,
             restartGatewayIfRunning: false
         )
     }
@@ -1298,9 +1673,65 @@ final class HelperClient {
         }
     }
 
+    // MARK: - OpenClaw 插件管理 (v2)
+
+    /// 安装 openclaw plugin（plugins install <packageSpec>），仅插件安装，不执行 bot 绑定
+    func installOpenclawPlugin(username: String, packageSpec: String) async -> (Bool, String?) {
+        guard let proxy = installProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        do {
+            return try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+                proxy.installOpenclawPlugin(username: username, packageSpec: packageSpec) { ok, err in
+                    done((ok, err))
+                }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 列出已安装的 openclaw plugins，返回 JSON 编码的 [String]
+    func listOpenclawPlugins(username: String) async -> (String?, String?) {
+        guard let proxy = controlProxy else { return (nil, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        do {
+            return try await xpcCall { done in
+                proxy.listOpenclawPlugins(username: username) { json, err in done((json, err)) }
+            }
+        } catch { return (nil, error.localizedDescription) }
+    }
+
+    /// 移除 openclaw plugin
+    func removeOpenclawPlugin(username: String, packageSpec: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        do {
+            return try await xpcCall { done in
+                proxy.removeOpenclawPlugin(username: username, packageSpec: packageSpec) { ok, err in done((ok, err)) }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 执行 openclaw channels login（标准通道登录，微信/WhatsApp/Tlon）
+    /// args 示例：["--channel", "openclaw-weixin", "--account", "wechat-work"]
+    func runChannelLogin(username: String, args: [String]) async -> (Bool, String) {
+        guard let proxy = installProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        let argsJSON = (try? String(data: JSONEncoder().encode(args), encoding: .utf8)) ?? "[]"
+        do {
+            return try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+                proxy.runChannelLogin(username: username, argsJSON: argsJSON) { ok, out in done((ok, out)) }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
+    /// 批量写入 ShrimpConfigV2 JSON 到指定用户的 openclaw.json（v2）
+    func applyV2Config(username: String, configJSON: String) async -> (Bool, String?) {
+        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        do {
+            return try await xpcCall { done in
+                proxy.applyV2Config(username: username, configJSON: configJSON) { ok, err in done((ok, err)) }
+            }
+        } catch { return (false, error.localizedDescription) }
+    }
+
     /// 启动通用维护终端会话（Helper 侧 PTY）
     func startMaintenanceTerminalSession(username: String, command: [String]) async -> (Bool, String, String?) {
-        guard let proxy = controlProxy else { return (false, "", L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        guard let proxy = maintenanceProxy else { return (false, "", L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         let commandJSON = (try? String(data: JSONEncoder().encode(command), encoding: .utf8)) ?? "[]"
         appLog("[maintenance] session start request @\(username) cmd=\(command.joined(separator: " "))")
         do {
@@ -1323,7 +1754,7 @@ final class HelperClient {
     /// 轮询通用维护终端会话输出
     func pollMaintenanceTerminalSession(sessionID: String, fromOffset: Int64) async
     -> (Bool, Data, Int64, Bool, Int32, String?) {
-        guard let proxy = controlProxy else {
+        guard let proxy = maintenanceProxy else {
             return (false, Data(), fromOffset, true, -1, L10n.k("services.helper_client.disconnected", fallback: "未连接"))
         }
         do {
@@ -1340,7 +1771,7 @@ final class HelperClient {
 
     /// 向通用维护终端会话发送输入
     func sendMaintenanceTerminalSessionInput(sessionID: String, input: Data) async -> (Bool, String?) {
-        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        guard let proxy = maintenanceProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         let base64 = input.base64EncodedString()
         do {
             return try await xpcCall { done in
@@ -1353,7 +1784,7 @@ final class HelperClient {
 
     /// 调整通用维护终端会话终端尺寸
     func resizeMaintenanceTerminalSession(sessionID: String, cols: Int, rows: Int) async -> (Bool, String?) {
-        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        guard let proxy = maintenanceProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         do {
             return try await xpcCall { done in
                 proxy.resizeMaintenanceTerminalSession(sessionID: sessionID, cols: Int32(cols), rows: Int32(rows)) { ok, err in
@@ -1365,7 +1796,7 @@ final class HelperClient {
 
     /// 终止通用维护终端会话
     func terminateMaintenanceTerminalSession(sessionID: String) async -> (Bool, String?) {
-        guard let proxy = controlProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
+        guard let proxy = maintenanceProxy else { return (false, L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         do {
             return try await xpcCall { done in
                 proxy.terminateMaintenanceTerminalSession(sessionID: sessionID) { ok, err in
@@ -1446,12 +1877,18 @@ final class HelperClient {
     // MARK: - 统一诊断
 
     /// 对指定用户执行统一诊断（环境 + 权限 + 配置 + 安全 + Gateway + 网络）
-    func runDiagnostics(username: String, fix: Bool) async -> DiagnosticsResult? {
+    func runDiagnostics(username: String, fix: Bool, engine: String? = nil) async -> DiagnosticsResult? {
         guard let proxy = controlProxy else { return nil }
         do {
             let (_, json): (Bool, String) = try await xpcCall(timeout: .seconds(60)) { done in
-                proxy.runDiagnostics(username: username, fix: fix) { ok, json in
-                    done((ok, json))
+                if let engine, !engine.isEmpty {
+                    proxy.runDiagnosticsForEngine(username: username, fix: fix, engine: engine) { ok, json in
+                        done((ok, json))
+                    }
+                } else {
+                    proxy.runDiagnostics(username: username, fix: fix) { ok, json in
+                        done((ok, json))
+                    }
                 }
             }
             guard let data = json.data(using: .utf8) else { return nil }
@@ -1460,12 +1897,28 @@ final class HelperClient {
     }
 
     /// 单组诊断（逐组调用，实时展示进度）
-    func runDiagnosticGroup(username: String, group: DiagnosticGroup, fix: Bool) async -> [DiagnosticItem] {
+    func runDiagnosticGroup(
+        username: String,
+        group: DiagnosticGroup,
+        fix: Bool,
+        engine: String? = nil
+    ) async -> [DiagnosticItem] {
         guard let proxy = controlProxy else { return [] }
         do {
             let (_, json): (Bool, String) = try await xpcCall(timeout: .seconds(30)) { done in
-                proxy.runDiagnosticGroup(username: username, groupName: group.rawValue, fix: fix) { ok, json in
-                    done((ok, json))
+                if let engine, !engine.isEmpty {
+                    proxy.runDiagnosticGroupForEngine(
+                        username: username,
+                        groupName: group.rawValue,
+                        fix: fix,
+                        engine: engine
+                    ) { ok, json in
+                        done((ok, json))
+                    }
+                } else {
+                    proxy.runDiagnosticGroup(username: username, groupName: group.rawValue, fix: fix) { ok, json in
+                        done((ok, json))
+                    }
                 }
             }
             guard let data = json.data(using: .utf8) else { return [] }
@@ -1873,6 +2326,44 @@ final class HelperClient {
             }
         }
         if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.restore_failed", fallback: "回滚失败")) }
+    }
+
+    // MARK: - Agent Management
+
+    /// 获取指定用户的所有 agent 列表
+    func listAgents(username: String) async throws -> [AgentProfile] {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (json, err): (String?, String?) = try await xpcCall { done in
+            proxy.listAgents(username: username) { j, e in
+                done((j, e))
+            }
+        }
+        if let err { throw HelperError.operationFailed(err) }
+        guard let json, let data = json.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([AgentProfile].self, from: data)) ?? []
+    }
+
+    /// 创建新 agent
+    func createAgent(username: String, config: AgentProfile) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let configJSON = String(data: try JSONEncoder().encode(config), encoding: .utf8) ?? "{}"
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.createAgent(username: username, configJSON: configJSON) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.agent_create_failed", fallback: "创建 agent 失败")) }
+    }
+
+    /// 删除 agent
+    func removeAgent(username: String, agentId: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.removeAgent(username: username, agentId: agentId) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.agent_remove_failed", fallback: "删除 agent 失败")) }
     }
 }
 

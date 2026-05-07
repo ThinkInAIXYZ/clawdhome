@@ -20,6 +20,7 @@ final class ClawdHomeHelperImpl: NSObject, ClawdHomeHelperProtocol {
     override init() {
         super.init()
         Self.startSessionCleanupTimerIfNeeded()
+        VaultPermissionGuardian.shared.startIfNeeded()
     }
 
     func storeMaintenanceSession(_ session: MaintenanceTerminalSession) {
@@ -194,7 +195,7 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
     private let lock = NSLock()
 
     /// 根据同一 PID 的连接序号推断连接用途（App 按固定顺序创建）
-    private static let channelLabels = ["control", "dashboard", "install", "file", "process", "personaRead"]
+    private static let channelLabels = ["control", "maintenance", "gateway", "dashboard", "metadata", "install", "file", "process", "personaRead"]
 
     func listener(_ listener: NSXPCListener,
                   shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {

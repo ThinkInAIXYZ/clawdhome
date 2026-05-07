@@ -16,12 +16,12 @@ enum DiagnosticGroup: String, Codable, CaseIterable {
 
     var title: String {
         switch self {
-        case .environment: return "环境检测"
-        case .permissions: return "权限检测"
-        case .config:      return "配置校验"
-        case .security:    return "安全审计"
-        case .gateway:     return "Gateway 状态"
-        case .network:     return "网络连通"
+        case .environment: return String(localized: "health.group.environment", defaultValue: "环境检测")
+        case .permissions: return String(localized: "health.group.permissions", defaultValue: "权限检测")
+        case .config:      return String(localized: "health.group.config",      defaultValue: "配置校验")
+        case .security:    return String(localized: "health.group.security",    defaultValue: "安全审计")
+        case .gateway:     return String(localized: "health.group.gateway",     defaultValue: "Gateway 状态")
+        case .network:     return String(localized: "health.group.network",     defaultValue: "网络连通")
         }
     }
 
@@ -82,6 +82,223 @@ struct DiagnosticsResult: Codable {
 
     func groupPassed(_ group: DiagnosticGroup) -> Bool {
         items(for: group).allSatisfy { $0.severity == "ok" || $0.severity == "info" }
+    }
+}
+
+// MARK: - Gateway 自启动诊断策略
+
+enum DiagnosticsGatewayAutostartPolicy {
+    static func openClawItem(
+        globalAutostartEnabled: Bool,
+        userAutostartEnabled: Bool,
+        intentionalStopActive: Bool,
+        plistExists: Bool,
+        runAtLoad: Bool,
+        keepAlive: Bool,
+        running: Bool
+    ) -> DiagnosticItem {
+        if !globalAutostartEnabled {
+            return DiagnosticItem(
+                id: "gw-openclaw-autostart-global-disabled",
+                group: .gateway,
+                severity: "info",
+                title: "OpenClaw Gateway 全局自启动已关闭",
+                detail: "全局开机自启动关闭，跳过自启动检查",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        if !userAutostartEnabled {
+            return DiagnosticItem(
+                id: "gw-openclaw-autostart-user-disabled",
+                group: .gateway,
+                severity: "info",
+                title: "OpenClaw Gateway 实例已冻结",
+                detail: "该实例当前处于冻结状态，跳过自启动检查",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        if intentionalStopActive {
+            return DiagnosticItem(
+                id: "gw-openclaw-autostart-intentional-stop",
+                group: .gateway,
+                severity: "info",
+                title: "OpenClaw Gateway 已手动停止",
+                detail: "检测到手动停止记录，跳过自启动运行态检查",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        if !plistExists {
+            return DiagnosticItem(
+                id: "gw-openclaw-autostart-plist-missing",
+                group: .gateway,
+                severity: "warn",
+                title: "OpenClaw Gateway 自启动未注册",
+                detail: "自启动已启用，但 LaunchDaemon plist 不存在",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        if !runAtLoad || !keepAlive {
+            let missing = [
+                runAtLoad ? nil : "RunAtLoad",
+                keepAlive ? nil : "KeepAlive",
+            ].compactMap { $0 }.joined(separator: ", ")
+            return DiagnosticItem(
+                id: "gw-openclaw-autostart-plist-invalid",
+                group: .gateway,
+                severity: "warn",
+                title: "OpenClaw Gateway 自启动配置异常",
+                detail: "LaunchDaemon 缺少或关闭：\(missing)",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        if !running {
+            return DiagnosticItem(
+                id: "gw-openclaw-autostart-not-running",
+                group: .gateway,
+                severity: "warn",
+                title: "OpenClaw Gateway 自启动未拉起",
+                detail: "自启动已启用且 LaunchDaemon 已注册，但当前未运行",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        return DiagnosticItem(
+            id: "gw-openclaw-autostart-ok",
+            group: .gateway,
+            severity: "ok",
+            title: "OpenClaw Gateway 自启动正常",
+            detail: "LaunchDaemon 已注册并保持运行",
+            fixable: false,
+            fixed: nil,
+            fixError: nil,
+            latencyMs: nil
+        )
+    }
+
+    static func hermesItem(
+        profileID: String,
+        globalAutostartEnabled: Bool,
+        userAutostartEnabled: Bool,
+        profileAutostartEnabled: Bool,
+        plistExists: Bool,
+        runAtLoad: Bool,
+        keepAlive: Bool,
+        running: Bool
+    ) -> DiagnosticItem {
+        let safeProfileID = profileID.isEmpty ? "main" : profileID
+        let idPrefix = "gw-hermes-\(safeProfileID)-autostart"
+        let profileLabel = safeProfileID == "main" ? "main" : safeProfileID
+
+        if !globalAutostartEnabled {
+            return DiagnosticItem(
+                id: "\(idPrefix)-global-disabled",
+                group: .gateway,
+                severity: "info",
+                title: "Hermes Gateway 全局自启动已关闭",
+                detail: "全局开机自启动关闭，跳过 Hermes profile \(profileLabel) 自启动检查",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        if !userAutostartEnabled {
+            return DiagnosticItem(
+                id: "\(idPrefix)-user-disabled",
+                group: .gateway,
+                severity: "info",
+                title: "Hermes Gateway 实例已冻结",
+                detail: "该实例当前处于冻结状态，跳过 Hermes profile \(profileLabel) 自启动检查",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        if !profileAutostartEnabled {
+            return DiagnosticItem(
+                id: "\(idPrefix)-profile-disabled",
+                group: .gateway,
+                severity: "info",
+                title: "Hermes Profile 未启用自启动",
+                detail: "profile \(profileLabel) 不在 Hermes 自启动白名单中",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        if !plistExists {
+            return DiagnosticItem(
+                id: "\(idPrefix)-plist-missing",
+                group: .gateway,
+                severity: "warn",
+                title: "Hermes Gateway 自启动未注册",
+                detail: "profile \(profileLabel) 已启用自启动，但 LaunchDaemon plist 不存在",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        if !runAtLoad || !keepAlive {
+            let missing = [
+                runAtLoad ? nil : "RunAtLoad",
+                keepAlive ? nil : "KeepAlive",
+            ].compactMap { $0 }.joined(separator: ", ")
+            return DiagnosticItem(
+                id: "\(idPrefix)-plist-invalid",
+                group: .gateway,
+                severity: "warn",
+                title: "Hermes Gateway 自启动配置异常",
+                detail: "profile \(profileLabel) LaunchDaemon 缺少或关闭：\(missing)",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        if !running {
+            return DiagnosticItem(
+                id: "\(idPrefix)-not-running",
+                group: .gateway,
+                severity: "warn",
+                title: "Hermes Gateway 自启动未拉起",
+                detail: "profile \(profileLabel) 已启用自启动且 LaunchDaemon 已注册，但当前未运行",
+                fixable: false,
+                fixed: nil,
+                fixError: nil,
+                latencyMs: nil
+            )
+        }
+        return DiagnosticItem(
+            id: "\(idPrefix)-ok",
+            group: .gateway,
+            severity: "ok",
+            title: "Hermes Gateway 自启动正常",
+            detail: "profile \(profileLabel) LaunchDaemon 已注册并保持运行",
+            fixable: false,
+            fixed: nil,
+            fixError: nil,
+            latencyMs: nil
+        )
     }
 }
 

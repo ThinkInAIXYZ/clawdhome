@@ -26,9 +26,9 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .system: return "跟随系统"
-        case .light:  return "浅色"
-        case .dark:   return "深色"
+        case .system: return L10n.k("model.appearance.system", fallback: "跟随系统")
+        case .light:  return L10n.k("model.appearance.light", fallback: "浅色")
+        case .dark:   return L10n.k("model.appearance.dark", fallback: "深色")
         }
     }
 

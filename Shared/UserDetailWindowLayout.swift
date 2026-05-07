@@ -18,9 +18,10 @@ struct ProcessTableColumnLayout {
 
 enum UserDetailWindowLayout {
     static let mainWindowDefaultWidth: Double = 1040
-    static let detailWindowDefaultHeight: Double = 660
+    static let hermesDetailWindowPreferredWidth: Double = 1180
+    static let detailWindowDefaultHeight: Double = 792
     static let detailWindowMinimumWidth: Double = 960
-    static let detailWindowMinimumHeight: Double = 560
+    static let detailWindowMinimumHeight: Double = 672
     static let expandedSidebarWidth: Double = 180
     static let overviewSidebarWidth: Double = 296
     static let overviewSidebarPadding: Double = 18

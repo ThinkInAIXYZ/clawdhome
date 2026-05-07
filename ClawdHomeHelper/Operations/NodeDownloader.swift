@@ -153,8 +153,20 @@ struct NodeDownloader {
         let version = try run("\(binDir)/node", args: ["--version"])
         log("✓ Node.js 安装完成：\(version)\n")
 
-        // 8. 修复归属，确保目标用户可写可升级
-        _ = try? run("/usr/sbin/chown", args: ["-R", username, brewRoot])
+        // 8. 修复归属与权限，确保目标用户可执行、可写可升级
+        //    chown -R user:staff 同时修正用户和组（tar 解压后可能为 root:wheel，
+        //    若仅修改 user 而组仍为 wheel，部分 macOS 配置下可能阻止执行）
+        //    chmod -R u+rwX 确保 owner 对目录/可执行文件有完整权限
+        do {
+            try run("/usr/sbin/chown", args: ["-R", "\(username):staff", brewRoot])
+        } catch {
+            helperLog("chown -R \(username):staff \(brewRoot) failed: \(error.localizedDescription)", level: .warn)
+        }
+        do {
+            try run("/bin/chmod", args: ["-R", "u+rwX", brewRoot])
+        } catch {
+            helperLog("chmod -R u+rwX \(brewRoot) failed: \(error.localizedDescription)", level: .warn)
+        }
 
         // 7. 保留 cachePath 供后续快速安装复用（不再删除）
     }

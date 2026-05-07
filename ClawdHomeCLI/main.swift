@@ -57,6 +57,12 @@ do {
         try ExecCommand.run(args, client: client)
     case "chat":
         try ChatCommand.run(args, client: client)
+    case "init":
+        try InitCommand.run(args, client: client)
+
+    // 引擎特定
+    case "hermes":
+        try HermesCommand.run(args, client: client)
 
     // 配置与系统
     case "config":
@@ -96,7 +102,9 @@ func printGlobalUsage() {
       exec <name>                 进入实例终端
       inspect <name>              查看实例详情
       chat <name> <message>       发送消息
-      doctor <name> [--fix]       诊断检查
+      init <subcommand>           初始化流程（run/status/resume/cancel）
+      doctor <name> [--fix] [--engine <openclaw|hermes>] 诊断检查
+      hermes <subcommand>         Hermes 引擎管理（install/start/stop/status/ls）
       config <get|set> [args]     配置管理
       version                     版本信息
 
