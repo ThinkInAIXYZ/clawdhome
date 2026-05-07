@@ -1681,3 +1681,122 @@ struct ModelEditSheet: View {
         dismiss()
     }
 }
+
+// MARK: - ModelPicker
+
+/// 从 shrimp 模型池中挑选一个模型 ID 的下拉选择器。
+///
+/// 用于 agent 主模型 / 备用模型选择。设计要点：
+/// - selection 为空字符串时表示"继承全局默认"（区分于 nil）
+/// - selection 不在池里时显示 ⚠️ 失效标识，提示用户重选（不静默丢失原值）
+/// - 数据源优先 gateway runtime（动态发现的已配置模型），fallback 到 builtInModelGroups
+struct ModelPicker: View {
+    let username: String
+    @Binding var selection: String
+    /// 允许选"继承全局默认"（agent 主模型一般 true；备用模型槽 false）
+    var allowsInheritDefault: Bool = true
+
+    @Environment(GatewayHub.self) private var gatewayHub
+    @Environment(HelperClient.self) private var helperClient
+
+    @State private var modelGroups: [ModelGroup] = []
+    @State private var inheritedDefault: String? = nil
+    @State private var hasLoaded = false
+
+    private var allModels: [ModelEntry] {
+        modelGroups.flatMap(\.models)
+    }
+
+    private var isSelectionValid: Bool {
+        if selection.isEmpty { return true }
+        return allModels.contains { $0.id == selection }
+    }
+
+    private var inheritedDefaultLabel: String {
+        guard let inherited = inheritedDefault, !inherited.isEmpty else {
+            return L10n.k("model_picker.inherit.unset", fallback: "继承全局默认（未设置）")
+        }
+        let label = allModels.first { $0.id == inherited }?.label ?? inherited
+        return L10n.f("model_picker.inherit.with_value", fallback: "继承全局默认（%@）", label)
+    }
+
+    private var selectedLabel: String {
+        if selection.isEmpty {
+            return inheritedDefaultLabel
+        }
+        if let entry = allModels.first(where: { $0.id == selection }) {
+            return entry.label
+        }
+        return L10n.f("model_picker.invalid", fallback: "⚠️ %@（已失效）", selection)
+    }
+
+    var body: some View {
+        Menu {
+            if allowsInheritDefault {
+                Button {
+                    selection = ""
+                } label: {
+                    Text(inheritedDefaultLabel)
+                }
+                Divider()
+            }
+
+            if hasLoaded && allModels.isEmpty {
+                Text(L10n.k("model_picker.empty", fallback: "模型池为空，请先去「模型」tab 添加"))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(modelGroups) { group in
+                    Section(group.provider) {
+                        ForEach(group.models, id: \.id) { entry in
+                            Button(entry.label) {
+                                selection = entry.id
+                            }
+                        }
+                    }
+                }
+            }
+
+            // selection 失效时，给个"清空回到继承"的快捷
+            if !isSelectionValid {
+                Divider()
+                Button(L10n.k("model_picker.clear_invalid", fallback: "清除失效选择，回到继承默认"), role: .destructive) {
+                    selection = ""
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(selectedLabel)
+                    .lineLimit(1)
+                    .foregroundStyle(isSelectionValid ? Color.primary : Color.red)
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .foregroundStyle(.secondary)
+                    .font(.caption2)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .task { await loadModels() }
+    }
+
+    private func loadModels() async {
+        async let statusTask = helperClient.getModelsStatus(username: username)
+        async let modelsTask = gatewayHub.modelsList(username: username)
+        let (status, models) = await (statusTask, modelsTask)
+        if let status {
+            inheritedDefault = status.resolvedDefault ?? status.defaultModel
+        }
+        modelGroups = models ?? builtInModelGroups
+        hasLoaded = true
+    }
+}
