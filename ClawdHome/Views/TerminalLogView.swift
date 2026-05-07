@@ -768,7 +768,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
         let (ok, chunk, nextOffset, exited, exitCode, err) = snapshot
         if !ok {
             if let err, !err.isEmpty {
-                feedToTerminal(L10n.f("views.terminal_log_view.r_n", fallback: "会话错误：%@\\r\\n", String(describing: err)))
+                feedToTerminal(L10n.f("views.terminal_log_view.r_n", fallback: "会话错误：%@\r\n", String(describing: err)))
             }
             notifyExitOnce(code: -1)
             timer?.invalidate()
@@ -802,7 +802,7 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
             )
             if !ok, let err {
                 await MainActor.run { [weak self] in
-                    self?.feedToTerminal(L10n.f("views.terminal_log_view.r_n_r_n", fallback: "\\r\\n输入失败：%@\\r\\n", String(describing: err)))
+                    self?.feedToTerminal(L10n.f("views.terminal_log_view.r_n_r_n", fallback: "\r\n输入失败：%@\r\n", String(describing: err)))
                 }
             }
         }

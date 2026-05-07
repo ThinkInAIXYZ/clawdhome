@@ -25,21 +25,21 @@ struct QuickFileTransferOutcome {
             let shownPaths = uploadedTopLevelPaths.prefix(2).map(Self.displayPath)
             var uploadedBlock = L10n.f("views.user_detail_view.text_7b6b4044", fallback: "已上传 %@ 项。", String(describing: uploadedTopLevelPaths.count))
             if let first = shownPaths.first {
-                uploadedBlock += L10n.f("views.user_detail_view.n_n_n", fallback: "\\n\\n路径：\\n%@", String(describing: first))
+                uploadedBlock += L10n.f("views.user_detail_view.n_n_n", fallback: "\n\n路径：\n%@", String(describing: first))
                 if shownPaths.count > 1 {
                     uploadedBlock += "\n\(shownPaths[1])"
                 }
             }
             if uploadedTopLevelPaths.count > 2 {
-                uploadedBlock += L10n.f("views.user_detail_view.n", fallback: "\\n…以及另外 %@ 项", String(describing: uploadedTopLevelPaths.count - 2))
+                uploadedBlock += L10n.f("views.user_detail_view.n", fallback: "\n…以及另外 %@ 项", String(describing: uploadedTopLevelPaths.count - 2))
             }
             blocks.append(uploadedBlock)
         }
         if !failures.isEmpty {
             let shownFailures = failures.prefix(2).joined(separator: "\n")
-            var failedBlock = L10n.f("views.user_detail_view.n_8d3d10", fallback: "失败 %@ 项：\\n%@", String(describing: failures.count), String(describing: shownFailures))
+            var failedBlock = L10n.f("views.user_detail_view.n_8d3d10", fallback: "失败 %@ 项：\n%@", String(describing: failures.count), String(describing: shownFailures))
             if failures.count > 2 {
-                failedBlock += L10n.f("views.user_detail_view.n", fallback: "\\n…以及另外 %@ 项", String(describing: failures.count - 2))
+                failedBlock += L10n.f("views.user_detail_view.n", fallback: "\n…以及另外 %@ 项", String(describing: failures.count - 2))
             }
             blocks.append(failedBlock)
         }
@@ -253,6 +253,7 @@ struct UserDetailView: View {
     @State private var fallbackModels: [String] = []
     @State private var descriptionDraft: String = ""
     @State private var showModelConfig = false
+    @State private var showModelPriority = false
     @State private var isAdvancedConfigExpanded = false
     @State private var npmRegistryOption: NpmRegistryOption = .defaultForInitialization
     @State private var npmRegistryCustomURL: String? = nil
@@ -533,8 +534,19 @@ struct UserDetailView: View {
             if connected {
                 Task { await refreshStatus() }
             } else {
-                // 连接丢失时保持“待判定”状态，避免误落到概览页。
+                // 连接丢失时保持"待判定"状态，避免误落到概览页。
                 versionChecked = false
+                // XPC 连接断开时，若 withCheckedContinuation 正在等待 installOpenclaw/getOpenclawVersion
+                // 的 reply，reply 会被丢弃导致 continuation 永远不 resume，isInstalling 永久卡 true。
+                // 此处主动解锁，让用户可以关闭窗口并重试。
+                if isInstalling {
+                    installError = String(localized: "upgrade.error.connection_lost", defaultValue: "连接中断，请关闭后重试")
+                    isInstalling = false
+                }
+                if isRollingBack {
+                    installError = String(localized: "upgrade.error.connection_lost", defaultValue: "连接中断，请关闭后重试")
+                    isRollingBack = false
+                }
             }
         }
         .modifier(GatewayProbeModifier(
@@ -577,6 +589,16 @@ struct UserDetailView: View {
         }
         .sheet(isPresented: $showModelConfig) {
             modelConfigSheet
+        }
+        .sheet(isPresented: $showModelPriority) {
+            ModelPrioritySheet(user: user) {
+                Task {
+                    beginGatewayRestartVisualTransition()
+                    await refreshModelStatusSummary()
+                }
+            }
+            .environment(helperClient)
+            .environment(gatewayHub)
         }
         .sheet(isPresented: $showHealthCheck) {
             HealthCheckSheet(user: user) { result in
@@ -1125,6 +1147,15 @@ struct UserDetailView: View {
                         disabled: !helperClient.isConnected
                     ) {
                         showModelConfig = true
+                    }
+                    overviewCompactActionButton(
+                        title: L10n.k("model_priority.button", fallback: "优先级"),
+                        systemImage: "list.number",
+                        tint: Color.secondary.opacity(0.08),
+                        foreground: .primary,
+                        disabled: !helperClient.isConnected
+                    ) {
+                        showModelPriority = true
                     }
                 }
             }
@@ -2163,7 +2194,7 @@ struct UserDetailView: View {
                 try await action()
             } catch {
                 if error is GatewayStartNodeRepairPromptError {
-                    // 已切换到“修复并继续启动”弹窗，不显示通用错误。
+                    // 已切换到"修复并继续启动"弹窗，不显示通用错误。
                 } else {
                     actionError = error.localizedDescription
                 }
@@ -2435,7 +2466,7 @@ struct UserDetailView: View {
         }
 
         guard helperClient.isConnected else {
-            // Helper 未连接时不要把状态标记为“已判定”，避免误落到概览。
+            // Helper 未连接时不要把状态标记为"已判定"，避免误落到概览。
             versionChecked = false
             isNodeInstalledReady = false
             xcodeEnvStatus = nil
@@ -2578,7 +2609,7 @@ struct UserDetailView: View {
                 }
             }()
 
-            // 迁移旧脏状态：active=true 但全 pending，会导致 UI 误判为“正在初始化”。
+            // 迁移旧脏状态：active=true 但全 pending，会导致 UI 误判为"正在初始化"。
             if state.active && !state.isCompleted && !hasRecoverableProgress {
                 var repaired = state
                 repaired.active = false
@@ -2618,7 +2649,7 @@ struct UserDetailView: View {
             }
 
             // 已有未完成会话，但尚未开始（全部 pending）：
-            // 仅在“仍符合 onboarding 条件”时保持在初始化向导 pre-start。
+            // 仅在"仍符合 onboarding 条件"时保持在初始化向导 pre-start。
             if !state.isCompleted {
                 let shouldKeepOnboarding = shouldForceOnboarding || (!user.isAdmin
                     && user.clawType == .macosUser
@@ -2646,7 +2677,7 @@ struct UserDetailView: View {
         }
         let readiness = gatewayHub.readinessMap[user.username]
         if !shouldForceOnboarding && (user.isRunning || readiness == .starting || readiness == .ready) {
-            // Gateway 已运行/启动中时，说明该用户不是“未初始化”状态，不应自动回流到初始化向导。
+            // Gateway 已运行/启动中时，说明该用户不是"未初始化"状态，不应自动回流到初始化向导。
             user.initStep = nil
             return false
         }
@@ -2654,7 +2685,7 @@ struct UserDetailView: View {
         var state = InitWizardState()
         state.schemaVersion = 2
         state.mode = .onboarding
-        // 仅创建会话壳，不预置为 running，避免“未实际开始却显示正在初始化”。
+        // 仅创建会话壳，不预置为 running，避免"未实际开始却显示正在初始化"。
         state.active = false
         state.currentStep = nil
         state.steps = [
@@ -2678,7 +2709,7 @@ struct UserDetailView: View {
         }
     }
 
-    /// 在已初始化状态下重新进入初始化向导，从“模型配置”步骤继续。
+    /// 在已初始化状态下重新进入初始化向导，从"模型配置"步骤继续。
     /// 该入口会持久化状态，App 重启后仍停留在该步骤。
     private func reopenInitWizardAtModelStep() async {
         guard helperClient.isConnected else { return }
@@ -3832,7 +3863,7 @@ private struct GatewayProbeModifier: ViewModifier {
     func body(content: Content) -> some View {
         content.task(id: "\(username)#\(gatewayURL ?? "")") {
             while !Task.isCancelled {
-                // 优先使用 getGatewayURL() 的真实端口，避免快照端口滞后导致误判“启动中”
+                // 优先使用 getGatewayURL() 的真实端口，避免快照端口滞后导致误判"启动中"
                 let portFromURL = gatewayURL
                     .flatMap { GatewayHub.parse(gatewayURL: $0)?.port } ?? 0
                 // 回退：快照端口 -> 18000+uid 公式端口
@@ -3858,8 +3889,16 @@ private struct CronTabView: View {
     let username: String
     @Environment(GatewayHub.self) private var hub
 
+    private var isConnected: Bool {
+        hub.connectedUsernames.contains(username)
+    }
+
     var body: some View {
         CronTabContent(store: hub.cronStore(for: username))
+            .task(id: isConnected) {
+                guard isConnected else { return }
+                await hub.ensureCronStarted(for: username)
+            }
     }
 }
 
@@ -4150,8 +4189,16 @@ private struct SkillsTabView: View {
     let username: String
     @Environment(GatewayHub.self) private var hub
 
+    private var isConnected: Bool {
+        hub.connectedUsernames.contains(username)
+    }
+
     var body: some View {
         SkillsTabContent(store: hub.skillsStore(for: username))
+            .task(id: isConnected) {
+                guard isConnected else { return }
+                await hub.ensureSkillsStarted(for: username)
+            }
     }
 }
 
@@ -4274,9 +4321,11 @@ private struct SkillItemRow: View {
 private struct ConfigTabView: View {
     let username: String
     @Environment(HelperClient.self) private var helperClient
+    @Environment(GatewayHub.self) private var gatewayHub
     @State private var content: String = ""
     @State private var isLoading = false
     @State private var isSaving = false
+    @State private var isRestartingGateway = false
     @State private var errorMessage: String?
     @State private var jsonError: String?
 
@@ -4288,18 +4337,24 @@ private struct ConfigTabView: View {
                 Text("openclaw.json")
                     .font(.headline)
                 Spacer()
-                if isSaving {
+                if isSaving || isRestartingGateway {
                     ProgressView().controlSize(.small)
                 }
                 Button { Task { await load() } } label: {
                     Label(L10n.k("user.detail.auto.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
-                .disabled(isLoading || isSaving)
-                Button(L10n.k("user.detail.auto.save", fallback: "保存")) { Task { await save() } }
+                .disabled(isLoading || isSaving || isRestartingGateway)
+                Button(
+                    isRestartingGateway
+                        ? L10n.k("views.user_detail_view.restarting_gateway", fallback: "重启中…")
+                        : (isSaving
+                            ? L10n.k("views.config_tab_view.saving", fallback: "保存中…")
+                            : L10n.k("views.config_tab_view.save_and_restart", fallback: "保存并重启 Gateway"))
+                ) { Task { await save() } }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .disabled(isLoading || isSaving || jsonError != nil)
+                    .disabled(isLoading || isSaving || isRestartingGateway || jsonError != nil)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             .background(.bar)
@@ -4338,7 +4393,7 @@ private struct ConfigTabView: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "info.circle").foregroundStyle(.secondary).font(.caption)
-                Text(L10n.k("user.detail.auto.openclaw_openclaw_json_configuration_json_save", fallback: "编辑 .openclaw/openclaw.json 主配置。JSON 校验错误时保存按钮将禁用。"))
+                Text(L10n.k("views.config_tab_view.footer_hint", fallback: "编辑 .openclaw/openclaw.json 主配置。保存后将自动重启 Gateway 使配置生效。JSON 校验错误时保存按钮将禁用。"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
@@ -4371,11 +4426,19 @@ private struct ConfigTabView: View {
     private func save() async {
         guard jsonError == nil else { return }
         isSaving = true
+        isRestartingGateway = false
         errorMessage = nil
-        defer { isSaving = false }
+        defer {
+            isSaving = false
+            isRestartingGateway = false
+        }
         guard let data = content.data(using: .utf8) else { return }
         do {
             try await helperClient.writeFile(username: username, relativePath: relPath, data: data)
+            isSaving = false
+            isRestartingGateway = true
+            gatewayHub.markPendingStart(username: username)
+            try await helperClient.restartGateway(username: username)
         } catch {
             errorMessage = L10n.f("views.user_detail_view.text_1eacd4c6", fallback: "保存失败：%@", String(describing: error.localizedDescription))
         }
@@ -5438,6 +5501,12 @@ private struct KimiMinimaxModelConfigPanel: View {
     @State private var currentFallbackModels: [String] = []
     @State private var configMode: ConfigMode = .builtinUI
     @State private var activeModelConfigTerminalToken: String? = nil
+    @State private var showOldModelPrompt = false
+    @State private var pendingApiKey: String = ""
+
+    /// 用户选择：旧主模型如何处理
+    enum OldModelAction { case keepAsFallback, replace }
+    @State private var oldModelAction: OldModelAction? = nil
 
     private enum ConfigMode: String, CaseIterable, Identifiable {
         case builtinUI
@@ -5810,6 +5879,23 @@ private struct KimiMinimaxModelConfigPanel: View {
                 onApplied?()
             }
         }
+        .confirmationDialog(
+            L10n.f("views.user_detail_view.old_model_prompt_title",
+                    fallback: "当前主模型 %@ 如何处理？",
+                    currentDefaultModel ?? ""),
+            isPresented: $showOldModelPrompt,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.k("views.user_detail_view.old_model_keep_fallback", fallback: "保留为备选")) {
+                oldModelAction = .keepAsFallback
+                Task { await doApplyConfig(apiKey: pendingApiKey) }
+            }
+            Button(L10n.k("views.user_detail_view.old_model_replace", fallback: "直接替换")) {
+                oldModelAction = .replace
+                Task { await doApplyConfig(apiKey: pendingApiKey) }
+            }
+            Button(L10n.k("views.user_detail_view.old_model_cancel", fallback: "取消"), role: .cancel) {}
+        }
     }
 
     private func openModelConfigTerminal() {
@@ -5907,6 +5993,36 @@ private struct KimiMinimaxModelConfigPanel: View {
             return
         }
 
+        // 如果已有主模型且与新选择不同，弹窗让用户选择
+        if let current = currentDefaultModel, !current.isEmpty {
+            let newPrimary = resolveNewPrimary()
+            if current != newPrimary {
+                pendingApiKey = apiKey
+                oldModelAction = nil
+                showOldModelPrompt = true
+                return
+            }
+        }
+
+        // 没有旧模型冲突，直接替换
+        oldModelAction = .replace
+        await doApplyConfig(apiKey: apiKey)
+    }
+
+    /// 推算当前选择将要设置的主模型 ID
+    private func resolveNewPrimary() -> String {
+        switch selectedProvider {
+        case .kimiCoding: return selectedKimiModel.rawValue
+        case .minimax: return selectedMinimaxModel.rawValue
+        case .qiniu: return selectedQiniuModel.rawValue
+        case .zai: return selectedZAIModel.rawValue
+        case .custom: return "\(effectiveCustomProviderId)/\(effectiveCustomModelId)"
+        }
+    }
+
+    private func doApplyConfig(apiKey: String) async {
+        guard let action = oldModelAction else { return }
+
         isSaving = true
         isRestartingGateway = false
         defer {
@@ -5917,271 +6033,264 @@ private struct KimiMinimaxModelConfigPanel: View {
         saveError = nil
 
         do {
-            switch selectedProvider {
-            case .kimiCoding:
-                try await applyKimiConfig(apiKey: apiKey)
-            case .minimax:
-                try await applyMinimaxConfig(apiKey: apiKey)
-            case .qiniu:
-                try await applyQiniuConfig(apiKey: apiKey)
-            case .zai:
-                try await applyZAIConfig(apiKey: apiKey)
-            case .custom:
-                try await applyCustomConfig(apiKey: apiKey)
+            // 1. 构建 config patch + 同步 agent 文件
+            let (patch, agentFileSync) = try await buildProviderPatch(apiKey: apiKey)
+
+            // 2. 通过 WebSocket config.patch 写入（带 schema 校验 + 自动热重启）
+            let (cfg, baseHash) = try await gatewayHub.configGetFull(username: user.username)
+            var mergedPatch = mergePatchWithExistingAliases(patch: patch, existingConfig: cfg)
+
+            // 3. 根据用户选择处理旧主模型
+            if action == .keepAsFallback, let oldPrimary = currentDefaultModel, !oldPrimary.isEmpty {
+                let existingModel = ((cfg["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]
+                var fallbacks = (existingModel?["fallbacks"] as? [String]) ?? []
+                // 将旧主模型插入 fallbacks 首位（避免重复）
+                fallbacks.removeAll { $0 == oldPrimary }
+                fallbacks.insert(oldPrimary, at: 0)
+                // 移除新主模型（避免重复）
+                let newPrimary = resolveNewPrimary()
+                fallbacks.removeAll { $0 == newPrimary }
+
+                var agentsPatch = (mergedPatch["agents"] as? [String: Any]) ?? [:]
+                var defaults = (agentsPatch["defaults"] as? [String: Any]) ?? [:]
+                var model = (defaults["model"] as? [String: Any]) ?? [:]
+                model["fallbacks"] = fallbacks
+                defaults["model"] = model
+                agentsPatch["defaults"] = defaults
+                mergedPatch["agents"] = agentsPatch
             }
-            isRestartingGateway = true
-            gatewayHub.markPendingStart(username: user.username)
-            try await helperClient.restartGateway(username: user.username)
+
+            let (noop, _) = try await gatewayHub.configPatch(
+                username: user.username,
+                patch: mergedPatch,
+                baseHash: baseHash,
+                note: "ClawdHome: apply \(selectedProvider.title) config"
+            )
+
+            // 4. 同步 agent 目录文件
+            try await agentFileSync()
+
+            if !noop {
+                isRestartingGateway = true
+                gatewayHub.markPendingStart(username: user.username)
+            }
             saveMessage = L10n.k("user.detail.auto.configuration", fallback: "配置已应用")
+
+            // 刷新当前模型显示
+            let newStatus = await helperClient.getModelsStatus(username: user.username)
+            currentDefaultModel = newStatus?.resolvedDefault ?? newStatus?.defaultModel
+            currentFallbackModels = newStatus?.fallbacks ?? []
+
             onApplied?()
         } catch {
             saveError = error.localizedDescription
         }
     }
 
-    private func applyKimiConfig(apiKey: String) async throws {
-        let config = await helperClient.getConfigJSON(username: user.username)
+    /// 构建 provider 配置 patch 和 agent 文件同步闭包
+    private func buildProviderPatch(apiKey: String) async throws -> (patch: [String: Any], agentFileSync: () async throws -> Void) {
+        switch selectedProvider {
+        case .kimiCoding:
+            return try await buildKimiPatch(apiKey: apiKey)
+        case .minimax:
+            return try await buildMinimaxPatch(apiKey: apiKey)
+        case .qiniu:
+            return try await buildQiniuPatch(apiKey: apiKey)
+        case .zai:
+            return try await buildZAIPatch(apiKey: apiKey)
+        case .custom:
+            return try buildCustomPatch(apiKey: apiKey)
+        }
+    }
+
+    private func buildKimiPatch(apiKey: String) async throws -> ([String: Any], () async throws -> Void) {
         let modelId = selectedKimiModel.rawValue
         let providerModelId = modelId.replacingOccurrences(of: "kimi-coding/", with: "")
-        let normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: modelId)
-        let agentDir = ".openclaw/agents/main/agent"
-
-        try await helperClient.createDirectory(username: user.username, relativePath: agentDir)
-        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "models.providers.kimi-coding",
-            value: [
-                "api": "anthropic-messages",
-                "baseUrl": "https://api.kimi.com/coding/",
-                "apiKey": apiKey,
-                "models": [[
-                    "id": providerModelId,
-                    "name": selectedKimiModel.alias,
-                    "reasoning": true,
-                    "input": ["text", "image"],
-                    "cost": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0],
-                    "contextWindow": 262144,
-                    "maxTokens": 32768,
-                ]],
-            ]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "auth.profiles.kimi-coding:default",
-            value: ["provider": "kimi-coding", "mode": "api_key"]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "agents.defaults.model",
-            value: normalizedModelConfig
-        )
-
-        var authProfilesRoot = await readUserJSON(relativePath: "\(agentDir)/auth-profiles.json")
-        var profiles = (authProfilesRoot["profiles"] as? [String: Any]) ?? [:]
-        profiles["kimi-coding:default"] = [
-            "type": "api_key",
-            "provider": "kimi-coding",
-            "key": apiKey,
+        let modelDef: [String: Any] = [
+            "id": providerModelId, "name": selectedKimiModel.alias,
+            "reasoning": true, "input": ["text", "image"],
+            "cost": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0],
+            "contextWindow": 262144, "maxTokens": 32768,
         ]
-        authProfilesRoot["version"] = (authProfilesRoot["version"] as? Int) ?? 1
-        authProfilesRoot["profiles"] = profiles
-        try await writeUserJSON(authProfilesRoot, relativePath: "\(agentDir)/auth-profiles.json")
-
-        var modelsRoot = await readUserJSON(relativePath: "\(agentDir)/models.json")
-        var providers = (modelsRoot["providers"] as? [String: Any]) ?? [:]
-        providers["kimi-coding"] = [
-            "baseUrl": "https://api.kimi.com/coding/",
-            "api": "anthropic-messages",
-            "models": [[
-                "id": providerModelId,
-                "name": selectedKimiModel.alias,
-                "reasoning": true,
-                "input": ["text", "image"],
-                "cost": ["input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0],
-                "contextWindow": 262144,
-                "maxTokens": 32768,
-            ]],
+        let patch: [String: Any] = [
+            "models": [
+                "mode": "merge",
+                "providers": ["kimi-coding": [
+                    "api": "anthropic-messages",
+                    "baseUrl": "https://api.kimi.com/coding/",
+                    "apiKey": apiKey,
+                    "models": [modelDef],
+                ] as [String: Any]],
+            ] as [String: Any],
+            "auth": ["profiles": ["kimi-coding:default": ["provider": "kimi-coding", "mode": "api_key"]]],
+            "agents": ["defaults": ["model": ["primary": modelId]]],
         ]
-        modelsRoot["providers"] = providers
-        try await writeUserJSON(modelsRoot, relativePath: "\(agentDir)/models.json")
+        let sync: () async throws -> Void = { [self] in
+            let agentDir = ".openclaw/agents/main/agent"
+            try await helperClient.createDirectory(username: user.username, relativePath: agentDir)
+            var authRoot = await readUserJSON(relativePath: "\(agentDir)/auth-profiles.json")
+            var profiles = (authRoot["profiles"] as? [String: Any]) ?? [:]
+            profiles["kimi-coding:default"] = ["type": "api_key", "provider": "kimi-coding", "key": apiKey]
+            authRoot["version"] = (authRoot["version"] as? Int) ?? 1
+            authRoot["profiles"] = profiles
+            try await writeUserJSON(authRoot, relativePath: "\(agentDir)/auth-profiles.json")
+            var modelsRoot = await readUserJSON(relativePath: "\(agentDir)/models.json")
+            var provs = (modelsRoot["providers"] as? [String: Any]) ?? [:]
+            provs["kimi-coding"] = [
+                "baseUrl": "https://api.kimi.com/coding/", "api": "anthropic-messages",
+                "models": [modelDef],
+            ] as [String: Any]
+            modelsRoot["providers"] = provs
+            try await writeUserJSON(modelsRoot, relativePath: "\(agentDir)/models.json")
+        }
+        return (patch, sync)
     }
 
-    private func applyMinimaxConfig(apiKey: String) async throws {
-        let config = await helperClient.getConfigJSON(username: user.username)
+    private func buildMinimaxPatch(apiKey: String) async throws -> ([String: Any], () async throws -> Void) {
         let providerModels = DirectMinimaxModel.allCases.map(\.providerModelConfig)
-        var modelAliasMap = ((((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:])
-        var selectedAlias = (modelAliasMap[selectedMinimaxModel.rawValue] as? [String: Any]) ?? [:]
-        selectedAlias["alias"] = selectedAlias["alias"] ?? "Minimax"
-        modelAliasMap[selectedMinimaxModel.rawValue] = selectedAlias
-        let normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: selectedMinimaxModel.rawValue)
-
-        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "models.providers.minimax",
-            value: [
-                "api": "anthropic-messages",
-                "baseUrl": "https://api.minimaxi.com/anthropic",
-                "authHeader": true,
-                "models": providerModels,
-            ]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "auth.profiles.minimax:cn",
-            value: ["provider": "minimax", "mode": "api_key"]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "agents.defaults.model",
-            value: normalizedModelConfig
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "agents.defaults.models",
-            value: modelAliasMap
-        )
-
-        try await syncMinimaxAgentFiles(apiKey: apiKey, providerModels: providerModels)
+        let patch: [String: Any] = [
+            "models": [
+                "mode": "merge",
+                "providers": ["minimax": [
+                    "api": "anthropic-messages",
+                    "baseUrl": "https://api.minimaxi.com/anthropic",
+                    "authHeader": true,
+                    "models": providerModels,
+                ] as [String: Any]],
+            ] as [String: Any],
+            "auth": ["profiles": ["minimax:cn": ["provider": "minimax", "mode": "api_key"]]],
+            "agents": ["defaults": [
+                "model": ["primary": selectedMinimaxModel.rawValue],
+            ] as [String: Any]],
+        ]
+        let sync: () async throws -> Void = { [self] in
+            try await syncMinimaxAgentFiles(apiKey: apiKey, providerModels: providerModels)
+        }
+        return (patch, sync)
     }
 
-    private func applyQiniuConfig(apiKey: String) async throws {
-        let config = await helperClient.getConfigJSON(username: user.username)
+    private func buildQiniuPatch(apiKey: String) async throws -> ([String: Any], () async throws -> Void) {
         let providerModels = DirectQiniuModel.allCases.map(\.providerModelConfig)
-        let normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: selectedQiniuModel.rawValue)
-        var aliasMap = ((((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:])
-        for model in DirectQiniuModel.allCases {
-            var aliasConfig = (aliasMap[model.rawValue] as? [String: Any]) ?? [:]
-            aliasConfig["alias"] = model.alias
-            aliasMap[model.rawValue] = aliasConfig
+        let patch: [String: Any] = [
+            "env": ["QINIU_API_KEY": apiKey],
+            "models": [
+                "mode": "merge",
+                "providers": ["qiniu": [
+                    "baseUrl": "https://api.qnaigc.com/v1",
+                    "apiKey": "${QINIU_API_KEY}",
+                    "api": "openai-completions",
+                    "models": providerModels,
+                ] as [String: Any]],
+            ] as [String: Any],
+            "auth": ["profiles": ["qiniu:default": ["provider": "qiniu", "mode": "api_key"]]],
+            "agents": ["defaults": [
+                "model": ["primary": selectedQiniuModel.rawValue],
+            ] as [String: Any]],
+        ]
+        let sync: () async throws -> Void = { [self] in
+            try await syncQiniuAgentFiles(apiKey: apiKey, providerModels: providerModels)
         }
-
-        try await helperClient.setConfigDirect(username: user.username, path: "env.QINIU_API_KEY", value: apiKey)
-        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "models.providers.qiniu",
-            value: [
-                "baseUrl": "https://api.qnaigc.com/v1",
-                "apiKey": "${QINIU_API_KEY}",
-                "api": "openai-completions",
-                "models": providerModels,
-            ]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "auth.profiles.qiniu:default",
-            value: ["provider": "qiniu", "mode": "api_key"]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "agents.defaults.model",
-            value: normalizedModelConfig
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "agents.defaults.models",
-            value: aliasMap
-        )
-
-        try await syncQiniuAgentFiles(apiKey: apiKey, providerModels: providerModels)
+        return (patch, sync)
     }
 
-    private func applyZAIConfig(apiKey: String) async throws {
-        let config = await helperClient.getConfigJSON(username: user.username)
+    private func buildZAIPatch(apiKey: String) async throws -> ([String: Any], () async throws -> Void) {
         let providerModels = DirectZAIModel.allCases.map(\.providerModelConfig)
-        let normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: selectedZAIModel.rawValue)
-        var aliasMap = ((((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:])
-        for model in DirectZAIModel.allCases {
-            var aliasConfig = (aliasMap[model.rawValue] as? [String: Any]) ?? [:]
-            aliasConfig["alias"] = model.alias
-            aliasMap[model.rawValue] = aliasConfig
+        let patch: [String: Any] = [
+            "models": [
+                "mode": "merge",
+                "providers": ["zai": [
+                    "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+                    "apiKey": apiKey,
+                    "api": "openai-completions",
+                    "models": providerModels,
+                ] as [String: Any]],
+            ] as [String: Any],
+            "auth": ["profiles": ["zai:default": ["provider": "zai", "mode": "api_key"]]],
+            "agents": ["defaults": [
+                "model": ["primary": selectedZAIModel.rawValue],
+            ] as [String: Any]],
+        ]
+        let sync: () async throws -> Void = { [self] in
+            try await syncZAIAgentFiles(apiKey: apiKey, providerModels: providerModels)
         }
-
-        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "models.providers.zai",
-            value: [
-                "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
-                "apiKey": apiKey,
-                "api": "openai-completions",
-                "models": providerModels,
-            ]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "auth.profiles.zai:default",
-            value: ["provider": "zai", "mode": "api_key"]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "agents.defaults.model",
-            value: normalizedModelConfig
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "agents.defaults.models",
-            value: aliasMap
-        )
-
-        try await syncZAIAgentFiles(apiKey: apiKey, providerModels: providerModels)
+        return (patch, sync)
     }
 
-    private func applyCustomConfig(apiKey: String) async throws {
-        let config = await helperClient.getConfigJSON(username: user.username)
+    private func buildCustomPatch(apiKey: String) throws -> ([String: Any], () async throws -> Void) {
         let providerId = effectiveCustomProviderId
         let modelId = effectiveCustomModelId
         let baseURL = customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedAPIKey = CustomModelConfigUtils.resolvedAPIKey(apiKey)
 
-        guard !modelId.isEmpty else {
-            throw HelperError.operationFailed("请先选择模型")
-        }
-        guard !baseURL.isEmpty else {
-            throw HelperError.operationFailed("请先填写 Base URL")
-        }
+        guard !modelId.isEmpty else { throw HelperError.operationFailed("请先选择模型") }
+        guard !baseURL.isEmpty else { throw HelperError.operationFailed("请先填写 Base URL") }
 
         let primary = "\(providerId)/\(modelId)"
-        let normalizedModelConfig = normalizedDefaultModelConfig(from: config, primary: primary)
-        var aliasMap = ((((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:])
-        var aliasConfig = (aliasMap[primary] as? [String: Any]) ?? [:]
-        aliasConfig["alias"] = modelId
-        aliasMap[primary] = aliasConfig
+        let patch: [String: Any] = [
+            "models": [
+                "mode": "merge",
+                "providers": [providerId: [
+                    "baseUrl": baseURL,
+                    "apiKey": resolvedAPIKey,
+                    "api": customCompatibility.apiType,
+                    "models": [[
+                        "id": modelId, "name": modelId,
+                        "input": ["text"], "contextWindow": 128000, "maxTokens": 8192,
+                    ] as [String: Any]],
+                ] as [String: Any]],
+            ] as [String: Any],
+            "auth": ["profiles": ["\(providerId):default": ["provider": providerId, "mode": "api_key"]]],
+            "agents": ["defaults": [
+                "model": ["primary": primary],
+            ] as [String: Any]],
+        ]
+        return (patch, {})
+    }
 
-        try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "models.providers.\(providerId)",
-            value: [
-                "baseUrl": baseURL,
-                "apiKey": resolvedAPIKey,
-                "api": customCompatibility.apiType,
-                "models": [[
-                    "id": modelId,
-                    "name": modelId,
-                    "input": ["text"],
-                    "contextWindow": 128000,
-                    "maxTokens": 8192,
-                ]],
-            ]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "auth.profiles.\(providerId):default",
-            value: ["provider": providerId, "mode": "api_key"]
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "agents.defaults.model",
-            value: normalizedModelConfig
-        )
-        try await helperClient.setConfigDirect(
-            username: user.username,
-            path: "agents.defaults.models",
-            value: aliasMap
-        )
+    /// 将 patch 与现有配置中的 alias map 合并（保留已有别名）
+    private func mergePatchWithExistingAliases(patch: [String: Any], existingConfig: [String: Any]) -> [String: Any] {
+        var result = patch
+        let existingAliases = ((existingConfig["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]
+
+        // 根据提供商构建新的 alias
+        var aliasMap = existingAliases ?? [:]
+        switch selectedProvider {
+        case .minimax:
+            var a = (aliasMap[selectedMinimaxModel.rawValue] as? [String: Any]) ?? [:]
+            a["alias"] = a["alias"] ?? "Minimax"
+            aliasMap[selectedMinimaxModel.rawValue] = a
+        case .qiniu:
+            for model in DirectQiniuModel.allCases {
+                var a = (aliasMap[model.rawValue] as? [String: Any]) ?? [:]
+                a["alias"] = model.alias
+                aliasMap[model.rawValue] = a
+            }
+        case .zai:
+            for model in DirectZAIModel.allCases {
+                var a = (aliasMap[model.rawValue] as? [String: Any]) ?? [:]
+                a["alias"] = model.alias
+                aliasMap[model.rawValue] = a
+            }
+        case .custom:
+            let primary = "\(effectiveCustomProviderId)/\(effectiveCustomModelId)"
+            var a = (aliasMap[primary] as? [String: Any]) ?? [:]
+            a["alias"] = effectiveCustomModelId
+            aliasMap[primary] = a
+        default:
+            break
+        }
+
+        if !aliasMap.isEmpty {
+            var agentsPatch = (result["agents"] as? [String: Any]) ?? [:]
+            var defaults = (agentsPatch["defaults"] as? [String: Any]) ?? [:]
+            defaults["models"] = aliasMap
+            agentsPatch["defaults"] = defaults
+            result["agents"] = agentsPatch
+        }
+
+        // fallbacks 由 doApplyConfig 根据用户选择（保留/替换）处理，此处不自动保留
+
+        return result
     }
 
     private func fetchCustomModels() async {
@@ -6301,12 +6410,13 @@ private struct KimiMinimaxModelConfigPanel: View {
     }
 
     private func normalizedDefaultModelConfig(from config: [String: Any], primary: String) -> [String: Any] {
+        // OpenClaw schema 字段名为 "fallbacks"（复数），使用 .strict() 校验
         let existingModel = ((((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:])
         var normalized: [String: Any] = ["primary": primary]
-        if let fallbackArray = existingModel["fallback"] as? [String], !fallbackArray.isEmpty {
-            normalized["fallback"] = fallbackArray
-        } else if let singleFallback = existingModel["fallback"] as? String, !singleFallback.isEmpty {
-            normalized["fallback"] = [singleFallback]
+        if let fallbackArray = existingModel["fallbacks"] as? [String], !fallbackArray.isEmpty {
+            normalized["fallbacks"] = fallbackArray
+        } else if let singleFallback = existingModel["fallbacks"] as? String, !singleFallback.isEmpty {
+            normalized["fallbacks"] = [singleFallback]
         }
         return normalized
     }

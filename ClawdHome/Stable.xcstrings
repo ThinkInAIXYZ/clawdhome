@@ -10310,7 +10310,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "内存"
+            "value": "记忆"
           }
         }
       }
@@ -19905,6 +19905,23 @@
         }
       }
     },
+    "upgrade.error.connection_lost": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection lost, please close and retry"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接中断，请关闭后重试"
+          }
+        }
+      }
+    },
     "upgrade.confirm.status.done": {
       "extractionState": "manual",
       "localizations": {
@@ -20926,6 +20943,24 @@
         }
       }
     },
+    "persona.file.agents.desc": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Operating instructions · Memory management"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "操作指令 · 记忆管理"
+          }
+        }
+      }
+    },
     "persona.file.identity.desc": {
       "comment": "",
       "extractionState": "stale",
@@ -21178,6 +21213,42 @@
         }
       }
     },
+    "persona.memory_log.empty": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log is empty"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日志为空"
+          }
+        }
+      }
+    },
+    "persona.memory_log.readonly": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read-only"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只读"
+          }
+        }
+      }
+    },
     "persona.memo.badge": {
       "comment": "",
       "extractionState": "stale",
@@ -21354,6 +21425,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "已改"
+          }
+        }
+      }
+    },
+    "persona.sidebar.memory_logs": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Memory Logs"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "记忆日志"
           }
         }
       }

@@ -36,10 +36,21 @@ targets:
         script: |
           BUILD_NUM=$(git -C "${SRCROOT}" rev-list --count HEAD 2>/dev/null || echo 0)
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1.${BUILD_NUM}" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}" 2>/dev/null || true
+          MARKETING_VER="${CLAWDHOME_MARKETING_VERSION_OVERRIDE:-${MARKETING_VERSION:-}}"
+          if [ -z "$MARKETING_VER" ]; then
+            MARKETING_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "${SRCROOT}/ClawdHome/Info.plist" 2>/dev/null || echo "1.6.0")
+          fi
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${MARKETING_VER}" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}" 2>/dev/null || true
         basedOnDependencyAnalysis: false
       - name: "Embed Helper into App Bundle"
         script: |
+          # DEBUG 模式下跳过嵌入 helper，避免 SMAppService 检测到 app bundle 中的
+          # helper 变化后自动替换正在运行的 /Library/PrivilegedHelperTools/ 二进制。
+          # 开发阶段使用 make install-helper 手动管理 helper。
+          if [ "${CONFIGURATION}" = "Debug" ]; then
+            echo "⏭ DEBUG: skip embedding helper (use 'make install-helper' instead)"
+            exit 0
+          fi
           DEST="${CODESIGNING_FOLDER_PATH}/Contents/Library/LaunchDaemons"
           mkdir -p "$DEST"
           cp "${BUILT_PRODUCTS_DIR}/ClawdHomeHelper" "$DEST/ClawdHomeHelper"
@@ -62,8 +73,6 @@ targets:
         CFBundleName: ClawdHome
         CFBundleDisplayName: ClawdHome
         CFBundleIconFile: AppIcon.icns
-        CFBundleShortVersionString: "1.1.174"
-        CFBundleVersion: "174"
         NSHumanReadableDescription: OpenClaw 家庭管理器
         LSApplicationCategoryType: public.app-category.utilities
 

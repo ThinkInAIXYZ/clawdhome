@@ -59,6 +59,7 @@
 		52DC4DCC5F6553B9DA7AE563 /* UserManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14984A3D87B04508056F24CF /* UserManager.swift */; };
 		55CB96D5B61D248282E612F1 /* BackupManagerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB9584EDF129A0295EBB14A /* BackupManagerSheet.swift */; };
 		5AE2A7E5C2BDF08FCAC2DBE4 /* AppUpdateHeartbeatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335F70B73CF355F93B436AFA /* AppUpdateHeartbeatService.swift */; };
+		5C24D821B52B296FB1663DF8 /* ModelPrioritySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED27F46F57A2556B2A4A6512 /* ModelPrioritySheet.swift */; };
 		5C4286A2BA6C2A17C2E8D16A /* ApplyCredentialSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BF8C6365FBBA9CA2C07D90 /* ApplyCredentialSheet.swift */; };
 		5FF1FC550784127BA01FA09D /* LocalLLMManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9DBC78DA4D1FFD0EB50D466 /* LocalLLMManager.swift */; };
 		61122BA3487584B844D57BB3 /* GlobalModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89D6CAF4FF1A5DD31BFE266E /* GlobalModelStore.swift */; };
@@ -100,6 +101,7 @@
 		A8BE1B4D2DCDE54C8F63CBF2 /* ClawdHomeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AF76BC505A9925D08297CB1 /* ClawdHomeApp.swift */; };
 		A98586898710F4A55154C94A /* roles.html in Resources */ = {isa = PBXBuildFile; fileRef = 3F177240AE99ADC3F3D2AD8F /* roles.html */; };
 		A9B78E60A9F1EBB090E30958 /* ModelsStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 502BBF84DE690AD43299985F /* ModelsStatus.swift */; };
+		ACE028DB32C34188A8C47EA4 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6482AE0816A0181D42B69AB4 /* DeviceIdentity.swift */; };
 		B33BF87630AE1CBD7D47F438 /* FileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71156CAD7673A87034AF0D8 /* FileModels.swift */; };
 		B57160D717A6898E887EADDD /* CloneClawModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */; };
 		B81D3332811AFA345F523E3D /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E5226083EF9356F8C51363 /* AppLogger.swift */; };
@@ -201,6 +203,7 @@
 		5D7D1F12DB908202E9E91105 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		5F97A493AAFD488D32EC70F5 /* ClawdHome.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClawdHome.entitlements; sourceTree = "<group>"; };
 		6474BB5EEF5B87B65666E978 /* NetworkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkModels.swift; sourceTree = "<group>"; };
+		6482AE0816A0181D42B69AB4 /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
 		67AB0A69D9F15FA551CD2FFE /* ClawPoolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawPoolView.swift; sourceTree = "<group>"; };
 		6805588FE98C2E1FE665C5F1 /* ModelManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerView.swift; sourceTree = "<group>"; };
 		6E1B997BD537C60950ED9DD3 /* UserDirectoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDirectoryService.swift; sourceTree = "<group>"; };
@@ -259,6 +262,7 @@
 		E9D81E7B672B2A82591FEF1B /* GatewayCronStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayCronStore.swift; sourceTree = "<group>"; };
 		E9F9AD8700941AFBF1F34673 /* LogViewerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerSheet.swift; sourceTree = "<group>"; };
 		EB4BFDC6320B7C035E22C884 /* NodeDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeDownloader.swift; sourceTree = "<group>"; };
+		ED27F46F57A2556B2A4A6512 /* ModelPrioritySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPrioritySheet.swift; sourceTree = "<group>"; };
 		EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAIModels.swift; sourceTree = "<group>"; };
 		EFC4D03808505276353A3AD2 /* FileInputAcceptFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileInputAcceptFilter.swift; sourceTree = "<group>"; };
 		F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneClawModels.swift; sourceTree = "<group>"; };
@@ -308,6 +312,7 @@
 				4B639FCB2D3020F3E95F7EFC /* AppLockStore.swift */,
 				81E5226083EF9356F8C51363 /* AppLogger.swift */,
 				304E3BEE50A0653474FF27FC /* DaemonInstaller.swift */,
+				6482AE0816A0181D42B69AB4 /* DeviceIdentity.swift */,
 				BA77A80C488C3D16C1BD4243 /* GatewayClient.swift */,
 				E9D81E7B672B2A82591FEF1B /* GatewayCronStore.swift */,
 				4A1CD2C5DBEEFC059991B495 /* GatewayHub.swift */,
@@ -513,6 +518,7 @@
 				8E37D8B7B0C66ACFBDB383D1 /* MemoryTabView.swift */,
 				922B9F0332920FE79B0EF0B8 /* ModelConfigWizard.swift */,
 				4E294E274D560257BC77114C /* ModelPickerSheet.swift */,
+				ED27F46F57A2556B2A4A6512 /* ModelPrioritySheet.swift */,
 				54673332FA3CBD020381CD20 /* NetworkPolicyView.swift */,
 				77787365CF9FCFC1BABE9B81 /* PersonaDefView.swift */,
 				0511A43DA0C20592D7181ABD /* RoleMarketView.swift */,
@@ -671,7 +677,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "DEST=\"${CODESIGNING_FOLDER_PATH}/Contents/Library/LaunchDaemons\"\nmkdir -p \"$DEST\"\ncp \"${BUILT_PRODUCTS_DIR}/ClawdHomeHelper\" \"$DEST/ClawdHomeHelper\"\nchmod +x \"$DEST/ClawdHomeHelper\"\ncp \"${SRCROOT}/Resources/ai.clawdhome.mac.helper.plist\" \"$DEST/\"\n";
+			shellScript = "# DEBUG 模式下跳过嵌入 helper，避免 SMAppService 检测到 app bundle 中的\n# helper 变化后自动替换正在运行的 /Library/PrivilegedHelperTools/ 二进制。\n# 开发阶段使用 make install-helper 手动管理 helper。\nif [ \"${CONFIGURATION}\" = \"Debug\" ]; then\n  echo \"⏭ DEBUG: skip embedding helper (use 'make install-helper' instead)\"\n  exit 0\nfi\nDEST=\"${CODESIGNING_FOLDER_PATH}/Contents/Library/LaunchDaemons\"\nmkdir -p \"$DEST\"\ncp \"${BUILT_PRODUCTS_DIR}/ClawdHomeHelper\" \"$DEST/ClawdHomeHelper\"\nchmod +x \"$DEST/ClawdHomeHelper\"\ncp \"${SRCROOT}/Resources/ai.clawdhome.mac.helper.plist\" \"$DEST/\"\n";
 		};
 		A99DCFF1121F876C8AFAB831 /* Generate Helper Version */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -726,6 +732,7 @@
 				1EF1D1156BEAC282AC695473 /* DaemonSetupBanner.swift in Sources */,
 				6E8E862B9D09268ABD86C619 /* DashboardModels.swift in Sources */,
 				E0CEA96A5FE7483DCDA6DC57 /* DashboardView.swift in Sources */,
+				ACE028DB32C34188A8C47EA4 /* DeviceIdentity.swift in Sources */,
 				ED40DBD9596B50649987B59A /* FallbackManagerSheet.swift in Sources */,
 				BE20A437ADC0E25426EC7750 /* FeishuChannelOnboardingSheet.swift in Sources */,
 				1A9602934F0304C7AA1905A6 /* FileInputAcceptFilter.swift in Sources */,
@@ -757,6 +764,7 @@
 				528A031AEEFF0701F4E96EBD /* ModelManagerView.swift in Sources */,
 				A3581A320A78854BFF6B234D /* ModelPickerSheet.swift in Sources */,
 				3A3F42C9E4F1D40D1214CDA8 /* ModelPingService.swift in Sources */,
+				5C24D821B52B296FB1663DF8 /* ModelPrioritySheet.swift in Sources */,
 				A9B78E60A9F1EBB090E30958 /* ModelsStatus.swift in Sources */,
 				FBCAA5C027073F120856AC08 /* NetworkModels.swift in Sources */,
 				EFB354F72C60BB435A62D4B4 /* NetworkPolicyView.swift in Sources */,

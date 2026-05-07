@@ -789,12 +789,25 @@ struct ClawPoolView: View {
                 windowOpenInFlightUsernames.remove(usernameKey)
                 lastWindowOpenAtByUsername[usernameKey] = Date()
             }
-            let target = await UserEntryWindowResolver.resolve(
-                user: claw,
-                helperClient: helperClient,
-                readiness: gatewayHub.readinessMap[claw.username],
-                hasForcedOnboarding: hasForcedOnboarding
-            )
+            // 限制解析超时为 3 秒，避免 XPC 调用阻塞 UI（默认 30s 太久）
+            // 超时则直接打开详情窗口
+            let target: UserEntryWindowTarget = await withTaskGroup(of: UserEntryWindowTarget.self) { group in
+                group.addTask {
+                    await UserEntryWindowResolver.resolve(
+                        user: claw,
+                        helperClient: self.helperClient,
+                        readiness: self.gatewayHub.readinessMap[claw.username],
+                        hasForcedOnboarding: hasForcedOnboarding
+                    )
+                }
+                group.addTask {
+                    try? await Task.sleep(for: .seconds(3))
+                    return .detail
+                }
+                let result = await group.next() ?? .detail
+                group.cancelAll()
+                return result
+            }
             openWindow(id: target.rawValue, value: claw.username)
         }
     }
