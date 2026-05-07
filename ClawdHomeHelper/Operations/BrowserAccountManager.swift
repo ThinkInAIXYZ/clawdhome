@@ -239,6 +239,7 @@ enum BrowserAccountManager {
             try FilePermissionHelper.chownRecursive((binDir as NSString).deletingLastPathComponent, owner: username)
             try installBrowserShim(username: username, binDir: binDir, toolPath: toolPath)
             try installBrowserCommandWrappers(username: username, binDir: binDir, toolPath: toolPath)
+            try installNPMWrapperIfPossible(username: username, binDir: binDir, toolPath: toolPath)
             try installOpenCLIWrapperIfPresent(
                 username: username,
                 binDir: binDir,
@@ -416,6 +417,74 @@ enum BrowserAccountManager {
 
         echo "route=system-fallback command=\(commandName) argv=$*" >> "$LOG" 2>&1 || true
         \(systemOpenFallback)
+        """
+    }
+
+    private static func installNPMWrapperIfPossible(username: String, binDir: String, toolPath: String) throws {
+        guard binDir == "/Users/\(username)/\(BrowserAccountPaths.userLocalBinRelativePath)" else {
+            return
+        }
+        let wrapperPath = "\(binDir)/npm"
+        let fm = FileManager.default
+        let realCandidates = [
+            "/Users/\(username)/.brew/bin/npm",
+            "/Users/\(username)/.brew/lib/nodejs/node-v24.9.0-darwin-arm64/bin/npm",
+            "/Users/\(username)/.brew/lib/nodejs/node-v22.18.0-darwin-arm64/bin/npm",
+            "/Users/\(username)/.brew/lib/nodejs/node-v20.19.0-darwin-arm64/bin/npm",
+            "/Users/\(username)/.brew/lib/nodejs/node-v18.20.8-darwin-arm64/bin/npm",
+            "/opt/homebrew/bin/npm",
+            "/usr/local/bin/npm",
+        ]
+        guard let realNPM = realCandidates.first(where: { candidate in
+            candidate != wrapperPath && fm.isExecutableFile(atPath: candidate)
+        }) else {
+            return
+        }
+
+        let wrapper = npmWrapperScript(toolPath: toolPath, realNPM: realNPM)
+        try wrapper.write(toFile: wrapperPath, atomically: true, encoding: .utf8)
+        try FilePermissionHelper.chown(wrapperPath, owner: username)
+        try FilePermissionHelper.chmod(wrapperPath, mode: "755")
+    }
+
+    private static func npmWrapperScript(toolPath: String, realNPM: String) -> String {
+        """
+        #!/bin/zsh
+        # CLAWDHOME_NPM_WRAPPER
+        LOG="$HOME/\(BrowserAccountPaths.debugLogRelativePath)"
+        mkdir -p "$HOME/\(BrowserAccountPaths.browserDirectoryRelativePath)"
+
+        saw_install=0
+        saw_global=0
+        saw_opencli=0
+        for arg in "$@"; do
+          case "$arg" in
+            install|i|add)
+              saw_install=1
+              ;;
+            -g|--global)
+              saw_global=1
+              ;;
+            @jackwener/opencli|@jackwener/opencli@*|opencli|opencli@*)
+              saw_opencli=1
+              ;;
+          esac
+        done
+
+        "\(realNPM)" "$@"
+        npm_status=$?
+
+        if [ "$npm_status" -eq 0 ] && [ "$saw_install" -eq 1 ] && [ "$saw_global" -eq 1 ] && [ "$saw_opencli" -eq 1 ]; then
+          {
+            echo "--- $(/bin/date '+%Y-%m-%d %H:%M:%S') npm-wrapper repair-opencli"
+            echo "argv=$*"
+            echo "real-npm=\(realNPM)"
+          } >> "$LOG" 2>&1 || true
+          /usr/bin/env python3 "\(toolPath)" repair-opencli >> "$LOG" 2>&1 || true
+          hash -r 2>/dev/null || true
+        fi
+
+        exit "$npm_status"
         """
     }
 
@@ -1575,6 +1644,110 @@ def command_screenshot():
         f.write(raw)
     print(path)
 
+def opencli_daemon_port(username):
+    value = 2166136261
+    for byte in username.encode("utf-8"):
+        value = ((value ^ byte) * 16777619) & 0xFFFFFFFF
+    return 20000 + (value % 20000)
+
+def contains_marker(path, marker):
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            return marker in f.read(4096)
+    except Exception:
+        return False
+
+def sh_quote(value):
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+def atomic_write_executable(path, content):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp_path = path + ".tmp-" + str(os.getpid())
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    os.chmod(tmp_path, 0o755)
+    os.replace(tmp_path, path)
+
+def opencli_wrapper_content(real_path, daemon_path):
+    username = os.environ.get("USER") or getpass.getuser()
+    daemon_port = opencli_daemon_port(username)
+    return '''#!/bin/zsh
+# CLAWDHOME_OPENCLI_WRAPPER
+set -e
+LOG="$HOME/.clawdhome/browser/debug.log"
+mkdir -p "$HOME/.clawdhome/browser"
+{
+  echo "--- $(/bin/date '+%%Y-%%m-%%d %%H:%%M:%%S') opencli-wrapper"
+  echo "argv=$*"
+  echo "pwd=$PWD"
+  echo "PATH=$PATH"
+  echo "which-open=$(command -v open 2>/dev/null || true)"
+  echo "which-opencli-real=%s"
+} >> "$LOG" 2>&1 || true
+
+CLAWDHOME_BROWSER_HIDE=1 /usr/bin/env python3 "$HOME/.clawdhome/tools/clawdhome-browser/clawdhome-browser" open "https://clawdhome.ai" >/dev/null 2>&1 || {
+  echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
+  echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
+}
+echo "opencli-prelaunch=done" >> "$LOG" 2>&1 || true
+
+port="${OPENCLI_DAEMON_PORT:-%d}"
+export OPENCLI_DAEMON_PORT="$port"
+if ! /usr/bin/nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
+  echo "opencli-daemon=start port=$port" >> "$LOG" 2>&1 || true
+  mkdir -p "$HOME/.opencli"
+  /usr/bin/nohup /usr/bin/env node %s >> "$HOME/.opencli/clawdhome-daemon.log" 2>&1 &
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    /usr/bin/nc -z 127.0.0.1 "$port" >/dev/null 2>&1 && break
+    sleep 0.2
+  done
+fi
+
+for _ in {1..40}; do
+  status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"
+  echo "$status_json" | /usr/bin/grep -q '"extensionConnected":true' && break
+  sleep 0.5
+done
+
+echo "opencli-wrapper=exec-real" >> "$LOG" 2>&1 || true
+exec %s "$@"
+''' % (real_path, daemon_port, sh_quote(daemon_path), sh_quote(real_path))
+
+def command_repair_opencli():
+    home = os.path.expanduser("~")
+    local_bin = os.path.join(home, ".local", "bin")
+    npm_bin = os.path.join(home, ".npm-global", "bin")
+    npm_opencli = os.path.join(npm_bin, "opencli")
+    local_opencli = os.path.join(local_bin, "opencli")
+    real_opencli = os.path.join(npm_bin, "opencli.clawdhome-real")
+    daemon_path = os.path.join(npm_bin, "..", "lib", "node_modules", "@jackwener", "opencli", "dist", "src", "daemon.js")
+    marker = "CLAWDHOME_OPENCLI_WRAPPER"
+
+    debug_log(f"command_repair_opencli start npm_opencli={npm_opencli!r} real_opencli={real_opencli!r}")
+    if os.path.lexists(npm_opencli) and not contains_marker(npm_opencli, marker):
+        if os.path.lexists(real_opencli):
+            backup_path = real_opencli + ".backup-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            os.replace(real_opencli, backup_path)
+            debug_log(f"command_repair_opencli backup_real path={backup_path!r}")
+        os.replace(npm_opencli, real_opencli)
+        os.chmod(real_opencli, 0o755)
+        debug_log("command_repair_opencli moved raw npm opencli to real")
+
+    if not os.path.exists(real_opencli):
+        print("opencli executable not found; nothing to repair")
+        debug_log("command_repair_opencli no real opencli")
+        return
+    if not os.path.exists(daemon_path):
+        print("opencli daemon not found; wrapper not changed")
+        debug_log(f"command_repair_opencli missing daemon path={daemon_path!r}")
+        return
+
+    wrapper = opencli_wrapper_content(real_opencli, daemon_path)
+    atomic_write_executable(npm_opencli, wrapper)
+    atomic_write_executable(local_opencli, wrapper)
+    print("opencli wrapper repaired")
+    debug_log("command_repair_opencli repaired")
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
     debug_log(f"main cmd={cmd!r} argv={sys.argv!r} cwd={os.getcwd()!r} uid={os.getuid()} euid={os.geteuid()} user={os.environ.get('USER')!r}")
@@ -1590,8 +1763,10 @@ def main():
         command_eval("document.body ? document.body.innerText : ''")
     elif cmd == "screenshot":
         command_screenshot()
+    elif cmd == "repair-opencli":
+        command_repair_opencli()
     else:
-        fail("用法: clawdhome-browser status|launch [url]|open <url>|title|extract-text|screenshot")
+        fail("用法: clawdhome-browser status|launch [url]|open <url>|title|extract-text|screenshot|repair-opencli")
 
 if __name__ == "__main__":
     main()
