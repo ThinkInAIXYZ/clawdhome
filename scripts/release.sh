@@ -141,9 +141,13 @@ if [ "$DRY_RUN" = true ]; then
   echo "  3. git commit -m \"chore(release): v${NEXT_VERSION}\""
   echo "  4. git tag -a v${NEXT_VERSION}"
   if [ "${NOTARIZE:-false}" = "true" ]; then
-    echo "  5. xcodebuild + pkgbuild/productsign + notarize → dist/ClawdHome-${NEXT_VERSION}.pkg"
+    echo "  5. xcodebuild + pkgbuild/productsign + notarize →"
+    echo "     dist/ClawdHome-${NEXT_VERSION}-arm64.pkg"
+    echo "     dist/ClawdHome-${NEXT_VERSION}-x64.pkg"
   else
-    echo "  5. xcodebuild + pkgbuild/productsign → dist/ClawdHome-${NEXT_VERSION}.pkg"
+    echo "  5. xcodebuild + pkgbuild/productsign →"
+    echo "     dist/ClawdHome-${NEXT_VERSION}-arm64.pkg"
+    echo "     dist/ClawdHome-${NEXT_VERSION}-x64.pkg"
   fi
   echo "  6. 同步 version.json（含中英文 release notes）"
   echo "  7. git push && git push --tags"
@@ -196,32 +200,43 @@ trap rollback EXIT
 
 # ── Step 4：构建打包 ──────────────────────────────────────────────────────────
 
-log "构建打包..."
-RELEASE_VERSION="$NEXT_VERSION" bash "$SCRIPT_DIR/build-pkg.sh" --no-sync-api-version
+build_release_pkg() {
+  local archs="$1"
+  log "构建打包（${archs}）..."
+  RELEASE_VERSION="$NEXT_VERSION" PKG_ARCHS="$archs" bash "$SCRIPT_DIR/build-pkg.sh" --no-sync-api-version
+}
 
-PKG=$(ls -t dist/ClawdHome-*.pkg 2>/dev/null | head -1)
-[ -n "$PKG" ] || fail "未找到 dist/ClawdHome-*.pkg"
+build_release_pkg "arm64"
+build_release_pkg "x86_64"
 
-ok "打包完成：$PKG"
+PKG_ARM64="$REPO_ROOT/dist/ClawdHome-${NEXT_VERSION}-arm64.pkg"
+PKG_X64="$REPO_ROOT/dist/ClawdHome-${NEXT_VERSION}-x64.pkg"
+[ -f "$PKG_ARM64" ] || fail "未找到 $PKG_ARM64"
+[ -f "$PKG_X64" ] || fail "未找到 $PKG_X64"
+
+ok "打包完成：$PKG_ARM64"
+ok "打包完成：$PKG_X64"
 
 # ── Step 5：同步 version.json ────────────────────────────────────────────────
 
 if [ -f "$API_VERSION_JSON" ]; then
   log "同步 version.json..."
 
-  DOWNLOAD_URL="https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}.pkg"
+  DOWNLOAD_URL="https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}-arm64.pkg"
+  DOWNLOAD_URL_X64="https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}-x64.pkg"
 
   TMP_JSON=$(mktemp)
-  /usr/bin/python3 - "$API_VERSION_JSON" "$TMP_JSON" "$NEXT_VERSION" "$DOWNLOAD_URL" "$API_RELEASE_NOTES_ZH" "$API_RELEASE_NOTES_EN" <<'PY'
+  /usr/bin/python3 - "$API_VERSION_JSON" "$TMP_JSON" "$NEXT_VERSION" "$DOWNLOAD_URL" "$DOWNLOAD_URL_X64" "$API_RELEASE_NOTES_ZH" "$API_RELEASE_NOTES_EN" <<'PY'
 import json
 import sys
 
-src, dst, version, download_url, notes_zh, notes_en = sys.argv[1:]
+src, dst, version, download_url, download_url_x64, notes_zh, notes_en = sys.argv[1:]
 with open(src, "r", encoding="utf-8") as fh:
     data = json.load(fh)
 
 data["version"] = version
 data["download_url"] = download_url
+data["download_url_x64"] = download_url_x64
 data["release_notes"] = notes_zh
 data["release_notes_en"] = notes_en
 
@@ -236,10 +251,17 @@ PY
   WEBSITE_DOWNLOAD_DIR="$WEBSITE_DIR/download"
   if [ -d "$WEBSITE_DIR" ]; then
     mkdir -p "$WEBSITE_DOWNLOAD_DIR"
-    cp -f "$PKG" "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}.pkg"
-    cp -f "$PKG" "$WEBSITE_DOWNLOAD_DIR/ClawdHome-latest.pkg"
+    cp -f "$PKG_ARM64" "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}-arm64.pkg"
+    cp -f "$PKG_X64" "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}-x64.pkg"
+    # 向后兼容：保留无架构后缀的历史命名，默认指向 arm64 包。
+    cp -f "$PKG_ARM64" "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}.pkg"
+    cp -f "$PKG_ARM64" "$WEBSITE_DOWNLOAD_DIR/ClawdHome-latest.pkg"
+    cp -f "$PKG_X64" "$WEBSITE_DOWNLOAD_DIR/ClawdHome-latest-x64.pkg"
+    chmod 644 "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}-arm64.pkg"
+    chmod 644 "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}-x64.pkg"
     chmod 644 "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}.pkg"
     chmod 644 "$WEBSITE_DOWNLOAD_DIR/ClawdHome-latest.pkg"
+    chmod 644 "$WEBSITE_DOWNLOAD_DIR/ClawdHome-latest-x64.pkg"
     ok "已复制 pkg 到网站 download 目录"
   fi
 
@@ -259,7 +281,7 @@ if [ "$SKIP_PUSH" = false ]; then
   RELEASE_NOTES_FILE=$(mktemp)
   echo "$GITHUB_RELEASE_NOTES" > "$RELEASE_NOTES_FILE"
 
-  gh release create "v${NEXT_VERSION}" "$PKG" \
+  gh release create "v${NEXT_VERSION}" "$PKG_ARM64" "$PKG_X64" \
     --title "ClawdHome ${NEXT_VERSION}" \
     --notes-file "$RELEASE_NOTES_FILE"
 
@@ -281,7 +303,8 @@ echo "  ✅ Release v${NEXT_VERSION} 完成"
 echo ""
 echo "  版本：${CURRENT_VERSION:-无} → ${NEXT_VERSION}"
 echo "  Bump：${BUMP_TYPE}"
-echo "  PKG：$PKG"
+echo "  PKG (arm64)：$PKG_ARM64"
+echo "  PKG (x64)：$PKG_X64"
 echo "  Tag：v${NEXT_VERSION}"
 if [ "$SKIP_PUSH" = false ]; then
   echo "  GitHub Release：已创建"

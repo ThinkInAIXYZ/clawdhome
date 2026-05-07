@@ -17,6 +17,7 @@ NOTARY_PROFILE ?= clawdhome-release
 SIGN_APP ?= false
 SIGN_PKG ?= false
 NOTARIZE ?= true
+BUILD_ARCHS ?= arm64
 
 .PHONY: help bump-build build build-helper build-release install-helper uninstall-helper pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-dry-run release-notes-draft changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean
 
@@ -35,6 +36,8 @@ help:
 	@echo "  install-helper   安装 Helper 到系统（需要 sudo）"
 	@echo "  uninstall-helper 卸载 Helper（需要 sudo）"
 	@echo "  pkg              开发用快速打包（默认不签名）"
+	@echo "  pkg-intel        打包 Intel (x86_64) 安装包"
+	@echo "  pkg-universal    打包 Universal (arm64 + x86_64) 安装包"
 	@echo "  pkg-skip-build   跳过构建直接打开发包"
 	@echo "  pkg-signed       生成已签名未公证安装包（发布前本地验收推荐）"
 	@echo "  notarize-pkg     生成已签名且已公证安装包（读取 NOTARY_PROFILE / CLAWDHOME_NOTARY_PROFILE）"
@@ -127,7 +130,7 @@ build-release: bump-build
 		CURRENT_PROJECT_VERSION="$$BUILD_NO" \
 		INFOPLIST_KEY_CFBundleShortVersionString="$$MARKETING_VERSION" \
 		INFOPLIST_KEY_CFBundleVersion="$$BUILD_NO" \
-		ARCHS=arm64 \
+		ARCHS="$(BUILD_ARCHS)" \
 		ONLY_ACTIVE_ARCH=NO
 
 # ── 安装 / 卸载 ───────────────────────────────────────────────────────────────
@@ -142,6 +145,14 @@ uninstall-helper:
 
 pkg: bump-build
 	bash scripts/build-pkg.sh --no-sync-api-version
+	@open dist/
+
+pkg-intel: bump-build
+	PKG_ARCHS=x86_64 bash scripts/build-pkg.sh --no-sync-api-version
+	@open dist/
+
+pkg-universal: bump-build
+	PKG_ARCHS="arm64 x86_64" bash scripts/build-pkg.sh --no-sync-api-version
 	@open dist/
 
 pkg-skip-build:
