@@ -282,7 +282,7 @@ struct HermesDetailView: View {
     private var terminalColumn: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                Text("Chat")
+                Text(L10n.k("hermes.sidebar.chat", fallback: "会话"))
                     .font(.headline)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -509,7 +509,7 @@ struct HermesDetailView: View {
                     onShowChat()
                     chatTabManager.addTab(for: profile)
                 } label: {
-                    Label("Chat", systemImage: "message")
+                    Label(L10n.k("hermes.sidebar.chat", fallback: "会话"), systemImage: "message")
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.borderedProminent)
