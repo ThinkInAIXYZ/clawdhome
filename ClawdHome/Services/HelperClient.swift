@@ -805,6 +805,92 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
+    // MARK: - 分层备份与恢复（v2）
+
+    func backupGlobal(destinationDir: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.backupGlobal(destinationDir: destinationDir) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
+    func backupShrimp(username: String, destinationDir: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.backupShrimp(username: username, destinationDir: destinationDir) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
+    func backupAllV2(destinationDir: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.backupAll(destinationDir: destinationDir) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
+    func restoreGlobal(sourcePath: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.restoreGlobal(sourcePath: sourcePath) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
+    func restoreShrimp(username: String, sourcePath: String, backupBeforeRestore: Bool) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.restoreShrimp(username: username, sourcePath: sourcePath, backupBeforeRestore: backupBeforeRestore) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
+    func getBackupConfig() async throws -> BackupConfig {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let json: String? = try await xpcCall { done in
+            proxy.getBackupConfig { json in done(json) }
+        }
+        guard let json, let data = json.data(using: .utf8) else { return .default }
+        return (try? JSONDecoder().decode(BackupConfig.self, from: data)) ?? .default
+    }
+
+    func setBackupConfig(_ config: BackupConfig) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let data = try JSONEncoder().encode(config)
+        let json = String(data: data, encoding: .utf8) ?? "{}"
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.setBackupConfig(configJSON: json) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
+    func listBackups(destinationDir: String) async throws -> [BackupListEntry] {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let json: String? = try await xpcCall { done in
+            proxy.listBackups(destinationDir: destinationDir) { json in done(json) }
+        }
+        guard let json, let data = json.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([BackupListEntry].self, from: data)) ?? []
+    }
+
+    func deleteBackupFile(filePath: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.deleteBackup(filePath: filePath) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
+    func pruneBackups(destinationDir: String, maxCount: Int) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.pruneBackups(destinationDir: destinationDir, maxCount: maxCount) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
     /// 扫描来源虾可克隆项与大小
     func scanCloneClaw(username: String) async throws -> CloneScanResult {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
