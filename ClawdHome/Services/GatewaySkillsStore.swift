@@ -22,6 +22,7 @@ final class GatewaySkillsStore {
     private var client: GatewayClient?
     private var eventTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
+    private var shrimpName: String = ""
 
     func isBusy(skill: GatewaySkillStatus) -> Bool {
         pendingOps[skill.skillKey] != nil
@@ -29,15 +30,17 @@ final class GatewaySkillsStore {
 
     // MARK: - 生命周期
 
-    func start(client: GatewayClient) async {
+    func start(client: GatewayClient, shrimpName: String) async {
         self.client = client
+        self.shrimpName = shrimpName
         await refresh()
         startEventSubscription(client: client)
         startPolling()
     }
 
     /// 幂等启动：仅在 client 尚未设置时执行完整启动；已有 client 时仅 refresh
-    func startIfNeeded(client: GatewayClient) async {
+    func startIfNeeded(client: GatewayClient, shrimpName: String) async {
+        self.shrimpName = shrimpName
         if self.client != nil {
             self.client = client
             if eventTask == nil { startEventSubscription(client: client) }
@@ -45,7 +48,7 @@ final class GatewaySkillsStore {
             await refresh()
             return
         }
-        await start(client: client)
+        await start(client: client, shrimpName: shrimpName)
     }
 
     func stop() {
@@ -70,7 +73,7 @@ final class GatewaySkillsStore {
             skills = report.skills.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             error = nil
         } catch {
-            appLog("GatewaySkillsStore refresh error: \(error.localizedDescription)", level: .error)
+            appLog("GatewaySkillsStore refresh error [@\(shrimpName)]: \(error.localizedDescription)", level: .error)
             self.error = error.localizedDescription
         }
     }
