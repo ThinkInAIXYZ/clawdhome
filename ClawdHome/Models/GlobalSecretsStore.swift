@@ -68,6 +68,25 @@ final class GlobalSecretsStore {
         load().secrets[secretKey]?.value
     }
 
+    /// 读取指定 secretKey 的值；若该 key 未配置，可按 provider 回退到“供应商唯一 key”。
+    /// 回退策略：
+    /// 1) 先尝试精确命中 secretKey。
+    /// 2) 若未命中且提供了 provider，则收集该 provider 下所有非空 value。
+    /// 3) 仅当该 provider 下 value 去重后只剩 1 个时，返回该唯一值；否则返回 nil（避免多渠道误用）。
+    func value(for secretKey: String, fallbackProvider provider: String?) -> String? {
+        let file = load()
+        if let exact = file.secrets[secretKey]?.value, !exact.isEmpty {
+            return exact
+        }
+        guard let provider, !provider.isEmpty else { return nil }
+        return uniqueProviderValue(provider: provider, from: file)
+    }
+
+    /// 读取 provider 下“唯一 key”；若存在多个不同值则返回 nil。
+    func uniqueProviderValue(provider: String) -> String? {
+        uniqueProviderValue(provider: provider, from: load())
+    }
+
     /// 是否已存储指定 secretKey 的凭据
     func has(secretKey: String) -> Bool {
         load().secrets[secretKey] != nil
@@ -123,5 +142,16 @@ final class GlobalSecretsStore {
             [.posixPermissions: 0o600],
             ofItemAtPath: Self.storeURL.path
         )
+    }
+
+    private func uniqueProviderValue(provider: String, from file: SecretsFile) -> String? {
+        let values = Set(
+            file.secrets.values
+                .filter { $0.provider == provider }
+                .map { $0.value.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        )
+        guard values.count == 1 else { return nil }
+        return values.first
     }
 }

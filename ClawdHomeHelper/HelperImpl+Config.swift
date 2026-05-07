@@ -625,10 +625,22 @@ extension ClawdHomeHelperImpl {
             return
         }
         let home = "/Users/\(username)"
-        let openclawDir = "\(home)/.openclaw"
-        if FileManager.default.fileExists(atPath: openclawDir) {
-            if (try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])) == nil {
-                helperLog("chown -R \(username) \(openclawDir) failed before maintenance terminal session", level: .warn)
+        let isHermesCommand = command.first == "hermes"
+
+        // 按引擎类型修复对应配置目录的所有权
+        if isHermesCommand {
+            let hermesHome = HermesInstaller.hermesHome(for: username)
+            if FileManager.default.fileExists(atPath: hermesHome) {
+                if (try? run("/usr/sbin/chown", args: ["-R", username, hermesHome])) == nil {
+                    helperLog("chown -R \(username) \(hermesHome) failed before hermes maintenance terminal session", level: .warn)
+                }
+            }
+        } else {
+            let openclawDir = "\(home)/.openclaw"
+            if FileManager.default.fileExists(atPath: openclawDir) {
+                if (try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])) == nil {
+                    helperLog("chown -R \(username) \(openclawDir) failed before maintenance terminal session", level: .warn)
+                }
             }
         }
         let nodePath = ConfigWriter.buildNodePath(username: username)
