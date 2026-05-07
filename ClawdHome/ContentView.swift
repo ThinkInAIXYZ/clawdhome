@@ -9,6 +9,7 @@ enum NavDestination: Hashable {
     case vaultFiles
     case notes
     case wikiSupport
+    case prompts
     case network
     case aiLab
     case models
@@ -58,6 +59,8 @@ struct ContentView: View {
                             .tag(NavDestination.notes)
                         Label("Wiki Support", systemImage: "wrench.and.screwdriver")
                             .tag(NavDestination.wikiSupport)
+                        Label("Prompt", systemImage: "text.bubble")
+                            .tag(NavDestination.prompts)
                     }
                     Section(L10n.k("auto.content_view.services", fallback: "服务")) {
                         Label { Text(L10n.k("auto.content_view.role_market", fallback: "角色中心")) } icon: { Text("🎭") }
@@ -156,6 +159,8 @@ struct ContentView: View {
                     NotesCenterView()
                         .environment(helperClient)
                         .environment(pool)
+                case .prompts:
+                    PromptLibraryView()
                 case .network:
                     NetworkPolicyView()
                         .environment(helperClient)
