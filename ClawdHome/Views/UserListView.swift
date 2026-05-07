@@ -826,7 +826,16 @@ struct ClawPoolView: View {
             isAgentExpanded: isExpanded,
             onTap: { openPreferredWindow(for: claw) },
             onDoubleClick: { openPreferredWindow(for: claw) },
-            onUpgrade: { NotificationCenter.default.post(name: .openUpgradeSheet, object: nil) },
+            onUpgrade: {
+                openPreferredWindow(for: claw)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    NotificationCenter.default.post(
+                        name: .openUpgradeSheet,
+                        object: nil,
+                        userInfo: ["username": claw.username]
+                    )
+                }
+            },
             onAgentTap: { agent in
                 pool.pendingAgentSelection[claw.username] = agent.id
                 openPreferredWindow(for: claw)
