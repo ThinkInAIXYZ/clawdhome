@@ -103,7 +103,7 @@ func printGlobalUsage() {
       inspect <name>              查看实例详情
       chat <name> <message>       发送消息
       init <subcommand>           初始化流程（run/status/resume/cancel）
-      doctor <name> [--fix]       诊断检查
+      doctor <name> [--fix] [--engine <openclaw|hermes>] 诊断检查
       hermes <subcommand>         Hermes 引擎管理（install/start/stop/status/ls）
       config <get|set> [args]     配置管理
       version                     版本信息

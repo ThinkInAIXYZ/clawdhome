@@ -599,12 +599,17 @@ extension ClawdHomeHelperImpl {
 
     // MARK: - 维护终端 XPC 处理
 
+    private func normalizedMaintenanceExecutable(_ raw: String) -> String {
+        (raw as NSString).lastPathComponent.lowercased()
+    }
+
     private func validateMaintenanceCommand(_ command: [String]) -> String? {
         guard let executable = command.first, !executable.isEmpty else {
             return "命令不能为空"
         }
-        let allowed = Set(["openclaw", "npx", "zsh", "bash", "sh"])
-        if !allowed.contains(executable) {
+        let normalizedExecutable = normalizedMaintenanceExecutable(executable)
+        let allowed = Set(["openclaw", "hermes", "hermes-shell", "npx", "zsh", "bash", "sh"])
+        if !allowed.contains(normalizedExecutable) {
             return "不支持的维护命令：\(executable)"
         }
         return nil
@@ -625,24 +630,10 @@ extension ClawdHomeHelperImpl {
             return
         }
         let home = "/Users/\(username)"
-        let isHermesCommand = command.first == "hermes"
+        let normalizedCommand = normalizedMaintenanceExecutable(command.first ?? "")
+        let isHermesCommand = (normalizedCommand == "hermes" || normalizedCommand == "hermes-shell")
 
-        // 按引擎类型修复对应配置目录的所有权
-        if isHermesCommand {
-            let hermesHome = HermesInstaller.hermesHome(for: username)
-            if FileManager.default.fileExists(atPath: hermesHome) {
-                if (try? run("/usr/sbin/chown", args: ["-R", username, hermesHome])) == nil {
-                    helperLog("chown -R \(username) \(hermesHome) failed before hermes maintenance terminal session", level: .warn)
-                }
-            }
-        } else {
-            let openclawDir = "\(home)/.openclaw"
-            if FileManager.default.fileExists(atPath: openclawDir) {
-                if (try? run("/usr/sbin/chown", args: ["-R", username, openclawDir])) == nil {
-                    helperLog("chown -R \(username) \(openclawDir) failed before maintenance terminal session", level: .warn)
-                }
-            }
-        }
+        // 权限修复在安装/体检阶段完成，终端启动不再执行 chown
         let nodePath = ConfigWriter.buildNodePath(username: username)
 
         do {

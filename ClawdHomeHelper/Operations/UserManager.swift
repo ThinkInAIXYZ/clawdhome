@@ -155,11 +155,17 @@ struct UserManager {
     /// 必须在 sysadminctl -deleteUser **之前**调用（需读取用户 GeneratedUID）
     static func prepareDeleteUser(username: String) {
         if let uid = try? UserManager.uid(for: username) {
-            helperLog("用户删除预清理 @\(username): 停止 Gateway (uid=\(uid))")
+            helperLog("用户删除预清理 @\(username): 停止 OpenClaw Gateway (uid=\(uid))")
             do {
                 try GatewayManager.stopGateway(username: username, uid: uid)
             } catch {
                 helperLog("stopGateway failed during prepareDeleteUser @\(username): \(error.localizedDescription)", level: .warn)
+            }
+            helperLog("用户删除预清理 @\(username): 停止 Hermes Gateway (uid=\(uid))")
+            do {
+                try HermesGatewayManager.stopGateway(username: username, uid: uid)
+            } catch {
+                helperLog("hermesStopGateway failed during prepareDeleteUser @\(username): \(error.localizedDescription)", level: .warn)
             }
         }
         // 无论是否能读取到 uid，都按用户名卸载 launchd 服务与 plist，避免启动项残留
@@ -167,6 +173,11 @@ struct UserManager {
             try GatewayManager.uninstallGateway(username: username)
         } catch {
             helperLog("uninstallGateway failed during prepareDeleteUser @\(username): \(error.localizedDescription)", level: .warn)
+        }
+        do {
+            try HermesGatewayManager.uninstallGateway(username: username)
+        } catch {
+            helperLog("hermesUninstallGateway failed during prepareDeleteUser @\(username): \(error.localizedDescription)", level: .warn)
         }
         removeFromAllGroups(username: username)
         VaultManager.teardownVault(username: username, archive: true)

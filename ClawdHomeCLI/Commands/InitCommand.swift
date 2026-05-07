@@ -32,7 +32,7 @@ enum InitCommand {
     }
 
     private static func printUsage() {
-        Output.printErr(“””
+        Output.printErr("""
         ClawdHome Init — Shrimp 初始化流程
 
         用法: clawdhome init <command> [args]
@@ -58,7 +58,7 @@ enum InitCommand {
           --bind-weixin              执行微信扫码绑定（npx weixin-cli install）
           --bind-wechat              --bind-weixin 的别名
           --verify-chat              初始化后执行一次 chat 验证
-          --verify-chat-message <m>  chat 验证消息（默认”请简短回复：初始化验证成功”）
+          --verify-chat-message <m>  chat 验证消息（默认"请简短回复：初始化验证成功"）
           --verify-chat-session <k>  chat 验证 session key（默认 default）
           --verify-chat-timeout <s>  chat 验证超时秒数（默认 120）
 
@@ -66,15 +66,15 @@ enum InitCommand {
           1) 直接 ShrimpConfigV2 JSON
           2) 包装对象:
              {
-               “config”: { ...ShrimpConfigV2... },
-               “personas”: [{ “agentDefId”: “main”, “dna”: {...} }]
+               "config": { ...ShrimpConfigV2... },
+               "personas": [{ "agentDefId": "main", "dna": {...} }]
              }
-        “””)
+        """)
     }
 
     // MARK: - 默认 TOOLS.md 内容（与 UI 侧 UserInitWizardView.defaultToolsContent 保持一致）
 
-    static let defaultToolsContent = “””
+    static let defaultToolsContent = """
     ## Shared Folders
 
     You have two file sharing spaces accessible at the following paths:
@@ -93,7 +93,7 @@ enum InitCommand {
     - When asked to save files, export results, or generate reports, write to `~/clawdhome_shared/private/`
     - When referencing public resources, read from `~/clawdhome_shared/public/`
     - Do not write sensitive data to the public folder
-    “””
+    """
 
     // MARK: - run
 
