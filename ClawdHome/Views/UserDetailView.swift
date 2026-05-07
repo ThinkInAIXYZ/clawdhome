@@ -5768,7 +5768,7 @@ private struct KimiMinimaxModelConfigPanel: View {
                     }
 
                     if isRestartingGateway {
-                        Label("正在重启 Gateway，配置将在重启后生效…", systemImage: "arrow.triangle.2.circlepath")
+                        Label(L10n.k("user.detail.cron.restarting_gateway", fallback: "正在重启 Gateway，配置将在重启后生效…"), systemImage: "arrow.triangle.2.circlepath")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
