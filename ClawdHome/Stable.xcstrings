@@ -2543,6 +2543,24 @@
         }
       }
     },
+    "auto.content_view.vault_files": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File Sharing"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件共享"
+          }
+        }
+      }
+    },
     "auto.daemon_setup_banner.clawdhome_user": {
       "comment": "",
       "extractionState": "stale",
