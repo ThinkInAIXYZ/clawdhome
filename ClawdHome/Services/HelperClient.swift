@@ -1309,6 +1309,36 @@ final class HelperClient {
         } catch { return nil }
     }
 
+    // MARK: - 统一诊断
+
+    /// 对指定用户执行统一诊断（环境 + 权限 + 配置 + 安全 + Gateway + 网络）
+    func runDiagnostics(username: String, fix: Bool) async -> DiagnosticsResult? {
+        guard let proxy = controlProxy else { return nil }
+        do {
+            let (_, json): (Bool, String) = try await xpcCall(timeout: .seconds(60)) { done in
+                proxy.runDiagnostics(username: username, fix: fix) { ok, json in
+                    done((ok, json))
+                }
+            }
+            guard let data = json.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(DiagnosticsResult.self, from: data)
+        } catch { return nil }
+    }
+
+    /// 单组诊断（逐组调用，实时展示进度）
+    func runDiagnosticGroup(username: String, group: DiagnosticGroup, fix: Bool) async -> [DiagnosticItem] {
+        guard let proxy = controlProxy else { return [] }
+        do {
+            let (_, json): (Bool, String) = try await xpcCall(timeout: .seconds(30)) { done in
+                proxy.runDiagnosticGroup(username: username, groupName: group.rawValue, fix: fix) { ok, json in
+                    done((ok, json))
+                }
+            }
+            guard let data = json.data(using: .utf8) else { return [] }
+            return (try? JSONDecoder().decode([DiagnosticItem].self, from: data)) ?? []
+        } catch { return [] }
+    }
+
     // MARK: - Helper 生命周期
 
     func getVersion() async throws -> String {

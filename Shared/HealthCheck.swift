@@ -35,6 +35,88 @@ struct HealthCheckResult: Codable {
     }
 }
 
+// MARK: - 统一诊断结果
+
+/// 诊断分组类型
+enum DiagnosticGroup: String, Codable, CaseIterable {
+    case environment  = "environment"   // 环境检测（Node.js、npm）
+    case network      = "network"       // 网络连通性
+    case permissions  = "permissions"   // 权限检测（7 项隔离检查）
+    case config       = "config"        // 配置校验（openclaw doctor）
+    case security     = "security"      // 安全审计（openclaw security audit）
+    case gateway      = "gateway"       // Gateway 运行状态
+
+    var title: String {
+        switch self {
+        case .environment: return "环境检测"
+        case .permissions: return "权限检测"
+        case .config:      return "配置校验"
+        case .security:    return "安全审计"
+        case .gateway:     return "Gateway 状态"
+        case .network:     return "网络连通"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .environment: return "cpu"
+        case .permissions: return "lock.shield"
+        case .config:      return "doc.badge.gearshape"
+        case .security:    return "shield.checkered"
+        case .gateway:     return "server.rack"
+        case .network:     return "network"
+        }
+    }
+
+    var fixable: Bool {
+        switch self {
+        case .environment, .permissions, .config, .security: return true
+        case .gateway, .network: return false
+        }
+    }
+}
+
+/// 单项诊断结果
+struct DiagnosticItem: Codable, Identifiable {
+    let id: String
+    let group: DiagnosticGroup
+    let severity: String     // "ok" | "info" | "warn" | "critical"
+    let title: String
+    let detail: String
+    let fixable: Bool
+    let fixed: Bool?         // nil=未尝试, true=已修复, false=修复失败
+    let fixError: String?
+    /// 网络检测专用：延迟毫秒数，nil 表示不可达或非网络项
+    let latencyMs: Int?
+}
+
+/// 完整诊断报告
+struct DiagnosticsResult: Codable {
+    let username: String
+    let checkedAt: TimeInterval
+    let items: [DiagnosticItem]
+
+    func items(for group: DiagnosticGroup) -> [DiagnosticItem] {
+        items.filter { $0.group == group }
+    }
+
+    var issueItems: [DiagnosticItem] {
+        items.filter { $0.severity == "critical" || $0.severity == "warn" }
+    }
+
+    var criticalCount: Int { items.filter { $0.severity == "critical" }.count }
+    var warnCount: Int     { items.filter { $0.severity == "warn" }.count }
+    var hasIssues: Bool    { criticalCount + warnCount > 0 }
+
+    var fixableIssueCount: Int {
+        issueItems.filter { $0.fixable && $0.fixed == nil }.count
+    }
+
+    func groupPassed(_ group: DiagnosticGroup) -> Bool {
+        items(for: group).allSatisfy { $0.severity == "ok" || $0.severity == "info" }
+    }
+}
+
 // MARK: - Node.js 下载源
 
 enum NodeDistOption: String, CaseIterable, Codable {
