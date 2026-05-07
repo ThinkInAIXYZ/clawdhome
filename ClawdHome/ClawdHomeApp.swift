@@ -25,6 +25,7 @@ struct ClawdHomeApp: App {
     @State private var gatewayHub = GatewayHub()
     @State private var lockStore = AppLockStore()
     @State private var maintenanceWindowRegistry = MaintenanceWindowRegistry()
+    @State private var promptLibraryStore = PromptLibraryStore()
     @AppStorage("appLanguage") private var appLanguageRaw = AppLanguage.system.rawValue
 
     init() {
@@ -47,6 +48,7 @@ struct ClawdHomeApp: App {
                 .environment(gatewayHub)
                 .environment(lockStore)
                 .environment(maintenanceWindowRegistry)
+                .environment(promptLibraryStore)
                 .environment(\.locale, appLanguage.locale)
                 .task { await maintainConnection() }
                 .task { await updater.runOpenclawAutoCheckLoop() }
@@ -85,6 +87,7 @@ struct ClawdHomeApp: App {
                     .environment(keychainStore)
                     .environment(gatewayHub)
                     .environment(maintenanceWindowRegistry)
+                    .environment(promptLibraryStore)
                     .environment(\.locale, appLanguage.locale)
                     .background(ClawDetailWindowPositioner())
             }
