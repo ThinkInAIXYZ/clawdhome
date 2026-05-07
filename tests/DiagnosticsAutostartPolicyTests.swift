@@ -19,8 +19,9 @@ struct DiagnosticsAutostartPolicyTests {
             keepAlive: false,
             running: false
         )
-        expect(frozenOpenClaw.severity == "info", "OpenClaw should skip autostart check when user autostart is disabled for freeze/manual off")
+        expect(frozenOpenClaw.severity == "info", "OpenClaw should skip autostart check when instance is frozen")
         expect(frozenOpenClaw.id == "gw-openclaw-autostart-user-disabled", "OpenClaw skip item should use an OpenClaw-specific id")
+        expect(frozenOpenClaw.title.contains("冻结"), "OpenClaw frozen skip item should explicitly indicate frozen state")
 
         let brokenOpenClaw = DiagnosticsGatewayAutostartPolicy.openClawItem(
             globalAutostartEnabled: true,
@@ -44,8 +45,9 @@ struct DiagnosticsAutostartPolicyTests {
             keepAlive: false,
             running: false
         )
-        expect(frozenHermes.severity == "info", "Hermes should skip autostart check when user autostart is disabled for freeze/manual off")
+        expect(frozenHermes.severity == "info", "Hermes should skip autostart check when instance is frozen")
         expect(frozenHermes.id == "gw-hermes-main-autostart-user-disabled", "Hermes skip item should use a Hermes profile-specific id")
+        expect(frozenHermes.title.contains("冻结"), "Hermes frozen skip item should explicitly indicate frozen state")
 
         let missingHermesPlist = DiagnosticsGatewayAutostartPolicy.hermesItem(
             profileID: "main",

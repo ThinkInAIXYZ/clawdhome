@@ -196,4 +196,23 @@ extension WKUserScript {
         injectionTime: .atDocumentEnd,
         forMainFrameOnly: false
     )
+
+    static let controlUIBootstrapReset = WKUserScript(
+        source: """
+        (() => {
+          try {
+            if (!window.location || !window.location.hash) return;
+            const hash = window.location.hash || "";
+            if (!hash.includes("token=")) return;
+            // 防止同一 origin（按端口区分）上的旧控制台设置污染新 token 引导。
+            try { sessionStorage.removeItem("openclaw.control.settings.v1"); } catch (_) {}
+            try { localStorage.removeItem("openclaw.control.settings.v1"); } catch (_) {}
+            try { sessionStorage.removeItem("openclaw.control.settings"); } catch (_) {}
+            try { localStorage.removeItem("openclaw.control.settings"); } catch (_) {}
+          } catch (_) {}
+        })();
+        """,
+        injectionTime: .atDocumentStart,
+        forMainFrameOnly: true
+    )
 }

@@ -179,14 +179,30 @@ extension ClawdHomeHelperImpl {
     func setGatewayAutostart(enabled: Bool, withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("全局自启 \(enabled)")
         let path = ClawdHomeHelperImpl.autostartDisabledPath
-        if enabled {
-            try? FileManager.default.removeItem(atPath: path)
-        } else {
-            try? FileManager.default.createDirectory(
-                atPath: "/var/lib/clawdhome", withIntermediateDirectories: true, attributes: nil)
-            FileManager.default.createFile(atPath: path, contents: nil)
+        do {
+            if enabled {
+                if FileManager.default.fileExists(atPath: path) {
+                    try FileManager.default.removeItem(atPath: path)
+                }
+                reply(true, nil)
+            } else {
+                try FileManager.default.createDirectory(
+                    atPath: "/var/lib/clawdhome",
+                    withIntermediateDirectories: true,
+                    attributes: nil
+                )
+                if !FileManager.default.fileExists(atPath: path) {
+                    let ok = FileManager.default.createFile(atPath: path, contents: nil)
+                    guard ok else {
+                        reply(false, "创建全局自启禁用标记失败")
+                        return
+                    }
+                }
+                reply(true, nil)
+            }
+        } catch {
+            reply(false, error.localizedDescription)
         }
-        reply(true, nil)
     }
 
     func getGatewayAutostart(withReply reply: @escaping (Bool) -> Void) {
@@ -216,14 +232,30 @@ extension ClawdHomeHelperImpl {
                           withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("用户自启 @\(username) \(enabled)")
         let path = ClawdHomeHelperImpl.userAutostartDisabledPath(username: username)
-        if enabled {
-            try? FileManager.default.removeItem(atPath: path)
-        } else {
-            try? FileManager.default.createDirectory(
-                atPath: "/var/lib/clawdhome", withIntermediateDirectories: true, attributes: nil)
-            FileManager.default.createFile(atPath: path, contents: nil)
+        do {
+            if enabled {
+                if FileManager.default.fileExists(atPath: path) {
+                    try FileManager.default.removeItem(atPath: path)
+                }
+                reply(true, nil)
+            } else {
+                try FileManager.default.createDirectory(
+                    atPath: "/var/lib/clawdhome",
+                    withIntermediateDirectories: true,
+                    attributes: nil
+                )
+                if !FileManager.default.fileExists(atPath: path) {
+                    let ok = FileManager.default.createFile(atPath: path, contents: nil)
+                    guard ok else {
+                        reply(false, "创建用户自启禁用标记失败 @\(username)")
+                        return
+                    }
+                }
+                reply(true, nil)
+            }
+        } catch {
+            reply(false, error.localizedDescription)
         }
-        reply(true, nil)
     }
 
     func getUserAutostart(username: String, withReply reply: @escaping (Bool) -> Void) {

@@ -753,10 +753,14 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     private var exitNotified = false
     private var isCleaningUp = false
     private var transientPollRetryCount = 0
-    private let maxTransientPollRetries = 1
+    private let maxTransientPollRetries = 6
+    private let transientRetryNoticeThreshold = 2
     private var lastResizeSent: (cols: Int, rows: Int)?
     private var pendingResize: (cols: Int, rows: Int)?
     private var openedOAuthURLs: Set<String> = []
+    private let inputQueueLock = NSLock()
+    private var pendingInputBuffer = Data()
+    private var inputDrainInFlight = false
 
     init(
         helperClient: HelperClient,
@@ -867,7 +871,9 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
             if shouldRetryPoll(message: message), transientPollRetryCount < maxTransientPollRetries {
                 transientPollRetryCount += 1
                 helperClient.connect(reason: "maintenance poll retry")
-                feedToTerminal(L10n.k("views.terminal_log.session_interrupted", fallback: "会话连接中断，正在自动重试...") + "\r\n")
+                if transientPollRetryCount >= transientRetryNoticeThreshold {
+                    feedToTerminal(L10n.k("views.terminal_log.session_interrupted", fallback: "会话连接中断，正在自动重试...") + "\r\n")
+                }
                 return
             }
             if let err, !err.isEmpty {
@@ -905,12 +911,71 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     }
 
     private func sendInput(_ data: Data) {
+        guard !data.isEmpty else { return }
         guard let sessionID else { return }
-        Task {
-            let (ok, err) = await helperClient.sendMaintenanceTerminalSessionInput(
+
+        inputQueueLock.lock()
+        pendingInputBuffer.append(data)
+        let shouldStartDrain = !inputDrainInFlight
+        if shouldStartDrain {
+            inputDrainInFlight = true
+        }
+        inputQueueLock.unlock()
+
+        guard shouldStartDrain else { return }
+        Task { [weak self] in
+            await self?.drainInputQueue(sessionID: sessionID)
+        }
+    }
+
+    private func dequeuePendingInputChunk() -> Data {
+        inputQueueLock.lock()
+        defer { inputQueueLock.unlock() }
+        guard !pendingInputBuffer.isEmpty else { return Data() }
+        let chunk = pendingInputBuffer
+        pendingInputBuffer.removeAll(keepingCapacity: true)
+        return chunk
+    }
+
+    private func finishInputDrainIfIdle() {
+        inputQueueLock.lock()
+        if pendingInputBuffer.isEmpty {
+            inputDrainInFlight = false
+            inputQueueLock.unlock()
+            return
+        }
+        inputQueueLock.unlock()
+    }
+
+    private func drainInputQueue(sessionID: String) async {
+        while true {
+            let chunk = dequeuePendingInputChunk()
+            if chunk.isEmpty {
+                finishInputDrainIfIdle()
+                // 竞态保护：在 inFlight 复位后若又有新输入，重新拉起 drain。
+                inputQueueLock.lock()
+                let shouldRestart = !pendingInputBuffer.isEmpty && !inputDrainInFlight
+                if shouldRestart {
+                    inputDrainInFlight = true
+                }
+                inputQueueLock.unlock()
+                if shouldRestart {
+                    continue
+                }
+                return
+            }
+
+            var (ok, err) = await helperClient.sendMaintenanceTerminalSessionInput(
                 sessionID: sessionID,
-                input: data
+                input: chunk
             )
+            if !ok, shouldRetryPoll(message: err ?? "") {
+                helperClient.connect(reason: "maintenance input retry")
+                (ok, err) = await helperClient.sendMaintenanceTerminalSessionInput(
+                    sessionID: sessionID,
+                    input: chunk
+                )
+            }
             if !ok, let err {
                 await MainActor.run { [weak self] in
                     self?.feedToTerminal(L10n.f("views.terminal_log_view.r_n_r_n", fallback: "\r\n输入失败：%@\r\n", String(describing: err)))
@@ -937,6 +1002,10 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     private func cleanupSession() {
         timer?.invalidate()
         timer = nil
+        inputQueueLock.lock()
+        pendingInputBuffer.removeAll(keepingCapacity: false)
+        inputDrainInFlight = false
+        inputQueueLock.unlock()
         guard !isCleaningUp else { return }
         guard let sessionID else { return }
         isCleaningUp = true

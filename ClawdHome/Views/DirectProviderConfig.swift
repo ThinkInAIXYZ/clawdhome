@@ -1566,6 +1566,7 @@ final class EmbeddedGatewayConsoleCoordinator: NSObject, WKNavigationDelegate, W
     var onContentProcessTerminated: (() -> Void)?
     var onPromptMemoryRequest: ((String) -> Void)?
     var onPromptInputChanged: ((String) -> Void)?
+    var onDidFinishNavigation: ((WKWebView) -> Void)?
 
     func webView(
         _ webView: WKWebView,
@@ -1608,17 +1609,21 @@ final class EmbeddedGatewayConsoleCoordinator: NSObject, WKNavigationDelegate, W
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         onNavigationStateChanged?(true)
+        onDidFinishNavigation?(webView)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        appLog("[EmbeddedGatewayConsoleView] didFail url=\(webView.url?.absoluteString ?? "nil") error=\(error.localizedDescription)", level: .warn)
         onNavigationStateChanged?(false)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        appLog("[EmbeddedGatewayConsoleView] didFailProvisional url=\(webView.url?.absoluteString ?? "nil") error=\(error.localizedDescription)", level: .warn)
         onNavigationStateChanged?(false)
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        appLog("[EmbeddedGatewayConsoleView] web content process terminated url=\(webView.url?.absoluteString ?? "nil")", level: .warn)
         onContentProcessTerminated?()
     }
 
@@ -1670,6 +1675,8 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
     private var loadState: LoadState = .idle
     private var lastRetryAt: Date = .distantPast
     private let retryInterval: TimeInterval = 1.5
+    private var renderHealthCheckTask: Task<Void, Never>?
+    private var loadWatchdogTask: Task<Void, Never>?
 
     func resolveWebView() -> WKWebView {
         if let webView {
@@ -1680,9 +1687,14 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
         }
 
         let configuration = WKWebViewConfiguration()
+        // 内嵌控制台使用独立进程池，并保留持久化站点数据。
+        // 原先 nonPersistent 会导致 Control UI 的本地会话/设备凭据在窗口关闭后丢失，
+        // 在某些网关鉴权策略下表现为“首次可用，二次打开白屏”。
+        configuration.processPool = WKProcessPool()
         configuration.websiteDataStore = .default()
         configuration.userContentController.add(coordinator, name: "fileInputAccept")
         configuration.userContentController.add(coordinator, name: "promptMemory")
+        configuration.userContentController.addUserScript(.controlUIBootstrapReset)
         configuration.userContentController.addUserScript(.fileInputAcceptCapture)
         configuration.userContentController.addUserScript(.promptMemoryBridge)
 
@@ -1701,6 +1713,9 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
             self.loadState = .failed
             self.lastRetryAt = .distantPast
         }
+        coordinator.onDidFinishNavigation = { [weak self] webView in
+            self?.scheduleRenderHealthCheck(for: webView)
+        }
         self.webView = webView
         return webView
     }
@@ -1713,6 +1728,7 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
             loadState = .loading
             lastRetryAt = Date()
             webView.load(URLRequest(url: url))
+            startLoadWatchdog(for: url)
             return
         }
 
@@ -1726,6 +1742,7 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
         loadState = .loading
         lastRetryAt = now
         webView.load(URLRequest(url: url))
+        startLoadWatchdog(for: url)
     }
 
     func reloadCurrent() {
@@ -1733,13 +1750,91 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
         loadState = .loading
         lastRetryAt = Date()
         webView.reload()
+        if let currentURL = webView.url {
+            startLoadWatchdog(for: currentURL)
+        }
     }
 
     func invalidateLoadedURL() {
         loadedURL = nil
         loadState = .idle
         lastRetryAt = .distantPast
-        webView?.stopLoading()
+        discardWebView()
+    }
+
+    private func discardWebView() {
+        renderHealthCheckTask?.cancel()
+        renderHealthCheckTask = nil
+        loadWatchdogTask?.cancel()
+        loadWatchdogTask = nil
+        guard let webView else { return }
+        webView.stopLoading()
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+        webView.removeFromSuperview()
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "fileInputAccept")
+        coordinator.webView = nil
+        self.webView = nil
+    }
+
+    private func startLoadWatchdog(for url: URL) {
+        loadWatchdogTask?.cancel()
+        loadWatchdogTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            guard self.loadState == .loading else { return }
+            guard let webView = self.webView, !webView.isLoading else { return }
+            self.loadState = .failed
+            self.lastRetryAt = .distantPast
+            webView.load(URLRequest(url: url))
+        }
+    }
+
+    private func scheduleRenderHealthCheck(for webView: WKWebView) {
+        renderHealthCheckTask?.cancel()
+        renderHealthCheckTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            guard let self, !Task.isCancelled else { return }
+            let script = """
+            (function() {
+              var b = document.body;
+              if (!b) return "blank";
+              var txt = (b.innerText || "").trim();
+              var h = Math.max(b.scrollHeight || 0, document.documentElement ? document.documentElement.scrollHeight || 0 : 0);
+              var c = b.childElementCount || 0;
+              if (txt.length === 0 && h <= 4 && c === 0) return "blank";
+              return "ok";
+            })();
+            """
+            webView.evaluateJavaScript(script) { [weak self] result, _ in
+                guard let self else { return }
+                guard let state = result as? String, state == "blank" else { return }
+                guard let target = self.loadedURL, let targetURL = URL(string: target) else { return }
+                self.loadState = .failed
+                self.lastRetryAt = .distantPast
+                webView.load(URLRequest(url: targetURL))
+                self.startLoadWatchdog(for: targetURL)
+            }
+        }
+    }
+}
+
+@MainActor
+final class EmbeddedGatewayConsoleStoreRegistry {
+    static let shared = EmbeddedGatewayConsoleStoreRegistry()
+    private var stores: [String: EmbeddedGatewayConsoleStore] = [:]
+
+    func store(for username: String) -> EmbeddedGatewayConsoleStore {
+        if let existing = stores[username] { return existing }
+        let created = EmbeddedGatewayConsoleStore()
+        stores[username] = created
+        return created
+    }
+
+    func invalidate(username: String) {
+        guard let store = stores[username] else { return }
+        store.invalidateLoadedURL()
+        stores.removeValue(forKey: username)
     }
 
     func insertPromptText(_ text: String, mode: PromptInsertionMode) {

@@ -56,7 +56,11 @@ struct UserFileManager {
         let items = try fm.contentsOfDirectory(at: url,
                                                includingPropertiesForKeys: keys,
                                                options: options)
-        let homePrefix = "/Users/\(username)/"
+        // 基于“用户请求的相对目录 + 子项名称”拼接展示路径，避免符号链接目录被解析到
+        // /Users/Shared/... 后丢失相对路径（例如 ~/clawdhome_shared/private）。
+        let baseRelativePath = relativePath
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .joined(separator: "/")
         let ownerProbeLimit = 200
         let entries: [FileEntry] = items.enumerated().compactMap { idx, itemURL in
             let rv = try? itemURL.resourceValues(forKeys: Set(keys))
@@ -64,14 +68,9 @@ struct UserFileManager {
             let isLink = rv?.isSymbolicLink ?? false
             let size   = Int64(rv?.fileSize ?? 0)
             let mod    = rv?.contentModificationDate
-            // 计算相对路径
-            let absPath = itemURL.standardized.path
-            let relPath: String
-            if absPath.hasPrefix(homePrefix) {
-                relPath = String(absPath.dropFirst(homePrefix.count))
-            } else {
-                return nil   // 不在 home 内（罕见，符号链接逸出）
-            }
+            let relPath = baseRelativePath.isEmpty
+                ? itemURL.lastPathComponent
+                : "\(baseRelativePath)/\(itemURL.lastPathComponent)"
             // owner 查询需要额外 stat；只对前 N 项查询，避免大目录首屏阻塞
             let owner: String? = idx < ownerProbeLimit
                 ? ((try? fm.attributesOfItem(atPath: itemURL.path))?[.ownerAccountName] as? String)

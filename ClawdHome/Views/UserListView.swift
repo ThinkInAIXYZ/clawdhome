@@ -56,12 +56,11 @@ private enum UserEntryWindowResolver {
             return .detail
         }
 
-        async let openclawVersionResult = helperClient.getOpenclawVersion(username: user.username)
-        async let hermesVersionResult = helperClient.getHermesVersion(username: user.username)
         async let stateJSONResult = helperClient.loadInitState(username: user.username)
 
-        let hasOpenclawRuntime = await openclawVersionResult != nil
-        let hasHermesRuntime = await hermesVersionResult != nil
+        // 优先使用 ShrimpPool 中已缓存的版本信息，避免点击入口时额外发起版本查询造成卡顿。
+        let hasOpenclawRuntime = user.openclawVersion != nil
+        let hasHermesRuntime = user.hermesVersion != nil
         let hasInstalledRuntime = hasOpenclawRuntime || hasHermesRuntime
         let isGatewayOperational = user.isRunning || readiness == .starting || readiness == .ready
         let state = InitWizardState.from(json: await stateJSONResult)
@@ -1642,7 +1641,7 @@ private struct ClawCard: View {
         } isTargeted: { targeted in
             isDropTargeted = targeted
         }
-        .help(L10n.k("views.user_list_view.filefolder_openclaw_clawdhome_upload", fallback: "可将文件或文件夹拖入该虾卡片，快传到 ~/.openclaw/clawdhome_upload"))
+        .help(L10n.k("views.user_list_view.filefolder_openclaw_clawdhome_upload", fallback: "可将文件或文件夹拖入该虾卡片，快传到 ~/clawdhome_shared/private/upload"))
     }
 
     @Environment(GatewayHub.self) private var gatewayHub

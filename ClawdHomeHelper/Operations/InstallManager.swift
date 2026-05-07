@@ -81,8 +81,15 @@ struct InstallManager {
         } catch {
             helperLog("chownRecursive npm prefix \(prefix) failed for @\(username): \(error.localizedDescription)", level: .warn)
         }
-        // 写入运行时声明，固定识别引擎
-        HermesInstaller.writeRuntimeConfig(runtime: "openclaw", username: username)
+        // 写入运行时声明，固定识别引擎。
+        // 但若当前实例已明确声明为 Hermes，则禁止被 openclaw 安装流程覆盖，
+        // 避免虾塘列表运行时误翻转（Hermes -> OpenClaw）。
+        if let config = HermesInstaller.readRuntimeConfig(username: username),
+           config.runtime == "hermes" {
+            helperLog("[InstallManager] skip runtime overwrite @\(username): current runtime is hermes")
+        } else {
+            HermesInstaller.writeRuntimeConfig(runtime: "openclaw", username: username)
+        }
         return output
     }
 

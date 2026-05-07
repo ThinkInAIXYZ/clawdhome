@@ -212,12 +212,16 @@ struct AdoptTeamSheet: View {
 
             // 4. 注入 TOOLS.md
             let toolsPath = "\(workspaceDir)/TOOLS.md"
-            let toolsExists = (try? await helperClient.readFile(username: username, relativePath: toolsPath)) != nil
-            if !toolsExists {
+            let existingToolsData = try? await helperClient.readFile(username: username, relativePath: toolsPath)
+            let existingToolsContent = existingToolsData.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            if !existingToolsContent.contains("~/clawdhome_shared/") {
+                let newToolsContent = existingToolsContent.isEmpty
+                    ? defaultToolsContent
+                    : existingToolsContent + "\n\n" + defaultToolsContent
                 try? await helperClient.writeFile(
                     username: username,
                     relativePath: toolsPath,
-                    data: defaultToolsContent.data(using: .utf8) ?? Data()
+                    data: newToolsContent.data(using: .utf8) ?? Data()
                 )
             }
 
