@@ -1002,6 +1002,7 @@ struct HermesDetailView: View {
             await refreshBrowserAccountStatus()
         } catch {
             await refreshBrowserAccountStatus()
+            installToolError = "打开浏览器失败：\(error.localizedDescription)"
         }
     }
 
@@ -1018,6 +1019,7 @@ struct HermesDetailView: View {
             await refreshBrowserAccountStatus()
         } catch {
             await refreshBrowserAccountStatus()
+            installToolError = "打开登录页面失败：\(error.localizedDescription)"
         }
     }
 
