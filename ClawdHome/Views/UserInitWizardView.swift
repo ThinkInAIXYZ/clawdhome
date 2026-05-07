@@ -2660,10 +2660,10 @@ struct UserInitWizardView: View {
         let existingModel = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:]
         var modelAliasMap = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["models"] as? [String: Any]) ?? [:]
         var normalizedModelConfig: [String: Any] = ["primary": modelPrimary]
-        if let arr = existingModel["fallback"] as? [String], !arr.isEmpty {
-            normalizedModelConfig["fallback"] = arr
-        } else if let single = existingModel["fallback"] as? String, !single.isEmpty {
-            normalizedModelConfig["fallback"] = [single]
+        if let arr = existingModel["fallbacks"] as? [String], !arr.isEmpty {
+            normalizedModelConfig["fallbacks"] = arr
+        } else if let single = existingModel["fallbacks"] as? String, !single.isEmpty {
+            normalizedModelConfig["fallbacks"] = [single]
         }
         if !alias.isEmpty {
             modelAliasMap[modelPrimary] = ["alias": alias]
@@ -2755,10 +2755,10 @@ struct UserInitWizardView: View {
         modelAliasMap[selectedMinimaxModel.rawValue] = selectedAlias
         let existingModel = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:]
         var normalizedModelConfig: [String: Any] = ["primary": selectedMinimaxModel.rawValue]
-        if let arr = existingModel["fallback"] as? [String], !arr.isEmpty {
-            normalizedModelConfig["fallback"] = arr
-        } else if let single = existingModel["fallback"] as? String, !single.isEmpty {
-            normalizedModelConfig["fallback"] = [single]
+        if let arr = existingModel["fallbacks"] as? [String], !arr.isEmpty {
+            normalizedModelConfig["fallbacks"] = arr
+        } else if let single = existingModel["fallbacks"] as? String, !single.isEmpty {
+            normalizedModelConfig["fallbacks"] = [single]
         }
 
         try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
@@ -2793,10 +2793,10 @@ struct UserInitWizardView: View {
         }
         let existingModel = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:]
         var normalizedModelConfig: [String: Any] = ["primary": selectedQiniuModel.rawValue]
-        if let arr = existingModel["fallback"] as? [String], !arr.isEmpty {
-            normalizedModelConfig["fallback"] = arr
-        } else if let single = existingModel["fallback"] as? String, !single.isEmpty {
-            normalizedModelConfig["fallback"] = [single]
+        if let arr = existingModel["fallbacks"] as? [String], !arr.isEmpty {
+            normalizedModelConfig["fallbacks"] = arr
+        } else if let single = existingModel["fallbacks"] as? String, !single.isEmpty {
+            normalizedModelConfig["fallbacks"] = [single]
         }
 
         try await helperClient.setConfigDirect(username: user.username, path: "env.QINIU_API_KEY", value: apiKey)
@@ -2890,10 +2890,10 @@ struct UserInitWizardView: View {
         }
         let existingModel = (((config["agents"] as? [String: Any])?["defaults"] as? [String: Any])?["model"] as? [String: Any]) ?? [:]
         var normalizedModelConfig: [String: Any] = ["primary": selectedZAIModel.rawValue]
-        if let arr = existingModel["fallback"] as? [String], !arr.isEmpty {
-            normalizedModelConfig["fallback"] = arr
-        } else if let single = existingModel["fallback"] as? String, !single.isEmpty {
-            normalizedModelConfig["fallback"] = [single]
+        if let arr = existingModel["fallbacks"] as? [String], !arr.isEmpty {
+            normalizedModelConfig["fallbacks"] = arr
+        } else if let single = existingModel["fallbacks"] as? String, !single.isEmpty {
+            normalizedModelConfig["fallbacks"] = [single]
         }
 
         try await helperClient.setConfigDirect(username: user.username, path: "models.mode", value: "merge")
@@ -3013,7 +3013,7 @@ struct UserInitWizardView: View {
         appendFinishProgress(L10n.k("views.user_init_wizard_view.done_overview", fallback: "正在启动 OpenClaw Gateway…"))
 
         gatewayHub.markPendingStart(username: user.username)
-        appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_starting_gateway", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在启动 Gateway…\n"))
+        appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 正在启动 Gateway…\n")
 
         do {
             let startResult = try await helperClient.startGatewayDiagnoseNodeToolchain(username: user.username)
@@ -3036,7 +3036,7 @@ struct UserInitWizardView: View {
             user.pid = nil
             user.startedAt = nil
             activationProgress = 1
-            appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_started_successfully", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动成功。\n"))
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动成功。\n")
             await syncGatewayStateAfterStart()
             try? await Task.sleep(for: .milliseconds(280))
             await completeWizardOnly()
@@ -3050,7 +3050,7 @@ struct UserInitWizardView: View {
             gatewayHub.markPendingStopped(username: user.username)
             activationProgress = 0.12
             statuses[InitStep.finish.rawValue] = .failed(error.localizedDescription)
-            appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_start_failed", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动失败：\(error.localizedDescription)\n"))
+            appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 启动失败：\(error.localizedDescription)\n")
         }
     }
 
@@ -3121,18 +3121,18 @@ struct UserInitWizardView: View {
                 user.isRunning = true
                 user.pid = pid > 0 ? pid : nil
                 user.startedAt = pid > 0 ? GatewayHub.processStartTime(pid: pid) : nil
-                appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_running_confirmed", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 运行状态已确认。\n"))
+                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 运行状态已确认。\n")
                 _ = await helperClient.getGatewayURL(username: user.username)
                 return
             }
 
             if attempt < maxAttempts {
-                appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_waiting_gateway_running_state", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 等待 Gateway 进入运行态（\(attempt)/\(maxAttempts)）…\n"))
+                appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] 等待 Gateway 进入运行态（\(attempt)/\(maxAttempts)）…\n")
                 try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
             }
         }
 
-        appendLog(L10n.k("views.user_init_wizard_view.finish_self_finishprogresstimeformatter_string_date_gateway_status_sync_timeout", fallback: "[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 状态同步超时，概览页会在后续轮询中继续刷新。\n"))
+        appendLog("[finish] [\(Self.finishProgressTimeFormatter.string(from: Date()))] Gateway 状态同步超时，概览页会在后续轮询中继续刷新。\n")
     }
 
     private func appendFinishProgress(_ text: String) {

@@ -80,6 +80,7 @@ struct ModelConfigWizard: View {
                 Task { await loadStatus() }
             }
             .environment(helperClient)
+            .environment(gatewayHub)
         }
     }
 
@@ -974,8 +975,8 @@ struct ModelAddSheet: View {
             let newFallbacks = [oldDefault] + currentFallbacks
             let jsonArray = "[" + newFallbacks.map { "\"\($0)\"" }.joined(separator: ",") + "]"
             commands.append(CommandRun(
-                display: "config set agents.defaults.model.fallback [\(newFallbacks.count) models]",
-                args: ["config", "set", "agents.defaults.model.fallback", jsonArray]
+                display: "config set agents.defaults.model.fallbacks [\(newFallbacks.count) models]",
+                args: ["config", "set", "agents.defaults.model.fallbacks", jsonArray]
             ))
         }
 
@@ -1183,6 +1184,7 @@ struct ModelEditSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(HelperClient.self) private var helperClient
+    @Environment(GatewayHub.self) private var gatewayHub
 
     @State private var isBusy = false
     @State private var errorMsg: String? = nil
@@ -1257,24 +1259,24 @@ struct ModelEditSheet: View {
 
     private func promoteToDefault() async {
         isBusy = true; errorMsg = nil; successMsg = nil
-        // Remove from fallbacks, add old default to fallbacks
         var newFallbacks = currentFallbacks.filter { $0 != modelId }
         if let old = currentDefault { newFallbacks.insert(old, at: 0) }
 
-        let fallbackJSON = "[" + newFallbacks.map { "\"\($0)\"" }.joined(separator: ",") + "]"
-        let (ok1, out1) = await helperClient.runOpenclawCommand(
-            username: user.username,
-            args: ["config", "set", "agents.defaults.model.fallback", fallbackJSON]
-        )
-        guard ok1 else { errorMsg = out1; isBusy = false; return }
+        do {
+            var modelPatch: [String: Any] = ["primary": modelId]
+            if !newFallbacks.isEmpty { modelPatch["fallbacks"] = newFallbacks }
+            let (_, baseHash) = try await gatewayHub.configGetFull(username: user.username)
+            try await gatewayHub.configPatch(
+                username: user.username,
+                patch: ["agents": ["defaults": ["model": modelPatch]]],
+                baseHash: baseHash,
+                note: "ClawdHome: promote \(modelId) to default"
+            )
+            successMsg = L10n.k("views.model_config_wizard.models", fallback: "已设为主模型")
+        } catch {
+            errorMsg = error.localizedDescription
+        }
 
-        let (ok2, out2) = await helperClient.runOpenclawCommand(
-            username: user.username,
-            args: ["config", "set", "agents.defaults.model.primary", modelId]
-        )
-        guard ok2 else { errorMsg = out2; isBusy = false; return }
-
-        successMsg = L10n.k("views.model_config_wizard.models", fallback: "已设为主模型")
         isBusy = false
         onComplete?()
         try? await Task.sleep(for: .milliseconds(600))
@@ -1284,42 +1286,33 @@ struct ModelEditSheet: View {
     private func removeModel() async {
         isBusy = true; errorMsg = nil; successMsg = nil
 
-        if isPrimary {
-            // Promote first fallback
-            if let newDefault = currentFallbacks.first {
-                let newFallbacks = Array(currentFallbacks.dropFirst())
-                let fallbackJSON = "[" + newFallbacks.map { "\"\($0)\"" }.joined(separator: ",") + "]"
-                let (ok1, _) = await helperClient.runOpenclawCommand(
-                    username: user.username,
-                    args: ["config", "set", "agents.defaults.model.fallback", fallbackJSON]
-                )
-                if ok1 {
-                    let (ok2, out2) = await helperClient.runOpenclawCommand(
-                        username: user.username,
-                        args: ["config", "set", "agents.defaults.model.primary", newDefault]
-                    )
-                    if !ok2 { errorMsg = out2; isBusy = false; return }
+        do {
+            var modelPatch: [String: Any]
+            if isPrimary {
+                if let newDefault = currentFallbacks.first {
+                    let newFallbacks = Array(currentFallbacks.dropFirst())
+                    modelPatch = ["primary": newDefault]
+                    if !newFallbacks.isEmpty { modelPatch["fallbacks"] = newFallbacks }
+                } else {
+                    modelPatch = ["primary": ""]
                 }
             } else {
-                // No fallbacks, clear primary
-                let (ok, out) = await helperClient.runOpenclawCommand(
-                    username: user.username,
-                    args: ["config", "set", "agents.defaults.model.primary", ""]
-                )
-                if !ok { errorMsg = out; isBusy = false; return }
+                let newFallbacks = currentFallbacks.filter { $0 != modelId }
+                modelPatch = ["fallbacks": newFallbacks]
             }
-        } else {
-            // Remove from fallbacks
-            let newFallbacks = currentFallbacks.filter { $0 != modelId }
-            let fallbackJSON = "[" + newFallbacks.map { "\"\($0)\"" }.joined(separator: ",") + "]"
-            let (ok, out) = await helperClient.runOpenclawCommand(
+
+            let (_, baseHash) = try await gatewayHub.configGetFull(username: user.username)
+            try await gatewayHub.configPatch(
                 username: user.username,
-                args: ["config", "set", "agents.defaults.model.fallback", fallbackJSON]
+                patch: ["agents": ["defaults": ["model": modelPatch]]],
+                baseHash: baseHash,
+                note: "ClawdHome: remove model \(modelId)"
             )
-            if !ok { errorMsg = out; isBusy = false; return }
+            successMsg = L10n.k("views.model_config_wizard.removed", fallback: "已移除")
+        } catch {
+            errorMsg = error.localizedDescription
         }
 
-        successMsg = L10n.k("views.model_config_wizard.removed", fallback: "已移除")
         isBusy = false
         onComplete?()
         try? await Task.sleep(for: .milliseconds(600))
