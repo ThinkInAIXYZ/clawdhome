@@ -1182,15 +1182,6 @@ struct OpenClawDetailView: View {
                     showHealthCheck = true
                 }
 
-                overviewCompactActionButton(
-                    title: L10n.k("user.detail.auto.terminal", fallback: "终端"),
-                    systemImage: "terminal",
-                    tint: Color.secondary.opacity(0.08),
-                    foreground: .primary,
-                    disabled: !helperClient.isConnected
-                ) {
-                    openTerminal()
-                }
             }
 
             // 第二行：冻结 | 更多操作
@@ -1347,7 +1338,7 @@ struct OpenClawDetailView: View {
     private var overviewBrowserAccountCard: some View {
         overviewSupplementaryCard(
             title: L10n.k("browser.account.title", fallback: "浏览器账号"),
-            subtitle: browserAccountStatus?.message ?? L10n.k("hermes.browser.status_unchecked", fallback: "尚未检查")
+            subtitle: localizedBrowserAccountStatusMessage(browserAccountStatus?.message)
         ) {
             VStack(alignment: .leading, spacing: 8) {
                 if let endpoint = browserAccountStatus?.httpEndpoint,
@@ -1415,7 +1406,7 @@ struct OpenClawDetailView: View {
             }
         } label: {
             overviewCompactActionLabel(
-                title: "手动登录",
+                title: L10n.k("browser.manual_login", fallback: "手动登录"),
                 systemImage: "person.crop.circle.badge.plus",
                 tint: Color.orange.opacity(0.12),
                 foreground: .orange
@@ -1478,7 +1469,7 @@ struct OpenClawDetailView: View {
             case .success:
                 return L10n.k("browser.tool.install.success.detail", fallback: "浏览器工具安装成功，可直接点击“打开”继续登录。")
             case let .failure(message):
-                return L10n.f("browser.tool.install.failed.detail", fallback: "浏览器工具安装失败：%@", message)
+                return L10n.f("browser.tool.install.failed.detail", fallback: "浏览器工具安装失败：%@", localizedBrowserToolInstallError(message))
             }
         }()
         return HStack(spacing: 6) {
@@ -1489,6 +1480,31 @@ struct OpenClawDetailView: View {
         }
         .font(.caption)
         .foregroundStyle(browserToolInstallFeedback.color)
+    }
+
+    private func localizedBrowserAccountStatusMessage(_ raw: String?) -> String {
+        guard let raw, !raw.isEmpty else {
+            return L10n.k("hermes.browser.status_unchecked", fallback: "尚未检查")
+        }
+        switch raw {
+        case "浏览器账号运行中":
+            return L10n.k("browser.account.status.running", fallback: "Browser account is running")
+        case "已记录浏览器账号，但当前 Chrome 不可连接":
+            return L10n.k("browser.account.status.unreachable", fallback: "Browser account exists, but Chrome is unreachable")
+        case "尚未打开浏览器账号":
+            return L10n.k("browser.account.status.not_opened", fallback: "Browser account has not been opened yet")
+        case "用户不存在或用户名无效":
+            return L10n.k("browser.account.status.invalid_user", fallback: "User does not exist or username is invalid")
+        default:
+            return raw
+        }
+    }
+
+    private func localizedBrowserToolInstallError(_ raw: String) -> String {
+        if raw == "未能获取 OpenCLI Browser Bridge profile" {
+            return L10n.k("browser.tool.error.opencli_profile_unavailable", fallback: "Unable to obtain OpenCLI Browser Bridge profile")
+        }
+        return raw
     }
 
     private var overviewResourceCard: some View {
@@ -2321,11 +2337,6 @@ struct OpenClawDetailView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(gatewayHub.readinessMap[user.username] == .starting)
                     }
-
-                    Button { openTerminal() } label: {
-                        Label(L10n.k("user.detail.auto.terminal", fallback: "终端"), systemImage: "terminal")
-                    }
-                    .buttonStyle(.bordered)
 
                     Menu {
                         Button {
@@ -4005,4 +4016,3 @@ struct OpenClawDetailView: View {
     }
 
 }
-

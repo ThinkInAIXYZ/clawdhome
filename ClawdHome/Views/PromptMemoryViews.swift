@@ -87,16 +87,16 @@ struct PromptMemoryOverlay: View {
         .sheet(item: $pendingPrompt) { prompt in
             variableSheet(prompt: prompt)
         }
-        .confirmationDialog("替换当前输入？", isPresented: $showReplaceConfirm, titleVisibility: .visible) {
-            Button("替换", role: .destructive) {
+        .confirmationDialog(L10n.k("prompt.memory.replace.confirm.title", fallback: "替换当前输入？"), isPresented: $showReplaceConfirm, titleVisibility: .visible) {
+            Button(L10n.k("prompt.memory.replace", fallback: "替换"), role: .destructive) {
                 if let prompt = replaceConfirmPrompt {
                     replaceConfirmPrompt = nil
                     beginUse(prompt, mode: .replace, forceVariableSheet: true)
                 }
             }
-            Button("取消", role: .cancel) { replaceConfirmPrompt = nil }
+            Button(L10n.k("common.cancel", fallback: "取消"), role: .cancel) { replaceConfirmPrompt = nil }
         } message: {
-            Text("当前输入框内容会被选中的 Prompt 替换。")
+            Text(L10n.k("prompt.memory.replace.confirm.message", fallback: "当前输入框内容会被选中的 Prompt 替换。"))
         }
     }
 
@@ -122,7 +122,7 @@ struct PromptMemoryOverlay: View {
                 }
                 .shadow(color: .black.opacity(bubbleShadowOpacity), radius: bubbleShadowRadius, y: bubbleShadowYOffset)
                 .contentShape(Circle())
-                .help("Prompt 记忆")
+                .help(L10n.k("prompt.memory.title", fallback: "Prompt 记忆"))
                 .scaleEffect(bubbleScale)
                 .position(
                     x: bubblePosition.x + bubbleDragOffset.width,
@@ -228,7 +228,7 @@ struct PromptMemoryOverlay: View {
     private var promptPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Text("Prompt 记忆")
+                Text(L10n.k("prompt.memory.title", fallback: "Prompt 记忆"))
                     .font(.headline)
                 Spacer()
                 Button {
@@ -239,14 +239,14 @@ struct PromptMemoryOverlay: View {
                     Image(systemName: "square.grid.2x2")
                 }
                 .buttonStyle(.plain)
-                .help("快捷菜单")
+                .help(L10n.k("prompt.memory.quick_menu", fallback: "快捷菜单"))
                 Button {
                     openQuickCreate()
                 } label: {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.plain)
-                .help("新增 Prompt")
+                .help(L10n.k("prompt.memory.create_prompt", fallback: "新增 Prompt"))
                 Button {
                     setPanelPinned(!panelPinned)
                 } label: {
@@ -256,7 +256,7 @@ struct PromptMemoryOverlay: View {
                         .scaleEffect(panelPinned ? 1.08 : 1)
                 }
                 .buttonStyle(.plain)
-                .help(panelPinned ? "取消固定" : "固定面板")
+                .help(panelPinned ? L10n.k("prompt.memory.unpin_panel", fallback: "取消固定") : L10n.k("prompt.memory.pin_panel", fallback: "固定面板"))
                 .animation(.spring(response: 0.24, dampingFraction: 0.76), value: panelPinned)
                 Button {
                     withAnimation(panelAnimation) {
@@ -266,10 +266,10 @@ struct PromptMemoryOverlay: View {
                     Image(systemName: "xmark")
                 }
                 .buttonStyle(.plain)
-                .help("关闭")
+                .help(L10n.k("common.close", fallback: "关闭"))
             }
 
-            TextField("搜索标题、标签、关键词或正文", text: $query)
+            TextField(L10n.k("prompt.memory.search.placeholder", fallback: "搜索标题、标签、关键词或正文"), text: $query)
                 .textFieldStyle(.roundedBorder)
 
             if showQuickCreate || !currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -282,7 +282,7 @@ struct PromptMemoryOverlay: View {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     let results = store.search(query: query.isEmpty ? currentInput : query, limit: 30)
                     if results.isEmpty {
-                        ContentUnavailableView("暂无收藏", systemImage: "text.bubble", description: Text("可以先收藏当前输入，或到 Prompt 管理页新建。"))
+                        ContentUnavailableView(L10n.k("prompt.memory.empty", fallback: "暂无收藏"), systemImage: "text.bubble", description: Text(L10n.k("prompt.memory.empty.hint", fallback: "可以先收藏当前输入，或到 Prompt 管理页新建。")))
                             .frame(maxWidth: .infinity, minHeight: 160)
                     } else {
                         ForEach(results) { result in
@@ -303,7 +303,7 @@ struct PromptMemoryOverlay: View {
     private var launcherMenu: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("快捷入口")
+                Text(L10n.k("prompt.memory.quick_entry", fallback: "快捷入口"))
                     .font(.headline)
                 Spacer()
                 Button {
@@ -316,14 +316,14 @@ struct PromptMemoryOverlay: View {
                 .buttonStyle(.plain)
             }
 
-            Text("一个入口，切换 Prompt 和随手记。")
+            Text(L10n.k("prompt.memory.quick_entry.hint", fallback: "一个入口，切换 Prompt 和随手记。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             VStack(spacing: 8) {
                 launcherItem(
                     title: "Prompt",
-                    subtitle: "搜索、收藏、插入模板",
+                    subtitle: L10n.k("prompt.memory.prompt.subtitle", fallback: "搜索、收藏、插入模板"),
                     systemImage: "text.bubble",
                     badge: suggestions.isEmpty ? nil : "\(suggestions.count)"
                 ) {
@@ -334,10 +334,10 @@ struct PromptMemoryOverlay: View {
                 }
 
                 launcherItem(
-                    title: "随手记",
-                    subtitle: noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "随手记录，关闭不丢" : notePreviewText,
+                    title: L10n.k("prompt.memory.note.title", fallback: "随手记"),
+                    subtitle: noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? L10n.k("prompt.memory.note.subtitle", fallback: "随手记录，关闭不丢") : notePreviewText,
                     systemImage: "note.text",
-                    badge: noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : "已保存"
+                    badge: noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : L10n.k("prompt.memory.note.saved", fallback: "已保存")
                 ) {
                     withAnimation(panelAnimation) {
                         activeSurface = .note
@@ -419,9 +419,9 @@ struct PromptMemoryOverlay: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("随手记")
+                    Text(L10n.k("prompt.memory.note.title", fallback: "随手记"))
                         .font(.headline)
-                    Text("Markdown 自动保存")
+                    Text(L10n.k("prompt.memory.note.autosave", fallback: "Markdown 自动保存"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -434,7 +434,7 @@ struct PromptMemoryOverlay: View {
                     Image(systemName: "square.grid.2x2")
                 }
                 .buttonStyle(.plain)
-                .help("快捷菜单")
+                .help(L10n.k("prompt.memory.quick_menu", fallback: "快捷菜单"))
                 Button {
                     withAnimation(panelAnimation) {
                         activeSurface = nil
@@ -443,10 +443,10 @@ struct PromptMemoryOverlay: View {
                     Image(systemName: "xmark")
                 }
                 .buttonStyle(.plain)
-                .help("关闭")
+                .help(L10n.k("common.close", fallback: "关闭"))
             }
 
-            LiveMarkdownEditor(text: $noteDraft, placeholder: "支持 Markdown，输入时直接渲染。")
+            LiveMarkdownEditor(text: $noteDraft, placeholder: L10n.k("prompt.memory.note.placeholder", fallback: "支持 Markdown，输入时直接渲染。"))
                 .frame(minHeight: 300)
                 .background(Color(nsColor: .textBackgroundColor).opacity(0.84), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .onChange(of: noteDraft) { _, value in
@@ -454,11 +454,11 @@ struct PromptMemoryOverlay: View {
                 }
 
             HStack {
-                Text(noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "暂无内容" : "已自动保存")
+                Text(noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? L10n.k("prompt.memory.note.empty", fallback: "暂无内容") : L10n.k("prompt.memory.note.saved_auto", fallback: "已自动保存"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("清空") {
+                Button(L10n.k("common.clear", fallback: "清空")) {
                     noteDraft = ""
                     store.updateQuickNote("")
                 }
@@ -471,14 +471,14 @@ struct PromptMemoryOverlay: View {
 
     private var saveCurrentInputSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(showQuickCreate ? "新增 Prompt" : "收藏当前输入")
+            Text(showQuickCreate ? L10n.k("prompt.memory.create_prompt", fallback: "新增 Prompt") : L10n.k("prompt.memory.favorite_current", fallback: "收藏当前输入"))
                 .font(.subheadline.weight(.semibold))
-            TextField("标题", text: $titleDraft)
+            TextField(L10n.k("common.title", fallback: "标题"), text: $titleDraft)
                 .textFieldStyle(.roundedBorder)
             HStack(spacing: 8) {
-                TextField("标签/关键词，用逗号分隔", text: $tagsDraft)
+                TextField(L10n.k("prompt.memory.tags.placeholder", fallback: "标签/关键词，用逗号分隔"), text: $tagsDraft)
                     .textFieldStyle(.roundedBorder)
-                Button(showQuickCreate ? "新增" : "收藏") {
+                Button(showQuickCreate ? L10n.k("common.create", fallback: "新增") : L10n.k("prompt.memory.favorite", fallback: "收藏")) {
                     let bodySource = currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? query : currentInput
                     store.createPromptFromInput(title: titleDraft, body: bodySource, tagsText: tagsDraft)
                     titleDraft = ""
@@ -497,17 +497,17 @@ struct PromptMemoryOverlay: View {
 
     private var settingsStrip: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("默认插入", selection: Binding(
+            Picker(L10n.k("prompt.memory.default_insert", fallback: "默认插入"), selection: Binding(
                 get: { store.settings.defaultInsertionMode },
                 set: { mode in store.updateSettings { $0.defaultInsertionMode = mode } }
             )) {
-                Text("追加").tag(PromptInsertionMode.append)
-                Text("替换").tag(PromptInsertionMode.replace)
+                Text(L10n.k("prompt.memory.append", fallback: "追加")).tag(PromptInsertionMode.append)
+                Text(L10n.k("prompt.memory.replace", fallback: "替换")).tag(PromptInsertionMode.replace)
             }
             .pickerStyle(.segmented)
 
             HStack {
-                Toggle("相似提醒", isOn: Binding(
+                Toggle(L10n.k("prompt.memory.similar_hint", fallback: "相似提醒"), isOn: Binding(
                     get: { store.settings.proactiveSuggestionsEnabled },
                     set: { enabled in store.updateSettings { $0.proactiveSuggestionsEnabled = enabled } }
                 ))
@@ -553,13 +553,13 @@ struct PromptMemoryOverlay: View {
                         .background(Color.primary.opacity(0.06), in: Capsule())
                 }
                 Spacer()
-                Button("复制") {
+                Button(L10n.k("common.copy", fallback: "复制")) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(result.item.body, forType: .string)
                     store.recordUse(prompt: result.item, action: .copy, query: query, shrimpUsername: username)
                 }
-                Button("追加") { beginUse(result.item, mode: .append) }
-                Button("替换") {
+                Button(L10n.k("prompt.memory.append", fallback: "追加")) { beginUse(result.item, mode: .append) }
+                Button(L10n.k("prompt.memory.replace", fallback: "替换")) {
                     replaceConfirmPrompt = result.item
                     pendingMode = .replace
                     showReplaceConfirm = true
@@ -615,7 +615,7 @@ struct PromptMemoryOverlay: View {
 
                     Spacer(minLength: 4)
 
-                    Text("用")
+                    Text(L10n.k("prompt.memory.use_count", fallback: "用"))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(Color.accentColor)
                         .padding(.horizontal, 7)
@@ -646,7 +646,7 @@ struct PromptMemoryOverlay: View {
 
     private func variableSheet(prompt: PromptItem) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("填充变量")
+            Text(L10n.k("prompt.memory.fill_variables", fallback: "填充变量"))
                 .font(.headline)
             Text(prompt.title)
                 .foregroundStyle(.secondary)
@@ -659,8 +659,8 @@ struct PromptMemoryOverlay: View {
             }
             HStack {
                 Spacer()
-                Button("取消") { pendingPrompt = nil }
-                Button(pendingMode == .replace ? "替换" : "追加") {
+                Button(L10n.k("common.cancel", fallback: "取消")) { pendingPrompt = nil }
+                Button(pendingMode == .replace ? L10n.k("prompt.memory.replace", fallback: "替换") : L10n.k("prompt.memory.append", fallback: "追加")) {
                     let body = store.renderedBody(for: prompt, values: variableValues)
                     onInsert(body, pendingMode)
                     store.recordUse(prompt: prompt, action: pendingMode == .replace ? .replace : .append, query: query, shrimpUsername: username)
@@ -746,9 +746,9 @@ struct PromptMemoryOverlay: View {
 
     private func compactSuggestionSubtitle(for result: PromptSearchResult) -> String {
         if let firstField = result.matchedFields.first {
-            return "匹配 \(firstField)"
+            return L10n.f("prompt.memory.match_field", fallback: "匹配 %@", localizedMatchedField(firstField))
         }
-        return "可复用"
+        return L10n.k("prompt.memory.reusable", fallback: "可复用")
     }
 
     private func requiresShorterTrigger(for text: String) -> Bool {
@@ -867,8 +867,25 @@ struct PromptMemoryOverlay: View {
         let trimmed = noteDraft
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\n", with: " ")
-        guard !trimmed.isEmpty else { return "随手记录，关闭不丢" }
+        guard !trimmed.isEmpty else { return L10n.k("prompt.memory.note.subtitle", fallback: "随手记录，关闭不丢") }
         return String(trimmed.prefix(28))
+    }
+
+    private func localizedMatchedField(_ field: String) -> String {
+        switch field {
+        case "title":
+            return L10n.k("prompt.memory.field.title", fallback: "标题")
+        case "keywords":
+            return L10n.k("prompt.memory.field.keywords", fallback: "关键词")
+        case "tags":
+            return L10n.k("prompt.memory.field.tags", fallback: "标签")
+        case "summary":
+            return L10n.k("prompt.memory.field.summary", fallback: "摘要")
+        case "body":
+            return L10n.k("prompt.memory.field.body", fallback: "正文")
+        default:
+            return field
+        }
     }
 }
 
@@ -1101,31 +1118,31 @@ struct PromptLibraryView: View {
         HSplitView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("Prompt 管理")
+                    Text(L10n.k("prompt.library.title", fallback: "Prompt 管理"))
                         .font(.title3.weight(.semibold))
                     Spacer()
                     Button {
                         clearEditor()
                     } label: {
-                        Label("新建", systemImage: "plus")
+                        Label(L10n.k("common.create", fallback: "新建"), systemImage: "plus")
                     }
                 }
-                TextField("搜索标题、标签、关键词或正文", text: Binding(
+                TextField(L10n.k("prompt.memory.search.placeholder", fallback: "搜索标题、标签、关键词或正文"), text: Binding(
                     get: { store.searchText },
                     set: { store.searchText = $0 }
                 ))
                 .textFieldStyle(.roundedBorder)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    statRow(title: "总数", value: "\(store.prompts.count)")
-                    statRow(title: "置顶", value: "\(store.prompts.filter(\.pinned).count)")
-                    statRow(title: "最近使用", value: "\(store.prompts.filter { $0.lastUsedAt != nil }.count)")
+                    statRow(title: L10n.k("prompt.library.stats.total", fallback: "总数"), value: "\(store.prompts.count)")
+                    statRow(title: L10n.k("prompt.library.stats.pinned", fallback: "置顶"), value: "\(store.prompts.filter(\.pinned).count)")
+                    statRow(title: L10n.k("prompt.library.stats.recent", fallback: "最近使用"), value: "\(store.prompts.filter { $0.lastUsedAt != nil }.count)")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
                 List(selection: $selectedFilter) {
-                    Section("浏览") {
+                    Section(L10n.k("prompt.library.section.browse", fallback: "浏览")) {
                         filterRow(.all, systemImage: "tray.full", count: store.prompts.count)
                         filterRow(.pinned, systemImage: "pin.fill", count: store.prompts.filter(\.pinned).count)
                         filterRow(.recent, systemImage: "clock.arrow.circlepath", count: store.prompts.filter { $0.lastUsedAt != nil }.count)
@@ -1133,7 +1150,7 @@ struct PromptLibraryView: View {
                     }
 
                     if !availableTags.isEmpty {
-                        Section("标签") {
+                        Section(L10n.k("prompt.library.section.tags", fallback: "标签")) {
                             ForEach(availableTags, id: \.name) { tag in
                                 HStack {
                                     Label(tag.name, systemImage: "number")
@@ -1161,7 +1178,7 @@ struct PromptLibraryView: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Picker("排序", selection: $sortMode) {
+                    Picker(L10n.k("common.sort", fallback: "排序"), selection: $sortMode) {
                         ForEach(PromptLibrarySort.allCases) { mode in
                             Text(mode.title).tag(mode)
                         }
@@ -1172,9 +1189,9 @@ struct PromptLibraryView: View {
 
                 if displayedPrompts.isEmpty {
                     ContentUnavailableView(
-                        "没有匹配的 Prompt",
+                        L10n.k("prompt.library.no_match", fallback: "没有匹配的 Prompt"),
                         systemImage: "magnifyingglass",
-                        description: Text("换一个关键词，或者在右侧新建一条 Prompt。")
+                        description: Text(L10n.k("prompt.library.no_match.hint", fallback: "换一个关键词，或者在右侧新建一条 Prompt。"))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -1183,7 +1200,7 @@ struct PromptLibraryView: View {
                             let pinnedItems = displayedPrompts.filter(\.pinned)
                             let regularItems = displayedPrompts.filter { !$0.pinned }
                             if !pinnedItems.isEmpty {
-                                Section("置顶") {
+                                Section(L10n.k("prompt.library.pinned", fallback: "置顶")) {
                                     ForEach(pinnedItems) { prompt in
                                         promptRow(prompt)
                                             .tag(prompt.id)
@@ -1191,7 +1208,7 @@ struct PromptLibraryView: View {
                                 }
                             }
                             if !regularItems.isEmpty {
-                                Section(pinnedItems.isEmpty ? filterTitle : "全部结果") {
+                                Section(pinnedItems.isEmpty ? filterTitle : L10n.k("prompt.library.all_results", fallback: "全部结果")) {
                                     ForEach(regularItems) { prompt in
                                         promptRow(prompt)
                                             .tag(prompt.id)
@@ -1213,7 +1230,7 @@ struct PromptLibraryView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(selectedPromptId == nil ? "新建 Prompt" : "编辑 Prompt")
+                        Text(selectedPromptId == nil ? L10n.k("prompt.library.new_prompt", fallback: "新建 Prompt") : L10n.k("prompt.library.edit_prompt", fallback: "编辑 Prompt"))
                             .font(.headline)
                         Text(detailSubtitle)
                             .font(.caption)
@@ -1221,7 +1238,7 @@ struct PromptLibraryView: View {
                     }
                     Spacer()
                     if selectedPromptId != nil {
-                        Button("删除", role: .destructive) {
+                        Button(L10n.k("common.delete", fallback: "删除"), role: .destructive) {
                             if let selectedPromptId {
                                 store.deletePrompt(id: selectedPromptId)
                                 clearEditor()
@@ -1231,28 +1248,28 @@ struct PromptLibraryView: View {
                 }
 
                 Form {
-                    Section("基本信息") {
-                        TextField("标题", text: $title)
-                        TextField("标签/关键词，用逗号分隔", text: $tags)
-                        Picker("默认插入", selection: $insertionMode) {
-                            Text("追加").tag(PromptInsertionMode.append)
-                            Text("替换").tag(PromptInsertionMode.replace)
+                    Section(L10n.k("prompt.library.basic_info", fallback: "基本信息")) {
+                        TextField(L10n.k("common.title", fallback: "标题"), text: $title)
+                        TextField(L10n.k("prompt.memory.tags.placeholder", fallback: "标签/关键词，用逗号分隔"), text: $tags)
+                        Picker(L10n.k("prompt.memory.default_insert", fallback: "默认插入"), selection: $insertionMode) {
+                            Text(L10n.k("prompt.memory.append", fallback: "追加")).tag(PromptInsertionMode.append)
+                            Text(L10n.k("prompt.memory.replace", fallback: "替换")).tag(PromptInsertionMode.replace)
                         }
                     }
 
-                    Section("状态") {
-                        Toggle("启用此 Prompt", isOn: $isEnabled)
-                        Toggle("置顶", isOn: $isPinned)
+                    Section(L10n.k("common.status", fallback: "状态")) {
+                        Toggle(L10n.k("prompt.library.enable_prompt", fallback: "启用此 Prompt"), isOn: $isEnabled)
+                        Toggle(L10n.k("prompt.library.pinned", fallback: "置顶"), isOn: $isPinned)
                     }
 
-                    Section("正文") {
+                    Section(L10n.k("common.body", fallback: "正文")) {
                         TextEditor(text: $bodyText)
                             .font(.system(.body, design: .monospaced))
                             .frame(minHeight: 260)
                     }
 
-                    Section("库设置") {
-                        Toggle("相似提醒", isOn: Binding(
+                    Section(L10n.k("prompt.library.settings", fallback: "库设置")) {
+                        Toggle(L10n.k("prompt.memory.similar_hint", fallback: "相似提醒"), isOn: Binding(
                             get: { store.settings.proactiveSuggestionsEnabled },
                             set: { value in store.updateSettings { $0.proactiveSuggestionsEnabled = value } }
                         ))
@@ -1267,7 +1284,7 @@ struct PromptLibraryView: View {
                             .foregroundStyle(.red)
                     }
                     Spacer()
-                    Button("保存") { saveEditor() }
+                    Button(L10n.k("common.save", fallback: "保存")) { saveEditor() }
                         .buttonStyle(.borderedProminent)
                         .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -1275,7 +1292,7 @@ struct PromptLibraryView: View {
             .padding(16)
             .frame(minWidth: 420, idealWidth: 460)
         }
-        .navigationTitle("Prompt")
+        .navigationTitle(L10n.k("prompt.library.nav_title", fallback: "Prompt"))
         .onAppear {
             store.loadIfNeeded()
             syncSelectionWithVisibleResults()
@@ -1379,18 +1396,18 @@ struct PromptLibraryView: View {
 
     private var resultSummary: String {
         if normalizedSearchText.isEmpty {
-            return "共 \(displayedPrompts.count) 条"
+            return L10n.f("prompt.library.result.total", fallback: "共 %@ 条", String(displayedPrompts.count))
         }
-        return "搜索到 \(displayedPrompts.count) 条匹配结果"
+        return L10n.f("prompt.library.result.search", fallback: "搜索到 %@ 条匹配结果", String(displayedPrompts.count))
     }
 
     private var detailSubtitle: String {
         guard let selectedPromptId,
               let prompt = store.prompts.first(where: { $0.id == selectedPromptId }) else {
-            return "填写标题、标签和正文后保存到库中。"
+            return L10n.k("prompt.library.detail.empty", fallback: "填写标题、标签和正文后保存到库中。")
         }
-        let lastUsed = prompt.lastUsedAt.map(relativeDateString) ?? "尚未使用"
-        return "使用 \(prompt.useCount) 次 · 最近使用 \(lastUsed)"
+        let lastUsed = prompt.lastUsedAt.map(relativeDateString) ?? L10n.k("prompt.library.never_used", fallback: "尚未使用")
+        return L10n.f("prompt.library.detail.usage", fallback: "使用 %@ 次 · 最近使用 %@", String(prompt.useCount), lastUsed)
     }
 
     @ViewBuilder
@@ -1542,11 +1559,11 @@ struct PromptLibraryView: View {
     private func sourceLabel(_ source: PromptSource) -> String {
         switch source {
         case .userCreated:
-            return "手动创建"
+            return L10n.k("prompt.library.source.manual", fallback: "手动创建")
         case .imported:
-            return "导入"
+            return L10n.k("prompt.library.source.imported", fallback: "导入")
         case .savedFromInput:
-            return "来自输入"
+            return L10n.k("prompt.library.source.from_input", fallback: "来自输入")
         }
     }
 
@@ -1567,13 +1584,13 @@ private enum PromptLibraryFilter: Hashable {
     var title: String {
         switch self {
         case .all:
-            return "全部 Prompt"
+            return L10n.k("prompt.filter.all", fallback: "全部 Prompt")
         case .pinned:
-            return "置顶"
+            return L10n.k("prompt.library.pinned", fallback: "置顶")
         case .recent:
-            return "最近使用"
+            return L10n.k("prompt.filter.recent", fallback: "最近使用")
         case .unused:
-            return "未使用"
+            return L10n.k("prompt.filter.unused", fallback: "未使用")
         case .tag(let tag):
             return "#\(tag)"
         }
@@ -1591,13 +1608,13 @@ private enum PromptLibrarySort: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .smart:
-            return "推荐"
+            return L10n.k("prompt.sort.smart", fallback: "推荐")
         case .recent:
-            return "最近"
+            return L10n.k("prompt.sort.recent", fallback: "最近")
         case .title:
-            return "标题"
+            return L10n.k("prompt.sort.title", fallback: "标题")
         case .mostUsed:
-            return "常用"
+            return L10n.k("prompt.sort.most_used", fallback: "常用")
         }
     }
 }

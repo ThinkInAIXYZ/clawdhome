@@ -129,7 +129,6 @@ struct HermesDetailView: View {
                 }
             }
             .padding(.top, 44)
-            .padding(.trailing, isRightPanelExpanded ? UserDetailWindowLayout.expandedSidebarWidth + 12 : 0)
 
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 6) {
@@ -438,7 +437,9 @@ struct HermesDetailView: View {
                     Task { await runOpenCLIDoctor() }
                 } label: {
                     Label(
-                        isRunningOpenCLIDoctor ? L10n.k("hermes.opencli.doctor_running", fallback: "Doctor 检测中…") : "OpenCLI Doctor",
+                        isRunningOpenCLIDoctor
+                            ? L10n.k("hermes.opencli.doctor_running", fallback: "Doctor 检测中…")
+                            : L10n.k("hermes.opencli.doctor_run", fallback: "Run OpenCLI Doctor"),
                         systemImage: "stethoscope"
                     )
                 }
@@ -1051,10 +1052,10 @@ struct HermesDetailView: View {
         defer { isInstallingOpenCLI = false }
         do {
             try await helperClient.installOpenCLI(username: user.username)
-            opencliDoctorMessage = "OpenCLI 安装完成。"
+            opencliDoctorMessage = L10n.k("hermes.opencli.install_success", fallback: "OpenCLI installation completed.")
             await refreshBrowserAccountStatus()
         } catch {
-            opencliDoctorMessage = "OpenCLI 安装失败：\(error.localizedDescription)"
+            opencliDoctorMessage = L10n.f("hermes.opencli.install_failed", fallback: "OpenCLI installation failed: %@", error.localizedDescription)
         }
     }
 
@@ -1063,7 +1064,7 @@ struct HermesDetailView: View {
         isRunningOpenCLIDoctor = true
         defer { isRunningOpenCLIDoctor = false }
         let (ok, output) = await helperClient.runOpenCLIDoctor(username: user.username)
-        opencliDoctorMessage = ok ? output : "Doctor 失败：\(output)"
+        opencliDoctorMessage = ok ? output : L10n.f("hermes.opencli.doctor_failed", fallback: "Doctor failed: %@", output)
     }
 
     private func configureChatTabsIfNeeded() {
@@ -1118,7 +1119,15 @@ final class HermesChatTabManager: ObservableObject {
     func addTab(for profile: AgentProfile?) {
         guard let username, let helperClient else { return }
         let profileID = profile?.id ?? "main"
-        let profileName = profile?.name ?? L10n.k("hermes.profile.default_name", fallback: "默认角色")
+        let rawProfileName = profile?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let profileName: String = {
+            if profileID == "main" {
+                if rawProfileName.isEmpty || rawProfileName == "默认角色" || rawProfileName == "Default Agent" {
+                    return L10n.k("hermes.profile.default_name", fallback: "默认角色")
+                }
+            }
+            return rawProfileName.isEmpty ? L10n.k("hermes.profile.default_name", fallback: "默认角色") : rawProfileName
+        }()
         let sessionIndex = tabs.filter { $0.profileID == profileID }.count + 1
         let title = "\(profileName) · \(L10n.k("hermes.sidebar.chat", fallback: "会话")) \(sessionIndex)"
         let command: [String] = if profileID == "main" {
@@ -1753,7 +1762,7 @@ final class HermesTerminalTabManager: ObservableObject {
     private weak var helperClient: HelperClient?
     private var tabCounter = 0
 
-    init(titlePrefix: String = "配置", defaultCommand: [String] = ["hermes", "setup"]) {
+    init(titlePrefix: String = String(localized: "hermes.sidebar.config", defaultValue: "配置"), defaultCommand: [String] = ["hermes", "setup"]) {
         self.titlePrefix = titlePrefix
         self.defaultCommand = defaultCommand
     }
@@ -1997,7 +2006,7 @@ struct HermesDetailContainer: View {
     @State private var mode: HermesDetailMode = .chat
     @StateObject private var chatTabManager = HermesChatTabManager()
     @StateObject private var configTabManager = HermesTerminalTabManager()
-    @StateObject private var shellTabManager = HermesTerminalTabManager(titlePrefix: "终端", defaultCommand: ["hermes-shell", "-l"])
+    @StateObject private var shellTabManager = HermesTerminalTabManager(titlePrefix: String(localized: "common.label.terminal", defaultValue: "终端"), defaultCommand: ["hermes-shell", "-l"])
     @State private var profiles: [AgentProfile] = []
     @State private var selectedProfileID: String? = nil
     @State private var isLoading = false
@@ -2217,7 +2226,7 @@ struct HermesDetailContainer: View {
                 let currentProfile = profiles.first(where: { $0.id == selectedProfileID })
                 HStack(spacing: 4) {
                     let emoji = currentProfile?.emoji.isEmpty == false ? currentProfile!.emoji : "🤖"
-                    Text("\(emoji) \(currentProfile?.name ?? L10n.k("hermes.profile.default_name", fallback: "默认角色"))")
+                    Text("\(emoji) \(displayName(for: currentProfile))")
                         .lineLimit(1)
                 }
                 .font(.system(size: 13))
@@ -2361,6 +2370,18 @@ struct HermesDetailContainer: View {
         if running == total { return .green }
         if running == 0 { return .gray }
         return .orange
+    }
+
+    private func displayName(for profile: AgentProfile?) -> String {
+        guard let profile else {
+            return L10n.k("hermes.profile.default_name", fallback: "默认角色")
+        }
+        let trimmed = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if profile.id == "main",
+           trimmed.isEmpty || trimmed == "默认角色" || trimmed == "Default Agent" {
+            return L10n.k("hermes.profile.default_name", fallback: "默认角色")
+        }
+        return trimmed.isEmpty ? profile.id : trimmed
     }
 
     @ViewBuilder

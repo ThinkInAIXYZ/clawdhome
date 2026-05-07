@@ -68,7 +68,7 @@ struct ContentView: View {
                             .tag(NavDestination.clawPool)
                         Label(L10n.k("auto.content_view.vault_files", fallback: "文件共享"), systemImage: "folder.badge.person.crop")
                             .tag(NavDestination.vaultFiles)
-                        Label("Prompt", systemImage: "text.bubble")
+                        Label(L10n.k("content_view.nav.prompts", fallback: "Prompt"), systemImage: "text.bubble")
                             .tag(NavDestination.prompts)
                     }
                     Section(L10n.k("auto.content_view.services", fallback: "服务")) {
@@ -126,7 +126,13 @@ struct ContentView: View {
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
-                            .help(colorSchemePreference == 1 ? "浅色模式" : colorSchemePreference == 2 ? "深色模式" : "跟随系统")
+                            .help(
+                                colorSchemePreference == 1
+                                ? L10n.k("content_view.theme.light", fallback: "浅色模式")
+                                : colorSchemePreference == 2
+                                    ? L10n.k("content_view.theme.dark", fallback: "深色模式")
+                                    : L10n.k("content_view.theme.system", fallback: "跟随系统")
+                            )
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
