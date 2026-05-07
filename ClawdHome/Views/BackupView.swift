@@ -59,6 +59,23 @@ struct BackupView: View {
         }
         .navigationTitle(L10n.k("auto.backup_view.backups", fallback: "备份"))
         .task { await loadData() }
+        .overlay(alignment: .top) {
+            if isRestoring {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(L10n.k("backup.restore.in_progress", fallback: "正在恢复，请勿关闭窗口..."))
+                        .font(.callout.weight(.medium))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.ultraThickMaterial, in: Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.35), value: isRestoring)
         .alert(
             L10n.k("backup.restore.restart.title", fallback: "全局配置已恢复"),
             isPresented: $showRestartAlert

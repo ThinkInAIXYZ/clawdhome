@@ -305,6 +305,210 @@ struct InstallManager {
         }
     }
 
+    // MARK: - 环境验证与修复
+
+    /// 验证 openclaw 安装环境完整性，返回问题列表（空 = 全部正常）
+    struct EnvIssue {
+        let id: String
+        let title: String
+        let detail: String
+        let fixable: Bool
+    }
+
+    /// 验证指定用户的 openclaw 运行环境，返回发现的问题列表
+    static func verifyEnvironment(username: String) -> [EnvIssue] {
+        var issues: [EnvIssue] = []
+        let home = UserEnvContract.home(username: username)
+        let openclawBin = "\(npmGlobalBin(for: username))/openclaw"
+        let brewBin = "\(UserEnvContract.brewRoot(username: username))/bin"
+
+        // 1. openclaw 二进制存在且可执行
+        if !FileManager.default.fileExists(atPath: openclawBin) {
+            issues.append(EnvIssue(
+                id: "openclaw-missing",
+                title: "openclaw 二进制文件不存在",
+                detail: "\(openclawBin) 不存在",
+                fixable: true))
+        } else if !FileManager.default.isExecutableFile(atPath: openclawBin) {
+            issues.append(EnvIssue(
+                id: "openclaw-not-exec",
+                title: "openclaw 二进制不可执行",
+                detail: "\(openclawBin) 存在但无执行权限",
+                fixable: true))
+        } else {
+            // 2. openclaw --version 能正常输出
+            let versionResult = try? run("/usr/bin/sudo", args: [
+                "-u", username, "-H", "env", sudoNodePath(for: username),
+                openclawBin, "--version"
+            ])
+            if versionResult == nil || versionResult!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(EnvIssue(
+                    id: "openclaw-not-runnable",
+                    title: "openclaw 无法运行",
+                    detail: "执行 openclaw --version 失败，可能 node 环境损坏",
+                    fixable: true))
+            }
+        }
+
+        // 3. node 符号链接完整性
+        let nodeBin = "\(brewBin)/node"
+        let brewRoot = UserEnvContract.brewRoot(username: username)
+        if FileManager.default.fileExists(atPath: brewRoot) {
+            if !FileManager.default.isExecutableFile(atPath: nodeBin) {
+                let hasNodeElsewhere = FileManager.default.isExecutableFile(atPath: "\(brewRoot)/opt/node/bin/node")
+                    || hasNodeInLib(username: username)
+                issues.append(EnvIssue(
+                    id: "node-symlink-broken",
+                    title: "node 符号链接缺失",
+                    detail: hasNodeElsewhere
+                        ? "\(nodeBin) 不可用，但在 .brew/opt 或 .brew/lib 下找到了 node"
+                        : "\(nodeBin) 不可用，Node.js 可能需要重装",
+                    fixable: hasNodeElsewhere))
+            }
+
+            // 4. npm 符号链接完整性
+            let npmBin = "\(brewBin)/npm"
+            if !FileManager.default.isExecutableFile(atPath: npmBin) {
+                issues.append(EnvIssue(
+                    id: "npm-symlink-broken",
+                    title: "npm 符号链接缺失",
+                    detail: "\(npmBin) 不可用",
+                    fixable: true))
+            }
+        }
+
+        // 5. .zprofile PATH 导出完整性（利用 UserEnvContract）
+        let profilePath = "\(home)/.zprofile"
+        let profileContent = (try? String(contentsOfFile: profilePath, encoding: .utf8)) ?? ""
+        let requiredExports = UserEnvContract.zprofileRequiredExports()
+        let missingExports = requiredExports.filter { !profileContent.contains($0) }
+        if !missingExports.isEmpty {
+            issues.append(EnvIssue(
+                id: "zprofile-path-incomplete",
+                title: ".zprofile PATH 导出不完整",
+                detail: "缺少 \(missingExports.count) 项环境变量导出",
+                fixable: true))
+        }
+
+        return issues
+    }
+
+    /// 尝试修复环境问题，返回修复结果（成功/失败的 id 列表）
+    static func repairEnvironment(username: String, issues: [EnvIssue]) -> (fixed: [String], failed: [String]) {
+        var fixed: [String] = []
+        var failed: [String] = []
+        let home = UserEnvContract.home(username: username)
+        let openclawBin = "\(npmGlobalBin(for: username))/openclaw"
+
+        for issue in issues where issue.fixable {
+            switch issue.id {
+            case "openclaw-not-exec":
+                do {
+                    try FilePermissionHelper.chmod(openclawBin, mode: "755")
+                    fixed.append(issue.id)
+                } catch {
+                    failed.append(issue.id)
+                }
+
+            case "openclaw-missing", "openclaw-not-runnable":
+                // 需要重装，此处标记为需要重装（调用方决定是否执行）
+                failed.append(issue.id)
+
+            case "node-symlink-broken", "npm-symlink-broken":
+                let target = issue.id == "node-symlink-broken" ? "node" : "npm"
+                let symlinkPath = "\(UserEnvContract.brewRoot(username: username))/bin/\(target)"
+                if let realPath = findActualBinary(username: username, name: target) {
+                    do {
+                        try? FileManager.default.removeItem(atPath: symlinkPath)
+                        try FileManager.default.createSymbolicLink(atPath: symlinkPath, withDestinationPath: realPath)
+                        try FilePermissionHelper.chown(symlinkPath, owner: username)
+                        fixed.append(issue.id)
+                        helperLog("[env-repair] 修复符号链接 \(symlinkPath) → \(realPath) @\(username)")
+                    } catch {
+                        failed.append(issue.id)
+                        helperLog("[env-repair] 修复符号链接失败 \(symlinkPath): \(error.localizedDescription) @\(username)", level: .warn)
+                    }
+                } else {
+                    failed.append(issue.id)
+                }
+
+            case "zprofile-path-incomplete":
+                let profilePath = "\(home)/.zprofile"
+                let existing = (try? String(contentsOfFile: profilePath, encoding: .utf8)) ?? ""
+                let requiredExports = UserEnvContract.zprofileRequiredExports()
+                let missing = requiredExports.filter { !existing.contains($0) }
+                if !missing.isEmpty {
+                    var block = "\n"
+                    if !existing.contains("# npm global") { block += "# npm global\n" }
+                    block += missing.joined(separator: "\n") + "\n"
+                    do {
+                        let data = Data(block.utf8)
+                        if FileManager.default.fileExists(atPath: profilePath) {
+                            if let fh = FileHandle(forWritingAtPath: profilePath) {
+                                fh.seekToEndOfFile()
+                                fh.write(data)
+                                fh.closeFile()
+                            }
+                        } else {
+                            try data.write(to: URL(fileURLWithPath: profilePath))
+                        }
+                        try FilePermissionHelper.chown(profilePath, owner: username)
+                        fixed.append(issue.id)
+                        helperLog("[env-repair] 修复 .zprofile PATH 导出 @\(username)")
+                    } catch {
+                        failed.append(issue.id)
+                    }
+                }
+
+            default:
+                failed.append(issue.id)
+            }
+        }
+        return (fixed, failed)
+    }
+
+    /// 在 .brew 下查找实际的 node/npm 二进制路径
+    private static func findActualBinary(username: String, name: String) -> String? {
+        let brewRoot = UserEnvContract.brewRoot(username: username)
+        var candidates = [
+            "\(brewRoot)/opt/node/bin/\(name)",
+            "\(brewRoot)/opt/node@24/bin/\(name)",
+            "\(brewRoot)/opt/node@22/bin/\(name)",
+            "\(brewRoot)/opt/node@20/bin/\(name)",
+            "\(brewRoot)/opt/node@18/bin/\(name)",
+        ]
+        // 扫描 .brew/lib/nodejs
+        let libNodeRoot = "\(brewRoot)/lib/nodejs"
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: libNodeRoot).sorted(by: >) {
+            for entry in entries where entry.hasPrefix("node-") {
+                candidates.append("\(libNodeRoot)/\(entry)/bin/\(name)")
+            }
+        }
+        // 扫描 Cellar
+        let cellar = "\(brewRoot)/Cellar"
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: cellar) {
+            for formula in entries.filter({ $0 == "node" || $0.hasPrefix("node@") }).sorted() {
+                let formulaDir = "\(cellar)/\(formula)"
+                if let versions = try? FileManager.default.contentsOfDirectory(atPath: formulaDir).sorted(by: >) {
+                    for version in versions {
+                        candidates.append("\(formulaDir)/\(version)/bin/\(name)")
+                    }
+                }
+            }
+        }
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    /// 检查 .brew/lib/nodejs 下是否有可用的 node
+    private static func hasNodeInLib(username: String) -> Bool {
+        let libNodeRoot = "\(UserEnvContract.brewRoot(username: username))/lib/nodejs"
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: libNodeRoot) else { return false }
+        return entries.contains { entry in
+            entry.hasPrefix("node-") &&
+            FileManager.default.isExecutableFile(atPath: "\(libNodeRoot)/\(entry)/bin/node")
+        }
+    }
+
     private static func resolveConsoleSession() throws -> (username: String, uid: uid_t) {
         var uid: uid_t = 0
         guard let cfUser = SCDynamicStoreCopyConsoleUser(nil, &uid, nil),

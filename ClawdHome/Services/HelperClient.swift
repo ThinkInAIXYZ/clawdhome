@@ -617,6 +617,17 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
 
+    /// 重装 openclaw：停止网关 → 清除旧安装 → 重新安装 → 验证环境 → 重启网关
+    func reinstallOpenclaw(username: String, version: String? = nil) async throws {
+        guard let proxy = installProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.reinstallOpenclaw(username: username, version: version) { ok, msg in
+                done((ok, msg))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
     // MARK: - 版本查询
 
     /// 查询指定用户已安装的 openclaw 版本，未安装返回 nil
