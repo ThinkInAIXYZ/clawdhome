@@ -943,7 +943,12 @@ struct UserFilesView: View {
             TableSetup { [entries] row in
                 guard row < entries.count else { return }
                 let entry = entries[row]
-                if entry.isDirectory { navigateInto(entry) }
+                if entry.isDirectory {
+                    navigateInto(entry)
+                } else {
+                    selectedEntryIDs = [entry.id]
+                    Task { await openTextEditor() }
+                }
             }
         )
         .overlay {

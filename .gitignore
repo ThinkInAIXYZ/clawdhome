@@ -29,6 +29,8 @@ ClawdHomeHelper/GeneratedVersion.swift
 
 # 个人本地 AI 配置（不提交个人设置）
 .claude/settings.local.json
+.claude/worktrees
+docs/plans
 
 # 本地命名空间切换脚本（不托管）
 scripts/switch-namespace.local.sh
