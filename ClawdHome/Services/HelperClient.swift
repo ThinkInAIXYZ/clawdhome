@@ -2301,6 +2301,36 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.rename_failed", fallback: "重命名失败")) }
     }
 
+    /// 复制文件或目录
+    func copyItem(username: String, sourceRelativePath: String, destinationRelativePath: String) async throws {
+        guard let proxy = fileProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.copyItem(
+                username: username,
+                sourceRelativePath: sourceRelativePath,
+                destinationRelativePath: destinationRelativePath
+            ) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.copy_failed", fallback: "Copy failed")) }
+    }
+
+    /// 移动文件或目录
+    func moveItem(username: String, sourceRelativePath: String, destinationRelativePath: String) async throws {
+        guard let proxy = fileProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.moveItem(
+                username: username,
+                sourceRelativePath: sourceRelativePath,
+                destinationRelativePath: destinationRelativePath
+            ) { ok, e in
+                done((ok, e))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.move_failed", fallback: "Move failed")) }
+    }
+
     /// 解压压缩包到同目录
     func extractArchive(username: String, relativePath: String) async throws {
         guard let proxy = fileProxy else { throw HelperError.notConnected }

@@ -145,6 +145,40 @@ extension ClawdHomeHelperImpl {
         }
     }
 
+    func copyItem(username: String, sourceRelativePath: String, destinationRelativePath: String,
+                  withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("[FileManager] copyItem user=\(username) src=\(sourceRelativePath) dst=\(destinationRelativePath)",
+                  level: .debug, channel: .fileManager)
+        do {
+            try UserFileManager.copyItem(
+                username: username,
+                sourceRelativePath: sourceRelativePath,
+                destinationRelativePath: destinationRelativePath
+            )
+            reply(true, nil)
+        } catch {
+            helperLog("[FileManager] copyItem error: \(error)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func moveItem(username: String, sourceRelativePath: String, destinationRelativePath: String,
+                  withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("[FileManager] moveItem user=\(username) src=\(sourceRelativePath) dst=\(destinationRelativePath)",
+                  level: .debug, channel: .fileManager)
+        do {
+            try UserFileManager.moveItem(
+                username: username,
+                sourceRelativePath: sourceRelativePath,
+                destinationRelativePath: destinationRelativePath
+            )
+            reply(true, nil)
+        } catch {
+            helperLog("[FileManager] moveItem error: \(error)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
     func extractArchive(username: String, relativePath: String,
                         withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("[FileManager] extractArchive user=\(username) path=\(relativePath)",

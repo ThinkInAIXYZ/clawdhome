@@ -437,6 +437,23 @@ struct UserFilesView: View {
     @State private var uploadStatus: UploadStatus? = nil
     @State private var isUploadDropTargeted = false
     @State private var didApplyInitialRelativePath = false
+    @State private var pendingTransfer: PendingTransfer?
+
+    private enum TransferMode {
+        case copy
+        case move
+    }
+
+    private struct PendingTransfer {
+        let mode: TransferMode
+        let sourcePaths: [String]
+
+        var count: Int { sourcePaths.count }
+        var previewName: String {
+            guard let first = sourcePaths.first else { return "" }
+            return (first as NSString).lastPathComponent
+        }
+    }
 
     private enum UploadStatus {
         case singleUpload(name: String)
@@ -544,6 +561,9 @@ struct UserFilesView: View {
                     .padding(.vertical, 6)
                 Divider()
                 uploadDropHintBar
+                if let pendingTransfer {
+                    pendingTransferBar(pendingTransfer)
+                }
 
                 if let opErr = operationError {
                     HStack(spacing: 8) {
@@ -715,6 +735,27 @@ struct UserFilesView: View {
                 Label(L10n.k("auto.user_files_view.upload", fallback: "上传"), systemImage: "arrow.up.doc")
             }
             .disabled(selectedUser == nil)
+
+            Button {
+                prepareTransfer(.copy)
+            } label: {
+                Label(L10n.k("views.user_files_view.action_copy", fallback: "Copy"), systemImage: "doc.on.doc")
+            }
+            .disabled(selectedEntries.isEmpty)
+
+            Button {
+                prepareTransfer(.move)
+            } label: {
+                Label(L10n.k("views.user_files_view.action_move", fallback: "Move"), systemImage: "scissors")
+            }
+            .disabled(selectedEntries.isEmpty)
+
+            Button {
+                Task { await pastePendingTransfer() }
+            } label: {
+                Label(L10n.k("views.user_files_view.action_paste", fallback: "Paste"), systemImage: "doc.on.clipboard")
+            }
+            .disabled(selectedUser == nil || pendingTransfer == nil)
 
             Menu {
                 Picker(L10n.k("views.user_files_view.sort_by", fallback: "排序方式"), selection: $sortField) {
@@ -905,6 +946,40 @@ struct UserFilesView: View {
         .background(Color.secondary.opacity(0.06))
     }
 
+    private func pendingTransferBar(_ transfer: PendingTransfer) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: transfer.mode == .copy ? "doc.on.doc" : "scissors")
+                .foregroundStyle(Color.accentColor)
+            Text(
+                transfer.count > 1
+                ? L10n.f(
+                    "views.user_files_view.transfer_pending_multiple",
+                    fallback: "%@ queue: %@ items. Go to target folder and click Paste.",
+                    transferModeLabel(transfer.mode),
+                    String(describing: transfer.count)
+                )
+                : L10n.f(
+                    "views.user_files_view.transfer_pending_single",
+                    fallback: "%@ queue: %@. Go to target folder and click Paste.",
+                    transferModeLabel(transfer.mode),
+                    String(describing: transfer.previewName)
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            Spacer()
+            Button(L10n.k("common.action.clear", fallback: "Clear")) {
+                pendingTransfer = nil
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.accentColor.opacity(0.08))
+    }
+
     private var fileList: some View {
         Table(sortedEntries, selection: $selectedEntryIDs) {
             TableColumn(L10n.k("auto.user_files_view.name", fallback: "名称")) { entry in
@@ -978,6 +1053,14 @@ struct UserFilesView: View {
                 } label: {
                     Label(L10n.k("auto.user_files_view.copy_current_path", fallback: "复制当前路径"), systemImage: "doc.on.doc")
                 }
+                if pendingTransfer != nil {
+                    Divider()
+                    Button {
+                        Task { await pastePendingTransfer() }
+                    } label: {
+                        Label(L10n.k("views.user_files_view.action_paste_to_current", fallback: "Paste to current folder"), systemImage: "doc.on.clipboard")
+                    }
+                }
             } else if let id = ids.first,
                       let entry = entries.first(where: { $0.id == id }) {
                 if entry.isDirectory {
@@ -991,6 +1074,18 @@ struct UserFilesView: View {
                     Button(L10n.k("auto.user_files_view.rename", fallback: "重命名…")) {
                         selectedEntryIDs = [entry.id]
                         beginRename(entry)
+                    }
+                    Button {
+                        selectedEntryIDs = [entry.id]
+                        prepareTransfer(.copy)
+                    } label: {
+                        Label(L10n.k("views.user_files_view.action_copy", fallback: "Copy"), systemImage: "doc.on.doc")
+                    }
+                    Button {
+                        selectedEntryIDs = [entry.id]
+                        prepareTransfer(.move)
+                    } label: {
+                        Label(L10n.k("views.user_files_view.action_move", fallback: "Move"), systemImage: "scissors")
                     }
                     Divider()
                     Button { openTerminalAtCurrentPath() } label: {
@@ -1031,6 +1126,18 @@ struct UserFilesView: View {
                     Button(L10n.k("auto.user_files_view.rename", fallback: "重命名…")) {
                         selectedEntryIDs = [entry.id]
                         beginRename(entry)
+                    }
+                    Button {
+                        selectedEntryIDs = [entry.id]
+                        prepareTransfer(.copy)
+                    } label: {
+                        Label(L10n.k("views.user_files_view.action_copy", fallback: "Copy"), systemImage: "doc.on.doc")
+                    }
+                    Button {
+                        selectedEntryIDs = [entry.id]
+                        prepareTransfer(.move)
+                    } label: {
+                        Label(L10n.k("views.user_files_view.action_move", fallback: "Move"), systemImage: "scissors")
                     }
                     Divider()
                     Button { openTerminalAtCurrentPath() } label: {
@@ -1411,6 +1518,94 @@ struct UserFilesView: View {
             return String(format: L10n.k("views.user_files_view.partial_upload_failed_items", fallback: "部分文件上传失败：%@"), preview)
         }
         return nil
+    }
+
+    private func prepareTransfer(_ mode: TransferMode) {
+        let targets = topLevelDeleteTargets(from: selectedEntries)
+        guard !targets.isEmpty else { return }
+        let paths = targets.map(\.path)
+        pendingTransfer = PendingTransfer(mode: mode, sourcePaths: paths)
+        if paths.count > 1 {
+            operationError = L10n.f(
+                "views.user_files_view.transfer_prepared_multiple",
+                fallback: "%@ queue ready: %@ items",
+                transferModeLabel(mode),
+                String(describing: paths.count)
+            )
+        } else {
+            operationError = L10n.f(
+                "views.user_files_view.transfer_prepared_single",
+                fallback: "%@ queue ready: %@",
+                transferModeLabel(mode),
+                String(describing: (paths[0] as NSString).lastPathComponent)
+            )
+        }
+    }
+
+    private func pastePendingTransfer() async {
+        guard let user = selectedUser, let transfer = pendingTransfer else { return }
+
+        var failures: [String] = []
+        var remaining: [String] = []
+
+        for sourcePath in transfer.sourcePaths {
+            let name = (sourcePath as NSString).lastPathComponent
+            let destination = currentPath.isEmpty ? name : "\(currentPath)/\(name)"
+            do {
+                switch transfer.mode {
+                case .copy:
+                    try await helperClient.copyItem(
+                        username: user.username,
+                        sourceRelativePath: sourcePath,
+                        destinationRelativePath: destination
+                    )
+                    remaining.append(sourcePath)
+                case .move:
+                    try await helperClient.moveItem(
+                        username: user.username,
+                        sourceRelativePath: sourcePath,
+                        destinationRelativePath: destination
+                    )
+                }
+            } catch {
+                failures.append("\(name): \(error.localizedDescription)")
+                remaining.append(sourcePath)
+            }
+        }
+
+        if transfer.mode == .move {
+            pendingTransfer = remaining.isEmpty
+                ? nil
+                : PendingTransfer(mode: .move, sourcePaths: remaining)
+        }
+
+        selectedEntryIDs = []
+        await loadDirectory()
+
+        if failures.isEmpty {
+            operationError = transfer.mode == .copy
+                ? L10n.k("views.user_files_view.transfer_done_copy", fallback: "Copy completed")
+                : L10n.k("views.user_files_view.transfer_done_move", fallback: "Move completed")
+        } else {
+            let head = failures.prefix(2).joined(separator: "；")
+            operationError = failures.count > 2
+                ? L10n.f(
+                    "views.user_files_view.transfer_partial_failed_count",
+                    fallback: "%@; %@ more failed",
+                    String(describing: head),
+                    String(describing: failures.count)
+                )
+                : head
+        }
+    }
+
+    private func transferModeLabel(_ mode: TransferMode) -> String {
+        switch mode {
+        case .copy:
+            return L10n.k("views.user_files_view.transfer_mode_copy", fallback: "Copy")
+        case .move:
+            return L10n.k("views.user_files_view.transfer_mode_move", fallback: "Move")
+        }
     }
 
     private func downloadSelected() async {

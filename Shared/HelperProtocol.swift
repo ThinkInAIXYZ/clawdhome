@@ -551,6 +551,22 @@ import Foundation
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
+    /// 复制文件或目录到目标相对路径
+    func copyItem(
+        username: String,
+        sourceRelativePath: String,
+        destinationRelativePath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 移动文件或目录到目标相对路径
+    func moveItem(
+        username: String,
+        sourceRelativePath: String,
+        destinationRelativePath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
     /// 解压压缩包到同目录（支持 .zip / .tar.gz / .tgz / .tar.bz2 / .tar.xz）
     func extractArchive(
         username: String,
