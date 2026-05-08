@@ -132,6 +132,9 @@ let userDetailModelConfigMaintenanceContext = "user-detail-model-config"
 
 struct ProviderModelConfigCore: View {
     let user: ManagedUser
+    /// 当作为独立 “添加模型” 弹窗使用时为 true：表单始终以全新状态打开，
+    /// 不会沿用用户当前主模型/已存凭据。内嵌于详情页时保持 false（默认）。
+    var presentsAsAddSheet: Bool = false
     var onSaved: ((String) -> Void)? = nil
 
     @Environment(\.openWindow) private var openWindow
@@ -296,10 +299,23 @@ struct ProviderModelConfigCore: View {
                 customBaseURL = "https://api.example.com/v1"
             }
         }
-        .onChange(of: configSource) { _, _ in
+        .onChange(of: configSource) { _, newValue in
             saveMessage = nil
             saveError = nil
             showGlobalPoolPrompt = false
+            if newValue == .new {
+                // 切到“新增”时回到推荐的第一个 provider，避免沿用上一次已有配置的状态
+                selectedProvider = .bailian
+                providerKeys.removeAll()
+                isShowingApiKey = false
+                customProviderId = ""
+                customBaseURL = "https://api.example.com/v1"
+                customCompatibility = .openai
+                customModelId = "gpt-4.1"
+                customModelSuggestions = []
+                customModelFetchMessage = nil
+                customModelFetchError = nil
+            }
         }
         .task {
             await loadCurrentState()
@@ -445,12 +461,15 @@ struct ProviderModelConfigCore: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
         } else {
-            Picker(L10n.k("views.user_detail_view.provider", fallback: "模型提供商"), selection: $selectedProvider) {
+            Picker(selection: $selectedProvider) {
                 ForEach(DirectProviderChoice.allCases) { provider in
                     Text(provider.title).tag(provider)
                 }
+            } label: {
+                EmptyView()
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
 
             if selectedProvider != .custom {
                 VStack(alignment: .leading, spacing: 6) {
@@ -815,7 +834,8 @@ struct ProviderModelConfigCore: View {
             currentDefaultModel = currentPrimaryModel(from: config)
             currentFallbackModels = []
         }
-        if let primary = currentPrimaryModel(from: config) {
+        // “添加模型”弹窗里始终保持新增姿态：不沿用当前主模型，避免预选成已有 provider
+        if !presentsAsAddSheet, let primary = currentPrimaryModel(from: config) {
             if primary.hasPrefix("bailian/") {
                 selectedProvider = .bailian
                 selectedBailianModelId = primary
@@ -844,16 +864,18 @@ struct ProviderModelConfigCore: View {
         let authProfiles = await readUserJSON(relativePath: ".openclaw/agents/main/agent/auth-profiles.json")
         let profiles = (authProfiles["profiles"] as? [String: Any]) ?? [:]
 
-        let bailianKey = ((profiles["bailian:default"] as? [String: Any])?["key"] as? String) ?? ""
-        let kimiKey = ((profiles["kimi-coding:default"] as? [String: Any])?["key"] as? String) ?? ""
-        let minimaxKey = ((profiles["minimax:cn"] as? [String: Any])?["key"] as? String) ?? ""
-        let qiniuKey = ((profiles["qiniu:default"] as? [String: Any])?["key"] as? String) ?? ""
-        let zaiKey = ((profiles["zai:default"] as? [String: Any])?["key"] as? String) ?? ""
-        providerKeys[DirectProviderChoice.bailian.rawValue] = bailianKey
-        providerKeys[DirectProviderChoice.kimiCoding.rawValue] = kimiKey
-        providerKeys[DirectProviderChoice.minimax.rawValue] = minimaxKey
-        providerKeys[DirectProviderChoice.qiniu.rawValue] = qiniuKey
-        providerKeys[DirectProviderChoice.zai.rawValue] = zaiKey
+        if !presentsAsAddSheet {
+            let bailianKey = ((profiles["bailian:default"] as? [String: Any])?["key"] as? String) ?? ""
+            let kimiKey = ((profiles["kimi-coding:default"] as? [String: Any])?["key"] as? String) ?? ""
+            let minimaxKey = ((profiles["minimax:cn"] as? [String: Any])?["key"] as? String) ?? ""
+            let qiniuKey = ((profiles["qiniu:default"] as? [String: Any])?["key"] as? String) ?? ""
+            let zaiKey = ((profiles["zai:default"] as? [String: Any])?["key"] as? String) ?? ""
+            providerKeys[DirectProviderChoice.bailian.rawValue] = bailianKey
+            providerKeys[DirectProviderChoice.kimiCoding.rawValue] = kimiKey
+            providerKeys[DirectProviderChoice.minimax.rawValue] = minimaxKey
+            providerKeys[DirectProviderChoice.qiniu.rawValue] = qiniuKey
+            providerKeys[DirectProviderChoice.zai.rawValue] = zaiKey
+        }
 
         if selectedProvider == .custom {
             let providerId = effectiveCustomProviderId
