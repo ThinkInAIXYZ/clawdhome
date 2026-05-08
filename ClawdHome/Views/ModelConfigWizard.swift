@@ -135,7 +135,7 @@ struct ModelConfigWizard: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 14)
                 Divider()
-                ProviderModelConfigCore(user: user) { _ in
+                ProviderModelConfigCore(user: user, presentsAsAddSheet: true) { _ in
                     showAddModel = false
                     Task { await loadStatus() }
                 }
