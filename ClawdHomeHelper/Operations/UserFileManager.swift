@@ -9,6 +9,10 @@ enum UserFileError: LocalizedError {
     case notFound
     case notAFile
     case notADirectory
+    case destinationExists
+    case samePath
+    case cannotCopyIntoSelf
+    case cannotMoveIntoSelf
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +21,10 @@ enum UserFileError: LocalizedError {
         case .notFound:       return "No such file or directory"
         case .notAFile:       return "目标不是文件"
         case .notADirectory:  return "目标不是目录"
+        case .destinationExists: return "目标已存在"
+        case .samePath: return "源路径与目标路径相同"
+        case .cannotCopyIntoSelf: return "不能复制到自身目录内"
+        case .cannotMoveIntoSelf: return "不能移动到自身目录内"
         }
     }
 }
@@ -168,6 +176,86 @@ struct UserFileManager {
             throw UserFileError.pathTraversal
         }
         try FileManager.default.moveItem(at: src, to: dst)
+    }
+
+    // MARK: - 复制 / 移动
+
+    private static func validateTransferPaths(
+        username: String,
+        sourceRelativePath: String,
+        destinationRelativePath: String,
+        mode: TransferMode
+    ) throws -> (src: URL, dst: URL, isDirectory: Bool) {
+        let src = try resolvedPath(username: username, relativePath: sourceRelativePath)
+        let dst = try resolvedPath(username: username, relativePath: destinationRelativePath)
+
+        guard src.standardized.path != dst.standardized.path else {
+            throw UserFileError.samePath
+        }
+
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: src.path, isDirectory: &isDir) else {
+            throw UserFileError.notFound
+        }
+
+        if isDir.boolValue {
+            let srcPath = src.standardized.path
+            let dstPath = dst.standardized.path
+            if dstPath.hasPrefix(srcPath + "/") {
+                throw mode == .copy ? UserFileError.cannotCopyIntoSelf : UserFileError.cannotMoveIntoSelf
+            }
+        }
+
+        if FileManager.default.fileExists(atPath: dst.path) {
+            throw UserFileError.destinationExists
+        }
+
+        return (src, dst, isDir.boolValue)
+    }
+
+    private enum TransferMode {
+        case copy
+        case move
+    }
+
+    static func copyItem(username: String, sourceRelativePath: String, destinationRelativePath: String) throws {
+        let (src, dst, isDirectory) = try validateTransferPaths(
+            username: username,
+            sourceRelativePath: sourceRelativePath,
+            destinationRelativePath: destinationRelativePath,
+            mode: .copy
+        )
+        try FileManager.default.copyItem(at: src, to: dst)
+
+        do {
+            if isDirectory {
+                try FilePermissionHelper.chownRecursive(dst.path, owner: username)
+            } else {
+                try FilePermissionHelper.chown(dst.path, owner: username)
+            }
+        } catch {
+            helperLog("[FileManager] chown failed after copy for \(dst.path): \(error.localizedDescription)", level: .warn)
+        }
+    }
+
+    static func moveItem(username: String, sourceRelativePath: String, destinationRelativePath: String) throws {
+        let (src, dst, isDirectory) = try validateTransferPaths(
+            username: username,
+            sourceRelativePath: sourceRelativePath,
+            destinationRelativePath: destinationRelativePath,
+            mode: .move
+        )
+        try FileManager.default.moveItem(at: src, to: dst)
+
+        do {
+            if isDirectory {
+                try FilePermissionHelper.chownRecursive(dst.path, owner: username)
+            } else {
+                try FilePermissionHelper.chown(dst.path, owner: username)
+            }
+        } catch {
+            helperLog("[FileManager] chown failed after move for \(dst.path): \(error.localizedDescription)", level: .warn)
+        }
     }
 
     // MARK: - 解压
