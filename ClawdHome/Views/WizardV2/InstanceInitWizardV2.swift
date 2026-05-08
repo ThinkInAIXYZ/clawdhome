@@ -49,13 +49,13 @@ enum WizardV2Step: Int, CaseIterable {
     var title: String {
         switch self {
         case .selectEngine:   return L10n.k("wizard_v2.step.select_engine", fallback: "Select Engine")
-        case .basicEnv:       return L10n.k("wizard_v2.step.basic_env", fallback: "基础环境")
+        case .basicEnv:       return L10n.k("wizard_v2.step.basic_env", fallback: "Base Environment")
         case .installTools:   return L10n.k("wizard_v2.step.install_tools", fallback: "Install Dependencies")
         case .hermesSetup:    return L10n.k("wizard_v2.step.hermes_setup", fallback: "Hermes Setup")
-        case .configModel:    return L10n.k("wizard_v2.step.model", fallback: "模型配置")
-        case .configAgents:   return L10n.k("wizard_v2.step.agents", fallback: "Agent 配置")
-        case .configIM:       return L10n.k("wizard_v2.step.im", fallback: "IM 绑定")
-        case .done:           return L10n.k("wizard_v2.step.done", fallback: "完成")
+        case .configModel:    return L10n.k("wizard_v2.step.model", fallback: "Model Setup")
+        case .configAgents:   return L10n.k("wizard_v2.step.agents", fallback: "Agent Setup")
+        case .configIM:       return L10n.k("wizard_v2.step.im", fallback: "IM Binding")
+        case .done:           return L10n.k("wizard_v2.step.done", fallback: "Done")
         }
     }
 
@@ -105,17 +105,17 @@ private enum WizardV2BasicEnvPhase: Int, CaseIterable {
     var title: String {
         switch self {
         case .repairHomebrew:
-            return L10n.k("wizard.base_env.homebrew_repair", fallback: "修复 Homebrew 权限")
+            return L10n.k("wizard.base_env.homebrew_repair", fallback: "Repair Homebrew Permissions")
         case .installNode:
-            return L10n.k("wizard.base_env.install_node", fallback: "安装 Node.js")
+            return L10n.k("wizard.base_env.install_node", fallback: "Install Node.js")
         case .setupNpmEnv:
-            return L10n.k("wizard.base_env.setup_npm_env", fallback: "配置 npm 目录")
+            return L10n.k("wizard.base_env.setup_npm_env", fallback: "Configure npm Directory")
         case .setNpmRegistry:
-            return L10n.k("wizard.base_env.set_npm_registry", fallback: "设置 npm 安装源")
+            return L10n.k("wizard.base_env.set_npm_registry", fallback: "Set npm Registry")
         case .installOpenclaw:
-            return L10n.k("wizard.base_env.install_openclaw", fallback: "安装 openclaw")
+            return L10n.k("wizard.base_env.install_openclaw", fallback: "Install openclaw")
         case .startGateway:
-            return L10n.k("wizard.base_env.start_gateway", fallback: "启动 Gateway")
+            return L10n.k("wizard.base_env.start_gateway", fallback: "Start Gateway")
         }
     }
 
@@ -280,10 +280,10 @@ struct InstanceInitWizardV2: View {
                 stepContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .navigationTitle(L10n.f("wizard_v2.title_with_instance", fallback: "新建实例 %@@%@", user.fullName, user.username))
+            .navigationTitle(L10n.f("wizard_v2.title_with_instance", fallback: "Create Instance %@@%@", user.fullName, user.username))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.k("common.cancel", fallback: "取消")) {
+                    Button(L10n.k("common.cancel", fallback: "Cancel")) {
                         if hasDirtyState {
                             showCancelConfirm = true
                         } else {
@@ -294,16 +294,16 @@ struct InstanceInitWizardV2: View {
                 }
             }
             .confirmationDialog(
-                L10n.k("wizard_v2.cancel_confirm.title", fallback: "放弃初始化？"),
+                L10n.k("wizard_v2.cancel_confirm.title", fallback: "Discard Initialization?"),
                 isPresented: $showCancelConfirm,
                 titleVisibility: .visible
             ) {
-                Button(L10n.k("wizard_v2.cancel_confirm.discard", fallback: "放弃"), role: .destructive) {
+                Button(L10n.k("wizard_v2.cancel_confirm.discard", fallback: "Discard"), role: .destructive) {
                     Task { await cancelAndDismissWizard() }
                 }
-                Button(L10n.k("common.cancel", fallback: "取消"), role: .cancel) {}
+                Button(L10n.k("common.cancel", fallback: "Cancel"), role: .cancel) {}
             } message: {
-                Text(L10n.k("wizard_v2.cancel_confirm.message", fallback: "已配置的 Agent 和 IM 设置将不会保存"))
+                Text(L10n.k("wizard_v2.cancel_confirm.message", fallback: "Configured Agent and IM settings will not be saved."))
             }
         }
         .frame(minWidth: 680, minHeight: 520)
@@ -347,19 +347,19 @@ struct InstanceInitWizardV2: View {
                 Button {
                     openFilesWindow()
                 } label: {
-                    Label(L10n.k("wizard.maintenance.files", fallback: "文件"), systemImage: "folder")
+                    Label(L10n.k("wizard.maintenance.files", fallback: "Files"), systemImage: "folder")
                 }
 
                 Button {
                     openProcessesWindow()
                 } label: {
-                    Label(L10n.k("wizard.maintenance.processes", fallback: "进程"), systemImage: "cpu")
+                    Label(L10n.k("wizard.maintenance.processes", fallback: "Processes"), systemImage: "cpu")
                 }
 
                 Button {
                     openMaintenanceTerminal()
                 } label: {
-                    Label(L10n.k("wizard.maintenance.terminal", fallback: "终端"), systemImage: "terminal")
+                    Label(L10n.k("wizard.maintenance.terminal", fallback: "Terminal"), systemImage: "terminal")
                 }
             } label: {
                 Image(systemName: "wrench.and.screwdriver")
@@ -372,7 +372,7 @@ struct InstanceInitWizardV2: View {
                     )
             }
             .menuStyle(.borderlessButton)
-            .help(L10n.k("wizard.maintenance.section_title", fallback: "维护工具"))
+            .help(L10n.k("wizard.maintenance.section_title", fallback: "Maintenance Tools"))
 
             Spacer()
         }
@@ -418,9 +418,9 @@ struct InstanceInitWizardV2: View {
     private var selectEngineView: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.k("wizard.engine_select_title", fallback: "选择引擎"))
+                Text(L10n.k("wizard.engine_select_title", fallback: "Select Engine"))
                     .font(.title2).fontWeight(.semibold)
-                Text(L10n.k("wizard.engine_select_hint", fallback: "先确定该虾的运行引擎，再进入后续初始化步骤。"))
+                Text(L10n.k("wizard.engine_select_hint", fallback: "Choose the runtime engine first, then continue with initialization."))
                     .foregroundStyle(.secondary)
             }
 
@@ -500,9 +500,9 @@ struct InstanceInitWizardV2: View {
     private var configAgentsView: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.k("wizard_v2.agents.heading", fallback: "Agent 模型绑定"))
+                Text(L10n.k("wizard_v2.agents.heading", fallback: "Agent Model Binding"))
                     .font(.title2).fontWeight(.semibold)
-                Text(L10n.k("wizard_v2.agents.hint", fallback: "可选：为每个 Agent 指定专用模型。留空则继承全局模型配置。"))
+                Text(L10n.k("wizard_v2.agents.hint", fallback: "Optional: assign a dedicated model for each Agent. Leave empty to inherit global model config."))
                     .foregroundStyle(.secondary)
                     .font(.caption)
             }
@@ -545,7 +545,7 @@ struct InstanceInitWizardV2: View {
                     }
                     Text(agent.wrappedValue.displayName).fontWeight(.medium)
                     if agent.wrappedValue.isDefault {
-                        Text(L10n.k("agents.default_badge", fallback: "默认"))
+                        Text(L10n.k("agents.default_badge", fallback: "Default"))
                             .font(.caption2)
                             .padding(.horizontal, 5).padding(.vertical, 1)
                             .background(Color.accentColor.opacity(0.15))
@@ -562,7 +562,7 @@ struct InstanceInitWizardV2: View {
             Spacer()
             // 右：主模型选择（默认继承全局）
             Picker("", selection: modelSelection) {
-                Text(L10n.k("wizard_v2.agents.model_placeholder", fallback: "继承全局模型"))
+                Text(L10n.k("wizard_v2.agents.model_placeholder", fallback: "Inherit Global Model"))
                     .tag("")
                 ForEach(allChoices, id: \.self) { modelID in
                     Text(modelLabel(for: modelID)).tag(modelID)
@@ -629,27 +629,27 @@ struct InstanceInitWizardV2: View {
     private var basicEnvView: some View {
         if selectedEngine == .hermes {
             VStack(alignment: .leading, spacing: 0) {
-                Text(L10n.k("wizard.hermes_env.heading", fallback: "安装 Hermes 运行环境"))
+                Text(L10n.k("wizard.hermes_env.heading", fallback: "Install Hermes Runtime"))
                     .font(.title2).fontWeight(.semibold)
                     .padding(.bottom, 12)
 
                 HStack(spacing: 12) {
                     if let err = envError {
-                        Button(L10n.k("common.retry", fallback: "重试")) { runEnvInstall() }
+                        Button(L10n.k("common.retry", fallback: "Retry")) { runEnvInstall() }
                             .buttonStyle(.bordered)
                         Text(err)
                             .font(.caption)
                             .foregroundStyle(.red)
                             .lineLimit(2)
                     } else if envReady {
-                        Label(L10n.k("wizard.hermes_env.ready", fallback: "Hermes 环境就绪"), systemImage: "checkmark.circle.fill")
+                        Label(L10n.k("wizard.hermes_env.ready", fallback: "Hermes Runtime Ready"), systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                             .font(.system(size: 13, weight: .medium))
                         hermesEnvPhaseStepperView
                     } else if isInstallingEnv {
                         hermesEnvPhaseStepperView
                     } else {
-                        Button(L10n.k("wizard.hermes_env.install_btn", fallback: "安装 Hermes")) { runEnvInstall() }
+                        Button(L10n.k("wizard.hermes_env.install_btn", fallback: "Install Hermes")) { runEnvInstall() }
                             .buttonStyle(.borderedProminent)
                         hermesEnvPhaseStepperView
                     }
@@ -659,12 +659,12 @@ struct InstanceInitWizardV2: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     let showInteractiveHermesTerminal = (isInstallingEnv && hermesEnvInstallingPhase == .installHermes) || hermesInstallExitCode != nil
-                    Text(L10n.k("wizard.hermes_env.terminal_title", fallback: "安装终端（可交互）"))
+                    Text(L10n.k("wizard.hermes_env.terminal_title", fallback: "Install Terminal (Interactive)"))
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                     HStack(spacing: 10) {
-                        Label(L10n.k("wizard.hermes_env.terminal_hint", fallback: "支持键盘输入，可在异常时人工介入"), systemImage: "keyboard")
+                        Label(L10n.k("wizard.hermes_env.terminal_hint", fallback: "Keyboard input is supported for manual intervention when needed."), systemImage: "keyboard")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -678,13 +678,13 @@ struct InstanceInitWizardV2: View {
                         .buttonStyle(.borderless)
                         .disabled(!isInstallingEnv)
                         if isInstallingEnv, !showInteractiveHermesTerminal {
-                            Button(L10n.k("wizard.hermes.reconnect_log", fallback: "重连日志")) {
+                            Button(L10n.k("wizard.hermes.reconnect_log", fallback: "Reconnect Log")) {
                                 hermesLogTerminalRunToken = UUID()
                             }
                             .buttonStyle(.borderless)
                         }
                         if let code = hermesInstallExitCode {
-                            Text(L10n.f("wizard.hermes_env.exit_code", fallback: "最近退出码: %d", code))
+                            Text(L10n.f("wizard.hermes_env.exit_code", fallback: "Latest exit code: %d", code))
                                 .font(.caption2)
                                 .foregroundStyle(code == 0 ? Color.secondary : Color.orange)
                         }
@@ -717,7 +717,7 @@ struct InstanceInitWizardV2: View {
                             .stroke(Color.secondary.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                             .frame(minHeight: 160)
                             .overlay {
-                                Text(L10n.k("wizard.hermes_env.terminal_placeholder", fallback: "点击「安装 Hermes」后将启动可交互终端。"))
+                                Text(L10n.k("wizard.hermes_env.terminal_placeholder", fallback: "Click \"Install Hermes\" to start an interactive terminal."))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -725,7 +725,7 @@ struct InstanceInitWizardV2: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-                navigationButtons(canGoNext: envReady, nextLabel: L10n.k("common.next", fallback: "下一步")) {
+                navigationButtons(canGoNext: envReady, nextLabel: L10n.k("common.next", fallback: "Next")) {
                     advance()
                 }
                 .padding(.top, 12)
@@ -737,27 +737,27 @@ struct InstanceInitWizardV2: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                Text(L10n.k("wizard_v2.basic_env.heading", fallback: "安装基础运行环境"))
+                Text(L10n.k("wizard_v2.basic_env.heading", fallback: "Install Base Runtime Environment"))
                     .font(.title2).fontWeight(.semibold)
                     .padding(.bottom, 12)
 
                 HStack(spacing: 12) {
                     if let err = envError {
-                        Button(L10n.k("common.retry", fallback: "重试")) { runEnvInstall() }
+                        Button(L10n.k("common.retry", fallback: "Retry")) { runEnvInstall() }
                             .buttonStyle(.bordered)
                         Text(err)
                             .font(.caption)
                             .foregroundStyle(.red)
                             .lineLimit(2)
                     } else if envReady {
-                        Label(L10n.k("wizard_v2.basic_env.ready", fallback: "环境就绪"), systemImage: "checkmark.circle.fill")
+                        Label(L10n.k("wizard_v2.basic_env.ready", fallback: "Environment Ready"), systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                             .font(.system(size: 13, weight: .medium))
                         envPhaseStepperView
                     } else if isInstallingEnv {
                         envPhaseStepperView
                     } else {
-                        Button(L10n.k("wizard_v2.basic_env.start", fallback: "开始安装")) { runEnvInstall() }
+                        Button(L10n.k("wizard_v2.basic_env.start", fallback: "Start Installation")) { runEnvInstall() }
                             .buttonStyle(.borderedProminent)
                         envPhaseStepperView
                     }
@@ -766,12 +766,12 @@ struct InstanceInitWizardV2: View {
                 .padding(.bottom, 16)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(L10n.k("wizard_v2.basic_env.terminal_title", fallback: "安装终端（日志跟踪）"))
+                    Text(L10n.k("wizard_v2.basic_env.terminal_title", fallback: "Install Terminal (Log Tracking)"))
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                     HStack(spacing: 10) {
-                        Label(L10n.k("wizard_v2.basic_env.terminal_hint", fallback: "统一 SwiftTerm 显示（日志 tail 模式）"), systemImage: "terminal")
+                        Label(L10n.k("wizard_v2.basic_env.terminal_hint", fallback: "Unified SwiftTerm display (tail-log mode)."), systemImage: "terminal")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -779,7 +779,7 @@ struct InstanceInitWizardV2: View {
                             openclawLogTerminalControl.sendInterrupt()
                         }
                         .buttonStyle(.borderless)
-                        Button(L10n.k("wizard_v2.basic_env.reconnect_log", fallback: "重连日志")) {
+                        Button(L10n.k("wizard_v2.basic_env.reconnect_log", fallback: "Reconnect Log")) {
                             openclawLogTerminalRunToken = UUID()
                         }
                         .buttonStyle(.borderless)
@@ -798,7 +798,7 @@ struct InstanceInitWizardV2: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-                navigationButtons(canGoNext: envReady, nextLabel: L10n.k("common.next", fallback: "下一步")) {
+                navigationButtons(canGoNext: envReady, nextLabel: L10n.k("common.next", fallback: "Next")) {
                     advance()
                 }
                 .padding(.top, 12)
@@ -814,9 +814,9 @@ struct InstanceInitWizardV2: View {
     private var installToolsView: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.k("shrimp.wizard.install.title", fallback: "安装依赖工具"))
+                Text(L10n.k("shrimp.wizard.install.title", fallback: "Install Dependencies"))
                     .font(.title2).fontWeight(.semibold)
-                Text(L10n.k("shrimp.wizard.install.description", fallback: "用于 OAuth 登录、网页自动化与账号授权回调。缺失浏览器工具会导致部分平台无法完成绑定。"))
+                Text(L10n.k("shrimp.wizard.install.description", fallback: "Used for OAuth login, web automation, and authorization callbacks. Missing Browser Tool may block bindings on some platforms."))
                     .foregroundStyle(.secondary)
                     .font(.subheadline)
             }
@@ -826,9 +826,9 @@ struct InstanceInitWizardV2: View {
                     Image(systemName: browserToolInstalled ? "checkmark.circle.fill" : "circle.dotted")
                         .foregroundStyle(browserToolInstalled ? .green : .secondary)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(L10n.k("shrimp.wizard.browser_tool.title", fallback: "浏览器工具（必需）"))
+                        Text(L10n.k("shrimp.wizard.browser_tool.title", fallback: "Browser Tool (Required)"))
                             .font(.headline)
-                        Text(L10n.k("shrimp.wizard.browser_tool.description", fallback: "安装用户级 browser wrapper 与授权辅助能力。"))
+                        Text(L10n.k("shrimp.wizard.browser_tool.description", fallback: "Installs user-level browser wrapper and authorization helper capabilities."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text(browserToolInstalled
@@ -993,23 +993,23 @@ struct InstanceInitWizardV2: View {
 
     private var hermesSetupView: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(L10n.k("wizard.hermes_setup.heading", fallback: "Hermes 配置"))
+            Text(L10n.k("wizard.hermes_setup.heading", fallback: "Hermes Setup"))
                 .font(.title2).fontWeight(.semibold)
                 .padding(.bottom, 4)
-            Text(L10n.k("wizard.hermes_setup.hint", fallback: "通过 hermes setup 交互式向导完成模型、密钥等配置。"))
+            Text(L10n.k("wizard.hermes_setup.hint", fallback: "Use the interactive `hermes setup` wizard to configure model and API key."))
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 12)
 
             HStack(spacing: 12) {
                 if hermesSetupDone {
-                    Label(L10n.k("wizard.hermes_setup.done", fallback: "配置向导已完成"), systemImage: "checkmark.circle.fill")
+                    Label(L10n.k("wizard.hermes_setup.done", fallback: "Setup wizard completed"), systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.system(size: 13, weight: .medium))
                 } else if let code = hermesSetupExitCode, code != 0 {
-                    Label(L10n.f("wizard.hermes_setup.exit_abnormal", fallback: "向导异常退出（code %d），可重新运行。", code), systemImage: "exclamationmark.triangle.fill")
+                    Label(L10n.f("wizard.hermes_setup.exit_abnormal", fallback: "Wizard exited abnormally (code %d). You can run it again.", code), systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(.orange)
-                    Button(L10n.k("wizard.hermes_setup.rerun", fallback: "重新运行")) {
+                    Button(L10n.k("wizard.hermes_setup.rerun", fallback: "Run Again")) {
                         hermesSetupExitCode = nil
                         hermesSetupDone = false
                         hermesSetupTerminalRunToken = UUID()
@@ -1027,12 +1027,12 @@ struct InstanceInitWizardV2: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
-                    Label(L10n.k("wizard.hermes_setup.keyboard_hint", fallback: "支持键盘输入，按向导提示完成配置"), systemImage: "keyboard")
+                    Label(L10n.k("wizard.hermes_setup.keyboard_hint", fallback: "Keyboard input is supported. Follow prompts to finish setup."), systemImage: "keyboard")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
                     if let code = hermesSetupExitCode {
-                        Text(L10n.f("wizard.hermes_setup.exit_code", fallback: "退出码: %d", code))
+                        Text(L10n.f("wizard.hermes_setup.exit_code", fallback: "Exit code: %d", code))
                             .font(.caption2)
                             .foregroundStyle(code == 0 ? Color.secondary : Color.orange)
                     }
@@ -1052,7 +1052,7 @@ struct InstanceInitWizardV2: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-            navigationButtons(canGoNext: true, nextLabel: L10n.k("common.next", fallback: "下一步")) {
+            navigationButtons(canGoNext: true, nextLabel: L10n.k("common.next", fallback: "Next")) {
                 if hermesSetupDone {
                     advance()
                 } else {
@@ -1063,14 +1063,14 @@ struct InstanceInitWizardV2: View {
         }
         .padding(24)
         .confirmationDialog(
-            L10n.k("wizard.hermes_setup.skip_confirm_title", fallback: "尚未完成 Hermes 配置"),
+            L10n.k("wizard.hermes_setup.skip_confirm_title", fallback: "Hermes setup not completed"),
             isPresented: $showHermesSetupSkipConfirm,
             titleVisibility: .visible
         ) {
-            Button(L10n.k("wizard.hermes_setup.skip_confirm_proceed", fallback: "继续创建"), role: .destructive) { advance() }
-            Button(L10n.k("common.cancel", fallback: "取消"), role: .cancel) {}
+            Button(L10n.k("wizard.hermes_setup.skip_confirm_proceed", fallback: "Continue Anyway"), role: .destructive) { advance() }
+            Button(L10n.k("common.cancel", fallback: "Cancel"), role: .cancel) {}
         } message: {
-            Text(L10n.k("wizard.hermes_setup.skip_confirm_message", fallback: "hermes setup 尚未成功完成，模型 / API Key 等可能未配置。继续将直接创建 profile，启动后可能需要再次进入 Hermes 配置。"))
+            Text(L10n.k("wizard.hermes_setup.skip_confirm_message", fallback: "`hermes setup` has not completed successfully. Model/API key may be missing. Continuing will create profiles directly, and you may need to re-enter Hermes setup after startup."))
         }
     }
 
@@ -1103,9 +1103,9 @@ struct InstanceInitWizardV2: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.k("wizard_v2.im.heading", fallback: "绑定 IM Bot"))
+                    Text(L10n.k("wizard_v2.im.heading", fallback: "Bind IM Bot"))
                         .font(.title2).fontWeight(.semibold)
-                    Text(L10n.k("wizard_v2.im.hint", fallback: "可选 — 主 Agent 调度时不需要绑定"))
+                    Text(L10n.k("wizard_v2.im.hint", fallback: "Optional — binding is not required for main Agent task dispatch"))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -1127,7 +1127,7 @@ struct InstanceInitWizardV2: View {
             }
 
             Spacer()
-            navigationButtons(canGoNext: true, nextLabel: L10n.k("wizard_v2.im.skip_or_next", fallback: "跳过 / 下一步")) {
+            navigationButtons(canGoNext: true, nextLabel: L10n.k("wizard_v2.im.skip_or_next", fallback: "Skip / Next")) {
                 advance()
             }
         }
@@ -1142,7 +1142,7 @@ struct InstanceInitWizardV2: View {
                 .foregroundStyle(Color.yellow)
                 .font(.callout)
             Text(L10n.k("wizard_v2.im.banner",
-                        fallback: "只绑默认 Agent 就够用了 — 可以通过主 Agent 分派任务给其他 Agent，也可以后面在设置中按需绑定 / 更新 IM。"))
+                        fallback: "Binding only the default Agent is enough. The main Agent can delegate tasks to other Agents, and you can bind/update IM later in settings."))
                 .font(.callout)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1176,7 +1176,7 @@ struct InstanceInitWizardV2: View {
                         .padding(.horizontal, 16)
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text(L10n.f("wizard_v2.done.elapsed", fallback: "已耗时 %@", saveElapsedText(now: context.date)))
+                    Text(L10n.f("wizard_v2.done.elapsed", fallback: "Elapsed %@", saveElapsedText(now: context.date)))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1186,18 +1186,18 @@ struct InstanceInitWizardV2: View {
                     .foregroundStyle(.red)
                 Text(err)
                     .foregroundStyle(.red)
-                Button(L10n.k("common.retry", fallback: "重试")) { runSave() }
+                Button(L10n.k("common.retry", fallback: "Retry")) { runSave() }
                     .buttonStyle(.bordered)
             } else if saveSuccess {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 48))
                     .foregroundStyle(.green)
-                Text(L10n.k("wizard_v2.done.success", fallback: "初始化完成！"))
+                Text(L10n.k("wizard_v2.done.success", fallback: "Initialization Complete!"))
                     .font(.title2).fontWeight(.semibold)
                 Text(summaryText)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Button(L10n.k("common.done", fallback: "完成")) {
+                Button(L10n.k("common.done", fallback: "Done")) {
                     onDismiss?()
                     dismiss()
                 }
@@ -1211,7 +1211,7 @@ struct InstanceInitWizardV2: View {
 
     private var savePhaseProgressText: String {
         guard let phase = savePhase else {
-            return L10n.k("wizard_v2.done.saving", fallback: "正在写入配置…")
+            return L10n.k("wizard_v2.done.saving", fallback: "Writing configuration...")
         }
         let activePhases = activeSavePhases
         let idx = activePhases.firstIndex(of: phase).map { $0 + 1 } ?? phase.rawValue
@@ -1236,11 +1236,11 @@ struct InstanceInitWizardV2: View {
 
     private var summaryText: String {
         if selectedEngine == .hermes {
-            return L10n.k("wizard_v2.done.hermes_summary", fallback: "Hermes 引擎初始化完成")
+            return L10n.k("wizard_v2.done.hermes_summary", fallback: "Hermes engine initialization completed")
         }
         let agentCount = agents.count
         let botCount = imAccounts.count
-        return L10n.f("wizard_v2.done.summary", fallback: "%d 个 Agent，%d 个 IM Bot 绑定", agentCount, botCount)
+        return L10n.f("wizard_v2.done.summary", fallback: "%d Agents, %d IM Bot bindings", agentCount, botCount)
     }
 
     @MainActor
@@ -1294,12 +1294,12 @@ struct InstanceInitWizardV2: View {
 
     private func navigationButtons(
         canGoNext: Bool,
-        nextLabel: String = L10n.k("common.next", fallback: "下一步"),
+        nextLabel: String = L10n.k("common.next", fallback: "Next"),
         nextAction: @escaping () -> Void
     ) -> some View {
         HStack {
             if previousStep(of: currentStep) != nil {
-                Button(L10n.k("common.back", fallback: "上一步")) {
+                Button(L10n.k("common.back", fallback: "Back")) {
                     if let prev = previousStep(of: currentStep) {
                         currentStep = prev
                     }
@@ -1520,7 +1520,7 @@ struct InstanceInitWizardV2: View {
                     hermesInstallTerminalRunToken = UUID()
                 } catch {
                     let phaseTitle = hermesEnvInstallingPhase?.title
-                        ?? L10n.k("wizard_v2.basic_env.heading", fallback: "安装基础运行环境")
+                        ?? L10n.k("wizard_v2.basic_env.heading", fallback: "Install Base Runtime Environment")
                     isInstallingEnv = false
                     envInstallingPhase = nil
                     hermesEnvInstallingPhase = nil
@@ -1572,7 +1572,7 @@ struct InstanceInitWizardV2: View {
                 envReady = true
             } catch {
                 let phaseTitle = (engine == .hermes ? hermesEnvInstallingPhase?.title : envInstallingPhase?.title)
-                    ?? L10n.k("wizard_v2.basic_env.heading", fallback: "安装基础运行环境")
+                    ?? L10n.k("wizard_v2.basic_env.heading", fallback: "Install Base Runtime Environment")
                 isInstallingEnv = false
                 envInstallingPhase = nil
                 hermesEnvInstallingPhase = nil
@@ -1646,7 +1646,7 @@ struct InstanceInitWizardV2: View {
             username: user.username,
             title: L10n.f(
                 "wizard.maintenance.files.window_title",
-                fallback: "@%@ · 文件",
+                fallback: "@%@ · Files",
                 user.username
             ),
             kind: .files,
@@ -1662,7 +1662,7 @@ struct InstanceInitWizardV2: View {
             username: user.username,
             title: L10n.f(
                 "wizard.maintenance.processes.window_title",
-                fallback: "@%@ · 进程",
+                fallback: "@%@ · Processes",
                 user.username
             ),
             kind: .processes
@@ -1678,7 +1678,7 @@ struct InstanceInitWizardV2: View {
         }
         let payload = maintenanceWindowRegistry.makePayload(
             username: user.username,
-            title: L10n.k("user.detail.auto.cli_maintenance_advanced", fallback: "命令行维护（高级）"),
+            title: L10n.k("user.detail.auto.cli_maintenance_advanced", fallback: "Command-line Maintenance (Advanced)"),
             command: ["zsh", "-l"],
             engine: engine
         )
@@ -2203,10 +2203,10 @@ private struct RolePickerSheet: View {
                 onPick(dna)
                 dismiss()
             })
-            .navigationTitle(L10n.k("wizard_v2.agents.role_picker.title", fallback: "选择角色"))
+            .navigationTitle(L10n.k("wizard_v2.agents.role_picker.title", fallback: "Select Role"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.k("common.cancel", fallback: "取消")) { dismiss() }
+                    Button(L10n.k("common.cancel", fallback: "Cancel")) { dismiss() }
                 }
             }
         }
