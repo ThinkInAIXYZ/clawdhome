@@ -28,8 +28,8 @@ private enum WizardEngine: String, CaseIterable {
 
     var subtitle: String {
         switch self {
-        case .openclaw: return "多 Agent 协作，角色模板与 IM 绑定"
-        case .hermes: return "多平台消息代理，独立 Python 运行时"
+        case .openclaw: return L10n.k("wizard_v2.engine.openclaw.subtitle", fallback: "Multi-agent collaboration with role templates and IM bindings")
+        case .hermes: return L10n.k("wizard_v2.engine.hermes.subtitle", fallback: "Multi-platform messaging agent with an isolated Python runtime")
         }
     }
 }
@@ -48,10 +48,10 @@ enum WizardV2Step: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .selectEngine:   return "选择引擎"
+        case .selectEngine:   return L10n.k("wizard_v2.step.select_engine", fallback: "Select Engine")
         case .basicEnv:       return L10n.k("wizard_v2.step.basic_env", fallback: "基础环境")
-        case .installTools:   return "安装依赖工具"
-        case .hermesSetup:    return "Hermes 配置"
+        case .installTools:   return L10n.k("wizard_v2.step.install_tools", fallback: "Install Dependencies")
+        case .hermesSetup:    return L10n.k("wizard_v2.step.hermes_setup", fallback: "Hermes Setup")
         case .configModel:    return L10n.k("wizard_v2.step.model", fallback: "模型配置")
         case .configAgents:   return L10n.k("wizard_v2.step.agents", fallback: "Agent 配置")
         case .configIM:       return L10n.k("wizard_v2.step.im", fallback: "IM 绑定")
@@ -134,15 +134,15 @@ private enum WizardV2HermesEnvPhase: Int, CaseIterable {
     var title: String {
         switch self {
         case .repairHomebrew:
-            return "修复 Homebrew 权限"
+            return L10n.k("wizard_v2.hermes_env.phase.repair_homebrew", fallback: "Repair Homebrew permissions")
         case .installNode:
-            return "安装 Node.js"
+            return L10n.k("wizard_v2.hermes_env.phase.install_node", fallback: "Install Node.js")
         case .installHermes:
-            return "安装 Hermes"
+            return L10n.k("wizard_v2.hermes_env.phase.install_hermes", fallback: "Install Hermes")
         case .verifyInstall:
-            return "验证安装"
+            return L10n.k("wizard_v2.hermes_env.phase.verify_install", fallback: "Verify installation")
         case .startGateway:
-            return "启动 Gateway"
+            return L10n.k("wizard_v2.hermes_env.phase.start_gateway", fallback: "Start Gateway")
         }
     }
 }
