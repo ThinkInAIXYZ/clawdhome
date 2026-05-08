@@ -113,9 +113,28 @@ Build numbers are **auto-derived** from git commit count (`git rev-list --count 
 - Supported languages: English + Chinese.
 - CI enforcement via three Python scripts in `scripts/`:
   - `i18n_check_untranslated.py` — finds untranslated strings.
-  - `i18n_ci_check.py` — validates translation completeness and placeholder consistency.
+  - `i18n_ci_check.py` — validates translation completeness, placeholder consistency, and rejects auto-titlecased English placeholders (allowlist at `scripts/i18n_placeholder_en_allowlist.json` for legacy debt).
   - `i18n_forbid_legacy_t.py` — ensures no legacy `NSLocalizedString` usage.
 - Run all checks: `make i18n-check`.
+
+### i18n UI Rules (mandatory — agents MUST follow)
+
+When you add or edit any `L10n.k(...)` / `L10n.f(...)` call, or write to `Stable.xcstrings`:
+
+1. **Always supply BOTH a Chinese and a real English translation.** Never leave the English blank — Xcode auto-fills it with the title-cased key (e.g. `"Views Detail Config Source Picker"`), which renders as broken UI in English locale and is rejected by `make i18n-check`.
+2. **Length budgets** (English chars; Chinese ≈ half — see `docs/i18n-style.md` for examples):
+   - Segmented Picker / Tab option: **≤ 12 chars**
+   - Picker label / form field label: **≤ 14 chars**
+   - Button title: **≤ 14 chars**
+   - Table header / column name: **≤ 16 chars**
+3. **Translation style:** prefer single nouns/verbs over phrases — `Source` not `Configuration Source`, `New` not `Create New One`, `Pool` not `From Global Pool`.
+4. **`Picker` with `.pickerStyle(.segmented)` and ≥ 4 options:** the picker's built-in label gets squeezed to vertical text. Use `.labelsHidden()` and put a separate `Text(...)` label above the picker if a label is needed.
+5. **CI gates** (`make i18n-check` must pass before commit):
+   - **Error**: new keys with English value equal to the title-cased key → blocked. Exceptions go in `scripts/i18n_placeholder_en_allowlist.json` only as temporary historical-debt markers.
+   - **Error**: when you fix a translation that was on the allowlist, **remove the key from the allowlist** in the same change — CI flags stale entries.
+   - **Warning**: English visual width > Chinese × 2 for label-style strings (≤ 30-char, single-line, no sentence punctuation). Doesn't block CI but indicates likely UI overflow — shorten the English or restructure the control. CJK char counts as 2 visual units.
+
+Full reference with examples and anti-patterns: **`docs/i18n.md`** (§ "UI Translation Style Rules").
 
 ## Key Paths at Runtime
 
@@ -162,3 +181,8 @@ A single Shrimp can host multiple Hermes profiles (agent personas), each living 
 - XPC protocol changes require updating `Shared/HelperProtocol.swift` — both targets compile this file.
 - The helper runs as a LaunchDaemon (`/Library/LaunchDaemons/ai.clawdhome.mac.helper.plist`). During development, use `make install-helper` to deploy it.
 - JSON is the serialization format for complex data passed over XPC (encoded as String, decoded on both sides using shared Codable models).
+- **No demo or mock data anywhere** — every code path must use real data. If real data isn't available yet, surface the empty/loading state rather than fabricating values.
+
+## Agent Tooling
+
+`AGENTS.md` is a symlink to this file so that Codex CLI, Cursor, and other agent tools that follow the `AGENTS.md` convention pick up the same instructions Claude Code uses. Edit `CLAUDE.md` only — `AGENTS.md` stays in sync automatically.
