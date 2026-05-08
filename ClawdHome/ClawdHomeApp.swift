@@ -13,6 +13,11 @@ final class ClawdHomeAppDelegate: NSObject, NSApplicationDelegate {
     func application(_ app: NSApplication, shouldRestoreApplicationState coder: NSCoder) -> Bool {
         false
     }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        NotificationCenter.default.post(name: .showMainWindowRequested, object: nil)
+        return false
+    }
 }
 
 @main
@@ -39,8 +44,10 @@ struct ClawdHomeApp: App {
 
     var body: some Scene {
         let appLanguage = AppLanguage(rawValue: appLanguageRaw) ?? .system
-        WindowGroup {
+        WindowGroup(id: "main-window") {
             ContentView()
+                .background(MainWindowActivationBridge())
+                .background(WindowIdentifierBinder(windowID: .main))
                 .environment(helperClient)
                 .environment(shrimpPool)
                 .environment(updater)
@@ -75,6 +82,12 @@ struct ClawdHomeApp: App {
         .commands {
             // 隐藏主窗口L10n.k("clawd_home_app.text_ededdc48", fallback: "新建窗口")菜单项（单主窗口）
             CommandGroup(replacing: .newItem) { }
+            CommandMenu("Window") {
+                Button("Show Main Window") {
+                    NotificationCenter.default.post(name: .showMainWindowRequested, object: nil)
+                }
+                .keyboardShortcut("1", modifiers: .command)
+            }
         }
 
         // 龙虾详情独立窗口：每个 username 唯一，重复触发时置前
@@ -366,6 +379,50 @@ struct MaintenanceToolWindowRequest: Codable {
 extension Notification.Name {
     static let maintenanceTerminalWindowClosed = Notification.Name("MaintenanceTerminalWindowClosed")
     static let channelOnboardingAutoDetected = Notification.Name("ChannelOnboardingAutoDetected")
+    static let showMainWindowRequested = Notification.Name("ShowMainWindowRequested")
+}
+
+private enum AppWindowID: String {
+    case main = "clawdhome.main-window"
+}
+
+private struct MainWindowActivationBridge: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .onReceive(NotificationCenter.default.publisher(for: .showMainWindowRequested)) { _ in
+                focusOrOpenMainWindow()
+            }
+    }
+
+    private func focusOrOpenMainWindow() {
+        if let existingMainWindow = NSApp.windows.first(where: { $0.identifier?.rawValue == AppWindowID.main.rawValue }) {
+            NSApp.activate(ignoringOtherApps: true)
+            existingMainWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+        openWindow(id: "main-window")
+    }
+}
+
+private struct WindowIdentifierBinder: NSViewRepresentable {
+    let windowID: AppWindowID
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            view.window?.identifier = NSUserInterfaceItemIdentifier(windowID.rawValue)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            nsView.window?.identifier = NSUserInterfaceItemIdentifier(windowID.rawValue)
+        }
+    }
 }
 
 // MARK: - 通用维护终端窗口
