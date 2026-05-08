@@ -64,9 +64,9 @@ struct BindingFormSheet: View {
                     }
                 }
 
-                Section(L10n.k("binding.account_section", fallback: "IM 账号")) {
-                    Picker(L10n.k("binding.account", fallback: "账号"), selection: $selectedAccountId) {
-                        Text(L10n.k("binding.any_account", fallback: "通配（所有账号）")).tag("")
+                Section(L10n.k("binding.account_section", fallback: "IM Account")) {
+                    Picker(L10n.k("binding.account", fallback: "Account"), selection: $selectedAccountId) {
+                        Text(L10n.k("binding.any_account", fallback: "Wildcard (All Accounts)")).tag("")
                         ForEach(imAccounts) { account in
                             Text("\(account.displayName) (\(account.platform.displayName))")
                                 .tag(account.id)
@@ -74,8 +74,8 @@ struct BindingFormSheet: View {
                     }
                 }
 
-                Section(L10n.k("binding.peer_section", fallback: "路由到（可选）")) {
-                    Picker(L10n.k("binding.peer_type", fallback: "类型"), selection: $peerKind) {
+                Section(L10n.k("binding.peer_section", fallback: "Route To (Optional)")) {
+                    Picker(L10n.k("binding.peer_type", fallback: "Type"), selection: $peerKind) {
                         ForEach(PeerKindOption.allCases, id: \.rawValue) { opt in
                             Text(opt.localizedTitle).tag(opt)
                         }
@@ -97,7 +97,7 @@ struct BindingFormSheet: View {
                 Section {
                     HStack {
                         Spacer()
-                        Button(L10n.k("common.save", fallback: "保存")) {
+                        Button(L10n.k("common.save", fallback: "Save")) {
                             save()
                         }
                         .buttonStyle(.borderedProminent)
@@ -106,10 +106,10 @@ struct BindingFormSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(L10n.k("binding.title", fallback: "配置绑定"))
+            .navigationTitle(L10n.k("binding.title", fallback: "Configure Binding"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.k("common.cancel", fallback: "取消")) { dismiss() }
+                    Button(L10n.k("common.cancel", fallback: "Cancel")) { dismiss() }
                 }
             }
         }
@@ -136,9 +136,9 @@ struct BindingFormSheet: View {
 
     private var peerIdHint: String {
         switch peerKind {
-        case .direct:  return L10n.k("binding.hint.direct", fallback: "飞书：open_id（ou_开头）；微信：wxid 或 @username")
-        case .group:   return L10n.k("binding.hint.group", fallback: "飞书：chat_id（oc_开头）；微信：群 chatroom_id（@chatroom）")
-        case .channel: return L10n.k("binding.hint.channel", fallback: "Slack：C 开头频道 ID；Discord：频道 snowflake ID")
+        case .direct:  return L10n.k("binding.hint.direct", fallback: "Feishu: open_id (prefix `ou_`); WeChat: wxid or @username")
+        case .group:   return L10n.k("binding.hint.group", fallback: "Feishu: chat_id (prefix `oc_`); WeChat: group chatroom_id (`@chatroom`)")
+        case .channel: return L10n.k("binding.hint.channel", fallback: "Slack: channel ID starting with C; Discord: channel snowflake ID")
         case .none:    return ""
         }
     }
