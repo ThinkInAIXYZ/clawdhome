@@ -320,6 +320,15 @@ final class HelperClient {
         return proxyWithLogging(maintenanceConnection)
     }
 
+    private func maintenanceProxyWithErrorHandler(
+        _ handler: @escaping (Error) -> Void
+    ) -> (any ClawdHomeHelperProtocol)? {
+        if maintenanceConnection == nil, isConnected {
+            maintenanceConnection = makeConnection(label: "maintenance", generation: connectionGeneration)
+        }
+        return maintenanceConnection?.remoteObjectProxyWithErrorHandler(handler) as? any ClawdHomeHelperProtocol
+    }
+
     private var dashboardProxy: (any ClawdHomeHelperProtocol)? {
         if dashboardConnection == nil, isConnected {
             dashboardConnection = makeConnection(label: "dashboard", generation: connectionGeneration)
@@ -412,6 +421,20 @@ final class HelperClient {
             timeoutMessage: L10n.f("services.helper_client.xpc_timeout", fallback: "XPC 调用超时（%ds，基础 %ds + 冗余 %ds）", effectiveSeconds, requestedSeconds, effectiveSeconds - requestedSeconds),
             operation: operation
         )
+    }
+
+    private func shouldRetryMaintenanceStart(errorMessage: String) -> Bool {
+        let lower = errorMessage.lowercased()
+        if lower.contains("timeout") || errorMessage.contains("超时") {
+            return true
+        }
+        if lower.contains("xpc") || lower.contains("invalidat") || lower.contains("interrupt") {
+            return true
+        }
+        if errorMessage == L10n.k("services.helper_client.disconnected", fallback: "未连接") {
+            return true
+        }
+        return false
     }
 
     private func isGatewayRunningQuickly(username: String) async -> Bool {
@@ -1937,24 +1960,48 @@ final class HelperClient {
 
     /// 启动通用维护终端会话（Helper 侧 PTY）
     func startMaintenanceTerminalSession(username: String, command: [String]) async -> (Bool, String, String?) {
-        guard let proxy = maintenanceProxy else { return (false, "", L10n.k("services.helper_client.disconnected", fallback: "未连接")) }
         let commandJSON = (try? String(data: JSONEncoder().encode(command), encoding: .utf8)) ?? "[]"
         appLog("[maintenance] session start request @\(username) cmd=\(command.joined(separator: " "))")
-        do {
-            return try await xpcCall { done in
-                proxy.startMaintenanceTerminalSession(
-                    username: username,
-                    commandJSON: commandJSON
-                ) { ok, sessionID, err in
-                    if ok {
-                        appLog("[maintenance] session started @\(username) session=\(sessionID)")
-                    } else {
-                        appLog("[maintenance] session start failed @\(username): \(err ?? "unknown")", level: .error)
+
+        func startOnce() async -> (Bool, String, String?) {
+            do {
+                return try await xpcCall { done in
+                    guard let proxy = self.maintenanceProxyWithErrorHandler({ error in
+                        done((false, "", error.localizedDescription))
+                    }) else {
+                        done((false, "", L10n.k("services.helper_client.disconnected", fallback: "未连接")))
+                        return
                     }
-                    done((ok, sessionID, err))
+                    proxy.startMaintenanceTerminalSession(
+                        username: username,
+                        commandJSON: commandJSON
+                    ) { ok, sessionID, err in
+                        if ok {
+                            appLog("[maintenance] session started @\(username) session=\(sessionID)")
+                        } else {
+                            appLog("[maintenance] session start failed @\(username): \(err ?? "unknown")", level: .error)
+                        }
+                        done((ok, sessionID, err))
+                    }
                 }
+            } catch {
+                return (false, "", error.localizedDescription)
             }
-        } catch { return (false, "", error.localizedDescription) }
+        }
+
+        let first = await startOnce()
+        guard !first.0 else { return first }
+
+        let firstErr = first.2 ?? ""
+        guard shouldRetryMaintenanceStart(errorMessage: firstErr) else { return first }
+
+        appLog(
+            "[maintenance] session start transient failure, reconnect and retry once: \(firstErr)",
+            level: .warn
+        )
+        connect(reason: "maintenance start retry")
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        return await startOnce()
     }
 
     /// 轮询通用维护终端会话输出

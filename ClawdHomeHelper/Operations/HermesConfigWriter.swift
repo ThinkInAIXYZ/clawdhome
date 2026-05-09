@@ -700,6 +700,15 @@ struct HermesProfileManager {
         _ = try? FilePermissionHelper.chownRecursive(hermesHome, owner: username)
     }
 
+    /// 幂等补写指定 profile 的 SOUL 文件保存策略。
+    /// 用于兜底“未走 createProfile(main)”的安装路径，避免缺失 shared 文件夹写入指引。
+    static func ensureProfileSavePolicy(username: String, profileID: String = "main") throws {
+        try validateProfileID(profileID)
+        let hermesHome = HermesInstaller.hermesHome(for: username)
+        try ensureHermesHome(username: username, hermesHome: hermesHome)
+        try ensureSoulSavePolicy(username: username, hermesHome: hermesHome, profileID: profileID)
+    }
+
     private static func validateProfileID(_ id: String) throws {
         if id == "main" { return }
         guard isValidNamedProfileID(id) else {

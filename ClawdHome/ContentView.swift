@@ -139,18 +139,6 @@ struct ContentView: View {
                         .padding(.vertical, 10)
                     }
                 }
-                .toolbar {
-                    if lockStore.isEnabled {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button { lockStore.lock() } label: {
-                                Image(systemName: lockStore.isLocked ? "lock.fill" : "lock.open.fill")
-                                    .foregroundStyle(lockStore.isLocked ? .red : .secondary)
-                            }
-                            .help(lockStore.isLocked ? L10n.k("auto.content_view.locked", fallback: "已锁定") : L10n.k("auto.content_view.app", fallback: "点击锁定 App"))
-                            .disabled(lockStore.isLocked)
-                        }
-                    }
-                }
             } detail: {
                 switch navSelection {
                 case .dashboard, nil:
@@ -190,6 +178,18 @@ struct ContentView: View {
                 }
             }
             .frame(minWidth: 960, minHeight: 560)
+            .toolbar {
+                if lockStore.isEnabled {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { lockStore.lock() } label: {
+                            Image(systemName: lockStore.isLocked ? "lock.fill" : "lock.open.fill")
+                                .foregroundStyle(lockStore.isLocked ? .red : .secondary)
+                        }
+                        .help(lockStore.isLocked ? L10n.k("auto.content_view.locked", fallback: "已锁定") : L10n.k("auto.content_view.app", fallback: "点击锁定 App"))
+                        .disabled(lockStore.isLocked)
+                    }
+                }
+            }
         }
         // 系统屏幕锁定时自动锁定 App
         .onReceive(
