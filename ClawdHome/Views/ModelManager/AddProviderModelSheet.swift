@@ -28,6 +28,15 @@ struct AddProviderModelSheet: View {
     @State private var testFeedback: String? = nil
     @State private var testFailed = false
 
+    // 自定义 provider 模型拉取
+    @State private var isFetchingCustomModels = false
+    @State private var customModelSuggestions: [String] = []
+    @State private var customFetchMessage: String? = nil
+    @State private var customFetchError: String? = nil
+    @State private var showCustomAdvanced = false
+    @State private var isShowingCustomApiKey = false
+    @State private var isShowingNonCustomApiKey = false
+
     private var isEditMode: Bool { editing != nil }
     private var isCustomGroup: Bool { selectedGroupId == "custom" }
 
@@ -112,7 +121,7 @@ struct AddProviderModelSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // ── 标题栏 ──────────────────────────────────────────
+            // ── 标题栏（仅标题）──────────────────────────────────
             HStack {
                 Text(
                     isEditMode
@@ -121,42 +130,12 @@ struct AddProviderModelSheet: View {
                 )
                     .font(.headline)
                 Spacer()
-                Button(L10n.k("auto.add_provider_model_sheet.cancel", fallback: "取消")) { dismiss() }.keyboardShortcut(.escape)
-                Button(
-                    isEditMode
-                    ? L10n.k("auto.add_provider_model_sheet.save", fallback: "保存")
-                    : L10n.k("auto.add_provider_model_sheet.add_model", fallback: "添加模型")
-                ) { commit() }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.return)
-                    .disabled(!canCommit)
             }
             .padding()
 
             Divider()
 
-            // ── 别名 ─────────────────────────────────────────
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(L10n.k("auto.add_provider_model_sheet.alias", fallback: "别名")).font(.callout).foregroundStyle(.secondary)
-                        .frame(width: 64, alignment: .trailing)
-                    TextField(L10n.k("auto.add_provider_model_sheet.alias_placeholder", fallback: "如「主线路」"), text: $accountName)
-                        .textFieldStyle(.roundedBorder)
-                }
-                if hasDuplicateAlias {
-                    HStack {
-                        Spacer().frame(width: 72)
-                        Text(L10n.k("add_provider_model.duplicate_alias", fallback: "别名已存在，请使用唯一别名"))
-                            .font(.caption2)
-                            .foregroundStyle(.red)
-                    }
-                }
-            }
-            .padding(.horizontal, 20).padding(.vertical, 10)
-
-            Divider()
-
-            // ── Provider 选择 + 渠道配置 ─────────────────────────
+            // ── 主体：左 Provider 列表 / 右滚动表单 ──────────────
             HSplitView {
                 // 左：Provider 列表
                 List(providerGroups, selection: $selectedGroupId) { group in
@@ -186,84 +165,34 @@ struct AddProviderModelSheet: View {
                 .listStyle(.sidebar)
                 .frame(minWidth: 160, idealWidth: 185, maxWidth: 220)
 
-                // 右：模型多选 / 自定义配置
-                VStack(spacing: 0) {
-                    if isCustomGroup {
-                        customProviderForm
-                    } else if let group = currentGroup {
-                        // 搜索栏 + 全选
-                        HStack(spacing: 8) {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundStyle(.secondary).font(.caption)
-                            TextField(L10n.k("auto.add_provider_model_sheet.search", fallback: "搜索型号…"), text: $modelSearch)
-                                .textFieldStyle(.plain).font(.callout)
-                            if !modelSearch.isEmpty {
-                                Button { modelSearch = "" } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(.secondary).font(.caption)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            Divider().frame(height: 14)
-                            let allSel = group.models.allSatisfy { selectedModelIds.contains($0.id) }
-                            Button(allSel ? L10n.k("auto.add_provider_model_sheet.select_none", fallback: "全不选") : L10n.k("auto.add_provider_model_sheet.select_all", fallback: "全选")) {
-                                if allSel { group.models.forEach { selectedModelIds.remove($0.id) } }
-                                else { group.models.forEach { selectedModelIds.insert($0.id) } }
-                            }
-                            .buttonStyle(.plain).foregroundStyle(Color.accentColor).font(.callout)
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-
+                // 右：滚动表单
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        aliasField
                         Divider()
-
-                        List {
-                            ForEach(filteredModels) { model in
-                                let isSelected = selectedModelIds.contains(model.id)
-                                HStack(spacing: 10) {
-                                    Image(systemName: isSelected
-                                          ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                                        .font(.system(size: 16))
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(model.label).fontWeight(isSelected ? .semibold : .regular)
-                                        Text(model.id)
-                                            .font(.system(.caption2, design: .monospaced))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                }
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    if selectedModelIds.contains(model.id) { selectedModelIds.remove(model.id) }
-                                    else { selectedModelIds.insert(model.id) }
-                                }
-                            }
-                            if filteredModels.isEmpty {
-                                Text(L10n.k("auto.add_provider_model_sheet.no_matching_models", fallback: "无匹配型号")).font(.caption).foregroundStyle(.secondary)
-                                    .frame(maxWidth: .infinity).padding(.vertical, 8)
-                                    .listRowBackground(Color.clear)
-                            }
+                        if isCustomGroup {
+                            customProviderForm
+                        } else if let group = currentGroup {
+                            nonCustomCredentialField
+                            Divider()
+                            modelMultiSelect(group: group)
+                        } else {
+                            emptyPlaceholder
                         }
-                        .listStyle(.plain)
-                    } else {
-                        ContentUnavailableView(
-                            L10n.k("auto.add_provider_model_sheet.select_provider", fallback: "选择左侧 Provider"),
-                            systemImage: "sidebar.left",
-                            description: Text(L10n.k("auto.add_provider_model_sheet.select_models", fallback: "选择一个提供商，然后勾选需要的模型型号"))
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(minWidth: 300, maxWidth: .infinity)
+                .frame(minWidth: 360, maxWidth: .infinity)
             }
 
-            // ── 凭据配置 ─────────────────────────────────────────
-            if !selectedGroupId.isEmpty {
-                Divider()
-                credentialSection
-            }
+            Divider()
+
+            // ── 底部固定栏：测试 + 取消/添加 ─────────────────────
+            bottomBar
         }
-        .frame(width: 580, height: selectedGroupId.isEmpty ? 500 : (isCustomGroup ? 650 : 580))
+        .frame(width: 680, height: 640)
         .onAppear {
             if let p = editing {
                 accountName = p.name
@@ -308,9 +237,173 @@ struct AddProviderModelSheet: View {
         }
     }
 
+    // MARK: - 别名
+
+    @ViewBuilder
+    private var aliasField: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(L10n.k("auto.add_provider_model_sheet.alias", fallback: "别名"))
+                .font(.caption)
+                .foregroundStyle(.primary)
+            TextField(
+                L10n.k("auto.add_provider_model_sheet.alias_placeholder", fallback: "随便起一个，例如：个人阿里云"),
+                text: $accountName
+            )
+            .textFieldStyle(.roundedBorder)
+            if hasDuplicateAlias {
+                Text(L10n.k("add_provider_model.duplicate_alias", fallback: "别名已存在，请使用唯一别名"))
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+            } else {
+                Text(L10n.k("add_provider_model.alias_hint", fallback: "用来区分同一服务商的多个账号"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - 非自定义场景的 API Key 输入
+
+    @ViewBuilder
+    private var nonCustomCredentialField: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "key.fill")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text(credentialLabel)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if isEditMode && existingConfigured && credentialInput.isEmpty {
+                    Label(L10n.k("auto.add_provider_model_sheet.configuration", fallback: "已配置"), systemImage: "checkmark.circle.fill")
+                        .font(.caption2).foregroundStyle(.green)
+                }
+            }
+            HStack(spacing: 8) {
+                Group {
+                    if isUrlInput {
+                        TextField(credentialPlaceholder, text: $credentialInput)
+                    } else if isShowingNonCustomApiKey {
+                        TextField(
+                            isEditMode && existingConfigured
+                                ? L10n.k("auto.add_provider_model_sheet.input", fallback: "输入新值可更换，留空保持不变")
+                                : credentialPlaceholder,
+                            text: $credentialInput
+                        )
+                    } else {
+                        SecureField(
+                            isEditMode && existingConfigured
+                                ? L10n.k("auto.add_provider_model_sheet.input", fallback: "输入新值可更换，留空保持不变")
+                                : credentialPlaceholder,
+                            text: $credentialInput
+                        )
+                    }
+                }
+                .textFieldStyle(.roundedBorder)
+                .font(.callout)
+
+                if !isUrlInput {
+                    Button {
+                        isShowingNonCustomApiKey.toggle()
+                    } label: {
+                        Image(systemName: isShowingNonCustomApiKey ? "eye.slash" : "eye")
+                    }
+                    .buttonStyle(.bordered)
+                    .help(isShowingNonCustomApiKey
+                          ? L10n.k("user.detail.auto.hide", fallback: "隐藏")
+                          : L10n.k("user.detail.auto.show", fallback: "显示"))
+                }
+            }
+            Text(isEditMode && existingConfigured
+                 ? L10n.k("auto.add_provider_model_sheet.leave_blank_to_keep_current_credentials", fallback: "留空则保持现有凭据不变")
+                 : L10n.k("auto.add_provider_model_sheet.credential_storage_hint", fallback: "凭据加密存储于本机 Keychain，仅本应用可读"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - 非自定义模型多选
+
+    @ViewBuilder
+    private func modelMultiSelect(group: ModelGroup) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary).font(.caption)
+                TextField(L10n.k("auto.add_provider_model_sheet.search", fallback: "搜索型号…"), text: $modelSearch)
+                    .textFieldStyle(.plain).font(.callout)
+                if !modelSearch.isEmpty {
+                    Button { modelSearch = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary).font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Divider().frame(height: 14)
+                let allSel = group.models.allSatisfy { selectedModelIds.contains($0.id) }
+                Button(allSel
+                       ? L10n.k("auto.add_provider_model_sheet.select_none", fallback: "全不选")
+                       : L10n.k("auto.add_provider_model_sheet.select_all", fallback: "全选")) {
+                    if allSel { group.models.forEach { selectedModelIds.remove($0.id) } }
+                    else { group.models.forEach { selectedModelIds.insert($0.id) } }
+                }
+                .buttonStyle(.plain).foregroundStyle(Color.accentColor).font(.callout)
+            }
+            .padding(.horizontal, 6).padding(.vertical, 4)
+            .background(Color.secondary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+
+            VStack(spacing: 0) {
+                ForEach(filteredModels) { model in
+                    let isSelected = selectedModelIds.contains(model.id)
+                    HStack(spacing: 10) {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                            .font(.system(size: 16))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.label).fontWeight(isSelected ? .semibold : .regular)
+                            Text(model.id)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, 5)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if selectedModelIds.contains(model.id) { selectedModelIds.remove(model.id) }
+                        else { selectedModelIds.insert(model.id) }
+                    }
+                }
+                if filteredModels.isEmpty {
+                    Text(L10n.k("auto.add_provider_model_sheet.no_matching_models", fallback: "无匹配型号"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity).padding(.vertical, 8)
+                }
+            }
+        }
+    }
+
+    // MARK: - 空状态
+
+    @ViewBuilder
+    private var emptyPlaceholder: some View {
+        VStack {
+            Spacer(minLength: 60)
+            ContentUnavailableView(
+                L10n.k("auto.add_provider_model_sheet.select_provider", fallback: "选择左侧 Provider"),
+                systemImage: "sidebar.left",
+                description: Text(L10n.k("auto.add_provider_model_sheet.select_models", fallback: "选择一个提供商，然后勾选需要的模型型号"))
+            )
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - 自定义 Provider 表单（无外层 padding，由父视图统一管理）
+
     @ViewBuilder
     private var customProviderForm: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.k("add_provider_model.compat_type", fallback: "兼容类型"))
                     .font(.caption)
@@ -320,6 +413,7 @@ struct AddProviderModelSheet: View {
                     Text("Anthropic").tag("anthropic-messages")
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -332,84 +426,201 @@ struct AddProviderModelSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.k("add_provider_model.provider_id_optional", fallback: "Provider ID（可选，默认 custom）"))
-                    .font(.caption)
-                    .foregroundStyle(.primary)
-                TextField("custom", text: $customProviderId)
+                HStack(spacing: 6) {
+                    Image(systemName: "key.fill")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("API Key")
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    if isEditMode && existingConfigured && credentialInput.isEmpty {
+                        Label(L10n.k("auto.add_provider_model_sheet.configuration", fallback: "已配置"), systemImage: "checkmark.circle.fill")
+                            .font(.caption2).foregroundStyle(.green)
+                    }
+                }
+                HStack(spacing: 8) {
+                    Group {
+                        if isShowingCustomApiKey {
+                            TextField(
+                                isEditMode && existingConfigured
+                                    ? L10n.k("auto.add_provider_model_sheet.input", fallback: "输入新值可更换，留空保持不变")
+                                    : "sk-...",
+                                text: $credentialInput
+                            )
+                        } else {
+                            SecureField(
+                                isEditMode && existingConfigured
+                                    ? L10n.k("auto.add_provider_model_sheet.input", fallback: "输入新值可更换，留空保持不变")
+                                    : "sk-...",
+                                text: $credentialInput
+                            )
+                        }
+                    }
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
+                    Button {
+                        isShowingCustomApiKey.toggle()
+                    } label: {
+                        Image(systemName: isShowingCustomApiKey ? "eye.slash" : "eye")
+                    }
+                    .buttonStyle(.bordered)
+                    .help(isShowingCustomApiKey
+                          ? L10n.k("user.detail.auto.hide", fallback: "隐藏")
+                          : L10n.k("user.detail.auto.show", fallback: "显示"))
+                }
+                if isEditMode && existingConfigured {
+                    Text(L10n.k("auto.add_provider_model_sheet.leave_blank_to_keep_current_credentials", fallback: "留空则保持现有凭据不变"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.k("add_provider_model.model_id_label", fallback: "模型 ID"))
+                Text(L10n.k("add_provider_model.model_id", fallback: "模型 ID"))
                     .font(.caption)
                     .foregroundStyle(.primary)
-                TextField(L10n.k("add_provider_model.model_id_placeholder", fallback: "例如 gpt-4.1 / claude-3-7-sonnet"), text: $customModelId)
+                TextField(L10n.k("add_provider_model.model_id_placeholder", fallback: "例如 gpt-5.5 / claude-opus-4-7"), text: $customModelId)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
-            }
 
-            Text(L10n.f("add_provider_model.primary_model_preview", fallback: "主模型：%@", customPrimaryModelId.isEmpty ? "-" : customPrimaryModelId))
-                .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(.secondary)
-
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-    }
-
-    // MARK: - 凭据区域
-
-    @ViewBuilder
-    private var credentialSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: "key.fill")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text(credentialLabel).font(.callout).fontWeight(.medium)
-                Spacer()
-                if isEditMode && existingConfigured && credentialInput.isEmpty {
-                    Label(L10n.k("auto.add_provider_model_sheet.configuration", fallback: "已配置"), systemImage: "checkmark.circle.fill")
-                        .font(.caption2).foregroundStyle(.green)
-                }
-            }
-
-            if isUrlInput {
-                TextField(credentialPlaceholder, text: $credentialInput)
-                    .textFieldStyle(.roundedBorder).font(.callout)
-            } else {
-                SecureField(
-                    isEditMode && existingConfigured ? L10n.k("auto.add_provider_model_sheet.input", fallback: "输入新值可更换，留空保持不变") : credentialPlaceholder,
-                    text: $credentialInput
-                )
-                .textFieldStyle(.roundedBorder).font(.callout)
-            }
-
-            Text(isEditMode && existingConfigured
-                 ? L10n.k("auto.add_provider_model_sheet.leave_blank_to_keep_current_credentials", fallback: "留空则保持现有凭据不变")
-                 : L10n.k("auto.add_provider_model_sheet.configurationfile_sync_openclaw_configuration", fallback: "凭据存储在本机配置文件，点击「同步凭据」可写入虾的 openclaw 配置"))
-                .font(.caption2).foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 6) {
-                TextField(L10n.k("add_provider_model.test_content_placeholder", fallback: "测试内容（留空默认：请发送你好）"), text: $testContent)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.caption)
-                HStack(spacing: 10) {
-                    Button(isTestingCredential ? L10n.k("add_provider_model.testing", fallback: "测试中…") : L10n.k("add_provider_model.test_config", fallback: "测试配置")) {
-                        Task { await testCredential() }
+                HStack(spacing: 8) {
+                    Button(isFetchingCustomModels
+                           ? L10n.k("views.custom_provider.fetching", fallback: "拉取中…")
+                           : L10n.k("views.custom_provider.fetch_from_api", fallback: "从 API 拉取列表")) {
+                        Task { await fetchCustomModels() }
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .disabled(isTestingCredential)
-                    if let testFeedback {
-                        Label(testFeedback, systemImage: testFailed ? "xmark.circle.fill" : "checkmark.circle.fill")
-                            .font(.caption2)
-                            .foregroundStyle(testFailed ? .red : .green)
+                    .disabled(isFetchingCustomModels || customBaseURLTrimmed.isEmpty)
+
+                    if !customModelSuggestions.isEmpty {
+                        Picker(L10n.k("views.user_detail_view.suggested_models", fallback: "可选模型"), selection: $customModelId) {
+                            ForEach(customModelSuggestions, id: \.self) { item in
+                                Text(item).tag(item)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .controlSize(.small)
+                        .labelsHidden()
                     }
                 }
+
+                if let customFetchMessage {
+                    Text(customFetchMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if let customFetchError {
+                    Text(customFetchError)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            DisclosureGroup(isExpanded: $showCustomAdvanced) {
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L10n.k("add_provider_model.provider_id_optional", fallback: "Provider ID（可选，默认 custom）"))
+                            .font(.caption)
+                            .foregroundStyle(.primary)
+                        TextField("custom", text: $customProviderId)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                    }
+
+                    Text(L10n.f("add_provider_model.primary_model", fallback: "主模型：%@", customPrimaryModelId.isEmpty ? "-" : customPrimaryModelId))
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 4)
+            } label: {
+                Text(L10n.k("add_provider_model.advanced", fallback: "高级"))
+                    .font(.caption)
+                    .foregroundStyle(.primary)
             }
         }
-        .padding(.horizontal, 20).padding(.vertical, 10)
+    }
+
+    // MARK: - 底部固定按钮栏（测试 + 取消/添加）
+
+    @ViewBuilder
+    private var bottomBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !selectedGroupId.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField(L10n.k("add_provider_model.test_content", fallback: "测试内容（留空默认：请发送你好）"), text: $testContent)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.caption)
+                    HStack(alignment: .top, spacing: 10) {
+                        Button(isTestingCredential
+                               ? L10n.k("add_provider_model.testing", fallback: "测试中…")
+                               : L10n.k("add_provider_model.test_config", fallback: "测试配置")) {
+                            Task { await testCredential() }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(isTestingCredential)
+                        if let testFeedback {
+                            Label(testFeedback, systemImage: testFailed ? "xmark.circle.fill" : "checkmark.circle.fill")
+                                .font(.caption2)
+                                .foregroundStyle(testFailed ? .red : .green)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .lineLimit(4)
+                                .truncationMode(.tail)
+                        }
+                    }
+                }
+                Divider()
+            }
+            HStack(spacing: 10) {
+                Button(L10n.k("auto.add_provider_model_sheet.cancel", fallback: "取消")) { dismiss() }
+                    .keyboardShortcut(.escape)
+                Spacer()
+                Button(
+                    isEditMode
+                    ? L10n.k("auto.add_provider_model_sheet.save", fallback: "保存")
+                    : L10n.k("auto.add_provider_model_sheet.add_model", fallback: "添加模型")
+                ) { commit() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.return)
+                    .disabled(!canCommit)
+            }
+        }
+        .padding(14)
+    }
+
+    // MARK: - 拉取自定义模型列表
+
+    @MainActor
+    private func fetchCustomModels() async {
+        let trimmedURL = customBaseURLTrimmed
+        guard !trimmedURL.isEmpty else {
+            customFetchError = L10n.k("views.custom_provider.invalid_base_url", fallback: "请先填写有效的 Base URL")
+            customFetchMessage = nil
+            return
+        }
+        isFetchingCustomModels = true
+        customFetchError = nil
+        customFetchMessage = nil
+        defer { isFetchingCustomModels = false }
+        do {
+            let key = (resolvedCredentialForTest() ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let ids = try await CustomModelConfigUtils.fetchModelIDs(
+                baseURL: trimmedURL,
+                apiKey: key.isEmpty ? nil : key
+            )
+            if ids.isEmpty {
+                customModelSuggestions = []
+                customFetchMessage = L10n.k("views.custom_provider.no_models_found", fallback: "已请求成功，但未解析到可用模型 ID（该接口可能不支持标准 list）")
+                return
+            }
+            customModelSuggestions = ids
+            if customModelIdTrimmed.isEmpty, let first = ids.first {
+                customModelId = first
+            }
+            customFetchMessage = L10n.f("views.custom_provider.models_fetched", fallback: "已拉取 %d 个模型", ids.count)
+        } catch {
+            customFetchError = error.localizedDescription
+        }
     }
 
     // MARK: - 提交

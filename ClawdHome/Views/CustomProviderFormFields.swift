@@ -15,7 +15,7 @@ struct CustomProviderFormFields: View {
     /// API Key 占位文字
     var apiKeyPlaceholder: String = L10n.k("views.custom_provider.api_key_placeholder", fallback: "留空则尝试使用 CUSTOM_API_KEY")
     /// 模型 ID 占位文字
-    var modelIdPlaceholder: String = L10n.k("views.custom_provider.model_id_placeholder", fallback: "输入模型 ID（例如 gpt-4.1 / claude-3-7-sonnet）")
+    var modelIdPlaceholder: String = L10n.k("views.custom_provider.model_id_placeholder", fallback: "输入模型 ID（例如 gpt-5.5 / claude-opus-4-7）")
 
     /// 是否显示兼容类型选择器（ModelPrioritySheet 需要，OpenClawDetailView 已有独立的）
     var showCompatibilityPicker: Bool = true
