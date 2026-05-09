@@ -155,7 +155,7 @@ struct ProviderModelConfigCore: View {
     @State private var customProviderId = ""
     @State private var customBaseURL = "https://api.example.com/v1"
     @State private var customCompatibility: DirectCustomCompatibility = .openai
-    @State private var customModelId = "gpt-4.1"
+    @State private var customModelId = "gpt-5.5"
     @State private var customModelSuggestions: [String] = []
     @State private var isFetchingCustomModels = false
     @State private var customModelFetchMessage: String? = nil
@@ -311,7 +311,7 @@ struct ProviderModelConfigCore: View {
                 customProviderId = ""
                 customBaseURL = "https://api.example.com/v1"
                 customCompatibility = .openai
-                customModelId = "gpt-4.1"
+                customModelId = "gpt-5.5"
                 customModelSuggestions = []
                 customModelFetchMessage = nil
                 customModelFetchError = nil
@@ -583,7 +583,7 @@ struct ProviderModelConfigCore: View {
                             .font(.caption)
                             .foregroundStyle(.primary)
                         TextField(
-                            L10n.k("views.user_detail_view.custom_model_id_placeholder", fallback: "输入模型 ID（例如 gpt-4.1 / claude-3-7-sonnet）"),
+                            L10n.k("views.user_detail_view.custom_model_id_placeholder", fallback: "输入模型 ID（例如 gpt-5.5 / claude-opus-4-7）"),
                             text: $customModelId
                         )
                         .textFieldStyle(.roundedBorder)
@@ -952,17 +952,35 @@ struct ProviderModelConfigCore: View {
             // 1. 构建 config patch + 同步 agent 文件
             let (patch, agentFileSync) = try await buildProviderPatch(apiKey: apiKey)
 
-            // 2. 仅使用 WebSocket config.patch；失败时直接报错（不再回退本地直写）
-            let (cfg, baseHash) = try await gatewayHub.configGetFull(username: user.username)
-            var mergedPatch = mergePatchWithExistingAliases(patch: patch, existingConfig: cfg)
-            applyOldModelAction(action, to: &mergedPatch, existingConfig: cfg)
+            // 2. 优先 WebSocket config.patch；连接层错误回退到 helper 直写 + 重启 gateway
+            var noop = false
+            do {
+                let (cfg, baseHash) = try await gatewayHub.configGetFull(username: user.username)
+                var mergedPatch = mergePatchWithExistingAliases(patch: patch, existingConfig: cfg)
+                applyOldModelAction(action, to: &mergedPatch, existingConfig: cfg)
 
-            let (noop, _) = try await gatewayHub.configPatch(
-                username: user.username,
-                patch: mergedPatch,
-                baseHash: baseHash,
-                note: "ClawdHome: apply \(selectedProvider.title) config"
-            )
+                let (websocketNoop, _) = try await gatewayHub.configPatch(
+                    username: user.username,
+                    patch: mergedPatch,
+                    baseHash: baseHash,
+                    note: "ClawdHome: apply \(selectedProvider.title) config"
+                )
+                noop = websocketNoop
+            } catch {
+                guard isGatewayConnectivityError(error) else { throw error }
+                let cfg = await helperClient.getConfigJSON(username: user.username)
+                var mergedPatch = mergePatchWithExistingAliases(patch: patch, existingConfig: cfg)
+                applyOldModelAction(action, to: &mergedPatch, existingConfig: cfg)
+
+                let merged = deepMergeJSON(base: cfg, patch: mergedPatch)
+                for key in mergedPatch.keys {
+                    guard let value = merged[key] else { continue }
+                    try await helperClient.setConfigDirect(username: user.username, path: key, value: value)
+                }
+                isRestartingGateway = true
+                try await helperClient.restartGateway(username: user.username)
+                noop = false
+            }
 
             // 3. 同步 agent 目录文件
             try await agentFileSync()
@@ -1044,6 +1062,24 @@ struct ProviderModelConfigCore: View {
                 showGlobalPoolPrompt = true
             }
         }
+    }
+
+    /// JSON Merge Patch 深合并：用于 WebSocket 不可用时模拟 gateway 的合并语义
+    private func deepMergeJSON(base: [String: Any], patch: [String: Any]) -> [String: Any] {
+        var result = base
+        for (key, patchValue) in patch {
+            if patchValue is NSNull {
+                result.removeValue(forKey: key)
+                continue
+            }
+            if let patchObject = patchValue as? [String: Any] {
+                let baseObject = result[key] as? [String: Any] ?? [:]
+                result[key] = deepMergeJSON(base: baseObject, patch: patchObject)
+            } else {
+                result[key] = patchValue
+            }
+        }
+        return result
     }
 
     /// keepAsFallback 逻辑：将旧主模型保留到 fallback 首位
