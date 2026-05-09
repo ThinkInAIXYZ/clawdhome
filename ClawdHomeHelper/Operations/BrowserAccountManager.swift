@@ -33,6 +33,7 @@ enum BrowserAccountManager {
     private static let openCLIBrowserBridgeUpdateURL = "https://clients2.google.com/service/update2/crx"
     private static let chromeManagedPolicyPath = "/Library/Managed Preferences/com.google.Chrome.plist"
     private static let openCLIDefaultDaemonPort = 19825
+    private static let openCLIDefaultCDPCapturePort = 9222
 
     static func prepareForRuntimeInstall(username: String, logURL: URL? = nil) throws {
         appendInstallLog("→ 安装 ClawdHome 用户级浏览器工具\n", logURL: logURL)
@@ -56,7 +57,7 @@ enum BrowserAccountManager {
         appendInstallLog("✓ OpenCLI Browser Bridge 安装策略已写入：\(policyPath)\n", logURL: logURL)
         var openedProfilePath = context.paths.profileDirectory.path
         do {
-            let session = try open(username: username, requireBridge: true)
+            let session = try open(username: username, requireBridge: true, enableCDPCapture: true)
             openedProfilePath = session.profilePath
             Thread.sleep(forTimeInterval: 0.8)
             do {
@@ -79,7 +80,12 @@ enum BrowserAccountManager {
         appendInstallLog("✓ 浏览器账号已预热并关闭\n", logURL: logURL)
     }
 
-    static func open(username: String, requireBridge: Bool = false) throws -> BrowserAccountSession {
+    static func open(
+        username: String,
+        requireBridge: Bool = false,
+        enableCDPCapture: Bool = false
+    ) throws -> BrowserAccountSession {
+        try ensureBrowserToolCurrent(username: username)
         let context = try resolveContext(username: username)
         guard isChromeInstalled() else {
             throw BrowserAccountError.chromeNotFound
@@ -95,11 +101,19 @@ enum BrowserAccountManager {
             }
             try closeWarmupBrowser(profilePath: existingSession.profilePath, logURL: nil)
         }
+        let launchMode: String
+        if enableCDPCapture {
+            launchMode = "install-cdp"
+        } else if requireBridge {
+            launchMode = "bridge"
+        } else {
+            launchMode = "runtime"
+        }
         try spawnPipeBrowserLauncher(
             context: context,
             target: "about:blank",
             hidden: false,
-            mode: requireBridge ? "bridge" : "runtime"
+            mode: launchMode
         )
         let startupDeadline = Date().addingTimeInterval(5)
         while Date() < startupDeadline {
@@ -118,7 +132,7 @@ enum BrowserAccountManager {
             devToolsActivePortPath: context.paths.devToolsActivePortFile.path,
             httpEndpoint: "",
             webSocketDebuggerURL: "",
-            cdpPort: 9222,
+            cdpPort: openCLIDefaultCDPCapturePort,
             launchedAt: Date().timeIntervalSince1970,
             consoleUsername: context.consoleUsername
         )
@@ -390,6 +404,47 @@ enum BrowserAccountManager {
         "/Users/\(username)/\(BrowserAccountPaths.openCLIProfileRelativePath)"
     }
 
+    private static func ensureBrowserToolCurrent(username: String) throws {
+        guard needsBrowserToolRefresh(username: username) else { return }
+        _ = try installTool(username: username)
+    }
+
+    private static func needsBrowserToolRefresh(username: String) -> Bool {
+        let fm = FileManager.default
+        let toolPath = "/Users/\(username)/\(BrowserAccountPaths.toolExecutableRelativePath)"
+        if !fm.isExecutableFile(atPath: toolPath) { return true }
+        if !fileContainsMarker(path: toolPath, marker: "opencli-profile-known-sync")
+            || !fileContainsMarker(path: toolPath, marker: "profile_runtime_active") {
+            return true
+        }
+
+        var sawWrapper = false
+        for wrapper in openCLIWrapperCandidates(username: username) where fm.fileExists(atPath: wrapper) {
+            sawWrapper = true
+            if !fileContainsMarker(path: wrapper, marker: "opencli-profile-known-sync") {
+                return true
+            }
+        }
+        if !sawWrapper {
+            return false
+        }
+        return false
+    }
+
+    private static func openCLIWrapperCandidates(username: String) -> [String] {
+        [
+            "/Users/\(username)/.local/bin/opencli",
+            "\(npmGlobalBinDirectory(username: username))/opencli",
+        ]
+    }
+
+    private static func fileContainsMarker(path: String, marker: String) -> Bool {
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return false
+        }
+        return text.contains(marker)
+    }
+
     static func readOpenCLIProfile(username: String) -> String? {
         let path = openCLIProfilePath(username: username)
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
@@ -473,6 +528,12 @@ enum BrowserAccountManager {
             return profile
         }
 
+        if let profile = readOpenCLIProfileFromCDP(port: openCLIDefaultCDPCapturePort) {
+            appendInstallLog("✓ 已通过 CDP 读取 OpenCLI 扩展 profile：\(profile)\n", logURL: logURL)
+            try writeOpenCLIProfile(profile, username: username, source: "chrome extension cdp")
+            return profile
+        }
+
         guard let profile = readOpenCLIProfileFromExtensionStorage(profilePath: profilePath) else {
             throw BrowserAccountError.commandFailed("未能获取 OpenCLI Browser Bridge profile")
         }
@@ -509,6 +570,182 @@ enum BrowserAccountManager {
             return connectedProfiles[0]
         }
         return nil
+    }
+
+    private static func readOpenCLIProfileFromCDP(port: Int) -> String? {
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            let targets = openCLIBridgeCDPTargetWebSocketURLs(port: port)
+            for target in targets {
+                if let profile = evaluateOpenCLIProfileOnCDPTarget(webSocketDebuggerURL: target) {
+                    return profile
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        return nil
+    }
+
+    private static func openCLIBridgeCDPTargetWebSocketURLs(port: Int) -> [String] {
+        guard let url = URL(string: "http://127.0.0.1:\(port)/json/list"),
+              let payload = readJSONObject(url: url, timeout: 1.2) as? [[String: Any]] else {
+            return []
+        }
+        let prefix = "chrome-extension://\(openCLIBrowserBridgeExtensionID)/"
+        return payload
+            .compactMap { item -> (Int, String)? in
+                guard let targetURL = item["url"] as? String,
+                      targetURL.hasPrefix(prefix),
+                      let ws = item["webSocketDebuggerUrl"] as? String,
+                      !ws.isEmpty else {
+                    return nil
+                }
+                let type = (item["type"] as? String ?? "").lowercased()
+                let score = type == "service_worker" ? 0 : 1
+                return (score, ws)
+            }
+            .sorted { lhs, rhs in
+                if lhs.0 == rhs.0 {
+                    return lhs.1 < rhs.1
+                }
+                return lhs.0 < rhs.0
+            }
+            .map(\.1)
+    }
+
+    private static func evaluateOpenCLIProfileOnCDPTarget(webSocketDebuggerURL: String) -> String? {
+        guard let url = URL(string: webSocketDebuggerURL) else { return nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 2
+        config.timeoutIntervalForResource = 2
+        let session = URLSession(configuration: config)
+        let task = session.webSocketTask(with: url)
+        task.resume()
+        defer {
+            task.cancel(with: .goingAway, reason: nil)
+            session.invalidateAndCancel()
+        }
+
+        guard sendCDPCommand(task: task, id: 1, method: "Runtime.enable", params: [:]) else {
+            return nil
+        }
+        let expression = """
+        (async () => {
+          const key = "opencli_context_id_v1";
+          if (!globalThis.chrome || !chrome.storage || !chrome.storage.local) return null;
+          const raw = await chrome.storage.local.get(key);
+          const value = raw && typeof raw[key] === "string" ? raw[key].trim() : "";
+          return value || null;
+        })()
+        """
+        guard sendCDPCommand(
+            task: task,
+            id: 2,
+            method: "Runtime.evaluate",
+            params: [
+                "expression": expression,
+                "awaitPromise": true,
+                "returnByValue": true,
+            ]
+        ) else {
+            return nil
+        }
+
+        let deadline = Date().addingTimeInterval(2.5)
+        while Date() < deadline {
+            guard let message = receiveCDPMessage(task: task, timeout: 0.6) else {
+                continue
+            }
+            let raw: String
+            switch message {
+            case .string(let text):
+                raw = text
+            case .data(let data):
+                raw = String(decoding: data, as: UTF8.self)
+            @unknown default:
+                continue
+            }
+            guard let data = raw.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let responseID = object["id"] as? Int,
+                  responseID == 2,
+                  let result = object["result"] as? [String: Any],
+                  let runtimeResult = result["result"] as? [String: Any],
+                  let value = runtimeResult["value"] as? String else {
+                continue
+            }
+            let profile = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if isValidOpenCLIProfile(profile) {
+                return profile
+            }
+            return nil
+        }
+        return nil
+    }
+
+    private static func sendCDPCommand(
+        task: URLSessionWebSocketTask,
+        id: Int,
+        method: String,
+        params: [String: Any]
+    ) -> Bool {
+        let payload: [String: Any] = [
+            "id": id,
+            "method": method,
+            "params": params,
+        ]
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              let text = String(data: data, encoding: .utf8) else {
+            return false
+        }
+        let semaphore = DispatchSemaphore(value: 0)
+        var succeeded = false
+        task.send(.string(text)) { error in
+            succeeded = (error == nil)
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 2)
+        return succeeded
+    }
+
+    private static func receiveCDPMessage(
+        task: URLSessionWebSocketTask,
+        timeout: TimeInterval
+    ) -> URLSessionWebSocketTask.Message? {
+        let semaphore = DispatchSemaphore(value: 0)
+        var message: URLSessionWebSocketTask.Message?
+        task.receive { result in
+            if case .success(let value) = result {
+                message = value
+            }
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + timeout)
+        return message
+    }
+
+    private static func readJSONObject(url: URL, timeout: TimeInterval) -> Any? {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = timeout
+        config.timeoutIntervalForResource = timeout
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var responseData: Data?
+        var responseError: Error?
+        let task = session.dataTask(with: url) { data, _, error in
+            responseData = data
+            responseError = error
+            semaphore.signal()
+        }
+        task.resume()
+        _ = semaphore.wait(timeout: .now() + timeout + 0.5)
+        guard responseError == nil, let responseData else {
+            return nil
+        }
+        return try? JSONSerialization.jsonObject(with: responseData)
     }
 
     private static func readOpenCLIProfileFromExtensionStorage(profilePath: String) -> String? {
@@ -997,9 +1234,41 @@ enum BrowserAccountManager {
 
         bridge_connected=0
         status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"
-        if [ -n "${status_json:-}" ] && echo "$status_json" | /usr/bin/grep -q '"extensionConnected":true'; then
+        known_profiles="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; print(" ".join(profiles))' 2>/dev/null || true)"
+        known_primary="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; profiles=[x for x in profiles if x]; preferred=[]; [preferred.append((data.get(k) or "").strip()) for k in ("currentContextId","activeContextId","contextId","currentProfile","activeProfile","profile") if isinstance(data.get(k), str) and (data.get(k) or "").strip()]; print(next((c for c in preferred if c in profiles), (profiles[-1] if profiles else "")))' 2>/dev/null || true)"
+        connected_profiles="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[(p.get("contextId") or "").strip() for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; print(" ".join([x for x in profiles if x]))' 2>/dev/null || true)"
+        connected_primary="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[(p.get("contextId") or "").strip() for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; profiles=[x for x in profiles if x]; preferred=[]; [preferred.append((data.get(k) or "").strip()) for k in ("currentContextId","activeContextId","contextId","currentProfile","activeProfile","profile") if isinstance(data.get(k), str) and (data.get(k) or "").strip()]; [preferred.append((p.get("contextId") or "").strip()) for p in data.get("profiles", []) if (p.get("contextId") or "").strip() and any(p.get(flag) is True for flag in ("current","active","isCurrent","isActive","selected","default"))]; print(next((c for c in preferred if c in profiles), (profiles[0] if profiles else "")))' 2>/dev/null || true)"
+        known_count="$(printf '%s\n' "$known_profiles" | /usr/bin/awk '{print NF}')"
+        [ -n "$known_count" ] || known_count=0
+        profile_known=0
+        if [ -n "${OPENCLI_PROFILE:-}" ]; then
+          case " $known_profiles " in
+            *" $OPENCLI_PROFILE "*) profile_known=1 ;;
+          esac
+        fi
+        if [ "$profile_known" -ne 1 ] && [ -n "${known_primary:-}" ]; then
+          export OPENCLI_PROFILE="$known_primary"
+          echo "opencli-profile-known-sync=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
+        fi
+        connected_count="$(printf '%s\n' "$connected_profiles" | /usr/bin/awk '{print NF}')"
+        [ -n "$connected_count" ] || connected_count=0
+        profile_connected=0
+        if [ -n "${OPENCLI_PROFILE:-}" ]; then
+          case " $connected_profiles " in
+            *" $OPENCLI_PROFILE "*) profile_connected=1 ;;
+          esac
+        fi
+        if [ "$profile_connected" -eq 1 ]; then
           bridge_connected=1
-          echo "opencli-prelaunch=skip-connected" >> "$LOG" 2>&1 || true
+          echo "opencli-prelaunch=skip-profile-connected profile=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
+        elif [ -n "${connected_primary:-}" ]; then
+          profile_from_status="$connected_primary"
+          mkdir -p "$(dirname "$profile_file")"
+          /usr/bin/python3 -c 'import json,sys,time; json.dump({"profile": sys.argv[1], "capturedAt": time.time(), "source": "opencli daemon status"}, open(sys.argv[2], "w"), ensure_ascii=False, indent=2)' "$profile_from_status" "$profile_file" 2>/dev/null || true
+          chmod 600 "$profile_file" 2>/dev/null || true
+          export OPENCLI_PROFILE="$profile_from_status"
+          bridge_connected=1
+          echo "opencli-prelaunch=adopt-connected profile=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
         fi
 
         if [ "$bridge_connected" -ne 1 ]; then
@@ -1016,15 +1285,40 @@ enum BrowserAccountManager {
           sleep 0.5
         done
 
-        if [ -z "${OPENCLI_PROFILE:-}" ] && [ -n "${status_json:-}" ]; then
-          profile_from_status="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[p for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; print(profiles[0]["contextId"] if len(profiles)==1 else "")' 2>/dev/null || true)"
-          if [ -n "$profile_from_status" ]; then
-            mkdir -p "$(dirname "$profile_file")"
-            /usr/bin/python3 -c 'import json,sys,time; json.dump({"profile": sys.argv[1], "capturedAt": time.time(), "source": "opencli daemon status"}, open(sys.argv[2], "w"), ensure_ascii=False, indent=2)' "$profile_from_status" "$profile_file" 2>/dev/null || true
-            chmod 600 "$profile_file" 2>/dev/null || true
-            export OPENCLI_PROFILE="$profile_from_status"
-            echo "opencli-profile=$profile_from_status" >> "$LOG" 2>&1 || true
-          fi
+        known_profiles="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; print(" ".join(profiles))' 2>/dev/null || true)"
+        known_primary="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; profiles=[x for x in profiles if x]; preferred=[]; [preferred.append((data.get(k) or "").strip()) for k in ("currentContextId","activeContextId","contextId","currentProfile","activeProfile","profile") if isinstance(data.get(k), str) and (data.get(k) or "").strip()]; print(next((c for c in preferred if c in profiles), (profiles[-1] if profiles else "")))' 2>/dev/null || true)"
+        connected_profiles="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[(p.get("contextId") or "").strip() for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; print(" ".join([x for x in profiles if x]))' 2>/dev/null || true)"
+        connected_primary="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[(p.get("contextId") or "").strip() for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; profiles=[x for x in profiles if x]; preferred=[]; [preferred.append((data.get(k) or "").strip()) for k in ("currentContextId","activeContextId","contextId","currentProfile","activeProfile","profile") if isinstance(data.get(k), str) and (data.get(k) or "").strip()]; [preferred.append((p.get("contextId") or "").strip()) for p in data.get("profiles", []) if (p.get("contextId") or "").strip() and any(p.get(flag) is True for flag in ("current","active","isCurrent","isActive","selected","default"))]; print(next((c for c in preferred if c in profiles), (profiles[0] if profiles else "")))' 2>/dev/null || true)"
+        known_count="$(printf '%s\n' "$known_profiles" | /usr/bin/awk '{print NF}')"
+        [ -n "$known_count" ] || known_count=0
+        profile_known=0
+        if [ -n "${OPENCLI_PROFILE:-}" ]; then
+          case " $known_profiles " in
+            *" $OPENCLI_PROFILE "*) profile_known=1 ;;
+          esac
+        fi
+        if [ "$profile_known" -ne 1 ] && [ -n "${known_primary:-}" ]; then
+          export OPENCLI_PROFILE="$known_primary"
+          echo "opencli-profile-known-sync=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
+        fi
+        connected_count="$(printf '%s\n' "$connected_profiles" | /usr/bin/awk '{print NF}')"
+        [ -n "$connected_count" ] || connected_count=0
+        profile_connected=0
+        if [ -n "${OPENCLI_PROFILE:-}" ]; then
+          case " $connected_profiles " in
+            *" $OPENCLI_PROFILE "*) profile_connected=1 ;;
+          esac
+        fi
+        if [ "$profile_connected" -ne 1 ] && [ -n "${connected_primary:-}" ]; then
+          profile_from_status="$connected_primary"
+          mkdir -p "$(dirname "$profile_file")"
+          /usr/bin/python3 -c 'import json,sys,time; json.dump({"profile": sys.argv[1], "capturedAt": time.time(), "source": "opencli daemon status"}, open(sys.argv[2], "w"), ensure_ascii=False, indent=2)' "$profile_from_status" "$profile_file" 2>/dev/null || true
+          chmod 600 "$profile_file" 2>/dev/null || true
+          export OPENCLI_PROFILE="$profile_from_status"
+          echo "opencli-profile-sync=$profile_from_status" >> "$LOG" 2>&1 || true
+        elif [ "$profile_connected" -ne 1 ] && [ "$connected_count" -eq 0 ] && [ "$known_count" -eq 0 ] && [ -n "${OPENCLI_PROFILE:-}" ]; then
+          echo "opencli-profile-stale-clear=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
+          unset OPENCLI_PROFILE
         fi
 
         if [ "${1:-}" = "profile" ] && [ "${2:-}" = "list" ] && [ -n "${OPENCLI_PROFILE:-}" ]; then
@@ -1032,6 +1326,10 @@ enum BrowserAccountManager {
           [ -n "$extension_version" ] || extension_version="unknown"
           printf 'Connected Browser Bridge profiles\\n\\n  %s — connected v%s\\n' "$OPENCLI_PROFILE" "$extension_version"
           exit 0
+        fi
+
+        if [ -n "${OPENCLI_PROFILE:-}" ]; then
+          "\(realPath)" profile use "$OPENCLI_PROFILE" >/dev/null 2>&1 || true
         fi
 
         echo "opencli-wrapper=exec-real" >> "$LOG" 2>&1 || true
@@ -1379,7 +1677,7 @@ enum BrowserAccountManager {
             "/usr/bin/sudo", "-u", context.consoleUsername, "-H",
             pipeLauncherPath,
             context.paths.profileDirectory.path,
-            "9222",
+            "\(openCLIDefaultCDPCapturePort)",
             target,
             hidden ? "1" : "0",
             "/Users/\(context.username)",
@@ -1507,6 +1805,19 @@ def load_session_if_present():
 def should_hide_browser():
     return os.environ.get("CLAWDHOME_BROWSER_HIDE") == "1"
 
+def profile_path_markers(profile_path):
+    markers = [f"--user-data-dir={profile_path}", profile_path]
+    escaped = profile_path.replace(" ", "\\ ")
+    if escaped != profile_path:
+        markers.extend([f"--user-data-dir={escaped}", escaped])
+    return markers
+
+def command_mentions_profile(command, profile_path):
+    for marker in profile_path_markers(profile_path):
+        if marker and marker in command:
+            return True
+    return False
+
 def browser_process_running(profile_path):
     try:
         result = subprocess.run(
@@ -1522,7 +1833,7 @@ def browser_process_running(profile_path):
     for text in result.stdout.splitlines():
         if CHROME_BINARY not in text:
             continue
-        if f"--user-data-dir={profile_path}" in text or profile_path in text:
+        if command_mentions_profile(text, profile_path):
             return True
     return False
 
@@ -1593,7 +1904,7 @@ def chrome_profile_processes(profile_path):
         command = parts[1] if len(parts) > 1 else ""
         if CHROME_BINARY not in command:
             continue
-        if f"--user-data-dir={profile_path}" not in command and profile_path not in command:
+        if not command_mentions_profile(command, profile_path):
             continue
         if pid.isdigit():
             pids.append(pid)
@@ -1712,14 +2023,17 @@ def command_launch(url=None, emit_json=True, require_bridge=False):
     if existing_session and profile_runtime_active(launch_profile_path):
         debug_log(f"command_launch reuse-running profile={launch_profile_path!r} target={target!r} require_bridge={require_bridge}")
         opened = False
-        if target != "about:blank":
+        if require_bridge and target != "about:blank":
+            debug_log("command_launch reuse-running skip-open-url require_bridge=1")
+            opened = True
+        elif target != "about:blank":
             opened = (
                 open_url_via_app(target)
                 or open_url_via_applescript(target)
             )
-            if not opened and not require_bridge:
+            if not opened:
                 fail("检测到该用户浏览器已在运行，但复用打开 URL 失败。为避免重复启动 Chrome，已停止本次拉起。")
-        if target == "about:blank" or opened or require_bridge:
+        if target == "about:blank" or opened:
             hide_browser_if_requested()
             if emit_json:
                 print(json.dumps({
@@ -1846,9 +2160,41 @@ fi
 
 bridge_connected=0
 status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"
-if [ -n "${status_json:-}" ] && echo "$status_json" | /usr/bin/grep -q '"extensionConnected":true'; then
+known_profiles="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; print(" ".join(profiles))' 2>/dev/null || true)"
+known_primary="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; preferred=[]; [preferred.append((data.get(k) or "").strip()) for k in ("currentContextId","activeContextId","contextId","currentProfile","activeProfile","profile") if isinstance(data.get(k), str) and (data.get(k) or "").strip()]; print(next((c for c in preferred if c in profiles), (profiles[-1] if profiles else "")))' 2>/dev/null || true)"
+connected_profiles="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[(p.get("contextId") or "").strip() for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; print(" ".join([x for x in profiles if x]))' 2>/dev/null || true)"
+connected_primary="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[(p.get("contextId") or "").strip() for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; profiles=[x for x in profiles if x]; preferred=[]; [preferred.append((data.get(k) or "").strip()) for k in ("currentContextId","activeContextId","contextId","currentProfile","activeProfile","profile") if isinstance(data.get(k), str) and (data.get(k) or "").strip()]; [preferred.append((p.get("contextId") or "").strip()) for p in data.get("profiles", []) if (p.get("contextId") or "").strip() and any(p.get(flag) is True for flag in ("current","active","isCurrent","isActive","selected","default"))]; print(next((c for c in preferred if c in profiles), (profiles[0] if profiles else "")))' 2>/dev/null || true)"
+known_count="$(printf '%%s\n' "$known_profiles" | /usr/bin/awk '{print NF}')"
+[ -n "$known_count" ] || known_count=0
+profile_known=0
+if [ -n "${OPENCLI_PROFILE:-}" ]; then
+  case " $known_profiles " in
+    *" $OPENCLI_PROFILE "*) profile_known=1 ;;
+  esac
+fi
+if [ "$profile_known" -ne 1 ] && [ -n "${known_primary:-}" ]; then
+  export OPENCLI_PROFILE="$known_primary"
+  echo "opencli-profile-known-sync=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
+fi
+connected_count="$(printf '%%s\n' "$connected_profiles" | /usr/bin/awk '{print NF}')"
+[ -n "$connected_count" ] || connected_count=0
+profile_connected=0
+if [ -n "${OPENCLI_PROFILE:-}" ]; then
+  case " $connected_profiles " in
+    *" $OPENCLI_PROFILE "*) profile_connected=1 ;;
+  esac
+fi
+if [ "$profile_connected" -eq 1 ]; then
   bridge_connected=1
-  echo "opencli-prelaunch=skip-connected" >> "$LOG" 2>&1 || true
+  echo "opencli-prelaunch=skip-profile-connected profile=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
+elif [ -n "${connected_primary:-}" ]; then
+  profile_from_status="$connected_primary"
+  mkdir -p "$(dirname "$profile_file")"
+  /usr/bin/python3 -c 'import json,sys,time; json.dump({"profile": sys.argv[1], "capturedAt": time.time(), "source": "opencli daemon status"}, open(sys.argv[2], "w"), ensure_ascii=False, indent=2)' "$profile_from_status" "$profile_file" 2>/dev/null || true
+  chmod 600 "$profile_file" 2>/dev/null || true
+  export OPENCLI_PROFILE="$profile_from_status"
+  bridge_connected=1
+  echo "opencli-prelaunch=adopt-connected profile=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
 fi
 
 if [ "$bridge_connected" -ne 1 ]; then
@@ -1865,15 +2211,40 @@ for _ in {1..40}; do
   sleep 0.5
 done
 
-if [ -z "${OPENCLI_PROFILE:-}" ] && [ -n "${status_json:-}" ]; then
-  profile_from_status="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[p for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; print(profiles[0]["contextId"] if len(profiles)==1 else "")' 2>/dev/null || true)"
-  if [ -n "$profile_from_status" ]; then
-    mkdir -p "$(dirname "$profile_file")"
-    /usr/bin/python3 -c 'import json,sys,time; json.dump({"profile": sys.argv[1], "capturedAt": time.time(), "source": "opencli daemon status"}, open(sys.argv[2], "w"), ensure_ascii=False, indent=2)' "$profile_from_status" "$profile_file" 2>/dev/null || true
-    chmod 600 "$profile_file" 2>/dev/null || true
-    export OPENCLI_PROFILE="$profile_from_status"
-    echo "opencli-profile=$profile_from_status" >> "$LOG" 2>&1 || true
-  fi
+connected_profiles="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[(p.get("contextId") or "").strip() for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; print(" ".join([x for x in profiles if x]))' 2>/dev/null || true)"
+known_profiles="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; print(" ".join(profiles))' 2>/dev/null || true)"
+known_primary="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; preferred=[]; [preferred.append((data.get(k) or "").strip()) for k in ("currentContextId","activeContextId","contextId","currentProfile","activeProfile","profile") if isinstance(data.get(k), str) and (data.get(k) or "").strip()]; print(next((c for c in preferred if c in profiles), (profiles[-1] if profiles else "")))' 2>/dev/null || true)"
+connected_primary="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[(p.get("contextId") or "").strip() for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; profiles=[x for x in profiles if x]; preferred=[]; [preferred.append((data.get(k) or "").strip()) for k in ("currentContextId","activeContextId","contextId","currentProfile","activeProfile","profile") if isinstance(data.get(k), str) and (data.get(k) or "").strip()]; [preferred.append((p.get("contextId") or "").strip()) for p in data.get("profiles", []) if (p.get("contextId") or "").strip() and any(p.get(flag) is True for flag in ("current","active","isCurrent","isActive","selected","default"))]; print(next((c for c in preferred if c in profiles), (profiles[0] if profiles else "")))' 2>/dev/null || true)"
+known_count="$(printf '%%s\n' "$known_profiles" | /usr/bin/awk '{print NF}')"
+[ -n "$known_count" ] || known_count=0
+profile_known=0
+if [ -n "${OPENCLI_PROFILE:-}" ]; then
+  case " $known_profiles " in
+    *" $OPENCLI_PROFILE "*) profile_known=1 ;;
+  esac
+fi
+if [ "$profile_known" -ne 1 ] && [ -n "${known_primary:-}" ]; then
+  export OPENCLI_PROFILE="$known_primary"
+  echo "opencli-profile-known-sync=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
+fi
+connected_count="$(printf '%%s\n' "$connected_profiles" | /usr/bin/awk '{print NF}')"
+[ -n "$connected_count" ] || connected_count=0
+profile_connected=0
+if [ -n "${OPENCLI_PROFILE:-}" ]; then
+  case " $connected_profiles " in
+    *" $OPENCLI_PROFILE "*) profile_connected=1 ;;
+  esac
+fi
+if [ "$profile_connected" -ne 1 ] && [ -n "${connected_primary:-}" ]; then
+  profile_from_status="$connected_primary"
+  mkdir -p "$(dirname "$profile_file")"
+  /usr/bin/python3 -c 'import json,sys,time; json.dump({"profile": sys.argv[1], "capturedAt": time.time(), "source": "opencli daemon status"}, open(sys.argv[2], "w"), ensure_ascii=False, indent=2)' "$profile_from_status" "$profile_file" 2>/dev/null || true
+  chmod 600 "$profile_file" 2>/dev/null || true
+  export OPENCLI_PROFILE="$profile_from_status"
+  echo "opencli-profile-sync=$profile_from_status" >> "$LOG" 2>&1 || true
+elif [ "$profile_connected" -ne 1 ] && [ "$connected_count" -eq 0 ] && [ "$known_count" -eq 0 ] && [ -n "${OPENCLI_PROFILE:-}" ]; then
+  echo "opencli-profile-stale-clear=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
+  unset OPENCLI_PROFILE
 fi
 
 if [ "${1:-}" = "profile" ] && [ "${2:-}" = "list" ] && [ -n "${OPENCLI_PROFILE:-}" ]; then
@@ -1883,9 +2254,13 @@ if [ "${1:-}" = "profile" ] && [ "${2:-}" = "list" ] && [ -n "${OPENCLI_PROFILE:
   exit 0
 fi
 
+if [ -n "${OPENCLI_PROFILE:-}" ]; then
+  %s profile use "$OPENCLI_PROFILE" >/dev/null 2>&1 || true
+fi
+
 echo "opencli-wrapper=exec-real" >> "$LOG" 2>&1 || true
 exec %s "$@"
-''' % (real_path, daemon_port, sh_quote(daemon_path), sh_quote(real_path))
+''' % (real_path, daemon_port, sh_quote(daemon_path), sh_quote(real_path), sh_quote(real_path))
 
 def command_repair_opencli():
     home = os.path.expanduser("~")
@@ -1983,6 +2358,8 @@ def main():
         "--new-window",
         target or "about:blank",
     ]
+    if mode == "install-cdp":
+        args.append(f"--remote-debugging-port={port}")
     log(log_home, f"exec chrome mode={mode} profile={profile!r} target={target!r} port={port!r}")
     try:
         proc = subprocess.Popen(
