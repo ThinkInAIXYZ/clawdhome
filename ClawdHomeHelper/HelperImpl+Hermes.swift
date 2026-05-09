@@ -50,6 +50,12 @@ extension ClawdHomeHelperImpl {
                             withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("Hermes 启动 profile=\(profileID) @\(username)")
         do {
+            // 统一后处理入口：确保 shared 目录可用 + profile SOUL 保存策略已注入。
+            // 放在 start 路径上，覆盖 App/CLI/终端脚本等所有安装与启动分支。
+            do { try VaultManager.setupVault(username: username) }
+            catch { helperLog("Hermes 启动前 Vault 初始化失败（忽略继续） @\(username): \(error.localizedDescription)", level: .warn) }
+            try HermesProfileManager.ensureProfileSavePolicy(username: username, profileID: profileID)
+
             let uid = try UserManager.uid(for: username)
             try HermesGatewayManager.startGateway(username: username, profileID: profileID, uid: uid)
             // 统一在 Hermes 网关成功启动后写入运行时锚点，

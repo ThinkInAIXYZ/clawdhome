@@ -82,8 +82,8 @@ struct ClawdHomeApp: App {
         .commands {
             // 隐藏主窗口L10n.k("clawd_home_app.text_ededdc48", fallback: "新建窗口")菜单项（单主窗口）
             CommandGroup(replacing: .newItem) { }
-            CommandMenu("Window") {
-                Button("Show Main Window") {
+            CommandMenu(L10n.k("app.menu.window", fallback: "Window")) {
+                Button(L10n.k("app.menu.show_main_window", fallback: "Show Main Window")) {
                     NotificationCenter.default.post(name: .showMainWindowRequested, object: nil)
                 }
                 .keyboardShortcut("1", modifiers: .command)

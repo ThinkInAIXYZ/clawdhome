@@ -325,13 +325,13 @@ struct OpenClawDetailView: View {
 
     private func tabInfo(_ tab: ClawTab) -> (label: String, icon: String) {
         switch tab {
-        case .overview:  return (L10n.k("user.detail.auto.overview", fallback: "概览"), "gauge.with.dots.needle.33percent")
+        case .overview:  return (L10n.k("user.detail.auto.overview", fallback: "会话"), "gauge.with.dots.needle.33percent")
         case .files:     return (L10n.k("user.detail.auto.files", fallback: "文件"), "folder")
         case .logs:      return (L10n.k("user.detail.auto.logs", fallback: "日志"), "doc.text.magnifyingglass")
         case .cron:      return (L10n.k("user.detail.auto.scheduled", fallback: "定时"), "clock")
         case .skills:    return (L10n.k("user.detail.auto.skills_title", fallback: "技能"), "star.leadinghalf.filled")
         case .characterDef: return (L10n.k("user.detail.auto.character_def", fallback: "角色"), "theatermasks")
-        case .sessions:  return (L10n.k("user.detail.auto.sessions", fallback: "会话"), "bubble.left.and.bubble.right")
+        case .sessions:  return (L10n.k("user.detail.auto.sessions", fallback: "会话"), "bubble.left.and.text.bubble.right")
         case .memory:    return (L10n.k("user.detail.auto.memory", fallback: "记忆"), "brain.head.profile")
         case .processes: return (L10n.k("user.detail.auto.processes", fallback: "进程"), "square.3.layers.3d")
         case .terminal:  return (L10n.k("user.detail.auto.terminal", fallback: "终端"), "terminal")
@@ -372,7 +372,7 @@ struct OpenClawDetailView: View {
             // 折叠/展开按钮
             HStack {
                 if detailSidebarShowsLabels {
-                    Text(L10n.k("user.detail.auto.overview", fallback: "概览"))
+                    Text(L10n.k("common.label.overview", fallback: "概览"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }

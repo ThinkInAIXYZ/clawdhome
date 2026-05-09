@@ -1127,64 +1127,40 @@ struct PromptLibraryView: View {
                         Label(L10n.k("common.create", fallback: "新建"), systemImage: "plus")
                     }
                 }
+
                 TextField(L10n.k("prompt.memory.search.placeholder", fallback: "搜索标题、标签、关键词或正文"), text: Binding(
                     get: { store.searchText },
                     set: { store.searchText = $0 }
                 ))
                 .textFieldStyle(.roundedBorder)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    statRow(title: L10n.k("prompt.library.stats.total", fallback: "总数"), value: "\(store.prompts.count)")
-                    statRow(title: L10n.k("prompt.library.stats.pinned", fallback: "置顶"), value: "\(store.prompts.filter(\.pinned).count)")
-                    statRow(title: L10n.k("prompt.library.stats.recent", fallback: "最近使用"), value: "\(store.prompts.filter { $0.lastUsedAt != nil }.count)")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                List(selection: $selectedFilter) {
-                    Section(L10n.k("prompt.library.section.browse", fallback: "浏览")) {
-                        filterRow(.all, systemImage: "tray.full", count: store.prompts.count)
-                        filterRow(.pinned, systemImage: "pin.fill", count: store.prompts.filter(\.pinned).count)
-                        filterRow(.recent, systemImage: "clock.arrow.circlepath", count: store.prompts.filter { $0.lastUsedAt != nil }.count)
-                        filterRow(.unused, systemImage: "circle.dashed", count: store.prompts.filter { $0.useCount == 0 }.count)
-                    }
-
-                    if !availableTags.isEmpty {
-                        Section(L10n.k("prompt.library.section.tags", fallback: "标签")) {
-                            ForEach(availableTags, id: \.name) { tag in
-                                HStack {
-                                    Label(tag.name, systemImage: "number")
-                                    Spacer()
-                                    Text("\(tag.count)")
-                                        .foregroundStyle(.secondary)
-                                }
-                                .tag(PromptLibraryFilter.tag(tag.name))
+                HStack(spacing: 8) {
+                    filterMenu
+                    Spacer(minLength: 8)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(L10n.k("common.sort", fallback: "排序"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Picker("", selection: $sortMode) {
+                            ForEach(PromptLibrarySort.allCases) { mode in
+                                Text(mode.title).tag(mode)
                             }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 240)
                     }
                 }
-                .listStyle(.sidebar)
-                .frame(minWidth: 220)
-            }
-            .padding(16)
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(filterTitle)
-                            .font(.headline)
-                        Text(resultSummary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                HStack(spacing: 12) {
+                    statBadge(L10n.k("prompt.library.stats.total", fallback: "总数"), value: store.prompts.count)
+                    statBadge(L10n.k("prompt.library.stats.pinned", fallback: "置顶"), value: store.prompts.filter(\.pinned).count)
+                    statBadge(L10n.k("prompt.library.stats.recent", fallback: "最近使用"), value: store.prompts.filter { $0.lastUsedAt != nil }.count)
                     Spacer()
-                    Picker(L10n.k("common.sort", fallback: "排序"), selection: $sortMode) {
-                        ForEach(PromptLibrarySort.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 300)
+                    Text(resultSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
                 if displayedPrompts.isEmpty {
@@ -1225,72 +1201,10 @@ struct PromptLibraryView: View {
                 }
             }
             .padding(16)
-            .frame(minWidth: 340)
+            .frame(minWidth: 320)
 
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(selectedPromptId == nil ? L10n.k("prompt.library.new_prompt", fallback: "新建 Prompt") : L10n.k("prompt.library.edit_prompt", fallback: "编辑 Prompt"))
-                            .font(.headline)
-                        Text(detailSubtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if selectedPromptId != nil {
-                        Button(L10n.k("common.delete", fallback: "删除"), role: .destructive) {
-                            if let selectedPromptId {
-                                store.deletePrompt(id: selectedPromptId)
-                                clearEditor()
-                            }
-                        }
-                    }
-                }
-
-                Form {
-                    Section(L10n.k("prompt.library.basic_info", fallback: "基本信息")) {
-                        TextField(L10n.k("common.title", fallback: "标题"), text: $title)
-                        TextField(L10n.k("prompt.memory.tags.placeholder", fallback: "标签/关键词，用逗号分隔"), text: $tags)
-                        Picker(L10n.k("prompt.memory.default_insert", fallback: "默认插入"), selection: $insertionMode) {
-                            Text(L10n.k("prompt.memory.append", fallback: "追加")).tag(PromptInsertionMode.append)
-                            Text(L10n.k("prompt.memory.replace", fallback: "替换")).tag(PromptInsertionMode.replace)
-                        }
-                    }
-
-                    Section(L10n.k("common.status", fallback: "状态")) {
-                        Toggle(L10n.k("prompt.library.enable_prompt", fallback: "启用此 Prompt"), isOn: $isEnabled)
-                        Toggle(L10n.k("prompt.library.pinned", fallback: "置顶"), isOn: $isPinned)
-                    }
-
-                    Section(L10n.k("common.body", fallback: "正文")) {
-                        TextEditor(text: $bodyText)
-                            .font(.system(.body, design: .monospaced))
-                            .frame(minHeight: 260)
-                    }
-
-                    Section(L10n.k("prompt.library.settings", fallback: "库设置")) {
-                        Toggle(L10n.k("prompt.memory.similar_hint", fallback: "相似提醒"), isOn: Binding(
-                            get: { store.settings.proactiveSuggestionsEnabled },
-                            set: { value in store.updateSettings { $0.proactiveSuggestionsEnabled = value } }
-                        ))
-                    }
-                }
-                .formStyle(.grouped)
-
-                HStack {
-                    if let error = store.error {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-                    Spacer()
-                    Button(L10n.k("common.save", fallback: "保存")) { saveEditor() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .padding(16)
-            .frame(minWidth: 420, idealWidth: 460)
+            promptEditorPanel
+                .frame(minWidth: 280, idealWidth: 380)
         }
         .navigationTitle(L10n.k("prompt.library.nav_title", fallback: "Prompt"))
         .onAppear {
@@ -1313,6 +1227,73 @@ struct PromptLibraryView: View {
         .onChange(of: store.prompts) { _, _ in
             syncSelectionWithVisibleResults()
         }
+    }
+
+    @ViewBuilder
+    private var promptEditorPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(selectedPromptId == nil ? L10n.k("prompt.library.new_prompt", fallback: "新建 Prompt") : L10n.k("prompt.library.edit_prompt", fallback: "编辑 Prompt"))
+                        .font(.headline)
+                    Text(detailSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if selectedPromptId != nil {
+                    Button(L10n.k("common.delete", fallback: "删除"), role: .destructive) {
+                        if let selectedPromptId {
+                            store.deletePrompt(id: selectedPromptId)
+                            clearEditor()
+                        }
+                    }
+                }
+            }
+
+            Form {
+                Section(L10n.k("prompt.library.basic_info", fallback: "基本信息")) {
+                    TextField(L10n.k("common.title", fallback: "标题"), text: $title)
+                    TextField(L10n.k("prompt.memory.tags.placeholder", fallback: "标签/关键词，用逗号分隔"), text: $tags)
+                    Picker(L10n.k("prompt.memory.default_insert", fallback: "默认插入"), selection: $insertionMode) {
+                        Text(L10n.k("prompt.memory.append", fallback: "追加")).tag(PromptInsertionMode.append)
+                        Text(L10n.k("prompt.memory.replace", fallback: "替换")).tag(PromptInsertionMode.replace)
+                    }
+                }
+
+                Section(L10n.k("common.status", fallback: "状态")) {
+                    Toggle(L10n.k("prompt.library.enable_prompt", fallback: "启用此 Prompt"), isOn: $isEnabled)
+                    Toggle(L10n.k("prompt.library.pinned", fallback: "置顶"), isOn: $isPinned)
+                }
+
+                Section(L10n.k("common.body", fallback: "正文")) {
+                    TextEditor(text: $bodyText)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minHeight: 260)
+                }
+
+                Section(L10n.k("prompt.library.settings", fallback: "库设置")) {
+                    Toggle(L10n.k("prompt.memory.similar_hint", fallback: "相似提醒"), isOn: Binding(
+                        get: { store.settings.proactiveSuggestionsEnabled },
+                        set: { value in store.updateSettings { $0.proactiveSuggestionsEnabled = value } }
+                    ))
+                }
+            }
+            .formStyle(.grouped)
+
+            HStack {
+                if let error = store.error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                Spacer()
+                Button(L10n.k("common.save", fallback: "保存")) { saveEditor() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(16)
     }
 
     private func saveEditor() {
@@ -1411,14 +1392,103 @@ struct PromptLibraryView: View {
     }
 
     @ViewBuilder
-    private func filterRow(_ filter: PromptLibraryFilter, systemImage: String, count: Int) -> some View {
-        HStack {
-            Label(filter.title, systemImage: systemImage)
-            Spacer()
-            Text("\(count)")
-                .foregroundStyle(.secondary)
+    private var filterMenu: some View {
+        Menu {
+            Section(L10n.k("prompt.library.section.browse", fallback: "浏览")) {
+                Button {
+                    selectedFilter = .all
+                } label: {
+                    filterMenuLabel(.all, count: store.prompts.count)
+                }
+                Button {
+                    selectedFilter = .pinned
+                } label: {
+                    filterMenuLabel(.pinned, count: store.prompts.filter(\.pinned).count)
+                }
+                Button {
+                    selectedFilter = .recent
+                } label: {
+                    filterMenuLabel(.recent, count: store.prompts.filter { $0.lastUsedAt != nil }.count)
+                }
+                Button {
+                    selectedFilter = .unused
+                } label: {
+                    filterMenuLabel(.unused, count: store.prompts.filter { $0.useCount == 0 }.count)
+                }
+            }
+            if !availableTags.isEmpty {
+                Section(L10n.k("prompt.library.section.tags", fallback: "标签")) {
+                    ForEach(availableTags, id: \.name) { tag in
+                        Button {
+                            selectedFilter = .tag(tag.name)
+                        } label: {
+                            filterMenuLabel(.tag(tag.name), count: tag.count)
+                        }
+                    }
+                }
+            }
+        } label: {
+            let isFiltering = selectedFilter != .all
+            HStack(spacing: 6) {
+                Image(systemName: filterIcon)
+                    .foregroundStyle(isFiltering ? Color.accentColor : .primary)
+                Text(filterTitle)
+                    .lineLimit(1)
+                    .foregroundStyle(isFiltering ? Color.accentColor : .primary)
+                    .fontWeight(isFiltering ? .semibold : .regular)
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                isFiltering
+                    ? Color.accentColor.opacity(0.14)
+                    : Color.primary.opacity(0.06),
+                in: RoundedRectangle(cornerRadius: 6)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(
+                        isFiltering ? Color.accentColor.opacity(0.5) : Color.clear,
+                        lineWidth: 1
+                    )
+            )
         }
-        .tag(filter)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private func filterMenuLabel(_ filter: PromptLibraryFilter, count: Int) -> some View {
+        if filter == selectedFilter {
+            Label("\(filter.title) (\(count))", systemImage: "checkmark")
+        } else {
+            Text("\(filter.title) (\(count))")
+        }
+    }
+
+    private var filterIcon: String {
+        switch selectedFilter {
+        case .all: return "tray.full"
+        case .pinned: return "pin.fill"
+        case .recent: return "clock.arrow.circlepath"
+        case .unused: return "circle.dashed"
+        case .tag: return "number"
+        }
+    }
+
+    @ViewBuilder
+    private func statBadge(_ title: String, value: Int) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Text("\(value)")
+                .font(.caption.monospacedDigit().weight(.semibold))
+        }
+        .font(.caption)
     }
 
     @ViewBuilder
@@ -1471,14 +1541,6 @@ struct PromptLibraryView: View {
             }
         }
         .padding(.vertical, 4)
-    }
-
-    private func statRow(title: String, value: String) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Text(value)
-        }
     }
 
     private func matchesSearch(_ prompt: PromptItem) -> Bool {
@@ -1592,7 +1654,7 @@ private enum PromptLibraryFilter: Hashable {
         case .unused:
             return L10n.k("prompt.filter.unused", fallback: "未使用")
         case .tag(let tag):
-            return "#\(tag)"
+            return tag.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
         }
     }
 }

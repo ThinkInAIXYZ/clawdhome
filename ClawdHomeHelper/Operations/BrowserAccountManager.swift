@@ -32,6 +32,9 @@ enum BrowserAccountManager {
     private static let openCLIBrowserBridgeExtensionID = "ildkmabpimmkaediidaifkhjpohdnifk"
     private static let openCLIBrowserBridgeUpdateURL = "https://clients2.google.com/service/update2/crx"
     private static let chromeManagedPolicyPath = "/Library/Managed Preferences/com.google.Chrome.plist"
+    // 主动防御：默认不触碰宿主机全局 Chrome 策略，只有显式创建该开关文件才允许写入 force-install。
+    // 这样可以避免误把宿主机默认浏览器也强制安装 OpenCLI 扩展。
+    private static let allowGlobalChromePolicyFlagPath = "/var/lib/clawdhome/browser/allow-global-chrome-policy"
     private static let openCLIDefaultDaemonPort = 19825
     private static let openCLIDefaultCDPCapturePort = 9222
 
@@ -53,8 +56,21 @@ enum BrowserAccountManager {
 
         appendInstallLog("→ 首次打开用户级 Chrome 浏览器账号并写入 session\n", logURL: logURL)
         let context = try resolveContext(username: username)
-        let policyPath = try ensureOpenCLIBrowserBridgeExtensionInstalled(context: context, logURL: logURL)
-        appendInstallLog("✓ OpenCLI Browser Bridge 安装策略已写入：\(policyPath)\n", logURL: logURL)
+        let bridgePolicyAction = try ensureOpenCLIBrowserBridgeExtensionInstalled(context: context, logURL: logURL)
+        switch bridgePolicyAction {
+        case .configured(let policyPath):
+            appendInstallLog("✓ OpenCLI Browser Bridge 安装策略已写入：\(policyPath)\n", logURL: logURL)
+        case .guardedPolicyRemoved(let policyPath):
+            appendInstallLog(
+                "⚠ 已触发主动防御：检测到宿主机全局 force-install 条目，已移除：\(policyPath)\n",
+                logURL: logURL
+            )
+        case .guardedNoPolicyChange:
+            appendInstallLog(
+                "✓ 已启用主动防御：默认不写入宿主机 Chrome 全局策略（仅维护实例专属 profile）\n",
+                logURL: logURL
+            )
+        }
         var openedProfilePath = context.paths.profileDirectory.path
         do {
             let session = try open(username: username, requireBridge: true, enableCDPCapture: true)
@@ -85,6 +101,7 @@ enum BrowserAccountManager {
         requireBridge: Bool = false,
         enableCDPCapture: Bool = false
     ) throws -> BrowserAccountSession {
+        // 每次 open 前先做一次脚本自愈，防止历史用户继续执行旧 wrapper 逻辑。
         try ensureBrowserToolCurrent(username: username)
         let context = try resolveContext(username: username)
         guard isChromeInstalled() else {
@@ -102,6 +119,7 @@ enum BrowserAccountManager {
             try closeWarmupBrowser(profilePath: existingSession.profilePath, logURL: nil)
         }
         let launchMode: String
+        // 仅安装预热阶段允许带 CDP 参数启动；日常 runtime/bridge 都保持无 CDP 参数，避免登录风控问题。
         if enableCDPCapture {
             launchMode = "install-cdp"
         } else if requireBridge {
@@ -405,6 +423,7 @@ enum BrowserAccountManager {
     }
 
     private static func ensureBrowserToolCurrent(username: String) throws {
+        // 旧版本 wrapper 会导致 profile 选择错误；检测到旧标记时立即重装工具并覆盖脚本。
         guard needsBrowserToolRefresh(username: username) else { return }
         _ = try installTool(username: username)
     }
@@ -413,21 +432,19 @@ enum BrowserAccountManager {
         let fm = FileManager.default
         let toolPath = "/Users/\(username)/\(BrowserAccountPaths.toolExecutableRelativePath)"
         if !fm.isExecutableFile(atPath: toolPath) { return true }
+        // 用功能标记判断脚本代际，避免依赖版本号管理历史遗留用户。
         if !fileContainsMarker(path: toolPath, marker: "opencli-profile-known-sync")
-            || !fileContainsMarker(path: toolPath, marker: "profile_runtime_active") {
+            || !fileContainsMarker(path: toolPath, marker: "profile_runtime_active")
+            || !fileContainsMarker(path: toolPath, marker: "profile-strict-open-v4") {
             return true
         }
 
-        var sawWrapper = false
         for wrapper in openCLIWrapperCandidates(username: username) where fm.fileExists(atPath: wrapper) {
-            sawWrapper = true
             if !fileContainsMarker(path: wrapper, marker: "opencli-profile-known-sync") {
                 return true
             }
         }
-        if !sawWrapper {
-            return false
-        }
+        // wrapper 不存在通常代表用户尚未安装 opencli，此时不需要因 wrapper 缺失触发刷新。
         return false
     }
 
@@ -522,6 +539,10 @@ enum BrowserAccountManager {
             appendInstallLog("⚠ opencli profile list 执行失败，尝试读取 OpenCLI daemon 状态与插件本地存储：\(error.localizedDescription)\n", logURL: logURL)
         }
 
+        // 顺序设计：
+        // 1) 先用 daemon status（成本最低、兼容最好）；
+        // 2) 再尝试 CDP 直读扩展 storage（仅安装阶段临时开启）；
+        // 3) 最后回退到本地 extension 存储文件扫描。
         if let profile = readOpenCLIProfileFromDaemonStatus(username: username) {
             appendInstallLog("✓ 已从 OpenCLI daemon status 捕获 profile：\(profile)\n", logURL: logURL)
             try writeOpenCLIProfile(profile, username: username, source: "opencli daemon status")
@@ -573,6 +594,7 @@ enum BrowserAccountManager {
     }
 
     private static func readOpenCLIProfileFromCDP(port: Int) -> String? {
+        // MV3 service worker 可能尚未激活，短轮询一段时间等待 target 出现。
         let deadline = Date().addingTimeInterval(10)
         while Date() < deadline {
             let targets = openCLIBridgeCDPTargetWebSocketURLs(port: port)
@@ -601,6 +623,7 @@ enum BrowserAccountManager {
                     return nil
                 }
                 let type = (item["type"] as? String ?? "").lowercased()
+                // service worker 通常最接近扩展后台状态，优先尝试。
                 let score = type == "service_worker" ? 0 : 1
                 return (score, ws)
             }
@@ -629,6 +652,7 @@ enum BrowserAccountManager {
         guard sendCDPCommand(task: task, id: 1, method: "Runtime.enable", params: [:]) else {
             return nil
         }
+        // 必须在扩展上下文读取 chrome.storage.local；普通网页 target 无权限访问。
         let expression = """
         (async () => {
           const key = "opencli_context_id_v1";
@@ -1216,6 +1240,7 @@ enum BrowserAccountManager {
         port="${OPENCLI_DAEMON_PORT:-\(daemonPort)}"
         export OPENCLI_DAEMON_PORT="$port"
         profile_file="$HOME/\(BrowserAccountPaths.openCLIProfileRelativePath)"
+        # 优先读取本地缓存 profile，减少每次启动都依赖 daemon 返回。
         if [ -z "${OPENCLI_PROFILE:-}" ] && [ -f "$profile_file" ]; then
           profile_from_file="$(/usr/bin/python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("profile") or "").strip())' "$profile_file" 2>/dev/null || true)"
           if [ -n "$profile_from_file" ]; then
@@ -1234,6 +1259,7 @@ enum BrowserAccountManager {
 
         bridge_connected=0
         status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"
+        # known_* 用于“纠正陈旧 profile”，connected_* 用于“判断是否已连上桥接”。
         known_profiles="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; print(" ".join(profiles))' 2>/dev/null || true)"
         known_primary="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; profiles=[x for x in profiles if x]; preferred=[]; [preferred.append((data.get(k) or "").strip()) for k in ("currentContextId","activeContextId","contextId","currentProfile","activeProfile","profile") if isinstance(data.get(k), str) and (data.get(k) or "").strip()]; print(next((c for c in preferred if c in profiles), (profiles[-1] if profiles else "")))' 2>/dev/null || true)"
         connected_profiles="$(printf '%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[(p.get("contextId") or "").strip() for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; print(" ".join([x for x in profiles if x]))' 2>/dev/null || true)"
@@ -1262,6 +1288,7 @@ enum BrowserAccountManager {
           bridge_connected=1
           echo "opencli-prelaunch=skip-profile-connected profile=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
         elif [ -n "${connected_primary:-}" ]; then
+          # 当前 profile 未连通时，优先切到 daemon 认为已连通的主 profile。
           profile_from_status="$connected_primary"
           mkdir -p "$(dirname "$profile_file")"
           /usr/bin/python3 -c 'import json,sys,time; json.dump({"profile": sys.argv[1], "capturedAt": time.time(), "source": "opencli daemon status"}, open(sys.argv[2], "w"), ensure_ascii=False, indent=2)' "$profile_from_status" "$profile_file" 2>/dev/null || true
@@ -1272,6 +1299,7 @@ enum BrowserAccountManager {
         fi
 
         if [ "$bridge_connected" -ne 1 ]; then
+          # 仅在确实未连通时触发 bridge-open，避免重复拉起同 profile 浏览器。
           /usr/bin/env python3 "\(toolPath)" bridge-open "https://clawdhome.ai" >/dev/null 2>&1 || {
             echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
             echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
@@ -1322,6 +1350,7 @@ enum BrowserAccountManager {
         fi
 
         if [ "${1:-}" = "profile" ] && [ "${2:-}" = "list" ] && [ -n "${OPENCLI_PROFILE:-}" ]; then
+          # profile list 直接复用 daemon 状态，避免 real opencli 在未连通时输出误导信息。
           extension_version="$(printf '%s' "${status_json:-}" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("extensionVersion") or "")' 2>/dev/null || true)"
           [ -n "$extension_version" ] || extension_version="unknown"
           printf 'Connected Browser Bridge profiles\\n\\n  %s — connected v%s\\n' "$OPENCLI_PROFILE" "$extension_version"
@@ -1329,6 +1358,7 @@ enum BrowserAccountManager {
         fi
 
         if [ -n "${OPENCLI_PROFILE:-}" ]; then
+          # 在真正执行命令前强制 real opencli 切到同一 profile，避免读取到旧默认 profile。
           "\(realPath)" profile use "$OPENCLI_PROFILE" >/dev/null 2>&1 || true
         fi
 
@@ -1414,7 +1444,35 @@ enum BrowserAccountManager {
         return openCLIDefaultDaemonPort
     }
 
-    private static func ensureOpenCLIBrowserBridgeExtensionInstalled(context: Context, logURL: URL?) throws -> String {
+    private enum BridgePolicyAction {
+        case configured(path: String)
+        case guardedPolicyRemoved(path: String)
+        case guardedNoPolicyChange
+    }
+
+    private static func ensureOpenCLIBrowserBridgeExtensionInstalled(
+        context: Context,
+        logURL: URL?
+    ) throws -> BridgePolicyAction {
+        // 默认防御：不允许写入宿主机全局 Chrome 策略，除非管理员显式创建 allow flag。
+        // 这样可避免把 OpenCLI 扩展误安装到默认/非实例浏览器环境。
+        if !isGlobalChromePolicyInstallAllowed() {
+            do {
+                if try removeOpenCLIBrowserBridgePolicyIfPresent() {
+                    cleanupLegacyUnpackedBridgeExtensionIfNeeded(context: context, logURL: logURL)
+                    return .guardedPolicyRemoved(path: chromeManagedPolicyPath)
+                }
+            } catch {
+                // 防御分支不应阻断实例浏览器启动；清理失败仅记录安装日志（有 logURL 时）。
+                appendInstallLog(
+                    "⚠ 主动防御清理宿主机策略失败（可忽略，不影响实例浏览器）：\(error.localizedDescription)\n",
+                    logURL: logURL
+                )
+            }
+            cleanupLegacyUnpackedBridgeExtensionIfNeeded(context: context, logURL: logURL)
+            return .guardedNoPolicyChange
+        }
+
         let alreadyConfigured = isOpenCLIBrowserBridgePolicyConfigured()
         if !alreadyConfigured {
             appendInstallLog("→ 写入 Chrome 托管策略，强制安装 OpenCLI Browser Bridge（无需开发者模式）\n", logURL: logURL)
@@ -1424,7 +1482,11 @@ enum BrowserAccountManager {
             appendInstallLog("✓ Chrome 托管策略写入完成，首次生效需重启 Chrome profile\n", logURL: logURL)
         }
         cleanupLegacyUnpackedBridgeExtensionIfNeeded(context: context, logURL: logURL)
-        return chromeManagedPolicyPath
+        return .configured(path: chromeManagedPolicyPath)
+    }
+
+    private static func isGlobalChromePolicyInstallAllowed() -> Bool {
+        FileManager.default.fileExists(atPath: allowGlobalChromePolicyFlagPath)
     }
 
     private static func ensureOpenCLIBrowserBridgePolicyConfigured() throws {
@@ -1454,6 +1516,41 @@ enum BrowserAccountManager {
         try output.write(to: policyURL, options: .atomic)
         try FilePermissionHelper.chown(chromeManagedPolicyPath, owner: "root", group: "wheel")
         try FilePermissionHelper.chmod(chromeManagedPolicyPath, mode: "644")
+    }
+
+    private static func removeOpenCLIBrowserBridgePolicyIfPresent() throws -> Bool {
+        let fm = FileManager.default
+        let policyURL = URL(fileURLWithPath: chromeManagedPolicyPath)
+        guard fm.fileExists(atPath: chromeManagedPolicyPath) else {
+            return false
+        }
+        let data = try Data(contentsOf: policyURL)
+        let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
+        guard var root = plist as? [String: Any] else {
+            throw BrowserAccountError.commandFailed("Chrome 托管策略文件格式无效：\(chromeManagedPolicyPath)")
+        }
+        guard var extensionSettings = root["ExtensionSettings"] as? [String: Any] else {
+            return false
+        }
+        guard let bridgeEntry = extensionSettings[openCLIBrowserBridgeExtensionID] as? [String: Any],
+              let mode = bridgeEntry["installation_mode"] as? String,
+              let updateURL = bridgeEntry["update_url"] as? String,
+              mode == "force_installed",
+              updateURL == openCLIBrowserBridgeUpdateURL else {
+            return false
+        }
+
+        extensionSettings.removeValue(forKey: openCLIBrowserBridgeExtensionID)
+        if extensionSettings.isEmpty {
+            root.removeValue(forKey: "ExtensionSettings")
+        } else {
+            root["ExtensionSettings"] = extensionSettings
+        }
+        let output = try PropertyListSerialization.data(fromPropertyList: root, format: .xml, options: 0)
+        try output.write(to: policyURL, options: .atomic)
+        try FilePermissionHelper.chown(chromeManagedPolicyPath, owner: "root", group: "wheel")
+        try FilePermissionHelper.chmod(chromeManagedPolicyPath, mode: "644")
+        return true
     }
 
     private static func isOpenCLIBrowserBridgePolicyConfigured() -> Bool {
@@ -1492,8 +1589,10 @@ enum BrowserAccountManager {
     private static func openCLIBrowserBridgeMeta(context: Context) -> OpenCLIBrowserBridgeMeta {
         let policyConfigured = isOpenCLIBrowserBridgePolicyConfigured()
         let installedVersion = installedOpenCLIBrowserBridgeVersion(profilePath: context.paths.profileDirectory.path)
+        // 状态优先看实例 profile 中是否实际安装了扩展；policy 仅作为辅助信号。
+        let installed = installedVersion != nil || policyConfigured
         return OpenCLIBrowserBridgeMeta(
-            installed: policyConfigured,
+            installed: installed,
             installedVersion: installedVersion,
             latestVersion: nil,
             updateAvailable: nil
@@ -1956,34 +2055,22 @@ def hide_browser_if_requested():
         stderr=subprocess.DEVNULL,
     )
 
-def open_url_via_app(target):
+def open_url_via_launcher_reuse(launcher_path, target):
+    # profile-strict-open-v4
+    # 严格模式：只允许通过 launcher 在实例专属 profile 打开 URL；不回退到 open -a/AppleScript。
+    args = [launcher_path, target, "--reuse-open-url"]
     try:
         result = subprocess.run(
-            ["/usr/bin/open", "-a", "Google Chrome", target],
+            args,
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
         )
-        debug_log(f"open_url_via_app ok url={target!r} stdout={result.stdout.strip()!r} stderr={result.stderr.strip()!r}")
+        debug_log(f"open_url_via_launcher_reuse ok url={target!r} launcher={launcher_path!r} stdout={result.stdout.strip()!r} stderr={result.stderr.strip()!r}")
         return True
     except subprocess.CalledProcessError as exc:
-        debug_log(f"open_url_via_app fail url={target!r} rc={exc.returncode} stdout={(exc.stdout or '').strip()!r} stderr={(exc.stderr or '').strip()!r}")
-        return False
-
-def open_url_via_applescript(target):
-    try:
-        script = f'tell application "Google Chrome" to open location "{target}"'
-        subprocess.run(
-            ["/usr/bin/osascript", "-e", script],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        debug_log(f"open_url_via_applescript ok url={target!r}")
-        return True
-    except subprocess.CalledProcessError as exc:
-        debug_log(f"open_url_via_applescript fail url={target!r} rc={exc.returncode}")
+        debug_log(f"open_url_via_launcher_reuse fail url={target!r} launcher={launcher_path!r} rc={exc.returncode} stdout={(exc.stdout or '').strip()!r} stderr={(exc.stderr or '').strip()!r}")
         return False
 
 def command_status():
@@ -2022,17 +2109,18 @@ def command_launch(url=None, emit_json=True, require_bridge=False):
     target = url or "about:blank"
     if existing_session and profile_runtime_active(launch_profile_path):
         debug_log(f"command_launch reuse-running profile={launch_profile_path!r} target={target!r} require_bridge={require_bridge}")
+        launcher_path = resolve_launcher_path()
         opened = False
+        # bridge 场景下避免对已运行窗口再发一次 URL 打开请求，防止 Chrome 生成额外窗口或误路由。
         if require_bridge and target != "about:blank":
             debug_log("command_launch reuse-running skip-open-url require_bridge=1")
             opened = True
         elif target != "about:blank":
-            opened = (
-                open_url_via_app(target)
-                or open_url_via_applescript(target)
-            )
+            if not launcher_path:
+                fail("无法定位实例专属浏览器 launcher，已拒绝回退到系统默认浏览器。请先在 ClawdHome 重新安装浏览器工具。")
+            opened = open_url_via_launcher_reuse(launcher_path, target)
             if not opened:
-                fail("检测到该用户浏览器已在运行，但复用打开 URL 失败。为避免重复启动 Chrome，已停止本次拉起。")
+                fail("实例专属 profile 打开 URL 失败，已拒绝回退到其他浏览器 profile。请检查该实例浏览器会话是否正常。")
         if target == "about:blank" or opened:
             hide_browser_if_requested()
             if emit_json:
@@ -2045,6 +2133,7 @@ def command_launch(url=None, emit_json=True, require_bridge=False):
 
     launcher_path = resolve_launcher_path() if existing_session else None
     if existing_session and launcher_path:
+        # bridge 模式先回收旧进程，确保扩展连接与 opencli 观察到的是同一个新进程。
         if require_bridge:
             close_profile_chrome_processes(launch_profile_path)
         args = [launcher_path, target]
@@ -2142,6 +2231,7 @@ mkdir -p "$HOME/.clawdhome/browser"
 port="${OPENCLI_DAEMON_PORT:-%d}"
 export OPENCLI_DAEMON_PORT="$port"
 profile_file="$HOME/.clawdhome/browser/opencli-profile.json"
+# 优先读取本地缓存 profile，减少每次启动都依赖 daemon 返回。
 if [ -z "${OPENCLI_PROFILE:-}" ] && [ -f "$profile_file" ]; then
   profile_from_file="$(/usr/bin/python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("profile") or "").strip())' "$profile_file" 2>/dev/null || true)"
   if [ -n "$profile_from_file" ]; then
@@ -2160,6 +2250,7 @@ fi
 
 bridge_connected=0
 status_json="$(/usr/bin/curl -fsS -H 'X-OpenCLI: 1' "http://127.0.0.1:$port/status" 2>/dev/null || true)"
+# known_* 用于“纠正陈旧 profile”，connected_* 用于“判断是否已连上桥接”。
 known_profiles="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; print(" ".join(profiles))' 2>/dev/null || true)"
 known_primary="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[]; [profiles.append(v) for p in data.get("profiles", []) for v in [((p.get("contextId") or p.get("id") or p.get("profile") or p.get("name") or "").strip() if isinstance(p, dict) else "")] if v]; preferred=[]; [preferred.append((data.get(k) or "").strip()) for k in ("currentContextId","activeContextId","contextId","currentProfile","activeProfile","profile") if isinstance(data.get(k), str) and (data.get(k) or "").strip()]; print(next((c for c in preferred if c in profiles), (profiles[-1] if profiles else "")))' 2>/dev/null || true)"
 connected_profiles="$(printf '%%s' "$status_json" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); profiles=[(p.get("contextId") or "").strip() for p in data.get("profiles", []) if p.get("extensionConnected") and p.get("contextId")]; print(" ".join([x for x in profiles if x]))' 2>/dev/null || true)"
@@ -2188,6 +2279,7 @@ if [ "$profile_connected" -eq 1 ]; then
   bridge_connected=1
   echo "opencli-prelaunch=skip-profile-connected profile=$OPENCLI_PROFILE" >> "$LOG" 2>&1 || true
 elif [ -n "${connected_primary:-}" ]; then
+  # 当前 profile 未连通时，优先切到 daemon 认为已连通的主 profile。
   profile_from_status="$connected_primary"
   mkdir -p "$(dirname "$profile_file")"
   /usr/bin/python3 -c 'import json,sys,time; json.dump({"profile": sys.argv[1], "capturedAt": time.time(), "source": "opencli daemon status"}, open(sys.argv[2], "w"), ensure_ascii=False, indent=2)' "$profile_from_status" "$profile_file" 2>/dev/null || true
@@ -2198,6 +2290,7 @@ elif [ -n "${connected_primary:-}" ]; then
 fi
 
 if [ "$bridge_connected" -ne 1 ]; then
+  # 仅在确实未连通时触发 bridge-open，避免重复拉起同 profile 浏览器。
   /usr/bin/env python3 "$HOME/.clawdhome/tools/clawdhome-browser/clawdhome-browser" bridge-open "https://clawdhome.ai" >/dev/null 2>&1 || {
     echo "opencli-prelaunch=failed" >> "$LOG" 2>&1 || true
     echo "ClawdHome: 已尝试自动打开该用户的 ClawdHome Chrome，但启动失败。请先在 ClawdHome 中打开浏览器账号。" >&2
@@ -2248,6 +2341,7 @@ elif [ "$profile_connected" -ne 1 ] && [ "$connected_count" -eq 0 ] && [ "$known
 fi
 
 if [ "${1:-}" = "profile" ] && [ "${2:-}" = "list" ] && [ -n "${OPENCLI_PROFILE:-}" ]; then
+  # profile list 直接复用 daemon 状态，避免 real opencli 在未连通时输出误导信息。
   extension_version="$(printf '%%s' "${status_json:-}" | /usr/bin/python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("extensionVersion") or "")' 2>/dev/null || true)"
   [ -n "$extension_version" ] || extension_version="unknown"
   printf 'Connected Browser Bridge profiles\\n\\n  %%s — connected v%%s\\n' "$OPENCLI_PROFILE" "$extension_version"
@@ -2255,6 +2349,7 @@ if [ "${1:-}" = "profile" ] && [ "${2:-}" = "list" ] && [ -n "${OPENCLI_PROFILE:
 fi
 
 if [ -n "${OPENCLI_PROFILE:-}" ]; then
+  # 在真正执行命令前强制 real opencli 切到同一 profile，避免读取到旧默认 profile。
   %s profile use "$OPENCLI_PROFILE" >/dev/null 2>&1 || true
 fi
 
@@ -2358,6 +2453,7 @@ def main():
         "--new-window",
         target or "about:blank",
     ]
+    # 只在安装预热时短暂开启 CDP 端口读取扩展 context id；日常模式不携带 CDP 参数。
     if mode == "install-cdp":
         args.append(f"--remote-debugging-port={port}")
     log(log_home, f"exec chrome mode={mode} profile={profile!r} target={target!r} port={port!r}")
@@ -2513,9 +2609,11 @@ int main(int argc, char **argv) {
     const char *target = (argc > 1 && argv[1] && argv[1][0]) ? argv[1] : "about:blank";
     int hidden = 0;
     int bridge = 0;
+    int reuse_open_url = 0;
     for (int a = 2; a < argc; a++) {
         if (strcmp(argv[a], "--hidden") == 0) hidden = 1;
         if (strcmp(argv[a], "--bridge") == 0) bridge = 1;
+        if (strcmp(argv[a], "--reuse-open-url") == 0) reuse_open_url = 1;
     }
 
     char uidbuf[32], portbuf[32], pipe_launcher[4096], hiddenarg[8], stale[4096];
@@ -2524,6 +2622,50 @@ int main(int argc, char **argv) {
     snprintf(portbuf, sizeof(portbuf), "%d", port);
     snprintf(pipe_launcher, sizeof(pipe_launcher), "/Library/Application Support/ClawdHome/BrowserLaunchers/%s/clawdhome-browser-pipe-launcher", pw->pw_name);
     snprintf(hiddenarg, sizeof(hiddenarg), "%d", hidden ? 1 : 0);
+
+    if (reuse_open_url) {
+        char profile_arg[4096];
+        snprintf(profile_arg, sizeof(profile_arg), "--user-data-dir=%s", profile);
+
+        char *open_args[20];
+        int i = 0;
+        open_args[i++] = "/bin/launchctl";
+        open_args[i++] = "asuser";
+        open_args[i++] = uidbuf;
+        open_args[i++] = "/usr/bin/sudo";
+        open_args[i++] = "-u";
+        open_args[i++] = console->pw_name;
+        open_args[i++] = "-H";
+        open_args[i++] = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+        open_args[i++] = profile_arg;
+        open_args[i++] = "--no-first-run";
+        open_args[i++] = "--new-tab";
+        open_args[i++] = (char *)target;
+        open_args[i] = NULL;
+
+        char msg[4096];
+        snprintf(msg, sizeof(msg), "reuse-open-url strict-profile launchctl console=%s target=%s profile=%s", console->pw_name, target, profile);
+        append_log(pw->pw_dir, msg);
+
+        pid_t child = fork();
+        if (child < 0) {
+            append_log(pw->pw_dir, "fork launchctl reuse-open-url failed");
+            perror("fork");
+            return 76;
+        }
+        if (child == 0) {
+            FILE *devnull = fopen("/dev/null", "r+");
+            if (devnull) {
+                int fd = fileno(devnull);
+                dup2(fd, STDIN_FILENO);
+                dup2(fd, STDOUT_FILENO);
+                dup2(fd, STDERR_FILENO);
+            }
+            execv(open_args[0], open_args);
+            _exit(127);
+        }
+        return 0;
+    }
 
     snprintf(stale, sizeof(stale), "%s/DevToolsActivePort", profile);
     unlink(stale);
@@ -2557,9 +2699,9 @@ int main(int argc, char **argv) {
     args[i++] = pw->pw_dir;
     args[i++] = (char *)modearg;
     args[i] = NULL;
-    char msg[4096];
-    snprintf(msg, sizeof(msg), "spawn pipe launchctl console=%s target=%s profile=%s port=%d hidden=%d mode=%s", console->pw_name, target, profile, port, hidden, modearg);
-    append_log(pw->pw_dir, msg);
+    char pipe_msg[4096];
+    snprintf(pipe_msg, sizeof(pipe_msg), "spawn pipe launchctl console=%s target=%s profile=%s port=%d hidden=%d mode=%s", console->pw_name, target, profile, port, hidden, modearg);
+    append_log(pw->pw_dir, pipe_msg);
     pid_t child = fork();
     if (child < 0) {
         append_log(pw->pw_dir, "fork launchctl failed");

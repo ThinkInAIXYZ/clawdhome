@@ -1083,7 +1083,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "🦞openclaw Commands"
+            "value": "🦞 Commands"
           }
         },
         "zh-Hans": {
@@ -1263,6 +1263,52 @@
           "stringUnit": {
             "state": "translated",
             "value": "@%@ · 維護視窗 #%d"
+          }
+        }
+      }
+    },
+    "app.menu.show_main_window": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Main Window"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示主窗口"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示主視窗"
+          }
+        }
+      }
+    },
+    "app.menu.window": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Window"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "窗口"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "視窗"
           }
         }
       }
@@ -19754,19 +19800,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Overview"
+            "value": "Chat"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "概览"
+            "value": "会话"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "模型配置"
+            "value": "會話"
           }
         }
       }
@@ -34397,6 +34443,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "建立目錄失敗：%@"
+          }
+        }
+      }
+    },
+    "views.user_files_view.transfer_in_progress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ in progress: %@/%@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@中：%@/%@"
           }
         }
       }
@@ -53954,7 +54017,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "App Maintenance Actions Menu"
+            "value": "Actions"
           }
         },
         "zh-Hans": {
@@ -53977,7 +54040,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "App Maintenance Font Decrease"
+            "value": "Decrease Font"
           }
         },
         "zh-Hans": {
@@ -54000,7 +54063,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "App Maintenance Font Increase"
+            "value": "Increase Font"
           }
         },
         "zh-Hans": {
@@ -54023,7 +54086,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "App Maintenance Font Reset To"
+            "value": "Reset (%.0f)"
           }
         },
         "zh-Hans": {
@@ -54046,7 +54109,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "App Maintenance Font Section"
+            "value": "Font"
           }
         },
         "zh-Hans": {
@@ -54598,7 +54661,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "App Maintenance Settings Menu"
+            "value": "Settings"
           }
         },
         "zh-Hans": {
@@ -54644,7 +54707,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "App Maintenance Shared Cd Private"
+            "value": "cd Private Dir"
           }
         },
         "zh-Hans": {
@@ -54759,7 +54822,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "App Maintenance Shared Open Files"
+            "value": "Open Files"
           }
         },
         "zh-Hans": {
@@ -54782,7 +54845,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "App Maintenance Shared Open Finder"
+            "value": "Open in Finder"
           }
         },
         "zh-Hans": {
@@ -54828,7 +54891,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "App Maintenance Theme Section"
+            "value": "Theme"
           }
         },
         "zh-Hans": {
@@ -56300,7 +56363,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Common Action Clear Screen"
+            "value": "Clear Screen"
           }
         },
         "zh-Hans": {
@@ -59129,7 +59192,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Views Terminal Log Theme Black"
+            "value": "Black"
           }
         },
         "zh-Hans": {
@@ -59152,7 +59215,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Views Terminal Log Theme System"
+            "value": "Follow System"
           }
         },
         "zh-Hans": {

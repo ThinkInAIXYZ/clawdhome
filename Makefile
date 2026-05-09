@@ -19,9 +19,10 @@ SIGN_PKG ?= false
 NOTARIZE ?= true
 BUILD_ARCHS ?= arm64
 
-.PHONY: help bump-build build build-cli build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-dry-run release-notes-draft changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli test-cli-onboard-env test-cli-onboard-help test-cli-onboard test-cli-onboard-step test-cli-onboard-clean
+.PHONY: help bump-build build build-cli build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-prepare release-build release-publish release-dry-run release-notes-draft notes-rename changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli test-cli-onboard-env test-cli-onboard-help test-cli-onboard test-cli-onboard-step test-cli-onboard-clean
 
-WEBSITE_DIR ?= ../clawdhome_website
+WEBSITE_DIR  ?= ../clawdhome_website
+WEBSITE_REPO ?= deepjerry-ai/clawdhome_website
 
 help:
 	@echo "可用目标："
@@ -53,8 +54,13 @@ help:
 	@echo "  pkg-signed       生成已签名未公证安装包（发布前本地验收推荐）"
 	@echo "  notarize-pkg     生成已签名且已公证安装包（读取 NOTARY_PROFILE / CLAWDHOME_NOTARY_PROFILE）"
 	@echo "  QUIET_XCODE=false 可显示完整 xcodebuild 输出（默认静默并写入 build/logs/）"
-	@echo "  release          正式发布：更新 changelog + tag + 签名 pkg + 默认公证 + GitHub Release（可用 NOTARIZE=false 关闭）"
-	@echo "  release-dry-run  预览正式发布流程（不执行）"
+	@echo "  release-notes-draft  生成中英文发布说明草稿（--no-claude 可用于无 claude 环境）"
+	@echo "  notes-rename     重命名草稿版本号（make notes-rename FROM=1.10.0 TO=2.0.0）"
+	@echo "  release-prepare  Step 1：写 CHANGELOG + commit + tag（不构建）"
+	@echo "  release-build    Step 2：arm64 + x64 构建打包（需先 release-prepare）"
+	@echo "  release-publish  Step 3：push + GitHub Release + website changelog PR"
+	@echo "  release          完整发布（prepare → build → publish，签名+公证）"
+	@echo "  release-dry-run  预览完整发布流程（不执行任何写操作）"
 	@echo "  test-release-scripts  校验 release/changelog 脚本"
 	@echo "  install-hooks    安装 git commit-msg / pre-commit hooks"
 	@echo "  run-release      直接运行 build/export 里的 Release 包（无需安装）"
@@ -279,6 +285,38 @@ notarize-pkg: bump-build
 	bash scripts/build-pkg.sh --no-sync-api-version
 	@open dist/
 
+release-notes-draft:
+	bash scripts/release_notes_draft.sh
+
+notes-rename:
+	@[ -n "$(FROM)" ] && [ -n "$(TO)" ] || \
+		(echo "❌ 用法: make notes-rename FROM=1.10.0 TO=2.0.0"; exit 1)
+	@for ext in zh.md en.md; do \
+		src="release-notes/v$(FROM).$$ext"; \
+		dst="release-notes/v$(TO).$$ext"; \
+		[ -f "$$src" ] || (echo "❌ 未找到 $$src"; exit 1); \
+		mv "$$src" "$$dst"; \
+		echo "✅ $$src → $$dst"; \
+	done
+
+release-prepare:
+	bash scripts/release_prepare.sh
+
+release-build:
+	SIGN_APP=true \
+	SIGN_PKG=true \
+	NOTARIZE=$(NOTARIZE) \
+	APPLE_TEAM_ID="$(APPLE_TEAM_ID)" \
+	APP_SIGN_IDENTITY="$(APP_SIGN_IDENTITY)" \
+	PKG_SIGN_IDENTITY="$(PKG_SIGN_IDENTITY)" \
+	NOTARY_PROFILE="$(NOTARY_PROFILE)" \
+	bash scripts/release_build.sh
+
+release-publish:
+	WEBSITE_DIR="$(WEBSITE_DIR)" \
+	WEBSITE_REPO="$(WEBSITE_REPO)" \
+	bash scripts/release_publish.sh
+
 release:
 	SIGN_APP=true \
 	SIGN_PKG=true \
@@ -287,6 +325,8 @@ release:
 	APP_SIGN_IDENTITY="$(APP_SIGN_IDENTITY)" \
 	PKG_SIGN_IDENTITY="$(PKG_SIGN_IDENTITY)" \
 	NOTARY_PROFILE="$(NOTARY_PROFILE)" \
+	WEBSITE_DIR="$(WEBSITE_DIR)" \
+	WEBSITE_REPO="$(WEBSITE_REPO)" \
 	bash scripts/release.sh
 
 release-dry-run:
@@ -297,10 +337,9 @@ release-dry-run:
 	APP_SIGN_IDENTITY="$(APP_SIGN_IDENTITY)" \
 	PKG_SIGN_IDENTITY="$(PKG_SIGN_IDENTITY)" \
 	NOTARY_PROFILE="$(NOTARY_PROFILE)" \
+	WEBSITE_DIR="$(WEBSITE_DIR)" \
+	WEBSITE_REPO="$(WEBSITE_REPO)" \
 	bash scripts/release.sh --dry-run
-
-release-notes-draft:
-	bash scripts/release_notes_draft.sh
 
 # ── 运行 ──────────────────────────────────────────────────────────────────────
 

@@ -10,6 +10,7 @@ options:
   deploymentTarget:
     macOS: "14.0"
   defaultConfig: Debug
+  knownRegions: [Base, en, zh-Hans, zh-Hant]
 
 configs:
   Debug: debug

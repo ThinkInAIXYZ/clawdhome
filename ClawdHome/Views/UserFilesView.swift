@@ -438,6 +438,8 @@ struct UserFilesView: View {
     @State private var isUploadDropTargeted = false
     @State private var didApplyInitialRelativePath = false
     @State private var pendingTransfer: PendingTransfer?
+    @State private var isPasting = false
+    @State private var pasteProgress: (current: Int, total: Int) = (0, 0)
 
     private enum TransferMode {
         case copy
@@ -755,7 +757,7 @@ struct UserFilesView: View {
             } label: {
                 Label(L10n.k("views.user_files_view.action_paste", fallback: "Paste"), systemImage: "doc.on.clipboard")
             }
-            .disabled(selectedUser == nil || pendingTransfer == nil)
+            .disabled(selectedUser == nil || pendingTransfer == nil || isPasting)
 
             Menu {
                 Picker(L10n.k("views.user_files_view.sort_by", fallback: "排序方式"), selection: $sortField) {
@@ -950,30 +952,59 @@ struct UserFilesView: View {
         HStack(spacing: 8) {
             Image(systemName: transfer.mode == .copy ? "doc.on.doc" : "scissors")
                 .foregroundStyle(Color.accentColor)
-            Text(
-                transfer.count > 1
-                ? L10n.f(
-                    "views.user_files_view.transfer_pending_multiple",
-                    fallback: "%@ queue: %@ items. Go to target folder and click Paste.",
-                    transferModeLabel(transfer.mode),
-                    String(describing: transfer.count)
+            if isPasting {
+                ProgressView()
+                    .controlSize(.small)
+                Text(
+                    L10n.f(
+                        "views.user_files_view.transfer_in_progress",
+                        fallback: "%@ in progress: %@/%@",
+                        transferModeLabel(transfer.mode),
+                        String(describing: pasteProgress.current),
+                        String(describing: pasteProgress.total)
+                    )
                 )
-                : L10n.f(
-                    "views.user_files_view.transfer_pending_single",
-                    fallback: "%@ queue: %@. Go to target folder and click Paste.",
-                    transferModeLabel(transfer.mode),
-                    String(describing: transfer.previewName)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            } else {
+                Text(
+                    transfer.count > 1
+                    ? L10n.f(
+                        "views.user_files_view.transfer_pending_multiple",
+                        fallback: "%@ queue: %@ items. Go to target folder and click Paste.",
+                        transferModeLabel(transfer.mode),
+                        String(describing: transfer.count)
+                    )
+                    : L10n.f(
+                        "views.user_files_view.transfer_pending_single",
+                        fallback: "%@ queue: %@. Go to target folder and click Paste.",
+                        transferModeLabel(transfer.mode),
+                        String(describing: transfer.previewName)
+                    )
                 )
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
             Spacer()
+            Button {
+                Task { await pastePendingTransfer() }
+            } label: {
+                Label(
+                    L10n.k("views.user_files_view.action_paste_to_current", fallback: "Paste to current folder"),
+                    systemImage: "doc.on.clipboard"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(isPasting || selectedUser == nil)
             Button(L10n.k("common.action.clear", fallback: "Clear")) {
                 pendingTransfer = nil
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
+            .disabled(isPasting)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -1060,9 +1091,19 @@ struct UserFilesView: View {
                     } label: {
                         Label(L10n.k("views.user_files_view.action_paste_to_current", fallback: "Paste to current folder"), systemImage: "doc.on.clipboard")
                     }
+                    .disabled(isPasting)
                 }
             } else if let id = ids.first,
                       let entry = entries.first(where: { $0.id == id }) {
+                if pendingTransfer != nil {
+                    Button {
+                        Task { await pastePendingTransfer() }
+                    } label: {
+                        Label(L10n.k("views.user_files_view.action_paste_to_current", fallback: "Paste to current folder"), systemImage: "doc.on.clipboard")
+                    }
+                    .disabled(isPasting)
+                    Divider()
+                }
                 if entry.isDirectory {
                     Button {
                         selectedEntryIDs = [entry.id]
@@ -1544,11 +1585,20 @@ struct UserFilesView: View {
 
     private func pastePendingTransfer() async {
         guard let user = selectedUser, let transfer = pendingTransfer else { return }
+        guard !isPasting else { return }
+
+        isPasting = true
+        pasteProgress = (0, transfer.sourcePaths.count)
+        defer {
+            isPasting = false
+            pasteProgress = (0, 0)
+        }
 
         var failures: [String] = []
-        var remaining: [String] = []
+        var failedSources: [String] = []
 
-        for sourcePath in transfer.sourcePaths {
+        for (index, sourcePath) in transfer.sourcePaths.enumerated() {
+            pasteProgress = (index, transfer.sourcePaths.count)
             let name = (sourcePath as NSString).lastPathComponent
             let destination = currentPath.isEmpty ? name : "\(currentPath)/\(name)"
             do {
@@ -1559,7 +1609,6 @@ struct UserFilesView: View {
                         sourceRelativePath: sourcePath,
                         destinationRelativePath: destination
                     )
-                    remaining.append(sourcePath)
                 case .move:
                     try await helperClient.moveItem(
                         username: user.username,
@@ -1569,15 +1618,15 @@ struct UserFilesView: View {
                 }
             } catch {
                 failures.append("\(name): \(error.localizedDescription)")
-                remaining.append(sourcePath)
+                failedSources.append(sourcePath)
             }
         }
+        pasteProgress = (transfer.sourcePaths.count, transfer.sourcePaths.count)
 
-        if transfer.mode == .move {
-            pendingTransfer = remaining.isEmpty
-                ? nil
-                : PendingTransfer(mode: .move, sourcePaths: remaining)
-        }
+        // 失败项保留在队列里，全部成功则清空——复制和移动行为一致
+        pendingTransfer = failedSources.isEmpty
+            ? nil
+            : PendingTransfer(mode: transfer.mode, sourcePaths: failedSources)
 
         selectedEntryIDs = []
         await loadDirectory()
@@ -1754,6 +1803,15 @@ struct UserFilesView: View {
     }
 
     private func copyCurrentPathToPasteboard() {
+        if !selectedEntries.isEmpty {
+            let joined = selectedEntries
+                .map { absolutePath(forRelativePath: $0.path) }
+                .joined(separator: "\n")
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            _ = pb.setString(joined, forType: .string)
+            return
+        }
         copyRelativePathToPasteboard(currentPath)
     }
 
@@ -1762,19 +1820,22 @@ struct UserFilesView: View {
     }
 
     private func copyRelativePathToPasteboard(_ relativePath: String) {
-        guard let user = selectedUser else { return }
-        let home = "/Users/\(user.username)"
-        let fullPath: String
-        if relativePath.isEmpty {
-            fullPath = home
-        } else if relativePath.hasPrefix("/") {
-            fullPath = relativePath
-        } else {
-            fullPath = "\(home)/\(relativePath)"
-        }
+        let fullPath = absolutePath(forRelativePath: relativePath)
         let pb = NSPasteboard.general
         pb.clearContents()
         _ = pb.setString(fullPath, forType: .string)
+    }
+
+    private func absolutePath(forRelativePath relativePath: String) -> String {
+        guard let user = selectedUser else { return relativePath }
+        let home = "/Users/\(user.username)"
+        if relativePath.isEmpty {
+            return home
+        } else if relativePath.hasPrefix("/") {
+            return relativePath
+        } else {
+            return "\(home)/\(relativePath)"
+        }
     }
 
     private func extractSelected() async {
