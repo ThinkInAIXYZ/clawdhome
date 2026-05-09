@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.10.0] - 2026-05-10
+
+### New Features
+
+- **Browser Account Bridge**: Agents access external services through your existing browser sessions — no re-authorization needed; OpenCLI and Hermes/OpenClaw share a unified account channel with persistent login state and isolated sessions.
+- **Prompt Memory & Library**: New Prompt Memory overlay and global Prompt Library with search, tag filters, and Quick Note launcher; ships with a curated set of built-in templates.
+- **Hermes × OpenClaw Dual-Engine Polish**: Independent install interface, multi-tab terminal switching, per-profile start/stop controls, batch actions, and autostart — both engines fully self-contained.
+- **Global Model Pool Redesign**: Grouped by provider with live search and dynamic model list fetching; supports custom channels, API connectivity tests, and drag-to-reorder fallback priority.
+- **Backup & Restore**: Snapshots, incremental backups, and one-click restore.
+- **Embedded Multi-Tab Terminal**: Replaces the old maintenance window with output search, theme switching, and tab cloning; full output fidelity with no truncation, automatic cleanup.
+- **Vault File Sharing**: New secure folder, public folder, and cross-Shrimp shared space; Agents automatically get the tool access they need, with on-demand permission repair.
+- **File Manager Upgrades**: Copy, move, and bulk-delete files and folders; column sorting and a freely resizable text editor window.
+- **Settings Panel Redesign**: Settings moved to a sidebar tab; IM bindings and Agent management unified in one place for a shorter navigation path.
+- **Unified Diagnostics Center**: Six checks (environment, permissions, config, security, gateway, network) in one click; engine-specific branches, health probe, force restart, and disconnection banner.
+- **ClawdHome CLI**: Docker-style commands (`init`, `exec`, …) with no nested `shrimp` subcommands.
+- **Appearance & Upgrade UX**: System / Light / Dark appearance toggle; upgrade animations, notifications, and shortcuts all refreshed.
+- **Chrome Environment Isolation**: ClawdHome manages only its own browser environment — your everyday Chrome is never affected.
+- **Internationalization Pass**: Hardcoded strings fully cleaned up; English translations are accurate and natural — no more placeholder text.
+
+### Improvements & Fixes
+
+- Resolved OpenCLI cold-start failures and daemon ordering issues — first launch and restart are much more reliable
+- Fixed blank screens, black screens, and display glitches in embedded WebView interfaces
+- Fixed IM channel backward compatibility with legacy configs; channel pairing now stays open after completion
+- Localized remaining hardcoded strings across wizard, detail pages, and binding flows
+- Additional stability, compatibility, and layout polish improvements
+
+
 ## [1.9.0] - 2026-04-28
 
 # New Features
