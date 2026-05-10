@@ -22,7 +22,7 @@ struct AppUpdateBanner: View {
                             Text(L10n.k("auto.app_update_banner.installing_title", fallback: "安装器已启动"))
                                 .font(.caption)
                                 .fontWeight(.medium)
-                            Text(L10n.k("auto.app_update_banner.installing_subtitle", fallback: "完成安装后会自动重启"))
+                            Text(L10n.k("auto.app_update_banner.installing_subtitle", fallback: "安装完成后请手动重启"))
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -115,10 +115,16 @@ struct AppUpdateSheet: View {
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 6)
                 ScrollView {
-                    Text(notes)
-                        .font(.callout)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
+                    Group {
+                        if let markdownNotes = parseMarkdownNotes(notes) {
+                            Text(markdownNotes)
+                        } else {
+                            Text(notes)
+                        }
+                    }
+                    .font(.callout)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
                 }
                 .frame(maxHeight: 180)
                 .padding(.bottom, 16)
@@ -130,7 +136,7 @@ struct AppUpdateSheet: View {
                     ProgressView()
                         .controlSize(.small)
                         .tint(.orange)
-                    Text(L10n.k("auto.app_update_banner.waiting_for_install", fallback: "安装器已打开。完成安装后，ClawdHome 会自动重新打开。"))
+                    Text(L10n.k("auto.app_update_banner.waiting_for_install", fallback: "安装器已打开。安装完成后请手动重新打开 ClawdHome。"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -212,6 +218,17 @@ struct AppUpdateSheet: View {
         }
         .onChange(of: updater.isAwaitingAppRelaunch) { _, waiting in
             if waiting { dismiss() }
+        }
+    }
+
+    private func parseMarkdownNotes(_ notes: String) -> AttributedString? {
+        do {
+            return try AttributedString(
+                markdown: notes,
+                options: .init(interpretedSyntax: .full)
+            )
+        } catch {
+            return nil
         }
     }
 }

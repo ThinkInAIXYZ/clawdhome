@@ -2159,13 +2159,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "ClawdHome will restart automatically after installation."
+            "value": "Reopen ClawdHome after install."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "完成安装后会自动重启"
+            "value": "安装完成后请手动重启"
           }
         },
         "zh-Hant": {
@@ -2303,13 +2303,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Installer opened. ClawdHome will reopen automatically after installation."
+            "value": "Installer opened. Reopen ClawdHome after installation."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "安装器已打开。完成安装后，ClawdHome 会自动重新打开。"
+            "value": "安装器已打开。安装完成后请手动重新打开 ClawdHome。"
           }
         },
         "zh-Hant": {
@@ -15677,13 +15677,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Installer has completed. If ClawdHome does not reopen automatically, open it manually."
+            "value": "Installer completed. Reopen ClawdHome manually."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "安装器已完成。如 ClawdHome 未自动重新打开，请手动启动。"
+            "value": "安装器已完成，请手动重新打开 ClawdHome。"
           }
         },
         "zh-Hant": {
