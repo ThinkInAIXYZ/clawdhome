@@ -332,7 +332,7 @@ final class UpdateChecker {
                 self.isAwaitingAppRelaunch = false
                 self.appUpdateError = L10n.k(
                     "services.update_checker.install_complete_reopen_manually",
-                    fallback: "安装器已启动，但未检测到新版自动打开。请完成安装后手动重新打开 ClawdHome。"
+                    fallback: "安装器已完成，请手动重新打开 ClawdHome。"
                 )
                 NSApp.unhide(nil)
                 NSApp.activate(ignoringOtherApps: true)

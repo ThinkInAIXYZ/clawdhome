@@ -13,15 +13,22 @@ import SwiftUI
 struct ShrimpSettingsV2View: View {
     let user: ManagedUser
     let includeAgentsTab: Bool
+    let visibleTabsOverride: [SettingsTab]?
 
     @Environment(HelperClient.self) private var helperClient
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedTab: SettingsTab
 
-    init(user: ManagedUser, initialTab: SettingsTab = .agents, includeAgentsTab: Bool = true) {
+    init(
+        user: ManagedUser,
+        initialTab: SettingsTab = .agents,
+        includeAgentsTab: Bool = true,
+        visibleTabs: [SettingsTab]? = nil
+    ) {
         self.user = user
         self.includeAgentsTab = includeAgentsTab
+        self.visibleTabsOverride = visibleTabs
         _selectedTab = State(initialValue: initialTab)
     }
 
@@ -90,20 +97,18 @@ struct ShrimpSettingsV2View: View {
 
     private var splitContent: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                // 二级 sidebar
-                secondarySidebar
-                Divider()
-                // 右侧 content
-                Group {
-                    switch selectedTab {
-                    case .agents:   agentsTab
-                    case .model:    modelTab
-                    case .advanced: advancedTab
-                    case .plugins:  pluginsTab
-                    }
+            if visibleTabs.count == 1 {
+                tabContent(selectedTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                HStack(spacing: 0) {
+                    // 二级 sidebar
+                    secondarySidebar
+                    Divider()
+                    // 右侧 content
+                    tabContent(selectedTab)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             // 底部保存条（dirty 时出现）
@@ -128,7 +133,20 @@ struct ShrimpSettingsV2View: View {
     }
 
     private var visibleTabs: [SettingsTab] {
-        includeAgentsTab ? SettingsTab.allCases : [.model, .advanced, .plugins]
+        if let override = visibleTabsOverride, !override.isEmpty {
+            return override
+        }
+        return includeAgentsTab ? SettingsTab.allCases : [.model, .advanced, .plugins]
+    }
+
+    @ViewBuilder
+    private func tabContent(_ tab: SettingsTab) -> some View {
+        switch tab {
+        case .agents:   agentsTab
+        case .model:    modelTab
+        case .advanced: advancedTab
+        case .plugins:  pluginsTab
+        }
     }
 
     @ViewBuilder

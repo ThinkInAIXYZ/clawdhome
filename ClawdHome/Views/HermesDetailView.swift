@@ -29,6 +29,10 @@ struct HermesDetailView: View {
     let isConnected: Bool
     let isLoading: Bool
     let runtimeVersion: String?
+    let latestRuntimeVersion: String?
+    let isCheckingRuntimeUpdate: Bool
+    let canUpgradeRuntime: Bool
+    let runtimeUpdateStatusMessage: String?
     let runtimeRunning: Bool
     let runtimePID: Int32?
     let cpuPercent: Double?
@@ -39,6 +43,8 @@ struct HermesDetailView: View {
     let onStop: () -> Void
     let onOpenHealthCheck: () -> Void
     let onRefresh: () -> Void
+    let onCheckRuntimeUpdate: () -> Void
+    let onUpgradeRuntime: () -> Void
     let onSelectProfile: (String) -> Void
     let onCreateProfile: (String, String) -> Void
     let onUpdateProfile: (String, String, String) -> Void
@@ -117,7 +123,12 @@ struct HermesDetailView: View {
                 if mode == .browser {
                     hermesBrowserBody
                 } else if mode == .settings {
-                    ShrimpSettingsV2View(user: user, initialTab: .model, includeAgentsTab: false)
+                    ShrimpSettingsV2View(
+                        user: user,
+                        initialTab: .plugins,
+                        includeAgentsTab: false,
+                        visibleTabs: [.plugins]
+                    )
                 } else if mode == .profiles && showMultiAgentEntrypoints {
                     profilesBody
                 } else if mode == .files {
@@ -895,6 +906,12 @@ struct HermesDetailView: View {
                 fixedSectionContent {
                     row(L10n.k("hermes.status.panel.status_label", fallback: "状态"), runtimeRunning ? L10n.k("hermes.status.running", fallback: "运行中") : L10n.k("hermes.status.not_running", fallback: "未运行"))
                     row(L10n.k("views.user_list_view.version", fallback: "版本"), runtimeVersion.map { "v\($0)" } ?? "—")
+                    row(
+                        L10n.k("auto.upgrade_confirm_sheet.latest_version", fallback: "最新版本"),
+                        isCheckingRuntimeUpdate
+                            ? L10n.k("views.settings_view.checking_update", fallback: "检查更新中…")
+                            : (latestRuntimeVersion.map { "v\($0)" } ?? "—")
+                    )
                     row("PID", runtimePID.map(String.init) ?? "—")
                 }
             }
@@ -913,24 +930,54 @@ struct HermesDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             GroupBox(L10n.k("hermes.actions.panel.title", fallback: "操作")) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Button(runtimeRunning ? L10n.k("hermes.action.restart_hermes", fallback: "重启 Hermes") : L10n.k("hermes.action.start_hermes", fallback: "启动 Hermes"), action: onStartOrRestart)
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!isConnected || isLoading)
+                fixedSectionContent {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button(runtimeRunning ? L10n.k("hermes.action.restart_hermes", fallback: "重启 Hermes") : L10n.k("hermes.action.start_hermes", fallback: "启动 Hermes"), action: onStartOrRestart)
+                            .buttonStyle(.borderedProminent)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .disabled(!isConnected || isLoading)
 
-                    Button(L10n.k("hermes.action.stop", fallback: "停止 Hermes"), action: onStop)
-                        .buttonStyle(.bordered)
-                        .disabled(!isConnected || isLoading || !runtimeRunning)
+                        Button(L10n.k("hermes.action.stop", fallback: "停止 Hermes"), action: onStop)
+                            .buttonStyle(.bordered)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .disabled(!isConnected || isLoading || !runtimeRunning)
 
-                    HStack(spacing: 8) {
+                        HStack(spacing: 8) {
+                            Button(
+                                isCheckingRuntimeUpdate
+                                    ? L10n.k("views.settings_view.checking_update", fallback: "检查更新中…")
+                                    : L10n.k("views.settings_view.check_update", fallback: "检查更新"),
+                                action: onCheckRuntimeUpdate
+                            )
+                            .buttonStyle(.bordered)
+                            .disabled(!isConnected || isLoading || isCheckingRuntimeUpdate)
+
+                            if canUpgradeRuntime {
+                                Button(L10n.k("app.maintenance.quick.hermes.upgrade_latest", fallback: "升级到最新"), action: onUpgradeRuntime)
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(!isConnected || isLoading)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
                         Button(L10n.k("hermes.action.health_check", fallback: "体检"), action: onOpenHealthCheck)
                             .buttonStyle(.bordered)
-                    }
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Button(L10n.k("common.action.refresh", fallback: "刷新状态"), action: onRefresh)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .disabled(!isConnected || isLoading)
+                        Button(L10n.k("common.action.refresh", fallback: "刷新状态"), action: onRefresh)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .disabled(!isConnected || isLoading)
+
+                        if let runtimeUpdateStatusMessage, !runtimeUpdateStatusMessage.isEmpty {
+                            Text(runtimeUpdateStatusMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2036,6 +2083,10 @@ struct HermesDetailContainer: View {
     @State private var deleteHomeOption: DeleteHomeOption = .deleteHome
     @State private var deleteAdminPassword = ""
     @State private var deleteError: String? = nil
+    @State private var hermesLatestVersion: String? = nil
+    @State private var isCheckingHermesUpdate = false
+    @State private var isUpgradingHermes = false
+    @State private var hermesUpgradeStatusMessage: String? = nil
     @State private var isDetailSidebarCollapsed = false
     @State private var showStopWithTerminalsAlert = false
 
@@ -2049,6 +2100,11 @@ struct HermesDetailContainer: View {
 
     private var detailSidebarWidth: CGFloat {
         isDetailSidebarCollapsed ? 76 : UserDetailWindowLayout.expandedSidebarWidth
+    }
+
+    private var canUpgradeHermes: Bool {
+        guard let installed = user.hermesVersion, let latest = hermesLatestVersion else { return false }
+        return compareVersions(installed, latest) == .orderedAscending
     }
 
     var body: some View {
@@ -2065,8 +2121,12 @@ struct HermesDetailContainer: View {
                     profiles: profiles,
                     selectedProfileID: selectedProfileID,
                     isConnected: helperClient.isConnected,
-                    isLoading: isLoading,
+                    isLoading: isLoading || isUpgradingHermes,
                     runtimeVersion: user.hermesVersion,
+                    latestRuntimeVersion: hermesLatestVersion,
+                    isCheckingRuntimeUpdate: isCheckingHermesUpdate,
+                    canUpgradeRuntime: canUpgradeHermes,
+                    runtimeUpdateStatusMessage: hermesUpgradeStatusMessage,
                     runtimeRunning: user.isRunning,
                     runtimePID: user.pid,
                     cpuPercent: user.cpuPercent,
@@ -2083,6 +2143,8 @@ struct HermesDetailContainer: View {
                     },
                     onOpenHealthCheck: { showHealthCheck = true },
                     onRefresh: { Task { await refreshAll() } },
+                    onCheckRuntimeUpdate: { Task { await checkHermesUpgrade() } },
+                    onUpgradeRuntime: { Task { await upgradeHermesToLatest() } },
                     onSelectProfile: { id in Task { await selectProfile(id) } },
                     onCreateProfile: { name, emoji in Task { await createProfile(name: name, emoji: emoji) } },
                     onUpdateProfile: { id, name, emoji in Task { await updateProfile(id: id, name: name, emoji: emoji) } },
@@ -2626,6 +2688,7 @@ struct HermesDetailContainer: View {
 
     private func refreshAll() async {
         await refreshStatus()
+        await checkHermesUpgrade()
         await loadProfiles()
         await refreshAllProfileStatuses()
     }
@@ -2636,6 +2699,133 @@ struct HermesDetailContainer: View {
         user.pid = status.pid > 0 ? status.pid : nil
         profileStatuses["main"] = status
         user.hermesVersion = await helperClient.getHermesVersion(username: user.username)
+    }
+
+    private func checkHermesUpgrade() async {
+        guard !isCheckingHermesUpdate else { return }
+        isCheckingHermesUpdate = true
+        defer { isCheckingHermesUpdate = false }
+
+        do {
+            let latest = try await fetchHermesLatestVersion()
+            hermesLatestVersion = latest
+
+            guard let installed = user.hermesVersion, installed != "unknown" else {
+                hermesUpgradeStatusMessage = nil
+                return
+            }
+
+            if compareVersions(installed, latest) == .orderedAscending {
+                hermesUpgradeStatusMessage = L10n.f(
+                    "shrimp.settings.dependency.bridge.update_available",
+                    fallback: "已安装（%@），可升级到 %@",
+                    installed,
+                    latest
+                )
+            } else {
+                hermesUpgradeStatusMessage = L10n.k("views.settings_view.up_to_date", fallback: "当前已是最新版本")
+            }
+        } catch {
+            hermesUpgradeStatusMessage = error.localizedDescription
+        }
+    }
+
+    private func upgradeHermesToLatest() async {
+        guard !isUpgradingHermes else { return }
+        guard helperClient.isConnected else { return }
+        guard canUpgradeHermes else {
+            hermesUpgradeStatusMessage = L10n.k("views.settings_view.up_to_date", fallback: "当前已是最新版本")
+            return
+        }
+
+        isUpgradingHermes = true
+        actionError = nil
+        defer { isUpgradingHermes = false }
+
+        do {
+            try await helperClient.installHermes(username: user.username, version: hermesLatestVersion)
+            await refreshStatus()
+            await checkHermesUpgrade()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private func fetchHermesLatestVersion() async throws -> String {
+        if let fromRelease = try await fetchHermesLatestVersionFromGitHubRelease() {
+            return fromRelease
+        }
+        if let fromPyPI = try await fetchHermesLatestVersionFromPyPI() {
+            return fromPyPI
+        }
+        throw NSError(domain: "HermesUpdate", code: -1, userInfo: [
+            NSLocalizedDescriptionKey: "无法获取 Hermes 最新版本"
+        ])
+    }
+
+    private func fetchHermesLatestVersionFromGitHubRelease() async throws -> String? {
+        guard let url = URL(string: "https://api.github.com/repos/NousResearch/hermes-agent/releases/latest") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 12
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("ClawdHome", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            return nil
+        }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tagName = json["tag_name"] as? String else {
+            return nil
+        }
+        return normalizeVersion(tagName)
+    }
+
+    private func fetchHermesLatestVersionFromPyPI() async throws -> String? {
+        guard let url = URL(string: "https://pypi.org/pypi/hermes-agent/json") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 12
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            return nil
+        }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let info = json["info"] as? [String: Any],
+              let version = info["version"] as? String else {
+            return nil
+        }
+        return normalizeVersion(version)
+    }
+
+    private func normalizeVersion(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        return trimmed.hasPrefix("v") ? String(trimmed.dropFirst()) : trimmed
+    }
+
+    private func compareVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        let leftParts = numericVersionParts(from: normalizeVersion(lhs))
+        let rightParts = numericVersionParts(from: normalizeVersion(rhs))
+        let maxCount = max(leftParts.count, rightParts.count)
+        for idx in 0..<maxCount {
+            let left = idx < leftParts.count ? leftParts[idx] : 0
+            let right = idx < rightParts.count ? rightParts[idx] : 0
+            if left < right { return .orderedAscending }
+            if left > right { return .orderedDescending }
+        }
+        return .orderedSame
+    }
+
+    private func numericVersionParts(from value: String) -> [Int] {
+        value
+            .split(separator: ".")
+            .map { component -> Int in
+                let digits = component.prefix { $0.isNumber }
+                return Int(digits) ?? 0
+            }
     }
 
     private func refreshAllProfileStatuses() async {
