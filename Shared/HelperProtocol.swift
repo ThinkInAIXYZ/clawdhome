@@ -177,6 +177,10 @@ import Foundation
     /// 接受 Xcode 许可（等价 xcodebuild -license accept）
     func acceptXcodeLicense(withReply reply: @escaping (Bool, String?) -> Void)
 
+    /// 自动修复 Xcode/CLT 工具链（优先无交互安装 CLT + 自动接受 license）。
+    /// 成功返回 (true, message)，失败返回 (false, errorMessage)。
+    func autoRepairXcodeToolchain(withReply reply: @escaping (Bool, String?) -> Void)
+
     /// 为指定用户初始化 npm 全局目录（~/.npm-global）并配置 shell 环境
     func setupNpmEnv(
         username: String,

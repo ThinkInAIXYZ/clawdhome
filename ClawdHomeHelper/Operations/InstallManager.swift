@@ -33,7 +33,7 @@ struct InstallManager {
     ///   - version: nil 表示安装最新版，否则安装指定版本（如 "2026.2.23"）
     @discardableResult
     static func install(username: String, version: String?, logURL: URL? = nil) throws -> String {
-        try ensureNpmBuildToolchainReady()
+        _ = try autoRepairXcodeToolchain()
         try normalizeNpmUserOwnership(username: username)
         try ensureSharedNpmCacheReady()
         defer { repairSharedNpmCachePermissions() }
@@ -362,6 +362,103 @@ struct InstallManager {
     static func acceptXcodeLicense() throws {
         do {
             _ = try run("/usr/bin/xcodebuild", args: ["-license", "accept"])
+        } catch let shell as ShellError {
+            throw InstallError.xcodeToolchainNotReady(details: shell.localizedDescription)
+        } catch {
+            throw InstallError.xcodeToolchainNotReady(details: error.localizedDescription)
+        }
+    }
+
+    /// 自动修复 Xcode/CLT 工具链（优先走无交互路径）。
+    /// 返回给 UI 的简要结果文本；失败抛出可读错误。
+    static func autoRepairXcodeToolchain() throws -> String {
+        let initial = xcodeEnvStatus()
+        if initial.isHealthy {
+            return "Xcode 开发环境已就绪。"
+        }
+
+        var actions: [String] = []
+
+        if !initial.commandLineToolsInstalled || !initial.clangAvailable {
+            let installed = try installXcodeCommandLineToolsSilently()
+            if installed {
+                actions.append("已通过软件更新安装 Command Line Tools")
+            }
+        }
+
+        // 无论初始状态如何，只要最终可能涉及 clang/xcodebuild，都补一次 license 接受（幂等）。
+        do {
+            try acceptXcodeLicense()
+            actions.append("已自动接受 Xcode license")
+        } catch {
+            helperLog("[xcode-auto-repair] 自动接受 Xcode license 失败: \(error.localizedDescription)", level: .warn)
+        }
+
+        let final = xcodeEnvStatus()
+        if final.isHealthy {
+            return actions.isEmpty ? "Xcode 开发环境已就绪。" : actions.joined(separator: "；")
+        }
+        if !final.commandLineToolsInstalled {
+            throw InstallError.xcodeCommandLineToolsMissing
+        }
+        if !final.licenseAccepted {
+            throw InstallError.xcodeLicenseNotAccepted
+        }
+        throw InstallError.xcodeToolchainNotReady(details: final.detail)
+    }
+
+    /// 通过 softwareupdate 无交互安装 Command Line Tools。
+    /// 返回 true 表示实际执行了安装，false 表示已安装或无需安装。
+    private static func installXcodeCommandLineToolsSilently() throws -> Bool {
+        // 触发 install-on-demand 清单刷新（best-effort）
+        _ = try? run("/usr/bin/touch", args: ["/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress"])
+        defer { _ = try? run("/bin/rm", args: ["-f", "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress"]) }
+
+        let labels = try discoverCommandLineToolsLabels()
+        guard let targetLabel = labels.first else {
+            throw InstallError.xcodeToolchainNotReady(
+                details: "未在 softwareupdate 列表中找到 Command Line Tools。请检查网络后重试。"
+            )
+        }
+
+        do {
+            _ = try run("/usr/sbin/softwareupdate", args: ["--install", targetLabel, "--verbose"])
+            return true
+        } catch let shell as ShellError {
+            if case .nonZeroExit(_, _, let stderr) = shell {
+                let all = stderr.lowercased()
+                if all.contains("already installed")
+                    || all.contains("no updates are available")
+                    || all.contains("no new software available") {
+                    return false
+                }
+            }
+            throw InstallError.xcodeToolchainNotReady(details: shell.localizedDescription)
+        } catch {
+            throw InstallError.xcodeToolchainNotReady(details: error.localizedDescription)
+        }
+    }
+
+    private static func discoverCommandLineToolsLabels() throws -> [String] {
+        do {
+            let output = try run("/usr/sbin/softwareupdate", args: ["--list"])
+            var labels: [String] = []
+            for rawLine in output.split(separator: "\n") {
+                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                if line.contains("Label:"),
+                   line.localizedCaseInsensitiveContains("Command Line Tools") {
+                    if let range = line.range(of: "Label:") {
+                        let label = line[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !label.isEmpty { labels.append(label) }
+                    }
+                }
+            }
+            // softwareupdate 通常按新到旧列出，保留原顺序，去重即可
+            var dedup: [String] = []
+            for label in labels where !dedup.contains(label) {
+                dedup.append(label)
+            }
+            return dedup
         } catch let shell as ShellError {
             throw InstallError.xcodeToolchainNotReady(details: shell.localizedDescription)
         } catch {

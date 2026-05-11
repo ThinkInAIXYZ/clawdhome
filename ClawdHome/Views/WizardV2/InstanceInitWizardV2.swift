@@ -12,6 +12,7 @@
 //
 // 入口替换：直接从 UserListView / AdoptTeamSheet 跳入本 Wizard
 
+import AppKit
 import SwiftUI
 import WebKit
 
@@ -180,6 +181,12 @@ private enum WizardV2SavePhase: Int, CaseIterable {
     }
 }
 
+private enum WizardDevToolchainIssue {
+    case missingCLT
+    case licenseNotAccepted
+    case toolchainNotReady
+}
+
 struct WizardV2InitialRoles {
     var teamDNA: TeamDNA?
     var agents: [AgentDef]
@@ -224,6 +231,10 @@ struct InstanceInitWizardV2: View {
     @State private var hermesInstallTerminalRunToken = UUID()
     @State private var hermesInstallTerminalControl = LocalTerminalControl()
     @State private var hermesInstallExitCode: Int32?
+    @State private var isAutoRepairingXcode = false
+    @State private var isInstallingXcodeCLT = false
+    @State private var isAcceptingXcodeLicense = false
+    @State private var envFixMessage: String?
     @State private var hermesLogTerminalRunToken = UUID()
     @State private var hermesLogTerminalControl = LocalTerminalControl()
     @State private var openclawLogTerminalRunToken = UUID()
@@ -637,10 +648,25 @@ struct InstanceInitWizardV2: View {
                     if let err = envError {
                         Button(L10n.k("common.retry", fallback: "Retry")) { runEnvInstall() }
                             .buttonStyle(.bordered)
-                        Text(err)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .lineLimit(2)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(err)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .lineLimit(3)
+                            if let issue = devToolchainIssue(from: err) {
+                                devToolchainQuickFixRow(issue: issue)
+                            }
+                            if isAutoRepairingXcode {
+                                Text(L10n.k("user.detail.auto.processing", fallback: "处理中…"))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let envFixMessage, !envFixMessage.isEmpty {
+                                Text(envFixMessage)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     } else if envReady {
                         Label(L10n.k("wizard.hermes_env.ready", fallback: "Hermes Runtime Ready"), systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
@@ -745,10 +771,25 @@ struct InstanceInitWizardV2: View {
                     if let err = envError {
                         Button(L10n.k("common.retry", fallback: "Retry")) { runEnvInstall() }
                             .buttonStyle(.bordered)
-                        Text(err)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .lineLimit(2)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(err)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .lineLimit(3)
+                            if let issue = devToolchainIssue(from: err) {
+                                devToolchainQuickFixRow(issue: issue)
+                            }
+                            if isAutoRepairingXcode {
+                                Text(L10n.k("user.detail.auto.processing", fallback: "处理中…"))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let envFixMessage, !envFixMessage.isEmpty {
+                                Text(envFixMessage)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     } else if envReady {
                         Label(L10n.k("wizard_v2.basic_env.ready", fallback: "Environment Ready"), systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
@@ -1495,6 +1536,7 @@ struct InstanceInitWizardV2: View {
         guard !isInstallingEnv else { return }
         isInstallingEnv = true
         envError = nil
+        envFixMessage = nil
         hermesInstallExitCode = nil
         let engine = selectedEngine ?? .openclaw
         if engine == .hermes {
@@ -1517,6 +1559,7 @@ struct InstanceInitWizardV2: View {
                     try await helperClient.installNode(username: user.username, nodeDistURL: nodeDistURL)
 
                     hermesEnvInstallingPhase = .installHermes
+                    try await ensureXcodeToolchainReadyForInitialization()
                     hermesInstallTerminalRunToken = UUID()
                 } catch {
                     let phaseTitle = hermesEnvInstallingPhase?.title
@@ -1524,7 +1567,7 @@ struct InstanceInitWizardV2: View {
                     isInstallingEnv = false
                     envInstallingPhase = nil
                     hermesEnvInstallingPhase = nil
-                    envError = L10n.f("wizard_v2.phase_failed", fallback: "%@ failed: %@", phaseTitle, error.localizedDescription)
+                    envError = await normalizeEnvInstallError(phaseTitle: phaseTitle, rawError: error.localizedDescription)
                 }
             }
             return
@@ -1548,6 +1591,7 @@ struct InstanceInitWizardV2: View {
                 )
 
                 envInstallingPhase = .installOpenclaw
+                try await ensureXcodeToolchainReadyForInitialization()
                 try await helperClient.installOpenclaw(username: user.username, version: nil)
 
                 envInstallingPhase = .startGateway
@@ -1576,7 +1620,7 @@ struct InstanceInitWizardV2: View {
                 isInstallingEnv = false
                 envInstallingPhase = nil
                 hermesEnvInstallingPhase = nil
-                envError = L10n.f("wizard_v2.phase_failed", fallback: "%@ failed: %@", phaseTitle, error.localizedDescription)
+                envError = await normalizeEnvInstallError(phaseTitle: phaseTitle, rawError: error.localizedDescription)
             }
         }
     }
@@ -1693,7 +1737,12 @@ struct InstanceInitWizardV2: View {
             isInstallingEnv = false
             envInstallingPhase = nil
             hermesEnvInstallingPhase = nil
-            envError = L10n.f("wizard_v2.hermes.install_failed_with_exit", fallback: "Hermes install failed: terminal exited with code %d. Fix it in terminal and retry.", Int(code ?? -1))
+            let logSnippet = readEnvLogTail(path: envLogPath(for: .hermes))
+            if let mapped = await mappedXcodeIssueMessage(rawError: logSnippet) {
+                envError = mapped
+            } else {
+                envError = L10n.f("wizard_v2.hermes.install_failed_with_exit", fallback: "Hermes install failed: terminal exited with code %d. Fix it in terminal and retry.", Int(code ?? -1))
+            }
             return
         }
 
@@ -1738,6 +1787,205 @@ struct InstanceInitWizardV2: View {
         case .hermes:
             return "/tmp/clawdhome-hermes-\(user.username).log"
         }
+    }
+
+    @ViewBuilder
+    private func devToolchainQuickFixRow(issue: WizardDevToolchainIssue) -> some View {
+        HStack(spacing: 10) {
+            if issue != .licenseNotAccepted {
+                Button(
+                    isInstallingXcodeCLT
+                        ? L10n.k("user.detail.auto.text_b2c6913616", fallback: "安装中…")
+                        : L10n.k("user.detail.auto.install_developer_tools", fallback: "安装开发工具")
+                ) {
+                    Task { await installXcodeCommandLineToolsForInitWizard() }
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Color.accentColor)
+                .disabled(isAutoRepairingXcode || isInstallingXcodeCLT || isAcceptingXcodeLicense || isInstallingEnv)
+            }
+
+            if issue != .missingCLT {
+                Button(
+                    isAcceptingXcodeLicense
+                        ? L10n.k("user.detail.auto.processing", fallback: "处理中…")
+                        : L10n.k("user.detail.auto.xcode", fallback: "同意 Xcode 许可")
+                ) {
+                    Task { await acceptXcodeLicenseForInitWizard() }
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Color.accentColor)
+                .disabled(isAutoRepairingXcode || isInstallingXcodeCLT || isAcceptingXcodeLicense || isInstallingEnv)
+            }
+
+            Button(L10n.k("user.detail.auto.open", fallback: "打开软件更新")) {
+                openSoftwareUpdateForInitWizard()
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(Color.accentColor)
+            .disabled(isAutoRepairingXcode || isInstallingXcodeCLT || isAcceptingXcodeLicense || isInstallingEnv)
+        }
+        .font(.caption2)
+    }
+
+    private func ensureXcodeToolchainReadyForInitialization() async throws {
+        guard let initialStatus = await helperClient.getXcodeEnvStatus() else {
+            throw HelperError.operationFailed(xcodeStatusUnavailableMessage())
+        }
+        if initialStatus.isHealthy {
+            return
+        }
+
+        isAutoRepairingXcode = true
+        defer { isAutoRepairingXcode = false }
+
+        do {
+            let message = try await helperClient.autoRepairXcodeToolchain()
+            if !message.isEmpty {
+                envFixMessage = message
+            }
+        } catch {
+            throw HelperError.operationFailed(error.localizedDescription)
+        }
+
+        guard let status = await helperClient.getXcodeEnvStatus() else {
+            throw HelperError.operationFailed(xcodeStatusUnavailableMessage())
+        }
+        guard !status.isHealthy else { return }
+        if !status.commandLineToolsInstalled {
+            throw HelperError.operationFailed(xcodeMissingCLTMessage())
+        }
+        if !status.licenseAccepted {
+            throw HelperError.operationFailed(xcodeLicenseNotAcceptedMessage())
+        }
+        throw HelperError.operationFailed(xcodeToolchainNotReadyMessage(detail: status.detail))
+    }
+
+    private func normalizeEnvInstallError(phaseTitle: String, rawError: String) async -> String {
+        if let mapped = await mappedXcodeIssueMessage(rawError: rawError) {
+            return mapped
+        }
+        return L10n.f("wizard_v2.phase_failed", fallback: "%@ failed: %@", phaseTitle, rawError)
+    }
+
+    private func mappedXcodeIssueMessage(rawError: String) async -> String? {
+        if let status = await helperClient.getXcodeEnvStatus() {
+            if !status.commandLineToolsInstalled {
+                return xcodeMissingCLTMessage()
+            }
+            if !status.licenseAccepted {
+                return xcodeLicenseNotAcceptedMessage()
+            }
+            if !status.clangAvailable {
+                return xcodeToolchainNotReadyMessage(detail: status.detail)
+            }
+        }
+
+        guard let issue = devToolchainIssue(from: rawError) else { return nil }
+        switch issue {
+        case .missingCLT:
+            return xcodeMissingCLTMessage()
+        case .licenseNotAccepted:
+            return xcodeLicenseNotAcceptedMessage()
+        case .toolchainNotReady:
+            return xcodeToolchainNotReadyMessage(detail: nil)
+        }
+    }
+
+    private func xcodeStatusUnavailableMessage() -> String {
+        L10n.k(
+            "views.user_init_wizard_view.xcode_status_retry",
+            fallback: "无法读取 Xcode 开发环境状态，请稍后重试。"
+        )
+    }
+
+    private func xcodeMissingCLTMessage() -> String {
+        L10n.k(
+            "views.user_init_wizard_view.xcode_command_line_tools_done",
+            fallback: "检测到缺少 Xcode Command Line Tools。请先在「开发环境修复」中点击“安装开发工具”，完成后再重试初始化。"
+        )
+    }
+
+    private func xcodeLicenseNotAcceptedMessage() -> String {
+        L10n.k(
+            "views.user_init_wizard_view.xcode_license_not_accepted_open_development_environment_repair",
+            fallback: "检测到 Xcode license 未接受。请先在「开发环境修复」中点击“同意 Xcode 许可”，完成后再重试初始化。"
+        )
+    }
+
+    private func xcodeToolchainNotReadyMessage(detail: String?) -> String {
+        var msg = L10n.k(
+            "views.user_init_wizard_view.xcode_toolsready_doneretry",
+            fallback: "检测到 Xcode 工具链未就绪。请先在「开发环境修复」中完成修复后再重试初始化。"
+        )
+        if let detail, !detail.isEmpty {
+            msg += "\n\(detail)"
+        }
+        return msg
+    }
+
+    private func devToolchainIssue(from message: String?) -> WizardDevToolchainIssue? {
+        guard let message else { return nil }
+        let normalized = message.lowercased()
+        if normalized.contains("xcode command line tools")
+            || normalized.contains("no developer tools were found")
+            || normalized.contains("xcode-select: error")
+            || message.contains("缺少 Xcode Command Line Tools") {
+            return .missingCLT
+        }
+        if (normalized.contains("license") && normalized.contains("accept"))
+            || message.contains("Xcode license 未接受") {
+            return .licenseNotAccepted
+        }
+        if normalized.contains("xcode toolchain")
+            || message.contains("Xcode 工具链未就绪")
+            || message.contains("Xcode/CLT 工具链未就绪") {
+            return .toolchainNotReady
+        }
+        return nil
+    }
+
+    private func readEnvLogTail(path: String, maxBytes: Int = 8192) -> String {
+        guard let data = FileManager.default.contents(atPath: path), !data.isEmpty else { return "" }
+        if data.count <= maxBytes {
+            return String(data: data, encoding: .utf8) ?? ""
+        }
+        let tail = data.suffix(maxBytes)
+        return String(data: tail, encoding: .utf8) ?? ""
+    }
+
+    @MainActor
+    private func installXcodeCommandLineToolsForInitWizard() async {
+        isInstallingXcodeCLT = true
+        envFixMessage = nil
+        defer { isInstallingXcodeCLT = false }
+        do {
+            try await helperClient.installXcodeCommandLineTools()
+            envFixMessage = L10n.k("user.detail.auto.hintdone", fallback: "已触发系统安装窗口，请按提示完成安装。")
+        } catch {
+            envFixMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func acceptXcodeLicenseForInitWizard() async {
+        isAcceptingXcodeLicense = true
+        envFixMessage = nil
+        defer { isAcceptingXcodeLicense = false }
+        do {
+            try await helperClient.acceptXcodeLicense()
+            envFixMessage = L10n.k("user.detail.auto.license_refreshstatus", fallback: "已执行 license 接受，正在刷新状态。")
+        } catch {
+            envFixMessage = error.localizedDescription
+        }
+    }
+
+    private func openSoftwareUpdateForInitWizard() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preferences.softwareupdate") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+        envFixMessage = L10n.k("user.detail.auto.open_settings_command_line_tools", fallback: "已打开“软件更新”。若未看到安装弹窗，可在系统设置中手动安装 Command Line Tools。")
     }
 
     private func runSave() {

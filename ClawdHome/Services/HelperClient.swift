@@ -1230,6 +1230,18 @@ final class HelperClient {
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.accept_license_failed", fallback: "接受 license 失败")) }
     }
 
+    /// 自动修复 Xcode/CLT 工具链（优先无交互安装 + 自动接受 license）
+    func autoRepairXcodeToolchain() async throws -> String {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.autoRepairXcodeToolchain { ok, msg in done((ok, msg)) }
+        }
+        if !ok {
+            throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.trigger_install_failed", fallback: "触发安装失败"))
+        }
+        return msg?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
     /// 初始化 npm 全局目录（~/.npm-global）并配置 shell 环境
     func setupNpmEnv(username: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
