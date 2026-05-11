@@ -89,6 +89,7 @@ if [ "$DRY_RUN" = true ]; then
   if [ -d "$WEBSITE_DIR" ]; then
     echo "  4. 写入 website CHANGELOG.zh-CN.md / CHANGELOG.en.md"
     echo "     gh pr create --repo ${WEBSITE_REPO} --title 'chore(release): sync v${NEXT_VERSION} changelog'"
+    echo "  5. make seed-platform-release（同步版本数据到 platform 数据库）"
   fi
   echo ""
   log "GitHub Release 正文预览："
@@ -98,6 +99,26 @@ fi
 
 [ -f "$PKG_ARM64" ] || fail "未找到 $PKG_ARM64，请先运行 make release-build"
 [ -f "$PKG_X64" ]   || fail "未找到 $PKG_X64，请先运行 make release-build"
+
+# ── push + GitHub Release（最重要，优先执行）─────────────────────────────────
+
+if [ "$SKIP_PUSH" = false ]; then
+  log "推送到远程仓库..."
+  git push
+  git push origin "v${NEXT_VERSION}"
+
+  log "创建 GitHub Release..."
+  RELEASE_NOTES_FILE=$(mktemp)
+  echo "$GITHUB_RELEASE_NOTES" > "$RELEASE_NOTES_FILE"
+  gh release create "v${NEXT_VERSION}" "$PKG_ARM64" "$PKG_X64" \
+    --title "ClawdHome ${NEXT_VERSION}" \
+    --notes-file "$RELEASE_NOTES_FILE" || \
+    warn "GitHub Release 创建失败（可能已存在），请手动检查"
+  rm -f "$RELEASE_NOTES_FILE"
+  ok "GitHub Release v${NEXT_VERSION} 已创建"
+else
+  warn "跳过 push 和 GitHub Release（--skip-push）"
+fi
 
 # ── 同步 api/version.json ──────────────────────────────────────────────────────
 
@@ -159,34 +180,22 @@ if [ -d "$WEBSITE_DIR" ]; then
       --notes-dir "$NOTES_DIR" \
       --website-dir "$WEBSITE_DIR" \
       --website-repo "$WEBSITE_REPO" \
-      --skip-push
+      --skip-push || warn "website PR 失败，请手动处理"
   else
     bash "$SCRIPT_DIR/release_website_pr.sh" \
       --version "$NEXT_VERSION" \
       --notes-dir "$NOTES_DIR" \
       --website-dir "$WEBSITE_DIR" \
-      --website-repo "$WEBSITE_REPO"
+      --website-repo "$WEBSITE_REPO" || warn "website PR 失败，请手动处理"
   fi
 fi
 
-# ── push + GitHub Release ─────────────────────────────────────────────────────
+# ── seed-platform ─────────────────────────────────────────────────────────────
 
-if [ "$SKIP_PUSH" = false ]; then
-  log "推送到远程仓库..."
-  git push
-  git push origin "v${NEXT_VERSION}"
-
-  log "创建 GitHub Release..."
-  RELEASE_NOTES_FILE=$(mktemp)
-  echo "$GITHUB_RELEASE_NOTES" > "$RELEASE_NOTES_FILE"
-  gh release create "v${NEXT_VERSION}" "$PKG_ARM64" "$PKG_X64" \
-    --title "ClawdHome ${NEXT_VERSION}" \
-    --notes-file "$RELEASE_NOTES_FILE" || \
-    warn "GitHub Release 创建失败（可能已存在），请手动检查"
-  rm -f "$RELEASE_NOTES_FILE"
-  ok "GitHub Release v${NEXT_VERSION} 已创建"
-else
-  warn "跳过 push 和 GitHub Release（--skip-push）"
+if [ -d "$WEBSITE_DIR" ] && [ "$SKIP_PUSH" = false ]; then
+  log "同步版本数据到 platform..."
+  make -C "$WEBSITE_DIR" seed-platform-release 2>&1 || \
+    warn "seed-platform-release 失败，请手动运行：make -C $WEBSITE_DIR seed-platform-release"
 fi
 
 # ── 完成摘要 ──────────────────────────────────────────────────────────────────
