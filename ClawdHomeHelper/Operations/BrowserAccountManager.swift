@@ -35,6 +35,7 @@ enum BrowserAccountManager {
     // 主动防御：默认不触碰宿主机全局 Chrome 策略，只有显式创建该开关文件才允许写入 force-install。
     // 这样可以避免误把宿主机默认浏览器也强制安装 OpenCLI 扩展。
     private static let allowGlobalChromePolicyFlagPath = "/var/lib/clawdhome/browser/allow-global-chrome-policy"
+    private static let openCLIReleaseAPIURL = "https://api.github.com/repos/jackwener/opencli/releases/latest"
     private static let openCLIDefaultDaemonPort = 19825
     private static let openCLIDefaultCDPCapturePort = 9222
 
@@ -249,9 +250,12 @@ enum BrowserAccountManager {
     static func reset(username: String) throws -> BrowserAccountStatus {
         let context = try resolveContext(username: username)
         let fm = FileManager.default
-        try backupAndRemoveProfileIfNeeded(context.paths.profileDirectory.path, fileManager: fm)
-        try backupAndRemoveProfileIfNeeded("/Users/\(username)/\(BrowserAccountPaths.toolBrowserProfileRelativePath)", fileManager: fm)
-        try backupAndRemoveProfileIfNeeded("/Users/\(username)/\(BrowserAccountPaths.legacyToolBrowserProfileRelativePath)", fileManager: fm)
+        // reset 仅清理浏览器数据，不卸载工具入口。
+        try? closeWarmupBrowser(profilePath: context.paths.profileDirectory.path, logURL: nil)
+        try? closeWarmupBrowser(profilePath: "/Users/\(username)/\(BrowserAccountPaths.toolBrowserProfileRelativePath)", logURL: nil)
+        try removeDirectoryContentsIfNeeded(context.paths.profileDirectory.path, fileManager: fm)
+        try removeDirectoryContentsIfNeeded("/Users/\(username)/\(BrowserAccountPaths.toolBrowserProfileRelativePath)", fileManager: fm)
+        try removeDirectoryContentsIfNeeded("/Users/\(username)/\(BrowserAccountPaths.legacyToolBrowserProfileRelativePath)", fileManager: fm)
         for session in sessionPaths(username: username) where fm.fileExists(atPath: session) {
             try fm.removeItem(atPath: session)
         }
@@ -269,6 +273,67 @@ enum BrowserAccountManager {
             toolPath: "/Users/\(username)/\(BrowserAccountPaths.toolExecutableRelativePath)"
         )
         return status(username: username)
+    }
+
+    static func uninstallTool(username: String) throws -> BrowserAccountStatus {
+        let context = try resolveContext(username: username)
+        let fm = FileManager.default
+        let toolPath = "/Users/\(username)/\(BrowserAccountPaths.toolExecutableRelativePath)"
+        let toolDir = "/Users/\(username)/\(BrowserAccountPaths.toolDirectoryRelativePath)"
+        let launcherDir = "/Library/Application Support/ClawdHome/BrowserLaunchers/\(username)"
+
+        try? closeWarmupBrowser(profilePath: context.paths.profileDirectory.path, logURL: nil)
+        try? closeWarmupBrowser(profilePath: "/Users/\(username)/\(BrowserAccountPaths.toolBrowserProfileRelativePath)", logURL: nil)
+
+        if fm.fileExists(atPath: context.paths.profileDirectory.path) {
+            try fm.removeItem(atPath: context.paths.profileDirectory.path)
+        }
+        if fm.fileExists(atPath: "/Users/\(username)/\(BrowserAccountPaths.toolBrowserProfileRelativePath)") {
+            try fm.removeItem(atPath: "/Users/\(username)/\(BrowserAccountPaths.toolBrowserProfileRelativePath)")
+        }
+        if fm.fileExists(atPath: "/Users/\(username)/\(BrowserAccountPaths.legacyToolBrowserProfileRelativePath)") {
+            try fm.removeItem(atPath: "/Users/\(username)/\(BrowserAccountPaths.legacyToolBrowserProfileRelativePath)")
+        }
+
+        for path in sessionPaths(username: username) where fm.fileExists(atPath: path) {
+            try fm.removeItem(atPath: path)
+        }
+        let openCLIProfile = openCLIProfilePath(username: username)
+        if fm.fileExists(atPath: openCLIProfile) {
+            try fm.removeItem(atPath: openCLIProfile)
+        }
+        let marker = installWarmupMarkerPath(username: username)
+        if fm.fileExists(atPath: marker) {
+            try fm.removeItem(atPath: marker)
+        }
+
+        let binDirs = browserBinDirectories(username: username)
+        for binDir in binDirs {
+            try removeBrowserShimIfOwned(username: username, binDir: binDir, toolPath: toolPath)
+            try removeBrowserCommandWrappersIfOwned(username: username, binDir: binDir, toolPath: toolPath)
+            try removeOpenURLCLIWrapperIfOwned(username: username, binDir: binDir)
+            try restoreOpenCLIWrapperIfNeeded(username: username, binDir: binDir)
+        }
+
+        if fm.fileExists(atPath: toolDir) {
+            try fm.removeItem(atPath: toolDir)
+        }
+        if fm.fileExists(atPath: launcherDir) {
+            try fm.removeItem(atPath: launcherDir)
+        }
+        try removeBrowserShellEnvironment(username: username)
+        HermesConfigWriter.syncBrowserCDPEndpoint(username: username, endpoint: nil)
+        // 卸载时尽量回收宿主机全局策略里的 OpenCLI Bridge 条目（若曾启用过）。
+        _ = try? removeOpenCLIBrowserBridgePolicyIfPresent()
+        return status(username: username)
+    }
+
+    private static func removeDirectoryContentsIfNeeded(_ path: String, fileManager fm: FileManager) throws {
+        guard fm.fileExists(atPath: path) else { return }
+        let entries = try fm.contentsOfDirectory(atPath: path)
+        for entry in entries {
+            try fm.removeItem(atPath: "\(path)/\(entry)")
+        }
     }
 
     private static func backupAndRemoveProfileIfNeeded(_ profile: String, fileManager fm: FileManager) throws {
@@ -933,6 +998,22 @@ enum BrowserAccountManager {
         }
     }
 
+    private static func removeBrowserShellEnvironment(username: String) throws {
+        for path in ["/Users/\(username)/.zprofile", "/Users/\(username)/.zshrc"] {
+            guard var existing = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+            guard let start = existing.range(of: "# ClawdHome browser account"),
+                  let end = existing.range(of: "# End ClawdHome browser account", range: start.lowerBound..<existing.endIndex) else {
+                continue
+            }
+            var replacement = existing
+            replacement.replaceSubrange(start.lowerBound..<end.upperBound, with: "")
+            replacement = replacement.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+            try Data(replacement.utf8).write(to: URL(fileURLWithPath: path))
+            try FilePermissionHelper.chown(path, owner: username)
+            try FilePermissionHelper.chmod(path, mode: "644")
+        }
+    }
+
     private static func installBrowserShim(username: String, binDir: String, toolPath: String) throws {
         let binPath = "\(binDir)/clawdhome-browser"
         let wrapper = """
@@ -1012,6 +1093,22 @@ enum BrowserAccountManager {
             try wrapper.write(toFile: path, atomically: true, encoding: .utf8)
             try FilePermissionHelper.chown(path, owner: username)
             try FilePermissionHelper.chmod(path, mode: "755")
+        }
+    }
+
+    private static func removeBrowserShimIfOwned(username: String, binDir: String, toolPath: String) throws {
+        let path = "\(binDir)/clawdhome-browser"
+        try removeFileIfOwnedByClawdHome(path: path, requiredMarkers: ["clawdhome-browser shim", toolPath], owner: username)
+    }
+
+    private static func removeBrowserCommandWrappersIfOwned(username: String, binDir: String, toolPath: String) throws {
+        for name in BrowserAccountPaths.browserCommandWrapperNames {
+            let path = "\(binDir)/\(name)"
+            try removeFileIfOwnedByClawdHome(
+                path: path,
+                requiredMarkers: ["route=clawdhome-browser-open", toolPath],
+                owner: username
+            )
         }
     }
 
@@ -1218,6 +1315,42 @@ enum BrowserAccountManager {
         try wrapper.write(toFile: wrapperPath, atomically: true, encoding: .utf8)
         try FilePermissionHelper.chown(wrapperPath, owner: username)
         try FilePermissionHelper.chmod(wrapperPath, mode: "755")
+    }
+
+    private static func removeOpenURLCLIWrapperIfOwned(username: String, binDir: String) throws {
+        let path = "\(binDir)/\(BrowserAccountPaths.openCLINPMExecutableName)"
+        try removeFileIfOwnedByClawdHome(path: path, requiredMarkers: ["CLAWDHOME_OPEN_URL_CLI_WRAPPER"], owner: username)
+    }
+
+    private static func restoreOpenCLIWrapperIfNeeded(username: String, binDir: String) throws {
+        let wrapperPath = "\(binDir)/opencli"
+        let realPath = "\(binDir)/\(BrowserAccountPaths.openCLIRealExecutableName)"
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: wrapperPath) else { return }
+        let content = (try? String(contentsOfFile: wrapperPath, encoding: .utf8)) ?? ""
+        guard content.contains("CLAWDHOME_OPENCLI_WRAPPER") else { return }
+        if fm.fileExists(atPath: realPath) {
+            try fm.removeItem(atPath: wrapperPath)
+            try fm.moveItem(atPath: realPath, toPath: wrapperPath)
+            try FilePermissionHelper.chown(wrapperPath, owner: username)
+            try FilePermissionHelper.chmod(wrapperPath, mode: "755")
+        } else {
+            try fm.removeItem(atPath: wrapperPath)
+        }
+    }
+
+    private static func removeFileIfOwnedByClawdHome(
+        path: String,
+        requiredMarkers: [String],
+        owner: String
+    ) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: path) else { return }
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return }
+        guard requiredMarkers.allSatisfy({ content.contains($0) }) else { return }
+        try fm.removeItem(atPath: path)
+        let parent = (path as NSString).deletingLastPathComponent
+        try? FilePermissionHelper.chown(parent, owner: owner)
     }
 
     private static func openCLIWrapperScript(username: String, toolPath: String, realPath: String, daemonPath: String) -> String {
@@ -1457,9 +1590,10 @@ enum BrowserAccountManager {
         // 默认防御：不允许写入宿主机全局 Chrome 策略，除非管理员显式创建 allow flag。
         // 这样可避免把 OpenCLI 扩展误安装到默认/非实例浏览器环境。
         if !isGlobalChromePolicyInstallAllowed() {
+            try ensureOpenCLIBrowserBridgeUnpackedExtensionReady(context: context, logURL: logURL)
             do {
                 if try removeOpenCLIBrowserBridgePolicyIfPresent() {
-                    cleanupLegacyUnpackedBridgeExtensionIfNeeded(context: context, logURL: logURL)
+                    appendInstallLog("✓ 已移除宿主机全局 OpenCLI Bridge force-install 策略\n", logURL: logURL)
                     return .guardedPolicyRemoved(path: chromeManagedPolicyPath)
                 }
             } catch {
@@ -1469,7 +1603,6 @@ enum BrowserAccountManager {
                     logURL: logURL
                 )
             }
-            cleanupLegacyUnpackedBridgeExtensionIfNeeded(context: context, logURL: logURL)
             return .guardedNoPolicyChange
         }
 
@@ -1483,6 +1616,96 @@ enum BrowserAccountManager {
         }
         cleanupLegacyUnpackedBridgeExtensionIfNeeded(context: context, logURL: logURL)
         return .configured(path: chromeManagedPolicyPath)
+    }
+
+    private static func ensureOpenCLIBrowserBridgeUnpackedExtensionReady(
+        context: Context,
+        logURL: URL?
+    ) throws {
+        let targetDir = context.paths.openCLIBrowserBridgeExtensionDirectory.path
+        let manifestPath = "\(targetDir)/manifest.json"
+        if FileManager.default.fileExists(atPath: manifestPath) {
+            return
+        }
+
+        appendInstallLog("→ 下载并安装 OpenCLI Browser Bridge（profile 内加载）\n", logURL: logURL)
+        let releaseURL = URL(string: openCLIReleaseAPIURL)!
+        guard let releaseJSON = readJSONObject(url: releaseURL, timeout: 8) as? [String: Any],
+              let assets = releaseJSON["assets"] as? [[String: Any]] else {
+            throw BrowserAccountError.commandFailed("无法获取 OpenCLI release 信息")
+        }
+
+        let assetURL: String? = assets
+            .compactMap { item in
+                let name = (item["name"] as? String ?? "").lowercased()
+                guard name.contains("extension"), name.hasSuffix(".zip") else { return nil }
+                return item["browser_download_url"] as? String
+            }
+            .first
+        guard let assetURL, let downloadURL = URL(string: assetURL) else {
+            throw BrowserAccountError.commandFailed("OpenCLI release 中未找到 Browser Bridge 扩展包")
+        }
+
+        let zipData = try Data(contentsOf: downloadURL)
+        let fm = FileManager.default
+        let tempBase = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("clawdhome-opencli-bridge-\(UUID().uuidString)", isDirectory: true)
+        let zipPath = tempBase.appendingPathComponent("extension.zip").path
+        let unpackRoot = tempBase.appendingPathComponent("unpacked", isDirectory: true).path
+        defer { try? fm.removeItem(at: tempBase) }
+        try fm.createDirectory(atPath: unpackRoot, withIntermediateDirectories: true)
+        try zipData.write(to: URL(fileURLWithPath: zipPath), options: .atomic)
+
+        let zipEntries = try run("/usr/bin/zipinfo", args: ["-1", zipPath])
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        for entry in zipEntries {
+            if entry.hasPrefix("/") {
+                throw BrowserAccountError.commandFailed("扩展包路径非法（绝对路径）：\(entry)")
+            }
+            let parts = entry.split(separator: "/")
+            if parts.contains(where: { $0 == ".." }) {
+                throw BrowserAccountError.commandFailed("扩展包路径非法（目录穿越）：\(entry)")
+            }
+        }
+
+        _ = try run("/usr/bin/unzip", args: ["-oq", zipPath, "-d", unpackRoot])
+
+        let unpackRootURL = URL(fileURLWithPath: unpackRoot, isDirectory: true)
+        let directManifest = unpackRootURL.appendingPathComponent("manifest.json").path
+        let sourceDir: String
+        if fm.fileExists(atPath: directManifest) {
+            sourceDir = unpackRoot
+        } else {
+            let children = try fm.contentsOfDirectory(
+                at: unpackRootURL,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+            guard let childDir = children.first(where: { url in
+                (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+                && fm.fileExists(atPath: url.appendingPathComponent("manifest.json").path)
+            }) else {
+                throw BrowserAccountError.commandFailed("扩展包解压后未找到 manifest.json")
+            }
+            sourceDir = childDir.path
+        }
+
+        let targetParent = (targetDir as NSString).deletingLastPathComponent
+        try fm.createDirectory(atPath: targetParent, withIntermediateDirectories: true)
+        if fm.fileExists(atPath: targetDir) {
+            let backup = "\(targetDir).backup-\(timestamp())"
+            try fm.moveItem(atPath: targetDir, toPath: backup)
+        }
+        try fm.copyItem(atPath: sourceDir, toPath: targetDir)
+        try FilePermissionHelper.chownRecursive(targetParent, owner: context.consoleUsername)
+        try FilePermissionHelper.chmodRecursive(targetParent, mode: "755")
+
+        guard fm.fileExists(atPath: manifestPath) else {
+            throw BrowserAccountError.commandFailed("扩展安装失败：manifest.json 缺失")
+        }
+        appendInstallLog("✓ OpenCLI Browser Bridge 已安装到 profile：\(targetDir)\n", logURL: logURL)
     }
 
     private static func isGlobalChromePolicyInstallAllowed() -> Bool {
@@ -2453,6 +2676,13 @@ def main():
         "--new-window",
         target or "about:blank",
     ]
+    extension_dir = os.path.join(profile, "ClawdHomeExtensions", "opencli-browser-bridge")
+    manifest_path = os.path.join(extension_dir, "manifest.json")
+    if os.path.exists(manifest_path):
+        args.append(f"--load-extension={extension_dir}")
+        log(log_home, f"load-extension path={extension_dir!r}")
+    else:
+        log(log_home, f"load-extension missing-manifest path={manifest_path!r}")
     # 只在安装预热时短暂开启 CDP 端口读取扩展 context id；日常模式不携带 CDP 参数。
     if mode == "install-cdp":
         args.append(f"--remote-debugging-port={port}")

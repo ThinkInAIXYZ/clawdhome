@@ -159,7 +159,9 @@ struct OpenClawDetailView: View {
     @State private var browserToolInstallFeedback: BrowserToolInstallFeedbackState = .idle
     @State private var browserToolInstallFeedbackTask: Task<Void, Never>? = nil
     @State private var isResettingBrowserAccount = false
+    @State private var isUninstallingBrowserAccountTool = false
     @State private var showResetBrowserAccountConfirm = false
+    @State private var showUninstallBrowserAccountToolConfirm = false
     @State private var showAddManualLoginSite = false
     @State private var manualLoginSiteName = ""
     @State private var manualLoginSiteURL = ""
@@ -812,18 +814,32 @@ struct OpenClawDetailView: View {
             Text(L10n.k("user.detail.auto.userprocess_openclaw_process_start", fallback: "将紧急终止该虾的用户空间进程（优先 openclaw 相关），已终止进程不可恢复，只能重新启动。"))
         }
         .confirmationDialog(
-            L10n.k("user.detail.browser.reset_title", fallback: "重置浏览器账号？"),
+            L10n.k("user.detail.browser.reset_title", fallback: "重置浏览器数据？"),
             isPresented: $showResetBrowserAccountConfirm,
             titleVisibility: .visible
         ) {
-            Button(L10n.k("user.browser.backup_reset", fallback: "备份并重置"), role: .destructive) {
+            Button(L10n.k("user.browser.reset_data_only", fallback: "重置数据"), role: .destructive) {
                 Task { await resetBrowserAccount() }
             }
             Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) {
                 showResetBrowserAccountConfirm = false
             }
         } message: {
-            Text(L10n.k("user.browser.reset_confirm_message", fallback: "将备份并清空该用户的 ClawdHome Chrome profile。其他用户和你的主浏览器账号不会受影响。"))
+            Text(L10n.k("user.browser.reset_confirm_message", fallback: "将清空该用户 ClawdHome 浏览器数据（cookies/session/cache），保留 Browser Tool 与 OpenCLI。其他用户和你的主浏览器不受影响。"))
+        }
+        .confirmationDialog(
+            L10n.k("user.browser.uninstall_title", fallback: "卸载浏览器工具？"),
+            isPresented: $showUninstallBrowserAccountToolConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.k("common.action.uninstall", fallback: "卸载"), role: .destructive) {
+                Task { await uninstallBrowserAccountTool() }
+            }
+            Button(L10n.k("user.detail.auto.cancel", fallback: "取消"), role: .cancel) {
+                showUninstallBrowserAccountToolConfirm = false
+            }
+        } message: {
+            Text(L10n.k("user.browser.uninstall_message", fallback: "将删除该用户的 ClawdHome 浏览器 profile、OpenCLI Browser Bridge 扩展和工具入口。不会影响系统默认 Chrome。"))
         }
         .alert(L10n.k("browser.add_login_site.title", fallback: "添加登录网站"), isPresented: $showAddManualLoginSite) {
             TextField(L10n.k("common.label.name", fallback: "名称"), text: $manualLoginSiteName)
@@ -1375,12 +1391,21 @@ struct OpenClawDetailView: View {
                     manualLoginMenuCompact
                     overviewCompactActionButton(
                         title: isResettingBrowserAccount ? L10n.k("browser.account.resetting", fallback: "重置中…") : L10n.k("common.action.reset", fallback: "重置"),
-                        systemImage: "trash",
-                        tint: Color.red.opacity(0.10),
-                        foreground: .red,
-                        disabled: !helperClient.isConnected || isResettingBrowserAccount
+                        systemImage: "arrow.counterclockwise",
+                        tint: Color.orange.opacity(0.12),
+                        foreground: .orange,
+                        disabled: !helperClient.isConnected || isResettingBrowserAccount || isUninstallingBrowserAccountTool
                     ) {
                         showResetBrowserAccountConfirm = true
+                    }
+                    overviewCompactActionButton(
+                        title: isUninstallingBrowserAccountTool ? L10n.k("browser.account.uninstalling", fallback: "卸载中…") : L10n.k("common.action.uninstall", fallback: "卸载"),
+                        systemImage: "trash.slash",
+                        tint: Color.red.opacity(0.10),
+                        foreground: .red,
+                        disabled: !helperClient.isConnected || isUninstallingBrowserAccountTool || isResettingBrowserAccount
+                    ) {
+                        showUninstallBrowserAccountToolConfirm = true
                     }
                 }
             }
@@ -3135,6 +3160,18 @@ struct OpenClawDetailView: View {
         defer { isResettingBrowserAccount = false }
         do {
             browserAccountStatus = try await helperClient.resetBrowserAccount(username: user.username)
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func uninstallBrowserAccountTool() async {
+        isUninstallingBrowserAccountTool = true
+        actionError = nil
+        defer { isUninstallingBrowserAccountTool = false }
+        do {
+            browserAccountStatus = try await helperClient.uninstallBrowserAccountTool(username: user.username)
         } catch {
             actionError = error.localizedDescription
         }

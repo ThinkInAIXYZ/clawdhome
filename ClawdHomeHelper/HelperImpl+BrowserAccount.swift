@@ -82,6 +82,18 @@ extension ClawdHomeHelperImpl {
         }
     }
 
+    func uninstallBrowserAccountTool(username: String, withReply reply: @escaping (Bool, String) -> Void) {
+        helperLog("[browser-account] uninstall tool request @\(username)")
+        do {
+            let status = try BrowserAccountManager.uninstallTool(username: username)
+            let data = try JSONEncoder().encode(status)
+            reply(true, String(data: data, encoding: .utf8) ?? "{}")
+        } catch {
+            helperLog("[browser-account] uninstall tool failed @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
     func prepareBrowserAccountForRuntimeInstall(username: String, withReply reply: @escaping (Bool, String) -> Void) {
         helperLog("[browser-account] prepare runtime install request @\(username)")
         do {
