@@ -723,6 +723,23 @@ final class HelperClient {
         return status
     }
 
+    func uninstallBrowserAccountTool(username: String) async throws -> BrowserAccountStatus {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in
+            proxy.uninstallBrowserAccountTool(username: username) { ok, payload in
+                done((ok, payload))
+            }
+        }
+        guard ok else {
+            throw HelperError.operationFailed(payload)
+        }
+        guard let data = payload.data(using: .utf8),
+              let status = try? JSONDecoder().decode(BrowserAccountStatus.self, from: data) else {
+            throw HelperError.operationFailed("浏览器账号状态解析失败")
+        }
+        return status
+    }
+
     func prepareBrowserAccountForRuntimeInstall(username: String) async throws {
         guard let proxy = controlProxy else { throw HelperError.notConnected }
         let (ok, payload): (Bool, String) = try await xpcCall(timeout: HelperClient.xpcCommandTimeout) { done in

@@ -83,11 +83,13 @@ struct HermesDetailView: View {
     @State private var showInstallToolSuccess = false
     @State private var installToolError: String?
     @State private var isResettingBrowserAccount = false
+    @State private var isUninstallingBrowserAccountTool = false
     @State private var isInstallingOpenCLI = false
     @State private var isRunningOpenCLIDoctor = false
     @State private var opencliVersion: String?
     @State private var opencliDoctorMessage: String?
     @State private var showResetBrowserAccountConfirm = false
+    @State private var showUninstallBrowserAccountToolConfirm = false
     @State private var showAddManualLoginSite = false
     @State private var manualLoginSiteName = ""
     @State private var manualLoginSiteURL = ""
@@ -306,17 +308,30 @@ struct HermesDetailView: View {
             Text(installToolError ?? "")
         }
         .alert(
-            L10n.k("hermes.browser.reset_title", fallback: "重置 Hermes 浏览器？"),
+            L10n.k("hermes.browser.reset_title", fallback: "重置 Hermes 浏览器数据？"),
             isPresented: $showResetBrowserAccountConfirm
         ) {
             Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {
                 showResetBrowserAccountConfirm = false
             }
-            Button(L10n.k("common.action.reset", fallback: "重置"), role: .destructive) {
+            Button(L10n.k("user.browser.reset_data_only", fallback: "重置数据"), role: .destructive) {
                 Task { await resetBrowserAccount() }
             }
         } message: {
-            Text(L10n.k("hermes.browser.reset_message", fallback: "将备份并清空该用户的 ClawdHome Chrome profile。Hermes 的 OAuth 和网页登录态会被清空，其他用户与主浏览器不受影响。"))
+            Text(L10n.k("hermes.browser.reset_message", fallback: "将清空该用户 ClawdHome 浏览器数据（cookies/session/cache），保留 Browser Tool 与 OpenCLI。Hermes 的 OAuth 和网页登录态会被清空。"))
+        }
+        .alert(
+            L10n.k("hermes.browser.uninstall_title", fallback: "卸载 Hermes 浏览器工具？"),
+            isPresented: $showUninstallBrowserAccountToolConfirm
+        ) {
+            Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {
+                showUninstallBrowserAccountToolConfirm = false
+            }
+            Button(L10n.k("common.action.uninstall", fallback: "卸载"), role: .destructive) {
+                Task { await uninstallBrowserAccountTool() }
+            }
+        } message: {
+            Text(L10n.k("hermes.browser.uninstall_message", fallback: "将删除该用户的 ClawdHome 浏览器 profile、OpenCLI Browser Bridge 扩展和工具入口。不会影响系统默认 Chrome。"))
         }
         .alert(L10n.k("browser.add_login_site.title", fallback: "添加登录网站"), isPresented: $showAddManualLoginSite) {
             TextField(L10n.k("common.label.name", fallback: "名称"), text: $manualLoginSiteName)
@@ -466,11 +481,24 @@ struct HermesDetailView: View {
                         isResettingBrowserAccount
                             ? L10n.k("hermes.browser.resetting", fallback: "重置中…")
                             : L10n.k("common.action.reset", fallback: "重置"),
-                        systemImage: "trash"
+                        systemImage: "arrow.counterclockwise"
                     )
                 }
                 .buttonStyle(.bordered)
-                .disabled(!helperClient.isConnected || isResettingBrowserAccount)
+                .disabled(!helperClient.isConnected || isResettingBrowserAccount || isUninstallingBrowserAccountTool)
+
+                Button(role: .destructive) {
+                    showUninstallBrowserAccountToolConfirm = true
+                } label: {
+                    Label(
+                        isUninstallingBrowserAccountTool
+                            ? L10n.k("browser.account.uninstalling", fallback: "卸载中…")
+                            : L10n.k("common.action.uninstall", fallback: "卸载"),
+                        systemImage: "trash.slash"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!helperClient.isConnected || isUninstallingBrowserAccountTool || isResettingBrowserAccount)
             }
 
             if let opencliDoctorMessage, !opencliDoctorMessage.isEmpty {
@@ -1090,6 +1118,19 @@ struct HermesDetailView: View {
             browserAccountStatus = try await helperClient.resetBrowserAccount(username: user.username)
         } catch {
             await refreshBrowserAccountStatus()
+        }
+    }
+
+    @MainActor
+    private func uninstallBrowserAccountTool() async {
+        isUninstallingBrowserAccountTool = true
+        defer { isUninstallingBrowserAccountTool = false }
+        do {
+            browserAccountStatus = try await helperClient.uninstallBrowserAccountTool(username: user.username)
+            await refreshBrowserAccountStatus()
+        } catch {
+            await refreshBrowserAccountStatus()
+            installToolError = error.localizedDescription
         }
     }
 

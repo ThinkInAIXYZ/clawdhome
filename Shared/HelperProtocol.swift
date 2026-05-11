@@ -94,8 +94,14 @@ import Foundation
         withReply reply: @escaping (String) -> Void
     )
 
-    /// 备份并重置指定用户的 ClawdHome Chrome profile，返回 BrowserAccountStatus JSON
+    /// 重置指定用户的浏览器账号数据（仅清理数据，不卸载工具），返回 BrowserAccountStatus JSON
     func resetBrowserAccount(
+        username: String,
+        withReply reply: @escaping (Bool, String) -> Void
+    )
+
+    /// 卸载指定用户的浏览器账号工具与 profile 数据，返回 BrowserAccountStatus JSON
+    func uninstallBrowserAccountTool(
         username: String,
         withReply reply: @escaping (Bool, String) -> Void
     )
