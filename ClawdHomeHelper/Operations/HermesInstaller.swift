@@ -196,6 +196,10 @@ struct HermesInstaller {
     @discardableResult
     static func install(username: String, version: String?, logURL: URL? = nil) throws -> String {
         try HomebrewRepairManager.withSharedCacheInstallLock(username: username, logURL: logURL) {
+            // Hermes 官方安装脚本会调用 git/python 构建流程；与 OpenClaw 统一：
+            // 先自动修复 Xcode/CLT，再进入安装。
+            _ = try InstallManager.autoRepairXcodeToolchain()
+
             // 与 openclaw 安装流程对齐：先做用户级 Homebrew 修复（best-effort）。
             // 该步骤失败不阻断后续 Hermes 官方安装流程。
             do {

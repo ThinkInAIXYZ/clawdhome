@@ -216,6 +216,17 @@ extension ClawdHomeHelperImpl {
         }
     }
 
+    func autoRepairXcodeToolchain(withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("自动修复 Xcode/CLT 工具链")
+        do {
+            let message = try InstallManager.autoRepairXcodeToolchain()
+            reply(true, message)
+        } catch {
+            helperLog("自动修复 Xcode/CLT 工具链失败: \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
     func setupNpmEnv(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
         let logURL = initLogURL(username: username)
         let npmGlobal = InstallManager.npmGlobalDir(for: username)
