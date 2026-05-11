@@ -191,7 +191,13 @@ ok "website commit 完成"
 
 if [ "$SKIP_PUSH" = false ]; then
   log "推送 $BRANCH 到 origin..."
-  git -C "$WEBSITE_DIR" push origin "$BRANCH"
+  # 确保 remote main 存在（gh pr create 需要 base 分支在 remote）
+  if ! git -C "$WEBSITE_DIR" show-ref --quiet "refs/remotes/origin/main" 2>/dev/null; then
+    log "remote main 不存在，先推送本地 main..."
+    git -C "$WEBSITE_DIR" -c http.version=HTTP/1.1 push origin main || \
+      warn "推送 main 失败，PR 可能无法创建"
+  fi
+  git -C "$WEBSITE_DIR" -c http.version=HTTP/1.1 push origin "$BRANCH"
 
   PR_BODY=$(printf '## 更新内容\n\n### 中文\n\n%s\n\n---\n\n### English\n\n%s\n' \
     "$(cat "$ZH_NOTES")" "$(cat "$EN_NOTES")")
