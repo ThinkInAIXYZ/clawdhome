@@ -72,7 +72,8 @@ extension ClawdHomeHelperImpl {
     func installBrowserAccountTool(username: String, withReply reply: @escaping (Bool, String) -> Void) {
         helperLog("[browser-account] install tool request @\(username)")
         do {
-            try BrowserAccountManager.prepareForRuntimeInstall(username: username)
+            let logURL = initLogURL(username: username)
+            try BrowserAccountManager.prepareForRuntimeInstall(username: username, logURL: logURL)
             let status = BrowserAccountManager.status(username: username)
             let data = try JSONEncoder().encode(status)
             reply(true, String(data: data, encoding: .utf8) ?? "{}")
@@ -97,8 +98,9 @@ extension ClawdHomeHelperImpl {
     func prepareBrowserAccountForRuntimeInstall(username: String, withReply reply: @escaping (Bool, String) -> Void) {
         helperLog("[browser-account] prepare runtime install request @\(username)")
         do {
+            let logURL = initLogURL(username: username)
             appendBrowserRuntimeLog("→ 准备安装浏览器工具与预热浏览器账号…\n", username: username)
-            try BrowserAccountManager.prepareForRuntimeInstall(username: username)
+            try BrowserAccountManager.prepareForRuntimeInstall(username: username, logURL: logURL)
             appendBrowserRuntimeLog("✓ 浏览器工具与账号预热完成。\n", username: username)
             reply(true, "")
         } catch {

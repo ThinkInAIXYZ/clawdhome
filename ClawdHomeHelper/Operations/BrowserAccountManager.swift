@@ -30,6 +30,8 @@ enum BrowserAccountError: LocalizedError {
 enum BrowserAccountManager {
     private static let chromeAppPath = "/Applications/Google Chrome.app"
     private static let openCLIBrowserBridgeExtensionID = "ildkmabpimmkaediidaifkhjpohdnifk"
+    private static let openCLIBrowserBridgeManifestKey =
+        "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzs2sa0xyaOirJPDWXH+dRFnnY05TNcUnKG95DkNxdWMH/UKD4G3gU63377A4Q6upmSXPYFY0jtC/Lfa1kpQYvenuaVOSndty9g3DaV4SrSxv+jGgyfFh0B+Ws87tUo1efvuonXTcnqJDV+BPSDV5JIAaZC+T5jOyHXE0dfHKzfOhaLsa7rHIrjIP8MMmoEb55OOdXf8MYAmD7x8ltfnBdeHEU+XzXxUpN+2S0MC93qrsqNHYDjSKfyXSQUZdJ4yMqkT/5wdawANlB9XP7M68XQTyMIxSGAWT5iBmYszEUfKx1VcIBbJ52tRBqTG/Jjzo6pVYp9e/GlU9W72940A6KQIDAQAB"
     private static let openCLIBrowserBridgeUpdateURL = "https://clients2.google.com/service/update2/crx"
     private static let chromeManagedPolicyPath = "/Library/Managed Preferences/com.google.Chrome.plist"
     // 主动防御：默认不触碰宿主机全局 Chrome 策略，只有显式创建该开关文件才允许写入 force-install。
@@ -44,19 +46,38 @@ enum BrowserAccountManager {
         _ = try installTool(username: username, logURL: logURL)
         appendInstallLog("✓ ClawdHome 用户级浏览器工具已安装\n", logURL: logURL)
 
-        if installWarmupCompleted(username: username),
-           readOpenCLIProfile(username: username) != nil {
-            appendInstallLog("✓ 浏览器安装预热与 OpenCLI profile 初始化已完成，本次跳过重复打开\n", logURL: logURL)
-            return
+        let warmupDone = installWarmupCompleted(username: username)
+        let hasProfile = readOpenCLIProfile(username: username) != nil
+        var context: Context? = nil
+        var bridgeInstalled = false
+        if warmupDone || isChromeInstalled() {
+            context = try? resolveContext(username: username)
+            if let context {
+                bridgeInstalled = installedOpenCLIBrowserBridgeVersion(profilePath: context.paths.profileDirectory.path) != nil
+            }
+        }
+
+        if warmupDone, hasProfile {
+            if bridgeInstalled {
+                appendInstallLog("✓ 浏览器安装预热与 OpenCLI profile 初始化已完成，本次跳过重复打开\n", logURL: logURL)
+                return
+            }
+            if context == nil {
+                appendInstallLog("ℹ 检测到历史预热标记，且当前无可用图形会话，沿用已记录的 profile 状态\n", logURL: logURL)
+                return
+            }
+            appendInstallLog("⚠ 检测到历史预热标记，但当前 profile 未安装 OpenCLI Bridge，将执行一次强制预热修复\n", logURL: logURL)
         }
 
         guard isChromeInstalled() else {
             appendInstallLog("⚠ 未检测到 Google Chrome，已跳过浏览器预热。浏览器工具已安装，安装 Chrome 后可直接使用。\n", logURL: logURL)
             return
         }
+        guard let context else {
+            throw BrowserAccountError.noConsoleSession
+        }
 
         appendInstallLog("→ 首次打开用户级 Chrome 浏览器账号并写入 session\n", logURL: logURL)
-        let context = try resolveContext(username: username)
         let bridgePolicyAction = try ensureOpenCLIBrowserBridgeExtensionInstalled(context: context, logURL: logURL)
         switch bridgePolicyAction {
         case .configured(let policyPath):
@@ -77,6 +98,16 @@ enum BrowserAccountManager {
             let session = try open(username: username, requireBridge: true, enableCDPCapture: true)
             openedProfilePath = session.profilePath
             Thread.sleep(forTimeInterval: 0.8)
+            let bridgeExtensionPath = context.paths.openCLIBrowserBridgeExtensionDirectory.path
+            if ensureOpenCLIBrowserBridgeLoadedViaCDP(
+                port: session.cdpPort,
+                extensionPath: bridgeExtensionPath,
+                logURL: logURL
+            ) {
+                appendInstallLog("✓ OpenCLI Browser Bridge 已通过 CDP 加载（兼容新版 Chrome）\n", logURL: logURL)
+            } else {
+                appendInstallLog("⚠ OpenCLI Browser Bridge 未能通过 CDP 确认加载，后续将继续尝试 profile 捕获\n", logURL: logURL)
+            }
             do {
                 let profile = try captureAndPersistOpenCLIProfile(
                     username: username,
@@ -673,6 +704,89 @@ enum BrowserAccountManager {
         return nil
     }
 
+    private static func ensureOpenCLIBrowserBridgeLoadedViaCDP(
+        port: Int,
+        extensionPath: String,
+        logURL: URL?
+    ) -> Bool {
+        let manifestPath = "\(extensionPath)/manifest.json"
+        guard FileManager.default.fileExists(atPath: manifestPath) else {
+            appendInstallLog("⚠ CDP 加载扩展失败：未找到 manifest.json（\(manifestPath)）\n", logURL: logURL)
+            return false
+        }
+        guard let versionURL = URL(string: "http://127.0.0.1:\(port)/json/version"),
+              let versionPayload = readJSONObject(url: versionURL, timeout: 1.8) as? [String: Any],
+              let browserWS = versionPayload["webSocketDebuggerUrl"] as? String,
+              !browserWS.isEmpty,
+              let wsURL = URL(string: browserWS) else {
+            appendInstallLog("⚠ CDP 加载扩展失败：无法获取 browser websocket endpoint\n", logURL: logURL)
+            return false
+        }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 2
+        config.timeoutIntervalForResource = 2
+        let session = URLSession(configuration: config)
+        let task = session.webSocketTask(with: wsURL)
+        task.resume()
+        defer {
+            task.cancel(with: .goingAway, reason: nil)
+            session.invalidateAndCancel()
+        }
+
+        guard sendCDPCommand(
+            task: task,
+            id: 101,
+            method: "Extensions.loadUnpacked",
+            params: [
+                "path": extensionPath,
+                "enableInIncognito": false,
+            ]
+        ) else {
+            appendInstallLog("⚠ CDP 加载扩展失败：发送 Extensions.loadUnpacked 失败\n", logURL: logURL)
+            return false
+        }
+        guard let loadResponse = waitForCDPResponse(task: task, id: 101, timeout: 4.0) else {
+            appendInstallLog("⚠ CDP 加载扩展失败：未收到 Extensions.loadUnpacked 响应\n", logURL: logURL)
+            return false
+        }
+        if let error = loadResponse["error"] as? [String: Any] {
+            let code = error["code"] as? Int ?? -1
+            let message = error["message"] as? String ?? "unknown"
+            appendInstallLog("⚠ CDP 加载扩展失败：code=\(code) message=\(message)\n", logURL: logURL)
+            return false
+        }
+
+        let loadedID = ((loadResponse["result"] as? [String: Any])?["id"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !loadedID.isEmpty, loadedID != openCLIBrowserBridgeExtensionID {
+            appendInstallLog("⚠ CDP 加载扩展返回了意外 ID：\(loadedID)\n", logURL: logURL)
+            return false
+        }
+
+        guard sendCDPCommand(task: task, id: 102, method: "Extensions.getExtensions", params: [:]),
+              let listResponse = waitForCDPResponse(task: task, id: 102, timeout: 2.0),
+              let result = listResponse["result"] as? [String: Any],
+              let extensions = result["extensions"] as? [[String: Any]] else {
+            appendInstallLog("⚠ CDP 校验扩展失败：无法读取 Extensions.getExtensions\n", logURL: logURL)
+            return false
+        }
+        let matched = extensions.first(where: { item in
+            let id = (item["id"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return id == openCLIBrowserBridgeExtensionID
+        })
+        guard let matched else {
+            appendInstallLog("⚠ CDP 校验扩展失败：未在扩展列表中找到 OpenCLI Bridge\n", logURL: logURL)
+            return false
+        }
+        let enabled = (matched["isEnabled"] as? Bool) ?? true
+        if !enabled {
+            appendInstallLog("⚠ CDP 校验扩展失败：OpenCLI Bridge 已安装但未启用\n", logURL: logURL)
+            return false
+        }
+        return true
+    }
+
     private static func openCLIBridgeCDPTargetWebSocketURLs(port: Int) -> [String] {
         guard let url = URL(string: "http://127.0.0.1:\(port)/json/list"),
               let payload = readJSONObject(url: url, timeout: 1.2) as? [[String: Any]] else {
@@ -812,6 +926,36 @@ enum BrowserAccountManager {
         }
         _ = semaphore.wait(timeout: .now() + timeout)
         return message
+    }
+
+    private static func waitForCDPResponse(
+        task: URLSessionWebSocketTask,
+        id: Int,
+        timeout: TimeInterval
+    ) -> [String: Any]? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            guard let message = receiveCDPMessage(task: task, timeout: 0.5) else {
+                continue
+            }
+            let raw: String
+            switch message {
+            case .string(let text):
+                raw = text
+            case .data(let data):
+                raw = String(decoding: data, as: UTF8.self)
+            @unknown default:
+                continue
+            }
+            guard let data = raw.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let responseID = object["id"] as? Int,
+                  responseID == id else {
+                continue
+            }
+            return object
+        }
+        return nil
     }
 
     private static func readJSONObject(url: URL, timeout: TimeInterval) -> Any? {
@@ -1624,8 +1768,12 @@ enum BrowserAccountManager {
     ) throws {
         let targetDir = context.paths.openCLIBrowserBridgeExtensionDirectory.path
         let manifestPath = "\(targetDir)/manifest.json"
-        if FileManager.default.fileExists(atPath: manifestPath) {
+        if isBridgeManifestReady(manifestPath: manifestPath) {
             return
+        }
+
+        if FileManager.default.fileExists(atPath: manifestPath) {
+            appendInstallLog("⚠ 现有 OpenCLI Bridge manifest 不兼容，准备重新安装\n", logURL: logURL)
         }
 
         appendInstallLog("→ 下载并安装 OpenCLI Browser Bridge（profile 内加载）\n", logURL: logURL)
@@ -1699,6 +1847,7 @@ enum BrowserAccountManager {
             try fm.moveItem(atPath: targetDir, toPath: backup)
         }
         try fm.copyItem(atPath: sourceDir, toPath: targetDir)
+        try normalizeBridgeManifest(manifestPath: manifestPath)
         try FilePermissionHelper.chownRecursive(targetParent, owner: context.consoleUsername)
         try FilePermissionHelper.chmodRecursive(targetParent, mode: "755")
 
@@ -1706,6 +1855,29 @@ enum BrowserAccountManager {
             throw BrowserAccountError.commandFailed("扩展安装失败：manifest.json 缺失")
         }
         appendInstallLog("✓ OpenCLI Browser Bridge 已安装到 profile：\(targetDir)\n", logURL: logURL)
+    }
+
+    private static func isBridgeManifestReady(manifestPath: String) -> Bool {
+        guard let data = FileManager.default.contents(atPath: manifestPath),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        let key = (json["key"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let manifestVersion = json["manifest_version"] as? Int
+            ?? Int((json["manifest_version"] as? String) ?? "")
+        return manifestVersion == 3 && key == openCLIBrowserBridgeManifestKey
+    }
+
+    private static func normalizeBridgeManifest(manifestPath: String) throws {
+        guard let data = FileManager.default.contents(atPath: manifestPath),
+              var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw BrowserAccountError.commandFailed("扩展安装失败：manifest.json 解析失败")
+        }
+        json["key"] = openCLIBrowserBridgeManifestKey
+        json["update_url"] = openCLIBrowserBridgeUpdateURL
+
+        let normalized = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+        try normalized.write(to: URL(fileURLWithPath: manifestPath), options: .atomic)
     }
 
     private static func isGlobalChromePolicyInstallAllowed() -> Bool {
