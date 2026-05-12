@@ -2809,12 +2809,15 @@ if __name__ == "__main__":
 
 private let browserPipeLauncherScript = #"""
 #!/usr/bin/env python3
+import json
 import os
+import select
 import subprocess
 import sys
 import time
 
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+OPENCLI_EXTENSION_ID = "ildkmabpimmkaediidaifkhjpohdnifk"
 
 def log(home, message):
     try:
@@ -2824,6 +2827,98 @@ def log(home, message):
             f.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} pipe-launcher pid={os.getpid()} {message}\n")
     except Exception:
         pass
+
+def send_pipe_json(fd, payload):
+    body = (json.dumps(payload, separators=(",", ":")) + "\0").encode("utf-8")
+    os.write(fd, body)
+
+def recv_pipe_message(fd, timeout, state):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if b"\0" in state["buf"]:
+            raw, state["buf"] = state["buf"].split(b"\0", 1)
+            if not raw:
+                continue
+            try:
+                return json.loads(raw.decode("utf-8", errors="replace"))
+            except Exception:
+                continue
+        wait = max(0.0, deadline - time.time())
+        readable, _, _ = select.select([fd], [], [], wait)
+        if not readable:
+            continue
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            break
+        state["buf"] += chunk
+    return None
+
+def wait_pipe_response(fd, request_id, timeout, state):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        remaining = max(0.05, deadline - time.time())
+        msg = recv_pipe_message(fd, remaining, state)
+        if not isinstance(msg, dict):
+            continue
+        if msg.get("id") == request_id:
+            return msg
+    return None
+
+def load_extension_via_pipe(in_fd, out_fd, extension_dir, log_home):
+    state = {"buf": b""}
+    try:
+        send_pipe_json(in_fd, {
+            "id": 101,
+            "method": "Extensions.loadUnpacked",
+            "params": {
+                "path": extension_dir,
+                "enableInIncognito": False,
+            },
+        })
+        load_resp = wait_pipe_response(out_fd, 101, 6.0, state)
+        if not isinstance(load_resp, dict):
+            log(log_home, "pipe-load-extension timeout waiting id=101")
+            return False
+        if isinstance(load_resp.get("error"), dict):
+            err = load_resp["error"]
+            log(log_home, f"pipe-load-extension failed code={err.get('code')} message={err.get('message')!r}")
+            return False
+
+        loaded = ((load_resp.get("result") or {}).get("id") or "").strip()
+        if loaded and loaded != OPENCLI_EXTENSION_ID:
+            log(log_home, f"pipe-load-extension unexpected-id={loaded!r}")
+            return False
+
+        send_pipe_json(in_fd, {
+            "id": 102,
+            "method": "Extensions.getExtensions",
+            "params": {},
+        })
+        list_resp = wait_pipe_response(out_fd, 102, 3.0, state)
+        if not isinstance(list_resp, dict):
+            log(log_home, "pipe-verify-extension timeout waiting id=102")
+            return False
+        if isinstance(list_resp.get("error"), dict):
+            err = list_resp["error"]
+            log(log_home, f"pipe-verify-extension failed code={err.get('code')} message={err.get('message')!r}")
+            return False
+        extensions = ((list_resp.get("result") or {}).get("extensions") or [])
+        matched = None
+        for item in extensions:
+            if isinstance(item, dict) and (item.get("id") or "").strip() == OPENCLI_EXTENSION_ID:
+                matched = item
+                break
+        if not isinstance(matched, dict):
+            log(log_home, "pipe-verify-extension missing-opencli-extension")
+            return False
+        if matched.get("isEnabled") is False:
+            log(log_home, "pipe-verify-extension opencli-disabled")
+            return False
+        log(log_home, "pipe-load-extension success")
+        return True
+    except Exception as exc:
+        log(log_home, f"pipe-load-extension exception={exc!r}")
+        return False
 
 def main():
     if len(sys.argv) < 5:
@@ -2850,21 +2945,55 @@ def main():
     ]
     extension_dir = os.path.join(profile, "ClawdHomeExtensions", "opencli-browser-bridge")
     manifest_path = os.path.join(extension_dir, "manifest.json")
-    if os.path.exists(manifest_path):
+    extension_exists = os.path.exists(manifest_path)
+    if extension_exists:
         args.append(f"--load-extension={extension_dir}")
         log(log_home, f"load-extension path={extension_dir!r}")
     else:
         log(log_home, f"load-extension missing-manifest path={manifest_path!r}")
-    # 只在安装预热时短暂开启 CDP 端口读取扩展 context id；日常模式不携带 CDP 参数。
+
+    # Chrome 正式版已禁用命令行 --load-extension；改为所有模式统一走 pipe 注入。
+    use_pipe_extension = extension_exists
+    if use_pipe_extension:
+        args.append("--remote-debugging-pipe")
+        args.append("--enable-unsafe-extension-debugging")
+        log(log_home, "enable remote-debugging-pipe + unsafe-extension-debugging")
+    # 仅安装预热需要 CDP 端口，后续还要读取扩展 context id。
     if mode == "install-cdp":
         args.append(f"--remote-debugging-port={port}")
+
     log(log_home, f"exec chrome mode={mode} profile={profile!r} target={target!r} port={port!r}")
     try:
-        proc = subprocess.Popen(
-            args,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        proc = None
+        pipe_in_w = None
+        pipe_out_r = None
+        if use_pipe_extension:
+            pipe_in_r, pipe_in_w = os.pipe()
+            pipe_out_r, pipe_out_w = os.pipe()
+
+            def preexec():
+                os.dup2(pipe_in_r, 3)
+                os.dup2(pipe_out_w, 4)
+
+            proc = subprocess.Popen(
+                args,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                pass_fds=(pipe_in_r, pipe_out_w),
+                preexec_fn=preexec,
+            )
+            os.close(pipe_in_r)
+            os.close(pipe_out_w)
+            loaded = load_extension_via_pipe(pipe_in_w, pipe_out_r, extension_dir, log_home)
+            if not loaded:
+                log(log_home, "pipe-load-extension fallback=continuing-with-launched-browser")
+        else:
+            proc = subprocess.Popen(
+                args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         log(log_home, f"chrome started pid={proc.pid}")
         if hidden:
             time.sleep(1)
@@ -2873,6 +3002,16 @@ def main():
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+        if pipe_in_w is not None:
+            try:
+                os.close(pipe_in_w)
+            except Exception:
+                pass
+        if pipe_out_r is not None:
+            try:
+                os.close(pipe_out_r)
+            except Exception:
+                pass
         return 0
     except Exception as exc:
         log(log_home, f"failed runtime error={exc!r}")
