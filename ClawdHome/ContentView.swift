@@ -23,6 +23,7 @@ struct ContentView: View {
     @Environment(ShrimpPool.self)   private var pool
     @Environment(UpdateChecker.self) private var updater
     @Environment(AppLockStore.self) private var lockStore
+    @Environment(HostPermissionCenter.self) private var hostPermissionCenter
     @State private var daemonInstaller = DaemonInstaller()
     @State private var navSelection: NavDestination? = .clawPool
     @State private var chromeInstallCheckCompleted = false
@@ -201,10 +202,16 @@ struct ContentView: View {
             navSelection = .clawPool
         }
         .overlay(alignment: .top) {
-            // Helper 未连接时显示安装引导横幅（最顶层浮动）
-            if !helperClient.isConnected {
-                DaemonSetupBanner(installer: daemonInstaller)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+            VStack(spacing: 0) {
+                // Helper 未连接时显示安装引导横幅（最顶层浮动）
+                if !helperClient.isConnected {
+                    DaemonSetupBanner(installer: daemonInstaller)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                if hostPermissionCenter.hasIssues {
+                    HostPermissionBanner()
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
         }
         .overlay(alignment: .bottomTrailing) {
@@ -251,14 +258,17 @@ struct ContentView: View {
             let visible = (navSelection == .dashboard || navSelection == nil)
             pool.setDashboardVisible(visible)
             refreshChromeInstallStatus()
+            hostPermissionCenter.refresh()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshChromeInstallStatus()
+            hostPermissionCenter.refresh()
         }
         .onReceive(chromeInstallCheckTimer) { _ in
             if chromeInstallCheckCompleted && !isChromeInstalled {
                 refreshChromeInstallStatus()
             }
+            hostPermissionCenter.refresh()
         }
         .onChange(of: isChromeInstalled) { _, _ in
             checkForBrowserSessionInitializationPrompt()

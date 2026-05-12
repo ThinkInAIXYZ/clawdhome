@@ -36,6 +36,7 @@ struct SettingsView: View {
 private struct GeneralSettingsTab: View {
     @Environment(HelperClient.self) private var helperClient
     @Environment(ShrimpPool.self) private var pool
+    @Environment(HostPermissionCenter.self) private var hostPermissionCenter
     @Environment(\.openWindow) private var openWindow
     @State private var gatewayAutostart = true
     @State private var showGatewayActivationPreview = false
@@ -76,6 +77,45 @@ private struct GeneralSettingsTab: View {
 
     var body: some View {
         Form {
+            Section(L10n.k("settings.permissions.section", fallback: "系统权限")) {
+                HStack {
+                    Text(L10n.k("settings.permissions.accessibility", fallback: "辅助功能"))
+                    Spacer()
+                    permissionTag(for: hostPermissionCenter.accessibilityStatus)
+                }
+                HStack {
+                    Text(L10n.k("settings.permissions.chrome_automation", fallback: "Chrome 自动化"))
+                    Spacer()
+                    if hostPermissionCenter.chromeInstalled {
+                        permissionTag(for: hostPermissionCenter.chromeAutomationStatus)
+                    } else {
+                        Text(L10n.k("settings.permissions.chrome_not_installed", fallback: "未安装 Chrome"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                HStack(spacing: 10) {
+                    Button(L10n.k("settings.permissions.action.accessibility", fallback: "授权辅助功能")) {
+                        hostPermissionCenter.requestAccessibilityPermission()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(L10n.k("settings.permissions.action.chrome_automation", fallback: "授权 Chrome 自动化")) {
+                        hostPermissionCenter.requestChromeAutomationPermission()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!hostPermissionCenter.chromeInstalled)
+
+                    Button(L10n.k("settings.permissions.action.refresh", fallback: "刷新权限状态")) {
+                        hostPermissionCenter.refresh()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Text(L10n.k("settings.permissions.hint", fallback: "用于浏览器自动化与授权回调。若缺失权限，相关功能会失败。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(L10n.k("views.settings_view.language", fallback: "语言")) {
                 Picker(L10n.k("views.settings_view.language_4c0678", fallback: "显示语言"), selection: appLanguageBinding) {
                     Text(L10n.k("views.settings_view.follow_system", fallback: "跟随系统")).tag(AppLanguage.system)
@@ -254,6 +294,29 @@ private struct GeneralSettingsTab: View {
             if helperClient.isConnected {
                 gatewayAutostart = await helperClient.getGatewayAutostart()
             }
+            hostPermissionCenter.refresh()
+        }
+    }
+
+    @ViewBuilder
+    private func permissionTag(for status: HostPermissionCenter.PermissionStatus) -> some View {
+        switch status {
+        case .granted:
+            Text(L10n.k("settings.permissions.status.granted", fallback: "已授权"))
+                .font(.caption)
+                .foregroundStyle(.green)
+        case .requiresConsent:
+            Text(L10n.k("settings.permissions.status.pending", fallback: "待同意"))
+                .font(.caption)
+                .foregroundStyle(.orange)
+        case .denied:
+            Text(L10n.k("settings.permissions.status.denied", fallback: "已拒绝"))
+                .font(.caption)
+                .foregroundStyle(.red)
+        case .unavailable:
+            Text(L10n.k("settings.permissions.status.unavailable", fallback: "不可用"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

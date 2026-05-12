@@ -76,6 +76,7 @@ targets:
         CFBundleShortVersionString: "1.9.0"
         CFBundleIconFile: AppIcon.icns
         NSHumanReadableDescription: OpenClaw 家庭管理器
+        NSAppleEventsUsageDescription: ClawdHome 需要控制 Chrome 完成浏览器自动化与授权回调。
         LSApplicationCategoryType: public.app-category.utilities
 
   ClawdHomeCLI:

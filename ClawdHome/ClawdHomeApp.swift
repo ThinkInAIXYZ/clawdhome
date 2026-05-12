@@ -30,6 +30,7 @@ struct ClawdHomeApp: App {
     @State private var keychainStore = ProviderKeychainStore()
     @State private var gatewayHub = GatewayHub()
     @State private var lockStore = AppLockStore()
+    @State private var hostPermissionCenter = HostPermissionCenter()
     @State private var maintenanceWindowRegistry = MaintenanceWindowRegistry()
     @State private var promptLibraryStore = PromptLibraryStore()
     @AppStorage("appLanguage") private var appLanguageRaw = AppLanguage.system.rawValue
@@ -55,6 +56,7 @@ struct ClawdHomeApp: App {
                 .environment(keychainStore)
                 .environment(gatewayHub)
                 .environment(lockStore)
+                .environment(hostPermissionCenter)
                 .environment(maintenanceWindowRegistry)
                 .environment(promptLibraryStore)
                 .environment(\.locale, appLanguage.locale)
