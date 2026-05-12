@@ -1210,7 +1210,8 @@ enum BrowserAccountManager {
         let launcherPath = "/Library/Application Support/ClawdHome/BrowserLaunchers/\(username)/clawdhome-browser-launcher"
         let pipeLauncherPath = "/Library/Application Support/ClawdHome/BrowserLaunchers/\(username)/clawdhome-browser-pipe-launcher"
         if FileManager.default.isExecutableFile(atPath: launcherPath),
-           FileManager.default.isExecutableFile(atPath: pipeLauncherPath) {
+           FileManager.default.isExecutableFile(atPath: pipeLauncherPath),
+           !pipeLauncherScriptNeedsRefresh(pipeLauncherPath) {
             return
         }
         try FileManager.default.createDirectory(atPath: toolDir, withIntermediateDirectories: true)
@@ -1227,6 +1228,19 @@ enum BrowserAccountManager {
             throw BrowserAccountError.commandFailed(
                 "clawdhome-browser-launcher 权限异常：\(launcherPath) owner=\(owner ?? "?") group=\(group ?? "?") mode=\(String(mode, radix: 8))"
             )
+        }
+    }
+
+    private static func pipeLauncherScriptNeedsRefresh(_ path: String) -> Bool {
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return true
+        }
+        let requiredMarkers = [
+            #"use_pipe_extension = extension_exists and mode == "install-cdp""#,
+            "pass_fds=(3, 4)",
+        ]
+        return requiredMarkers.contains { marker in
+            !content.contains(marker)
         }
     }
 
@@ -2952,8 +2966,9 @@ def main():
     else:
         log(log_home, f"load-extension missing-manifest path={manifest_path!r}")
 
-    # Chrome 正式版已禁用命令行 --load-extension；改为所有模式统一走 pipe 注入。
-    use_pipe_extension = extension_exists
+    # Chrome 正式版已禁用命令行 --load-extension；仅在安装预热阶段走 pipe 注入，
+    # 让扩展写入 profile 持久化，运行态不依赖 pipe（避免 pipe 关闭后浏览器随之退出）。
+    use_pipe_extension = extension_exists and mode == "install-cdp"
     if use_pipe_extension:
         args.append("--remote-debugging-pipe")
         args.append("--enable-unsafe-extension-debugging")
@@ -2980,7 +2995,7 @@ def main():
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                pass_fds=(pipe_in_r, pipe_out_w),
+                pass_fds=(3, 4),
                 preexec_fn=preexec,
             )
             os.close(pipe_in_r)
