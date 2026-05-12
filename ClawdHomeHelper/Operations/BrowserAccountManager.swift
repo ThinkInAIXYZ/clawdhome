@@ -33,7 +33,6 @@ enum BrowserAccountManager {
     private static let openCLIBrowserBridgeManifestKey =
         "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzs2sa0xyaOirJPDWXH+dRFnnY05TNcUnKG95DkNxdWMH/UKD4G3gU63377A4Q6upmSXPYFY0jtC/Lfa1kpQYvenuaVOSndty9g3DaV4SrSxv+jGgyfFh0B+Ws87tUo1efvuonXTcnqJDV+BPSDV5JIAaZC+T5jOyHXE0dfHKzfOhaLsa7rHIrjIP8MMmoEb55OOdXf8MYAmD7x8ltfnBdeHEU+XzXxUpN+2S0MC93qrsqNHYDjSKfyXSQUZdJ4yMqkT/5wdawANlB9XP7M68XQTyMIxSGAWT5iBmYszEUfKx1VcIBbJ52tRBqTG/Jjzo6pVYp9e/GlU9W72940A6KQIDAQAB"
     private static let openCLIBrowserBridgeUpdateURL = "https://clients2.google.com/service/update2/crx"
-    private static let unsupportedDeveloperExtensionDisableReason = 16_777_216
     private static let chromeManagedPolicyPath = "/Library/Managed Preferences/com.google.Chrome.plist"
     // 主动防御：默认不触碰宿主机全局 Chrome 策略，只有显式创建该开关文件才允许写入 force-install。
     // 这样可以避免误把宿主机默认浏览器也强制安装 OpenCLI 扩展。
@@ -120,18 +119,6 @@ enum BrowserAccountManager {
                 appendInstallLog("⚠ OpenCLI profile 初始化失败（稍后可由 wrapper 自动补全）：\(error.localizedDescription)\n", logURL: logURL)
             }
             try closeWarmupBrowser(profilePath: openedProfilePath, logURL: logURL)
-            if try ensureOpenCLIBrowserBridgeAutoEnabled(context: context, logURL: logURL) {
-                appendInstallLog("✓ 已自动开启开发者模式并启用 OpenCLI 扩展\n", logURL: logURL)
-                // 触发一次短暂后台拉起，让 Chrome 自己消费并固化配置变更。
-                try spawnPipeBrowserLauncher(
-                    context: context,
-                    target: "about:blank",
-                    hidden: true,
-                    mode: "runtime"
-                )
-                Thread.sleep(forTimeInterval: 1.2)
-                try closeWarmupBrowser(profilePath: openedProfilePath, logURL: logURL)
-            }
         } catch {
             appendInstallLog("⚠ 浏览器预热失败，先关闭已打开的 Chrome profile\n", logURL: logURL)
             try? closeWarmupBrowser(profilePath: openedProfilePath, logURL: logURL)
@@ -1249,7 +1236,7 @@ enum BrowserAccountManager {
             return true
         }
         let requiredMarkers = [
-            #"use_pipe_extension = extension_exists and mode == "install-cdp""#,
+            #"use_pipe_extension = extension_exists and mode in ("install-cdp", "runtime", "bridge")"#,
             "pass_fds=(3, 4)",
         ]
         return requiredMarkers.contains { marker in
@@ -1994,17 +1981,6 @@ enum BrowserAccountManager {
         return mode == "force_installed" && updateURL == openCLIBrowserBridgeUpdateURL
     }
 
-    private static func ensureOpenCLIBrowserBridgeAutoEnabled(context: Context, logURL: URL?) throws -> Bool {
-        var changed = false
-        if try ensureProfileDeveloperModeEnabled(context: context) {
-            changed = true
-        }
-        if try ensureOpenCLIBrowserBridgeEnabledInSecurePreferences(context: context, logURL: logURL) {
-            changed = true
-        }
-        return changed
-    }
-
     /// 仅在 ClawdHome 实例专属 profile 内开启开发者模式，避免影响宿主机默认 profile。
     private static func ensureProfileDeveloperModeEnabled(context: Context) throws -> Bool {
         let fm = FileManager.default
@@ -2042,117 +2018,6 @@ enum BrowserAccountManager {
         try output.write(to: preferencesURL, options: .atomic)
         try FilePermissionHelper.chown(preferencesPath, owner: context.consoleUsername)
         try FilePermissionHelper.chmod(preferencesPath, mode: "600")
-        return true
-    }
-
-    private static func ensureOpenCLIBrowserBridgeEnabledInSecurePreferences(
-        context: Context,
-        logURL: URL?
-    ) throws -> Bool {
-        let fm = FileManager.default
-        let securePreferencesURL = URL(fileURLWithPath: context.paths.profileDirectory.path, isDirectory: true)
-            .appendingPathComponent("Default", isDirectory: true)
-            .appendingPathComponent("Secure Preferences")
-        let securePreferencesPath = securePreferencesURL.path
-        guard fm.fileExists(atPath: securePreferencesPath) else {
-            return false
-        }
-
-        let raw = try Data(contentsOf: securePreferencesURL)
-        guard !raw.isEmpty else { return false }
-        let json = try JSONSerialization.jsonObject(with: raw)
-        guard var root = json as? [String: Any] else {
-            throw BrowserAccountError.commandFailed("Chrome Secure Preferences 格式无效：\(securePreferencesPath)")
-        }
-        guard var extensions = root["extensions"] as? [String: Any],
-              var settings = extensions["settings"] as? [String: Any],
-              var bridge = settings[openCLIBrowserBridgeExtensionID] as? [String: Any] else {
-            return false
-        }
-
-        var changed = false
-        if let rawReasons = bridge["disable_reasons"] as? [Any] {
-            let reasons = rawReasons.compactMap(decodeDisableReason)
-            let filtered = reasons.filter { $0 != unsupportedDeveloperExtensionDisableReason }
-            if filtered.count != reasons.count {
-                changed = true
-                if filtered.isEmpty {
-                    bridge.removeValue(forKey: "disable_reasons")
-                } else {
-                    bridge["disable_reasons"] = filtered
-                }
-                appendInstallLog("✓ 已移除 OpenCLI 扩展的开发者模式禁用标记\n", logURL: logURL)
-            }
-        }
-
-        if (bridge["state"] as? Int) != 1 {
-            bridge["state"] = 1
-            changed = true
-        }
-        if let activeBit = bridge["active_bit"] as? Bool, !activeBit {
-            bridge["active_bit"] = true
-            changed = true
-        }
-        if (bridge["ack_external"] as? Bool) != true {
-            bridge["ack_external"] = true
-            changed = true
-        }
-
-        guard changed else { return false }
-
-        settings[openCLIBrowserBridgeExtensionID] = bridge
-        extensions["settings"] = settings
-        root["extensions"] = extensions
-        _ = clearSecurePreferenceProtectionMACsForBridge(root: &root)
-
-        let output = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
-        try output.write(to: securePreferencesURL, options: .atomic)
-        try FilePermissionHelper.chown(securePreferencesPath, owner: context.consoleUsername)
-        try FilePermissionHelper.chmod(securePreferencesPath, mode: "600")
-        return true
-    }
-
-    private static func decodeDisableReason(_ raw: Any) -> Int? {
-        if let value = raw as? Int { return value }
-        if let value = raw as? NSNumber { return value.intValue }
-        if let value = raw as? String { return Int(value) }
-        return nil
-    }
-
-    private static func clearSecurePreferenceProtectionMACsForBridge(root: inout [String: Any]) -> Bool {
-        guard var protection = root["protection"] as? [String: Any],
-              var macs = protection["macs"] as? [String: Any],
-              var extensions = macs["extensions"] as? [String: Any] else {
-            return false
-        }
-
-        var changed = false
-
-        if var settings = extensions["settings"] as? [String: Any],
-           settings.removeValue(forKey: openCLIBrowserBridgeExtensionID) != nil {
-            extensions["settings"] = settings
-            changed = true
-        }
-        if var settingsHashes = extensions["settings_encrypted_hash"] as? [String: Any],
-           settingsHashes.removeValue(forKey: openCLIBrowserBridgeExtensionID) != nil {
-            extensions["settings_encrypted_hash"] = settingsHashes
-            changed = true
-        }
-        if var ui = extensions["ui"] as? [String: Any] {
-            let removedDeveloperMode = ui.removeValue(forKey: "developer_mode") != nil
-            let removedDeveloperModeHash = ui.removeValue(forKey: "developer_mode_encrypted_hash") != nil
-            if removedDeveloperMode || removedDeveloperModeHash {
-                extensions["ui"] = ui
-                changed = true
-            }
-        }
-
-        guard changed else { return false }
-
-        macs["extensions"] = extensions
-        protection["macs"] = macs
-        protection.removeValue(forKey: "super_mac")
-        root["protection"] = protection
         return true
     }
 
@@ -3148,9 +3013,9 @@ def main():
     else:
         log(log_home, f"load-extension missing-manifest path={manifest_path!r}")
 
-    # Chrome 正式版已禁用命令行 --load-extension；仅在安装预热阶段走 pipe 注入，
-    # 让扩展写入 profile 持久化，运行态不依赖 pipe（避免 pipe 关闭后浏览器随之退出）。
-    use_pipe_extension = extension_exists and mode == "install-cdp"
+    # Chrome 正式版已禁用命令行 --load-extension；统一走 pipe 注入，确保每次启动都能拉起 OpenCLI 扩展。
+    # 实测 pipe fd 关闭后浏览器进程不会随之退出，可安全用于 runtime/bridge/install-cdp 三种模式。
+    use_pipe_extension = extension_exists and mode in ("install-cdp", "runtime", "bridge")
     if use_pipe_extension:
         args.append("--remote-debugging-pipe")
         args.append("--enable-unsafe-extension-debugging")
