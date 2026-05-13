@@ -144,7 +144,27 @@ extension ClawdHomeHelperImpl {
                 fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
         }
 
-        // 检查 8：环境变量契约（zprofile / 代理托管块 / Gateway 运行时）
+        if let issue = InstallManager.sharedNpmCachePermissionIssue() {
+            var fixed: Bool? = nil
+            var fixError: String? = nil
+            if fix {
+                do {
+                    try InstallManager.ensureSharedNpmCacheReady()
+                    fixed = InstallManager.sharedNpmCachePermissionIssue() == nil
+                    if fixed == false { fixError = "修复后重新检查仍存在异常" }
+                } catch {
+                    fixed = false
+                    fixError = error.localizedDescription
+                }
+            }
+            items.append(DiagnosticItem(
+                id: "npm-shared-cache-perms", group: .permissions, severity: "critical",
+                title: "npm 共享缓存权限异常",
+                detail: issue,
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
+        }
+
+        // 检查 9：环境变量契约（zprofile / 代理托管块 / Gateway 运行时）
         items += diagEnvContract(username: username, fix: fix)
 
         // --- 应用安全审计（openclaw security audit --json）---
@@ -1347,6 +1367,26 @@ extension ClawdHomeHelperImpl {
         checkOwner(id: "perm-openclaw-owner", path: openclawDir, title: ".openclaw 目录归属错误", recursive: true)
         checkOwner(id: "perm-config-owner", path: configFile, title: "配置文件归属错误", recursive: false)
         checkOwner(id: "perm-npm-owner", path: npmGlobal, title: "npm 全局目录归属错误", recursive: true)
+
+        if let issue = InstallManager.sharedNpmCachePermissionIssue() {
+            var fixed: Bool? = nil
+            var fixError: String? = nil
+            if fix {
+                do {
+                    try InstallManager.ensureSharedNpmCacheReady()
+                    fixed = InstallManager.sharedNpmCachePermissionIssue() == nil
+                    if fixed == false { fixError = "修复后重新检查仍存在异常" }
+                } catch {
+                    fixed = false
+                    fixError = error.localizedDescription
+                }
+            }
+            items.append(DiagnosticItem(
+                id: "perm-npm-shared-cache", group: .permissions, severity: "critical",
+                title: "npm 共享缓存权限异常",
+                detail: issue,
+                fixable: true, fixed: fixed, fixError: fixError, latencyMs: nil))
+        }
 
         if items.isEmpty {
             items.append(DiagnosticItem(

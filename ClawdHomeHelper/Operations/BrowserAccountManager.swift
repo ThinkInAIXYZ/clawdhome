@@ -441,6 +441,9 @@ enum BrowserAccountManager {
         guard BrowserAccountPaths.isValidUsername(username) else {
             throw BrowserAccountError.invalidUsername
         }
+        try InstallManager.normalizeNpmUserOwnership(username: username)
+        try InstallManager.ensureSharedNpmCacheReady()
+        defer { InstallManager.repairSharedNpmCachePermissions() }
         let npmPath = try InstallManager.findNpmBinary(for: username)
         let prefix = InstallManager.npmGlobalDir(for: username)
         let nodePath = ConfigWriter.buildNodePath(username: username)
@@ -449,10 +452,23 @@ enum BrowserAccountManager {
         let args = ["-n", "-u", username, "-H", "/usr/bin/env"]
             + envArgs
             + [npmPath, "install", "-g", "--prefix", prefix, "@jackwener/opencli@latest"]
-        if let logURL {
-            _ = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
-        } else {
-            _ = try run("/usr/bin/sudo", args: args)
+        do {
+            if let logURL {
+                _ = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
+            } else {
+                _ = try run("/usr/bin/sudo", args: args)
+            }
+        } catch {
+            if InstallManager.isNpmPermissionError(error) {
+                try InstallManager.ensureSharedNpmCacheReady()
+                if let logURL {
+                    _ = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
+                } else {
+                    _ = try run("/usr/bin/sudo", args: args)
+                }
+            } else {
+                throw error
+            }
         }
         _ = try installTool(username: username)
     }
@@ -1249,11 +1265,11 @@ enum BrowserAccountManager {
 
         appendInstallLog("→ 默认安装 OpenCLI：@jackwener/opencli\n", logURL: logURL)
         try InstallManager.ensureNpmBuildToolchainReady()
+        try InstallManager.normalizeNpmUserOwnership(username: username)
+        try InstallManager.ensureSharedNpmCacheReady()
+        defer { InstallManager.repairSharedNpmCachePermissions() }
         try FileManager.default.createDirectory(atPath: binDir, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(atPath: UserEnvContract.npmSharedCacheDir(), withIntermediateDirectories: true)
         try FilePermissionHelper.chownRecursive(prefix, owner: username)
-        try? FilePermissionHelper.chmod("/var/lib/clawdhome/cache", mode: "1777")
-        try? FilePermissionHelper.chmod(UserEnvContract.npmSharedCacheDir(), mode: "1777")
 
         let nodePath = ConfigWriter.buildNodePath(username: username)
         let envArgs = UserEnvContract
@@ -1268,10 +1284,23 @@ enum BrowserAccountManager {
                 "--loglevel", "warn",
                 "@jackwener/opencli",
             ]
-        if let logURL {
-            _ = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
-        } else {
-            _ = try run("/usr/bin/sudo", args: args)
+        do {
+            if let logURL {
+                _ = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
+            } else {
+                _ = try run("/usr/bin/sudo", args: args)
+            }
+        } catch {
+            if InstallManager.isNpmPermissionError(error) {
+                try InstallManager.ensureSharedNpmCacheReady()
+                if let logURL {
+                    _ = try runLogging("/usr/bin/sudo", args: args, logURL: logURL)
+                } else {
+                    _ = try run("/usr/bin/sudo", args: args)
+                }
+            } else {
+                throw error
+            }
         }
         try FilePermissionHelper.chownRecursive(prefix, owner: username)
         appendInstallLog("✓ OpenCLI 默认安装完成\n", logURL: logURL)

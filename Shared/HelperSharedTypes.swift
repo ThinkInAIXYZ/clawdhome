@@ -259,6 +259,38 @@ enum ManagedUserFilter {
     }
 }
 
+enum IsolatedNodeToolLookup {
+    static func candidateBinaryPaths(
+        brewRoot: String,
+        executableName: String,
+        cellarFormulaVersions: [String: [String]],
+        libNodeEntries: [String]
+    ) -> [String] {
+        var candidates = [
+            "\(brewRoot)/bin/\(executableName)",
+            "\(brewRoot)/opt/node/bin/\(executableName)",
+            "\(brewRoot)/opt/node@24/bin/\(executableName)",
+            "\(brewRoot)/opt/node@22/bin/\(executableName)",
+            "\(brewRoot)/opt/node@20/bin/\(executableName)",
+            "\(brewRoot)/opt/node@18/bin/\(executableName)",
+        ]
+
+        for entry in libNodeEntries.sorted(by: >) where entry.hasPrefix("node-") {
+            candidates.append("\(brewRoot)/lib/nodejs/\(entry)/bin/\(executableName)")
+        }
+
+        for formula in cellarFormulaVersions.keys.sorted() {
+            let versions = cellarFormulaVersions[formula]?.sorted(by: >) ?? []
+            for version in versions {
+                candidates.append("\(brewRoot)/Cellar/\(formula)/\(version)/bin/\(executableName)")
+            }
+        }
+
+        var seen = Set<String>()
+        return candidates.filter { seen.insert($0).inserted }
+    }
+}
+
 struct HomebrewCacheStats: Codable, Equatable {
     var path: String
     var totalBytes: Int64

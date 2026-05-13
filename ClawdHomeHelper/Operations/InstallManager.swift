@@ -181,28 +181,13 @@ struct InstallManager {
     // MARK: - 内部工具
 
     static func findNpmBinary(for username: String) throws -> String {
-        let home = "/Users/\(username)"
-        let brewRoot = "\(home)/.brew"
-        var candidates = [
-            "\(brewRoot)/bin/npm",
-            "\(brewRoot)/opt/node/bin/npm",
-            "\(brewRoot)/opt/node@24/bin/npm",
-            "\(brewRoot)/opt/node@22/bin/npm",
-            "\(brewRoot)/opt/node@20/bin/npm",
-            "\(brewRoot)/opt/node@18/bin/npm",
-        ]
-        let cellar = "\(brewRoot)/Cellar"
-        if let entries = try? FileManager.default.contentsOfDirectory(atPath: cellar) {
-            let nodeFormulae = entries.filter { $0 == "node" || $0.hasPrefix("node@") }.sorted()
-            for formula in nodeFormulae {
-                let formulaDir = "\(cellar)/\(formula)"
-                if let versions = try? FileManager.default.contentsOfDirectory(atPath: formulaDir).sorted(by: >) {
-                    for version in versions {
-                        candidates.append("\(formulaDir)/\(version)/bin/npm")
-                    }
-                }
-            }
-        }
+        let brewRoot = UserEnvContract.brewRoot(username: username)
+        let candidates = IsolatedNodeToolLookup.candidateBinaryPaths(
+            brewRoot: brewRoot,
+            executableName: "npm",
+            cellarFormulaVersions: nodeFormulaVersions(in: "\(brewRoot)/Cellar"),
+            libNodeEntries: nodeLibEntries(in: "\(brewRoot)/lib/nodejs")
+        )
         for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
             return path
         }
@@ -224,7 +209,7 @@ struct InstallManager {
         }
     }
 
-    private static func normalizeNpmUserOwnership(username: String) throws {
+    static func normalizeNpmUserOwnership(username: String) throws {
         let home = "/Users/\(username)"
         let npmCacheDir = "\(home)/.npm"
         let npmrcPath = "\(home)/.npmrc"
@@ -259,7 +244,7 @@ struct InstallManager {
         }
     }
 
-    private static func ensureSharedNpmCacheReady() throws {
+    static func ensureSharedNpmCacheReady() throws {
         let sharedRoot = "/var/lib/clawdhome/cache"
         let sharedNpmCache = UserEnvContract.npmSharedCacheDir()
         try FileManager.default.createDirectory(
@@ -271,7 +256,7 @@ struct InstallManager {
         repairSharedNpmCachePermissions()
     }
 
-    private static func repairSharedNpmCachePermissions() {
+    static func repairSharedNpmCachePermissions() {
         let sharedNpmCache = UserEnvContract.npmSharedCacheDir()
         guard FileManager.default.fileExists(atPath: sharedNpmCache) else { return }
         // npm 的内容寻址缓存会递归建目录；这里统一放宽 cache 树权限，避免首个用户写入后其余用户无法复用。
@@ -279,12 +264,39 @@ struct InstallManager {
         _ = try? FilePermissionHelper.chmod(sharedNpmCache, mode: "1777")
     }
 
-    private static func isNpmPermissionError(_ error: Error) -> Bool {
+    static func isNpmPermissionError(_ error: Error) -> Bool {
         guard case let ShellError.nonZeroExit(_, _, stderr) = error else { return false }
         let normalized = stderr.lowercased()
         return normalized.contains("eacces")
             || normalized.contains("errno -13")
             || normalized.contains("permission denied")
+    }
+
+    static func sharedNpmCachePermissionIssue() -> String? {
+        let sharedNpmCache = UserEnvContract.npmSharedCacheDir()
+        guard FileManager.default.fileExists(atPath: sharedNpmCache) else { return nil }
+
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: sharedNpmCache),
+           let perms = attrs[.posixPermissions] as? Int,
+           perms != 0o1777 {
+            return "\(sharedNpmCache) 当前权限 \(String(format: "%o", perms))，应为 1777"
+        }
+
+        let args = [
+            sharedNpmCache,
+            "-mindepth", "1",
+            "(",
+                "!", "-perm", "-0002",
+                "-o",
+                "(", "-type", "d", "!", "-perm", "-0001", ")",
+            ")",
+            "-print",
+            "-quit",
+        ]
+        guard let output = try? run("/usr/bin/find", args: args) else { return nil }
+        let firstBrokenPath = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !firstBrokenPath.isEmpty else { return nil }
+        return "\(firstBrokenPath) 缺少共享可写权限，npm 共享缓存可能触发 EACCES"
     }
 
     /// 查询 Xcode/CLT 状态，用于 UI 展示和安装前预检。
@@ -633,32 +645,12 @@ struct InstallManager {
     /// 在 .brew 下查找实际的 node/npm 二进制路径
     private static func findActualBinary(username: String, name: String) -> String? {
         let brewRoot = UserEnvContract.brewRoot(username: username)
-        var candidates = [
-            "\(brewRoot)/opt/node/bin/\(name)",
-            "\(brewRoot)/opt/node@24/bin/\(name)",
-            "\(brewRoot)/opt/node@22/bin/\(name)",
-            "\(brewRoot)/opt/node@20/bin/\(name)",
-            "\(brewRoot)/opt/node@18/bin/\(name)",
-        ]
-        // 扫描 .brew/lib/nodejs
-        let libNodeRoot = "\(brewRoot)/lib/nodejs"
-        if let entries = try? FileManager.default.contentsOfDirectory(atPath: libNodeRoot).sorted(by: >) {
-            for entry in entries where entry.hasPrefix("node-") {
-                candidates.append("\(libNodeRoot)/\(entry)/bin/\(name)")
-            }
-        }
-        // 扫描 Cellar
-        let cellar = "\(brewRoot)/Cellar"
-        if let entries = try? FileManager.default.contentsOfDirectory(atPath: cellar) {
-            for formula in entries.filter({ $0 == "node" || $0.hasPrefix("node@") }).sorted() {
-                let formulaDir = "\(cellar)/\(formula)"
-                if let versions = try? FileManager.default.contentsOfDirectory(atPath: formulaDir).sorted(by: >) {
-                    for version in versions {
-                        candidates.append("\(formulaDir)/\(version)/bin/\(name)")
-                    }
-                }
-            }
-        }
+        let candidates = IsolatedNodeToolLookup.candidateBinaryPaths(
+            brewRoot: brewRoot,
+            executableName: name,
+            cellarFormulaVersions: nodeFormulaVersions(in: "\(brewRoot)/Cellar"),
+            libNodeEntries: nodeLibEntries(in: "\(brewRoot)/lib/nodejs")
+        )
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
@@ -687,6 +679,20 @@ struct InstallManager {
             )
         }
         return (username, uid)
+    }
+
+    private static func nodeFormulaVersions(in cellar: String) -> [String: [String]] {
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: cellar) else { return [:] }
+        var result: [String: [String]] = [:]
+        for formula in entries where formula == "node" || formula.hasPrefix("node@") {
+            let formulaDir = "\(cellar)/\(formula)"
+            result[formula] = (try? FileManager.default.contentsOfDirectory(atPath: formulaDir).sorted(by: >)) ?? []
+        }
+        return result
+    }
+
+    private static func nodeLibEntries(in libNodeRoot: String) -> [String] {
+        (try? FileManager.default.contentsOfDirectory(atPath: libNodeRoot)) ?? []
     }
 }
 
