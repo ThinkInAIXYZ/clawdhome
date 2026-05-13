@@ -40,6 +40,8 @@ enum BrowserAccountManager {
     private static let openCLIReleaseAPIURL = "https://api.github.com/repos/jackwener/opencli/releases/latest"
     private static let openCLIDefaultDaemonPort = 19825
     private static let openCLIDefaultCDPCapturePort = 9222
+    // Chromium: DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION = 1 << 24
+    private static let disableUnsupportedDeveloperExtensionReason = 1 << 24
 
     static func prepareForRuntimeInstall(username: String, logURL: URL? = nil) throws {
         appendInstallLog("→ 安装 ClawdHome 用户级浏览器工具\n", logURL: logURL)
@@ -50,15 +52,19 @@ enum BrowserAccountManager {
         let hasProfile = readOpenCLIProfile(username: username) != nil
         var context: Context? = nil
         var bridgeInstalled = false
+        var needsDevModeRemediation = false
         if warmupDone || isChromeInstalled() {
             context = try? resolveContext(username: username)
             if let context {
                 bridgeInstalled = installedOpenCLIBrowserBridgeVersion(profilePath: context.paths.profileDirectory.path) != nil
+                needsDevModeRemediation = openCLIBrowserBridgeNeedsDeveloperModeRemediation(
+                    profilePath: context.paths.profileDirectory.path
+                )
             }
         }
 
         if warmupDone, hasProfile {
-            if bridgeInstalled {
+            if bridgeInstalled, !needsDevModeRemediation {
                 appendInstallLog("✓ 浏览器安装预热与 OpenCLI profile 初始化已完成，本次跳过重复打开\n", logURL: logURL)
                 return
             }
@@ -66,7 +72,11 @@ enum BrowserAccountManager {
                 appendInstallLog("ℹ 检测到历史预热标记，且当前无可用图形会话，沿用已记录的 profile 状态\n", logURL: logURL)
                 return
             }
-            appendInstallLog("⚠ 检测到历史预热标记，但当前 profile 未安装 OpenCLI Bridge，将执行一次强制预热修复\n", logURL: logURL)
+            if needsDevModeRemediation {
+                appendInstallLog("⚠ 检测到 OpenCLI Bridge 被 Chrome 判定为开发扩展禁用，将执行一次自动修复（开启开发者模式并启用扩展）\n", logURL: logURL)
+            } else {
+                appendInstallLog("⚠ 检测到历史预热标记，但当前 profile 未安装 OpenCLI Bridge，将执行一次强制预热修复\n", logURL: logURL)
+            }
         }
 
         guard isChromeInstalled() else {
@@ -107,6 +117,11 @@ enum BrowserAccountManager {
                 appendInstallLog("✓ OpenCLI Browser Bridge 已通过 CDP 加载（兼容新版 Chrome）\n", logURL: logURL)
             } else {
                 appendInstallLog("⚠ OpenCLI Browser Bridge 未能通过 CDP 确认加载，后续将继续尝试 profile 捕获\n", logURL: logURL)
+            }
+            if ensureOpenCLIBrowserBridgeActivatedViaExtensionsPageCDP(port: session.cdpPort, logURL: logURL) {
+                appendInstallLog("✓ 已自动开启扩展页开发者模式并启用 OpenCLI Bridge\n", logURL: logURL)
+            } else {
+                appendInstallLog("⚠ 自动开启开发者模式/启用扩展失败，后续将依赖 bridge 启动继续尝试\n", logURL: logURL)
             }
             do {
                 let profile = try captureAndPersistOpenCLIProfile(
@@ -787,6 +802,151 @@ enum BrowserAccountManager {
         return true
     }
 
+    private static func ensureOpenCLIBrowserBridgeActivatedViaExtensionsPageCDP(
+        port: Int,
+        logURL: URL?
+    ) -> Bool {
+        guard let webSocketDebuggerURL = openCLIExtensionsPageCDPTargetWebSocketURL(port: port),
+              let wsURL = URL(string: webSocketDebuggerURL) else {
+            appendInstallLog("⚠ 自动启用扩展失败：无法打开 chrome://extensions 的 CDP 目标\n", logURL: logURL)
+            return false
+        }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 2
+        config.timeoutIntervalForResource = 2
+        let session = URLSession(configuration: config)
+        let task = session.webSocketTask(with: wsURL)
+        task.resume()
+        defer {
+            task.cancel(with: .goingAway, reason: nil)
+            session.invalidateAndCancel()
+        }
+
+        guard sendCDPCommand(task: task, id: 201, method: "Runtime.enable", params: [:]) else {
+            appendInstallLog("⚠ 自动启用扩展失败：发送 Runtime.enable 失败\n", logURL: logURL)
+            return false
+        }
+
+        let expression = """
+        (async () => {
+          const EXT_ID = "\(openCLIBrowserBridgeExtensionID)";
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          const deadline = Date.now() + 9000;
+          let sawDevToggle = false;
+          let sawItem = false;
+          while (Date.now() < deadline) {
+            const manager = document.querySelector("extensions-manager");
+            const list = manager?.shadowRoot?.querySelector("extensions-item-list");
+            const toolbar = manager?.shadowRoot?.querySelector("extensions-toolbar");
+            const devToggle = toolbar?.shadowRoot?.querySelector("#devMode");
+            if (!manager || !list?.shadowRoot) {
+              await sleep(150);
+              continue;
+            }
+            if (devToggle) sawDevToggle = true;
+            let devChanged = false;
+            if (devToggle && !devToggle.checked) {
+              devToggle.click();
+              devChanged = true;
+              await sleep(220);
+            }
+            const items = Array.from(list.shadowRoot.querySelectorAll("extensions-item"));
+            const item = items.find((node) => {
+              const dataId = node?.data && typeof node.data.id === "string" ? node.data.id : "";
+              const attrId = node.getAttribute("id")
+                || node.getAttribute("extension-id")
+                || (node.dataset && node.dataset.extensionId)
+                || "";
+              const current = (dataId || attrId).trim();
+              return current === EXT_ID;
+            });
+            if (!item) {
+              await sleep(150);
+              continue;
+            }
+            sawItem = true;
+            const enableToggle = item.shadowRoot?.querySelector("#enableToggle");
+            if (!enableToggle) {
+              await sleep(150);
+              continue;
+            }
+            if (!enableToggle.checked) {
+              enableToggle.click();
+              await sleep(220);
+            }
+            if (!enableToggle.checked && !enableToggle.disabled) {
+              enableToggle.click();
+              await sleep(220);
+            }
+            return {
+              ok: true,
+              reason: "done",
+              devNow: !!devToggle?.checked,
+              devChanged,
+              enabled: !!enableToggle.checked,
+              toggleDisabled: !!enableToggle.disabled,
+              itemCount: items.length,
+            };
+          }
+          return { ok: false, reason: "timeout", devNow: false, enabled: false, sawDevToggle, sawItem };
+        })()
+        """
+        guard sendCDPCommand(
+            task: task,
+            id: 202,
+            method: "Runtime.evaluate",
+            params: [
+                "expression": expression,
+                "awaitPromise": true,
+                "returnByValue": true,
+            ]
+        ) else {
+            appendInstallLog("⚠ 自动启用扩展失败：发送 Runtime.evaluate 失败\n", logURL: logURL)
+            return false
+        }
+        guard let response = waitForCDPResponse(task: task, id: 202, timeout: 12),
+              let result = response["result"] as? [String: Any],
+              let runtimeResult = result["result"] as? [String: Any],
+              let value = runtimeResult["value"] as? [String: Any] else {
+            appendInstallLog("⚠ 自动启用扩展失败：未收到有效的 Runtime.evaluate 响应\n", logURL: logURL)
+            return false
+        }
+        let ok = (value["ok"] as? Bool) ?? false
+        let devNow = (value["devNow"] as? Bool) ?? false
+        let enabled = (value["enabled"] as? Bool) ?? false
+        if ok, devNow, enabled {
+            return true
+        }
+        let reason = (value["reason"] as? String) ?? "unknown"
+        appendInstallLog(
+            "⚠ 自动启用扩展失败：reason=\(reason) devNow=\(devNow) enabled=\(enabled)\n",
+            logURL: logURL
+        )
+        return false
+    }
+
+    private static func openCLIExtensionsPageCDPTargetWebSocketURL(port: Int) -> String? {
+        if let newURL = URL(string: "http://127.0.0.1:\(port)/json/new?chrome://extensions/") {
+            var request = URLRequest(url: newURL)
+            request.httpMethod = "PUT"
+            request.timeoutInterval = 2.2
+            if let payload = readJSONObject(request: request, timeout: 2.2) as? [String: Any],
+               let ws = payload["webSocketDebuggerUrl"] as? String,
+               !ws.isEmpty {
+                return ws
+            }
+        }
+        guard let listURL = URL(string: "http://127.0.0.1:\(port)/json/list"),
+              let payload = readJSONObject(url: listURL, timeout: 1.2) as? [[String: Any]] else {
+            return nil
+        }
+        return payload.first { item in
+            let pageURL = (item["url"] as? String ?? "").lowercased()
+            return pageURL.hasPrefix("chrome://extensions")
+        }?["webSocketDebuggerUrl"] as? String
+    }
+
     private static func openCLIBridgeCDPTargetWebSocketURLs(port: Int) -> [String] {
         guard let url = URL(string: "http://127.0.0.1:\(port)/json/list"),
               let payload = readJSONObject(url: url, timeout: 1.2) as? [[String: Any]] else {
@@ -959,6 +1119,13 @@ enum BrowserAccountManager {
     }
 
     private static func readJSONObject(url: URL, timeout: TimeInterval) -> Any? {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = timeout
+        return readJSONObject(request: request, timeout: timeout)
+    }
+
+    private static func readJSONObject(request: URLRequest, timeout: TimeInterval) -> Any? {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = timeout
         config.timeoutIntervalForResource = timeout
@@ -968,7 +1135,7 @@ enum BrowserAccountManager {
         let semaphore = DispatchSemaphore(value: 0)
         var responseData: Data?
         var responseError: Error?
-        let task = session.dataTask(with: url) { data, _, error in
+        let task = session.dataTask(with: request) { data, _, error in
             responseData = data
             responseError = error
             semaphore.signal()
@@ -1236,7 +1403,8 @@ enum BrowserAccountManager {
             return true
         }
         let requiredMarkers = [
-            #"use_pipe_extension = extension_exists and mode in ("install-cdp", "runtime", "bridge")"#,
+            #"use_pipe_extension = extension_exists and mode in ("install-cdp", "bridge")"#,
+            "keep-debugging-pipe-alive",
             "pass_fds=(3, 4)",
         ]
         return requiredMarkers.contains { marker in
@@ -1750,13 +1918,6 @@ enum BrowserAccountManager {
         if !isGlobalChromePolicyInstallAllowed() {
             try ensureOpenCLIBrowserBridgeUnpackedExtensionReady(context: context, logURL: logURL)
             do {
-                if try ensureProfileDeveloperModeEnabled(context: context) {
-                    appendInstallLog("✓ 已为实例专属 Chrome profile 自动开启开发者模式\n", logURL: logURL)
-                }
-            } catch {
-                appendInstallLog("⚠ 自动开启实例 profile 开发者模式失败：\(error.localizedDescription)\n", logURL: logURL)
-            }
-            do {
                 if try removeOpenCLIBrowserBridgePolicyIfPresent() {
                     appendInstallLog("✓ 已移除宿主机全局 OpenCLI Bridge force-install 策略\n", logURL: logURL)
                     return .guardedPolicyRemoved(path: chromeManagedPolicyPath)
@@ -1981,46 +2142,6 @@ enum BrowserAccountManager {
         return mode == "force_installed" && updateURL == openCLIBrowserBridgeUpdateURL
     }
 
-    /// 仅在 ClawdHome 实例专属 profile 内开启开发者模式，避免影响宿主机默认 profile。
-    private static func ensureProfileDeveloperModeEnabled(context: Context) throws -> Bool {
-        let fm = FileManager.default
-        let defaultDir = URL(fileURLWithPath: context.paths.profileDirectory.path, isDirectory: true)
-            .appendingPathComponent("Default", isDirectory: true)
-        let preferencesURL = defaultDir.appendingPathComponent("Preferences")
-        let preferencesPath = preferencesURL.path
-
-        try fm.createDirectory(at: defaultDir, withIntermediateDirectories: true)
-
-        var root: [String: Any] = [:]
-        if fm.fileExists(atPath: preferencesPath) {
-            let raw = try Data(contentsOf: preferencesURL)
-            if !raw.isEmpty {
-                let json = try JSONSerialization.jsonObject(with: raw)
-                guard let dict = json as? [String: Any] else {
-                    throw BrowserAccountError.commandFailed("Chrome Preferences 格式无效：\(preferencesPath)")
-                }
-                root = dict
-            }
-        }
-
-        var extensions = root["extensions"] as? [String: Any] ?? [:]
-        var ui = extensions["ui"] as? [String: Any] ?? [:]
-        let currentValue = ui["developer_mode"] as? Bool ?? false
-        if currentValue {
-            return false
-        }
-
-        ui["developer_mode"] = true
-        extensions["ui"] = ui
-        root["extensions"] = extensions
-
-        let output = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
-        try output.write(to: preferencesURL, options: .atomic)
-        try FilePermissionHelper.chown(preferencesPath, owner: context.consoleUsername)
-        try FilePermissionHelper.chmod(preferencesPath, mode: "600")
-        return true
-    }
-
     private static func cleanupLegacyUnpackedBridgeExtensionIfNeeded(context: Context, logURL: URL?) {
         let legacyDir = context.paths.openCLIBrowserBridgeExtensionDirectory.path
         guard FileManager.default.fileExists(atPath: legacyDir) else { return }
@@ -2040,6 +2161,33 @@ enum BrowserAccountManager {
         let installedVersion: String?
         let latestVersion: String?
         let updateAvailable: Bool?
+    }
+
+    private static func openCLIBrowserBridgeNeedsDeveloperModeRemediation(profilePath: String) -> Bool {
+        let securePreferencesPath = URL(fileURLWithPath: profilePath, isDirectory: true)
+            .appendingPathComponent("Default", isDirectory: true)
+            .appendingPathComponent("Secure Preferences")
+            .path
+        guard let data = FileManager.default.contents(atPath: securePreferencesPath),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let settings = ((object["extensions"] as? [String: Any])?["settings"] as? [String: Any]),
+              let bridgeEntry = settings[openCLIBrowserBridgeExtensionID] as? [String: Any] else {
+            return false
+        }
+        if let reasons = bridgeEntry["disable_reasons"] as? [Int] {
+            return reasons.contains(disableUnsupportedDeveloperExtensionReason)
+        }
+        if let reasons = bridgeEntry["disable_reasons"] as? [Any] {
+            let values = reasons.compactMap { ($0 as? NSNumber)?.intValue }
+            return values.contains(disableUnsupportedDeveloperExtensionReason)
+        }
+        if let bitmask = bridgeEntry["disable_reasons"] as? Int {
+            return (bitmask & disableUnsupportedDeveloperExtensionReason) != 0
+        }
+        if let number = bridgeEntry["disable_reasons"] as? NSNumber {
+            return (number.intValue & disableUnsupportedDeveloperExtensionReason) != 0
+        }
+        return false
     }
 
     private static func openCLIBrowserBridgeMeta(context: Context) -> OpenCLIBrowserBridgeMeta {
@@ -3013,9 +3161,9 @@ def main():
     else:
         log(log_home, f"load-extension missing-manifest path={manifest_path!r}")
 
-    # Chrome 正式版已禁用命令行 --load-extension；统一走 pipe 注入，确保每次启动都能拉起 OpenCLI 扩展。
-    # 实测 pipe fd 关闭后浏览器进程不会随之退出，可安全用于 runtime/bridge/install-cdp 三种模式。
-    use_pipe_extension = extension_exists and mode in ("install-cdp", "runtime", "bridge")
+    # Chrome 正式版已禁用命令行 --load-extension。
+    # 仅在 install-cdp / bridge 模式走 pipe 注入；runtime 走普通启动，避免 pipe 断开触发浏览器退出。
+    use_pipe_extension = extension_exists and mode in ("install-cdp", "bridge")
     if use_pipe_extension:
         args.append("--remote-debugging-pipe")
         args.append("--enable-unsafe-extension-debugging")
@@ -3025,10 +3173,10 @@ def main():
         args.append(f"--remote-debugging-port={port}")
 
     log(log_home, f"exec chrome mode={mode} profile={profile!r} target={target!r} port={port!r}")
+    pipe_in_w = None
+    pipe_out_r = None
     try:
         proc = None
-        pipe_in_w = None
-        pipe_out_r = None
         if use_pipe_extension:
             pipe_in_r, pipe_in_w = os.pipe()
             pipe_out_r, pipe_out_w = os.pipe()
@@ -3064,6 +3212,19 @@ def main():
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+
+        # keep-debugging-pipe-alive:
+        # Chrome 会在 remote-debugging-pipe 另一端关闭后主动退出；bridge/install-cdp 需保持 launcher 常驻。
+        if use_pipe_extension:
+            log(log_home, f"keep-debugging-pipe-alive mode={mode}")
+            while proc.poll() is None:
+                time.sleep(1)
+            log(log_home, f"chrome exited rc={proc.returncode}")
+        return 0
+    except Exception as exc:
+        log(log_home, f"failed runtime error={exc!r}")
+        return 78
+    finally:
         if pipe_in_w is not None:
             try:
                 os.close(pipe_in_w)
@@ -3074,10 +3235,6 @@ def main():
                 os.close(pipe_out_r)
             except Exception:
                 pass
-        return 0
-    except Exception as exc:
-        log(log_home, f"failed runtime error={exc!r}")
-        return 78
 
 if __name__ == "__main__":
     raise SystemExit(main())
