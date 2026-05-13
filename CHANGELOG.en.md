@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.10.2] - 2026-05-14
+
+# New Features
+
+- Moved the permission banner to the bottom of the sidebar to reduce overlap with the main content area.
+- Added adaptive layout for permission action buttons so controls wrap cleanly on narrow widths.
+- Added bilingual fallback strings for permission-related copy to avoid mixed-language UI when translations are missing.
+
+# Improvements & Fixes
+
+- Improved permission summary and action labels for clearer guidance and faster troubleshooting.
+
+<!--
+Source commits (v1.10.1..HEAD):
+  92ac5404 feat(permission-ui): move sidebar banner and improve bilingual fallbacks
+  a54ef6df docs(release): polish v1.10.1 release notes
+-->
+
+
 ## [1.10.1] - 2026-05-13
 
 # New Features

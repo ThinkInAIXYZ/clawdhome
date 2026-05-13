@@ -149,8 +149,8 @@ struct ContentView: View {
                 .overlay(alignment: .bottomLeading) {
                     if hostPermissionCenter.hasIssues {
                         HostPermissionBanner()
-                            .frame(maxWidth: 280, alignment: .leading)
-                            .padding(.leading, 8)
+                            .frame(maxWidth: 272, alignment: .leading)
+                            .padding(.horizontal, 8)
                             .padding(.bottom, sidebarPermissionCardBottomPadding)
                             .transition(.move(edge: .leading).combined(with: .opacity))
                     }
