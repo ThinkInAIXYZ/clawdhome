@@ -60595,7 +60595,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "System permission required"
+            "value": "Permission needed"
           }
         },
         "zh-Hans": {
@@ -60618,7 +60618,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Allow Accessibility"
+            "value": "UI Access"
           }
         },
         "zh-Hans": {
@@ -60641,7 +60641,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Allow Chrome Automation"
+            "value": "Enable Chrome"
           }
         },
         "zh-Hans": {
@@ -60664,7 +60664,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open System Settings"
+            "value": "Open Settings"
           }
         },
         "zh-Hans": {
@@ -60825,7 +60825,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Missing permissions: %@. Grant them to enable browser automation."
+            "value": "Missing: %@. Grant access for browser automation."
           }
         },
         "zh-Hans": {

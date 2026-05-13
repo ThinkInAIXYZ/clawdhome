@@ -51,6 +51,12 @@ struct ContentView: View {
         && (navSelection == .dashboard || navSelection == .clawPool || navSelection == nil)
     }
 
+    private var sidebarPermissionCardBottomPadding: CGFloat {
+        let baseFooterHeight: CGFloat = 44
+        let updateBannerHeight: CGFloat = (updater.appNeedsUpdate || updater.isAwaitingAppRelaunch) ? 42 : 0
+        return baseFooterHeight + updateBannerHeight
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if let err = pool.loadError {
@@ -140,6 +146,15 @@ struct ContentView: View {
                         .padding(.vertical, 10)
                     }
                 }
+                .overlay(alignment: .bottomLeading) {
+                    if hostPermissionCenter.hasIssues {
+                        HostPermissionBanner()
+                            .frame(maxWidth: 280, alignment: .leading)
+                            .padding(.leading, 8)
+                            .padding(.bottom, sidebarPermissionCardBottomPadding)
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                    }
+                }
             } detail: {
                 switch navSelection {
                 case .dashboard, nil:
@@ -208,10 +223,6 @@ struct ContentView: View {
                     DaemonSetupBanner(installer: daemonInstaller)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
-                if hostPermissionCenter.hasIssues {
-                    HostPermissionBanner()
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
             }
         }
         .overlay(alignment: .bottomTrailing) {
@@ -222,6 +233,7 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: helperClient.isConnected)
+        .animation(.easeInOut(duration: 0.18), value: hostPermissionCenter.hasIssues)
         .animation(.easeInOut(duration: 0.18), value: shouldShowChromeInstallHint)
         .alert(
             L10n.k("content_view.browser.init_session_title", fallback: "初始化浏览器 Session？"),

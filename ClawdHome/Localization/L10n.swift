@@ -11,8 +11,17 @@ enum L10n {
         localizedString(forKey: key, fallback: fallback, tableName: "Stable")
     }
 
+    // Stable-key API with bilingual fallback to avoid mixed-language UI when a key misses at runtime.
+    static func k(_ key: String, zh: String, en: String) -> String {
+        localizedString(forKey: key, fallback: fallbackForCurrentLanguage(zh: zh, en: en), tableName: "Stable")
+    }
+
     static func f(_ key: String, fallback: String, _ args: CVarArg...) -> String {
         String(format: k(key, fallback: fallback), arguments: args)
+    }
+
+    static func f(_ key: String, zh: String, en: String, _ args: CVarArg...) -> String {
+        String(format: k(key, zh: zh, en: en), arguments: args)
     }
 
     private static func localizedString(forKey key: String, fallback: String, tableName: String?) -> String {
@@ -36,5 +45,22 @@ enum L10n {
             return NSLocalizedString(key, tableName: tableName, bundle: .main, value: fallback, comment: "")
         }
         return bundle.localizedString(forKey: key, value: fallback, table: tableName)
+    }
+
+    private static func fallbackForCurrentLanguage(zh: String, en: String) -> String {
+        let selected = UserDefaults.standard.string(forKey: "appLanguage") ?? AppLanguage.system.rawValue
+        guard let appLanguage = AppLanguage(rawValue: selected) else {
+            return en
+        }
+
+        switch appLanguage {
+        case .english:
+            return en
+        case .chineseSimplified:
+            return zh
+        case .system:
+            let preferred = Locale.preferredLanguages.first?.lowercased() ?? ""
+            return preferred.hasPrefix("zh") ? zh : en
+        }
     }
 }
