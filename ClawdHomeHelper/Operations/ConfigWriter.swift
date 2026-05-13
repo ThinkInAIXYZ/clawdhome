@@ -171,30 +171,22 @@ extension ConfigWriter {
     /// 查找隔离用户环境 npx：
     /// 仅允许 ~/.brew 下的 npx，避免回退到宿主机 /usr/local/bin/npx 造成版本串用。
     static func findIsolatedNpxBinary(for username: String) throws -> String {
-        let home = "/Users/\(username)"
-        let brewRoot = "\(home)/.brew"
-
-        var candidates: [String] = [
-            "\(brewRoot)/bin/npx",
-            "\(brewRoot)/opt/node/bin/npx",
-            "\(brewRoot)/opt/node@24/bin/npx",
-            "\(brewRoot)/opt/node@22/bin/npx",
-            "\(brewRoot)/opt/node@20/bin/npx",
-            "\(brewRoot)/opt/node@18/bin/npx",
-        ]
-
+        let brewRoot = UserEnvContract.brewRoot(username: username)
         let cellar = "\(brewRoot)/Cellar"
-        if let entries = try? FileManager.default.contentsOfDirectory(atPath: cellar) {
-            let nodeFormulae = entries.filter { $0 == "node" || $0.hasPrefix("node@") }.sorted()
-            for formula in nodeFormulae {
-                let formulaDir = "\(cellar)/\(formula)"
-                if let versions = try? FileManager.default.contentsOfDirectory(atPath: formulaDir).sorted(by: >) {
-                    for version in versions {
-                        candidates.append("\(formulaDir)/\(version)/bin/npx")
-                    }
-                }
-            }
+        let libNodeRoot = "\(brewRoot)/lib/nodejs"
+        let cellarEntries = (try? FileManager.default.contentsOfDirectory(atPath: cellar)) ?? []
+        var cellarFormulaVersions: [String: [String]] = [:]
+        for formula in cellarEntries where formula == "node" || formula.hasPrefix("node@") {
+            let formulaDir = "\(cellar)/\(formula)"
+            cellarFormulaVersions[formula] = (try? FileManager.default.contentsOfDirectory(atPath: formulaDir).sorted(by: >)) ?? []
         }
+        let libNodeEntries = (try? FileManager.default.contentsOfDirectory(atPath: libNodeRoot)) ?? []
+        let candidates = IsolatedNodeToolLookup.candidateBinaryPaths(
+            brewRoot: brewRoot,
+            executableName: "npx",
+            cellarFormulaVersions: cellarFormulaVersions,
+            libNodeEntries: libNodeEntries
+        )
 
         for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
             return path
