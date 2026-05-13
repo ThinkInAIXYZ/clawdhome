@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.10.3] - 2026-05-14
+
+# Fixes
+
+- Fixed false `npm` missing reports in Browser Tool / OpenCLI setup when the `~/.brew/bin/npm` shim is missing but Node is still available from `lib/nodejs` or `Cellar`.
+- Added shared `npm` cache permission remediation and retry logic to OpenCLI installation to reduce `EACCES` failures caused by stale ownership under `/var/lib/clawdhome/cache/npm`.
+- Added shared `npm` cache permission issues to the diagnostics permission checks with one-click repair support.
+
+
 ## [1.10.2] - 2026-05-14
 
 # New Features
