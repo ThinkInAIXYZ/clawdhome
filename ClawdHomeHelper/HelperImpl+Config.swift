@@ -33,6 +33,7 @@ extension ClawdHomeHelperImpl {
     // MARK: - 仪表盘
 
     func getDashboardSnapshot(withReply reply: @escaping (String) -> Void) {
+        DashboardCollector.shared.start()
         // 若机器指标仍为空（Collector 刚启动），立即补采（纯系统调用，微秒级）
         if DashboardCollector.shared.currentSnapshot().machine.memTotalMB == 0 {
             DashboardCollector.shared.collectMachineStatsNow()
@@ -51,6 +52,7 @@ extension ClawdHomeHelperImpl {
     }
 
     func getConnections(withReply reply: @escaping (String?) -> Void) {
+        DashboardCollector.shared.start()
         let conns = DashboardCollector.shared.currentSnapshot().connections
         let json = (try? JSONEncoder().encode(conns)).flatMap { String(data: $0, encoding: .utf8) }
         reply(json)

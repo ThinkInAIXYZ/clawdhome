@@ -177,6 +177,12 @@ final class ConnectionCollector {
         return (allConnections, uidBytesMap)
     }
 
+    func reset() {
+        frameCache.removeAll(keepingCapacity: false)
+        userRxAcc.removeAll(keepingCapacity: false)
+        userTxAcc.removeAll(keepingCapacity: false)
+    }
+
     // MARK: - 内部：sysctl 读取
 
     /// 调用 sysctl(net.inet.tcp.pcblist) 返回系统全部 TCP 连接

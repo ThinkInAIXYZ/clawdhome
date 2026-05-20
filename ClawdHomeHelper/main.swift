@@ -401,18 +401,9 @@ for sig: Int32 in [SIGTERM, SIGINT, SIGQUIT, SIGHUP] {
     }
 }
 
-// 启动仪表盘数据采集（双频 Timer：1s 动态指标 / 60s 静态指标）
 helperLog("Helper 启动")
-DashboardCollector.shared.start()
 AppUpdateHeartbeatService.shared.start()
-// 2 秒后记录首次采集结果（用于诊断连接采集问题）
-DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
-    let snap = DashboardCollector.shared.currentSnapshot()
-    let users = snap.shrimps.map { "\($0.username)(running=\($0.isRunning ?? false))" }.joined(separator: ", ")
-    helperLog("[boot] managedUsers: [\(users)]", level: .debug, channel: .diagnostics)
-    helperLog("[boot] connections: \(snap.connections.count)", level: .debug, channel: .diagnostics)
-    helperLog("[boot] debugLog: \(snap.debugLog ?? "(nil)")", level: .debug, channel: .diagnostics)
-}
+helperLog("[dashboard] collector switched to on-demand mode", channel: .diagnostics)
 
 // 开机自启：等系统稳定后，为所有被管理用户（UID≥500，非 admin）启动 gateway
 // 使用 launchctl bootstrap user/<uid>，即使用户未登录也能在其 launchd 域中启动服务

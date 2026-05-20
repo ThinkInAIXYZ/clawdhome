@@ -184,5 +184,7 @@ A single Shrimp can host multiple Hermes profiles (agent personas), each living 
 - **No demo or mock data anywhere** — every code path must use real data. If real data isn't available yet, surface the empty/loading state rather than fabricating values.
 
 ## Agent Tooling
+- When an agent commits code on your behalf, use English for the commit summary and description.
+
 
 `AGENTS.md` is a symlink to this file so that Codex CLI, Cursor, and other agent tools that follow the `AGENTS.md` convention pick up the same instructions Claude Code uses. Edit `CLAUDE.md` only — `AGENTS.md` stays in sync automatically.

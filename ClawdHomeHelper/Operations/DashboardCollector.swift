@@ -12,6 +12,7 @@ import IOKit
 protocol NetworkCollectorProtocol {
     func collect(users: [(username: String, uid: uid_t)])
         -> (connections: [ConnectionInfo], uidBytes: [uid_t: (rx: UInt64, tx: UInt64)])
+    func reset()
 }
 
 // MARK: - DashboardCollector
@@ -28,12 +29,15 @@ final class DashboardCollector {
     private(set) var snapshot: DashboardSnapshot = DashboardCollector.emptySnapshot()
 
     private let lock = NSLock()
+    private let lifecycleLock = NSLock()
 
     // 双频 Timer + 用户刷新 Timer
     private var fastTimer: Timer?
     private var slowTimer: Timer?
     private var userRefreshTimer: Timer?
+    private var idleStopTimer: Timer?
     private var isStarted = false
+    private var lastDemandAt: Date?
 
     // 网络采集后台任务重入保护（DispatchQueue.global 不自动串行化）
     private var isCollectingNet = false
@@ -68,16 +72,30 @@ final class DashboardCollector {
     private static let managedUserBaseCacheLock = NSLock()
     private static var managedUserBaseCache: (expiresAt: Date, users: [(username: String, uid: uid_t)])?
     private static let managedUserBaseCacheTTL: TimeInterval = 60
+    private static let idleTimeout: TimeInterval = 90
+    private static let idleCheckInterval: TimeInterval = 15
 
     // MARK: - 生命周期
 
-    /// 启动双频采集（主线程调用；Timer 加入 main RunLoop）
+    /// 仪表盘/连接明细被读取时调用；若当前空闲则按需启动采集。
     func start() {
-        guard !isStarted else {
-            helperLog("[dashboard] start() ignored: already started", level: .warn, channel: .diagnostics)
-            return
+        runOnMainSync {
+            self.lastDemandAt = Date()
+            self.startIfNeededOnMain()
         }
+    }
+
+    /// 停止采集
+    func stop() {
+        runOnMainSync {
+            self.stopOnMain(reason: "manual")
+        }
+    }
+
+    private func startIfNeededOnMain() {
+        guard !isStarted else { return }
         isStarted = true
+        resetSamplingState()
 
         // 立即刷新用户列表，确保快照有虾列表
         managedUsers = DashboardCollector.fetchManagedUsers()
@@ -121,14 +139,52 @@ final class DashboardCollector {
             self.snapshot.shrimps.removeAll { !current.contains($0.username) }
             self.lock.unlock()
         }
+        idleStopTimer = Timer.scheduledTimer(withTimeInterval: Self.idleCheckInterval, repeats: true) { [weak self] _ in
+            self?.stopIfIdle()
+        }
+        helperLog("[dashboard] collector started on demand", channel: .diagnostics)
     }
 
-    /// 停止采集
-    func stop() {
+    private func stopOnMain(reason: String) {
+        guard isStarted else { return }
         fastTimer?.invalidate(); fastTimer = nil
         slowTimer?.invalidate(); slowTimer = nil
         userRefreshTimer?.invalidate(); userRefreshTimer = nil
+        idleStopTimer?.invalidate(); idleStopTimer = nil
         isStarted = false
+        lastDemandAt = nil
+        resetSamplingState()
+        helperLog("[dashboard] collector stopped reason=\(reason)", channel: .diagnostics)
+    }
+
+    private func stopIfIdle() {
+        guard isStarted else { return }
+        guard let lastDemandAt else { return }
+        let idleSeconds = Date().timeIntervalSince(lastDemandAt)
+        guard idleSeconds >= Self.idleTimeout else { return }
+        stopOnMain(reason: "idle \(Int(idleSeconds))s")
+    }
+
+    private func resetSamplingState() {
+        lifecycleLock.lock()
+        isCollectingNet = false
+        lifecycleLock.unlock()
+        prevCPUTicks = (0, 0)
+        prevNetByUID.removeAll(keepingCapacity: false)
+        accumulatedNetBytes.removeAll(keepingCapacity: false)
+        prevNetTime = Date()
+        smoothedRateIn.removeAll(keepingCapacity: false)
+        smoothedRateOut.removeAll(keepingCapacity: false)
+        prevProcCPU.removeAll(keepingCapacity: false)
+        networkCollector.reset()
+    }
+
+    private func runOnMainSync(_ work: @escaping () -> Void) {
+        if Thread.isMainThread {
+            work()
+        } else {
+            DispatchQueue.main.sync(execute: work)
+        }
     }
 
     // MARK: - 快照读取（线程安全）
@@ -206,11 +262,20 @@ final class DashboardCollector {
         lock.unlock()
 
         // ── 网络指标（networkCollector，独立后台线程，不阻塞上面的同步路径）────
-        guard !isCollectingNet else { return }
+        lifecycleLock.lock()
+        guard !isCollectingNet else {
+            lifecycleLock.unlock()
+            return
+        }
         isCollectingNet = true
+        lifecycleLock.unlock()
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
-            defer { DispatchQueue.main.async { self.isCollectingNet = false } }
+            defer {
+                self.lifecycleLock.lock()
+                self.isCollectingNet = false
+                self.lifecycleLock.unlock()
+            }
             let (netResult, connections, diag) = self.collectNetBytesOnly(users: users)
             self.lock.lock()
             for (username, net) in netResult {

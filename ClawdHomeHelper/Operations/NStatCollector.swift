@@ -196,6 +196,16 @@ final class NStatCollector: NetworkCollectorProtocol {
         }
     }
 
+    func reset() {
+        callbackQueue.sync {
+            activeSources.removeAll(keepingCapacity: false)
+            userRxAcc.removeAll(keepingCapacity: false)
+            userTxAcc.removeAll(keepingCapacity: false)
+            prevSourceBytes.removeAll(keepingCapacity: false)
+            pidUIDCache.removeAll(keepingCapacity: false)
+        }
+    }
+
     // MARK: - 新 source 回调（callbackQueue 上执行）
 
     private func handleNewSource(_ source: NStatSourceRef) {
