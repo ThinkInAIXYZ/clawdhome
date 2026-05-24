@@ -2702,9 +2702,11 @@ struct OpenClawDetailView: View {
                     // 速冻为兜底路径：即使 stopGateway 失败也继续强制终止进程。
                     if mode != .flash { throw error }
                 }
+                try await helperClient.uninstallGateway(username: user.username)
             }
 
             if mode == .pause {
+                // 暂停冻结需要保留挂起中的进程内存态，不能卸载 launchd job，否则进程会被终止。
                 let processes = await helperClient.getProcessList(username: user.username)
                 let targets = ProcessEmergencyFreezeResolver.resolvePauseTargets(processes: processes)
                 var pausedPIDs: [Int32] = []
@@ -2747,8 +2749,6 @@ struct OpenClawDetailView: View {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
                     throw HelperError.operationFailed(L10n.f("views.user_detail_view.pid_0cbf36", fallback: "@%@ 速冻部分失败，未终止 PID: %@", String(describing: user.username), String(describing: pidList)))
                 }
-                // 二次 stop，防止状态滞后导致 launchd/job 被重新拉起。
-                try? await helperClient.stopGateway(username: user.username)
                 // 速冻后立即复核：若关键进程被外部拉起，给出明确提示。
                 try? await Task.sleep(for: .milliseconds(250))
                 let remaining = await helperClient.getProcessList(username: user.username)
@@ -2798,6 +2798,9 @@ struct OpenClawDetailView: View {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
                     throw HelperError.operationFailed(L10n.f("views.user_detail_view.pid_e5e7a7", fallback: "@%@ 解除暂停部分失败，未恢复 PID: %@", String(describing: user.username), String(describing: pidList)))
                 }
+            }
+            if mode != .pause, user.freezePreviousAutostartEnabled == true {
+                try await helperClient.restoreGatewayRegistration(username: user.username)
             }
             if let restoreAutostart = user.freezePreviousAutostartEnabled {
                 try await helperClient.setUserAutostart(username: user.username, enabled: restoreAutostart)

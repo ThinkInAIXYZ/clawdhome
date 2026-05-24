@@ -95,6 +95,27 @@ struct BrowserAccountSession: Codable, Equatable {
     let cdpPort: Int
     let launchedAt: TimeInterval
     let consoleUsername: String
+
+    func resolving(_ activePort: BrowserAccountActivePort?) -> BrowserAccountSession {
+        guard let activePort else {
+            return self
+        }
+        let resolvedHTTPEndpoint = httpEndpoint.isEmpty ? activePort.httpEndpoint : httpEndpoint
+        let resolvedWebSocketDebuggerURL = webSocketDebuggerURL.isEmpty
+            ? activePort.webSocketDebuggerURL
+            : webSocketDebuggerURL
+        let resolvedPort = activePort.port > 0 ? activePort.port : cdpPort
+        return BrowserAccountSession(
+            username: username,
+            profilePath: profilePath,
+            devToolsActivePortPath: devToolsActivePortPath,
+            httpEndpoint: resolvedHTTPEndpoint,
+            webSocketDebuggerURL: resolvedWebSocketDebuggerURL,
+            cdpPort: resolvedPort,
+            launchedAt: launchedAt,
+            consoleUsername: consoleUsername
+        )
+    }
 }
 
 struct BrowserAccountStatus: Codable, Equatable {

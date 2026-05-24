@@ -16,10 +16,12 @@
 		0473E31023503AFC1874A775 /* PortAllocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D143389A65EDC5DC54EAADDA /* PortAllocator.swift */; };
 		07B6092C2C29BC1A19385B32 /* UserAdoptionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */; };
 		08839820BB974F902ED7A261 /* AdoptTeamSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ECF5E624B00E077920548F8 /* AdoptTeamSheet.swift */; };
+		09949319D7306C4C88E68EEC /* SpeechToolOutputParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7EE59CFB2C94CE54AA96F38 /* SpeechToolOutputParser.swift */; };
 		0B88F32EFCC07BC3B59A465E /* GatewayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA77A80C488C3D16C1BD4243 /* GatewayClient.swift */; };
 		0CADD0BA47C3D056667999BB /* HostPermissionCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD0A32D83DB0459EA291534 /* HostPermissionCenter.swift */; };
 		0E07E58A241BA58310F6443A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 38A912F0A5514717350027B5 /* Assets.xcassets */; };
 		0E9D058F70E41C9D8D9E2FBB /* FileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71156CAD7673A87034AF0D8 /* FileModels.swift */; };
+		0EC5C12D39CC3F67DE6BA491 /* HelperServiceLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D932B00C4752A2F08B001E4D /* HelperServiceLocator.swift */; };
 		128DCAA688B24902AC319BB4 /* AppUpdateState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F2D77C8262C551CBD26BA2 /* AppUpdateState.swift */; };
 		136FC273887E88923B2A9D46 /* HermesQRBindingStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3E83E7E56811D071D7716FC /* HermesQRBindingStep.swift */; };
 		13E72438B5B5A0997D964566 /* HelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 467287AC8BE705E07CE3C366 /* HelperProtocol.swift */; };
@@ -30,9 +32,11 @@
 		161CF0DA6073064097C48EB7 /* GatewayProviderKeySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DDA04FF248DF6DFABA79529 /* GatewayProviderKeySheet.swift */; };
 		16C806CD97F4A5FB8DD95D1C /* DashboardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7E5FF24A0246F866BFF996 /* DashboardModels.swift */; };
 		16C9C690FB4DCA5509D4FC87 /* CreateAgentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0600D2F59788F6F8E907084B /* CreateAgentSheet.swift */; };
+		1725D0DC4180EF0AF7DD345F /* OpenCLINetworkSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FE016D8935F7B2F5451DC0 /* OpenCLINetworkSupportTests.swift */; };
 		17E5D8B68FE1128317AAB824 /* HermesInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6385281719FDB35F18456F6 /* HermesInstaller.swift */; };
 		1824EF17F688509BB58B146C /* HermesCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2377E2C629645068605ED7E /* HermesCommand.swift */; };
 		18454F2283EC4E5E627584DE /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62AE0CAFA22F67436019A51 /* BackupModels.swift */; };
+		19D3252B659C8CE08911BEE8 /* OpenCLINetworkDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7E54CF4523B98949C64414 /* OpenCLINetworkDiagnostics.swift */; };
 		1A9602934F0304C7AA1905A6 /* FileInputAcceptFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC4D03808505276353A3AD2 /* FileInputAcceptFilter.swift */; };
 		1BEAF513D61007FDC9394FFF /* ModelDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21010714E9E3C485F8F95B10 /* ModelDetailView.swift */; };
 		1CED2CBF329329B97F77FEFF /* UnixHTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D840800176C46190E9991E /* UnixHTTPClient.swift */; };
@@ -62,6 +66,7 @@
 		346939ADEDF99620B1967823 /* UserPasswordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFD718E7777280D5BC94DE0D /* UserPasswordStore.swift */; };
 		35293BE0C7E82BADEFB540F7 /* HealthCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CB22903A652976B892FA384 /* HealthCheck.swift */; };
 		372F9047B27AB90A2CF66AF5 /* RoleMarketView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0511A43DA0C20592D7181ABD /* RoleMarketView.swift */; };
+		37A75037470CE4F24E8F6868 /* SpeechTranscriptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CC213E660C052D13A71E7E9 /* SpeechTranscriptionView.swift */; };
 		3A03237B75B09194CF0193FF /* HermesGatewayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B68AC78663361B35065DD8F /* HermesGatewayManager.swift */; };
 		3A3F42C9E4F1D40D1214CDA8 /* ModelPingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9363CE8F8DF377157FAE1D71 /* ModelPingService.swift */; };
 		3B5E95B51DE262D04BC56FBA /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE86644B5FC4578CCB9C6FF /* ConfigWriter.swift */; };
@@ -80,8 +85,10 @@
 		4782C1ED1CE9598D4CF6AB21 /* ShrimpSettingsV2View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93B358D3DD9D3DFC500E47B0 /* ShrimpSettingsV2View.swift */; };
 		4853C793D4CFACBA2205144A /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5177F3CC658EC613A8D76CF1 /* UpdateChecker.swift */; };
 		48CA85BD34E13C23095ACA9F /* EmbeddedGatewayConsole.swift in Sources */ = {isa = PBXBuildFile; fileRef = 443602BDE6B91F5B0D62E1E4 /* EmbeddedGatewayConsole.swift */; };
+		48FF00842914C2BCF38EE753 /* ShrimpPoolLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DAF9A2EC9326CBAEEBAC8F4 /* ShrimpPoolLogicTests.swift */; };
 		4983179D8FF13E438DED0FEE /* OpenDirectory.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 05980B1012E839BAA33AD8CE /* OpenDirectory.framework */; };
 		4AFD7B4DF92B2A3466717D5E /* GatewayHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1CD2C5DBEEFC059991B495 /* GatewayHub.swift */; };
+		4C8CB1CCE51E04083065D234 /* ManagedUserStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0DFE630678B2D4F64020968 /* ManagedUserStateTests.swift */; };
 		4D82D868F60183781B251A15 /* ExecCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D1FC0407326B7C36C904EC2 /* ExecCommand.swift */; };
 		4D9977D09130B0CC18E9FEAF /* HelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 467287AC8BE705E07CE3C366 /* HelperProtocol.swift */; };
 		4DAB0D5C8EF28C674E25160A /* QuickFileTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DACAEF3ABEDBC65F590466B /* QuickFileTransfer.swift */; };
@@ -99,15 +106,19 @@
 		55CB96D5B61D248282E612F1 /* BackupManagerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB9584EDF129A0295EBB14A /* BackupManagerSheet.swift */; };
 		5A9570E544EE11988AAA01BC /* IMAccountModelsV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46BB2187C1CBAE602D47A53E /* IMAccountModelsV2.swift */; };
 		5AE2A7E5C2BDF08FCAC2DBE4 /* AppUpdateHeartbeatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335F70B73CF355F93B436AFA /* AppUpdateHeartbeatService.swift */; };
+		5C18744A625AA256F6209249 /* HermesWebViewCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B602547DF8E4759034B0623C /* HermesWebViewCoordinatorTests.swift */; };
 		5C24D821B52B296FB1663DF8 /* ModelPrioritySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED27F46F57A2556B2A4A6512 /* ModelPrioritySheet.swift */; };
 		5C4286A2BA6C2A17C2E8D16A /* ApplyCredentialSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BF8C6365FBBA9CA2C07D90 /* ApplyCredentialSheet.swift */; };
 		5F3A658D7E11C06F8F4F62D0 /* LocalAIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */; };
 		5FF1FC550784127BA01FA09D /* LocalLLMManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9DBC78DA4D1FFD0EB50D466 /* LocalLLMManager.swift */; };
+		6066FD6A33AF14652C8A9E6F /* OpenCLINetworkSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B217E37A39C1851DA831BB7 /* OpenCLINetworkSupport.swift */; };
 		61122BA3487584B844D57BB3 /* GlobalModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89D6CAF4FF1A5DD31BFE266E /* GlobalModelStore.swift */; };
 		62B2BCCC400B878EC9A0E01A /* HermesConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9752B678217A482704DF5A /* HermesConfigWriter.swift */; };
 		62FEC4E2E0447CE225724632 /* AgentModelEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0DC69D82EDF1233E53C335 /* AgentModelEditSheet.swift */; };
 		645CD594F1E088E7A3515D0D /* WizardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E2BC3AA8DD32C2E7B370D0 /* WizardComponents.swift */; };
 		647F82D1797FC9D80FF86C16 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6474BB5EEF5B87B65666E978 /* NetworkModels.swift */; };
+		681630BD590FD909762BB4AE /* SpeechModelAdvisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26146AAD44960591291B75E9 /* SpeechModelAdvisor.swift */; };
+		683FE4575750E0FCAED09BBD /* SpeechHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79479208C4E512A6C5CB90FD /* SpeechHistoryStore.swift */; };
 		69BF685059BE6B7AEB250E07 /* HelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F39F27916E7B56B4688842 /* HelperClient.swift */; };
 		6B2141CEF3983B1A8B1BE729 /* PromptMemoryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48678A8853E661D98169A602 /* PromptMemoryViews.swift */; };
 		6B6B8E332776101B198630AC /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 806D35D06FA4AFEDDAA912AD /* L10n.swift */; };
@@ -127,6 +138,7 @@
 		744E5B64F5A52793EFAED3AC /* UserInitPresentationRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */; };
 		7686487709FBD85014989A10 /* HermesAutostartList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95EC78AB0531DB2D03762D85 /* HermesAutostartList.swift */; };
 		77092E5843353741BB7AF6F1 /* PromptMemoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 226544013116B0A691E3CB60 /* PromptMemoryModels.swift */; };
+		7802A17AFB6D37823EF81E5A /* ProcessManagerCommandCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81449D5B0C2D9E19A73FB325 /* ProcessManagerCommandCaptureTests.swift */; };
 		79663F3C6F1A20FF33506B22 /* BrowserAccountModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D033FFF56C00EB989EF8FD /* BrowserAccountModels.swift */; };
 		7A11F882D706844DD3EF518F /* WizardConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C409AF7F1CC045A211F7F27E /* WizardConnection.swift */; };
 		7A19BA1D08E439220F09D5CD /* CloneClawSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A692ECF0806042C37B632CB /* CloneClawSheet.swift */; };
@@ -140,10 +152,12 @@
 		84C8DA8A847353DF24E6FECC /* AgentProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BADB9554D643220091AA3A3E /* AgentProfile.swift */; };
 		84EE8ABA47536FEBAD8C7E53 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13F07CE9D25F72DDB11AB739 /* ContentView.swift */; };
 		864844DC8AC7F16874F7E23F /* WizardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B0925580BD2EF371BC98D4 /* WizardModels.swift */; };
+		872634AF3CE0CA293DB18FD5 /* HermesWebUIManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 623824A7AAB125FAF8C54E45 /* HermesWebUIManager.swift */; };
 		8782D0C95C1470BAA40F3CB3 /* AppLockScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DFA0D3288E6276A9630CE4B /* AppLockScreen.swift */; };
 		87A7B7CEA0006EDF2248CB73 /* ConfigTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 764D573FDE4C0B1FF7EB5E7B /* ConfigTabView.swift */; };
 		87E35AE6191AA52D671EFC99 /* ConfigCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09AC66C79FE1B7EABAA7A9EE /* ConfigCommand.swift */; };
 		8846B8802FACD8C78C40CEAB /* ProviderKeySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A583A7B98571015C5E62789E /* ProviderKeySheet.swift */; };
+		88766C05E7B7C5A9833AF8CA /* SpeechFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D126F59DADF0F55B2B272430 /* SpeechFeatureTests.swift */; };
 		8880D4FA5302740F6CD8F7B2 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B9025469C59B7EE328F10ED /* main.swift */; };
 		88EC653755F61E5113FC2B85 /* HermesTeamWizard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 339C3611ECC7586DDB587C8C /* HermesTeamWizard.swift */; };
 		8ABC91BB2196F6C05E6647C9 /* AppUpdateState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F2D77C8262C551CBD26BA2 /* AppUpdateState.swift */; };
@@ -154,10 +168,13 @@
 		8E42CC7896C536E4FA02A426 /* UpdateCheckPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34938F121B712D4BEADB0796 /* UpdateCheckPolicy.swift */; };
 		8E9250B96F709346BC0A1158 /* UserAdoptionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */; };
 		925380A57BBAA972A1078DF0 /* ProviderKeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABBB28C4048F9B2A39AE099C /* ProviderKeychainStore.swift */; };
+		959CD8D3347EDCD04E013F4E /* OpenCLINetworkDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7E54CF4523B98949C64414 /* OpenCLINetworkDiagnostics.swift */; };
 		9685174F8F965C6D07F8FBCB /* LocalAITab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956F579AD39B5454F51944DB /* LocalAITab.swift */; };
 		96C93E87A53551D90828E5D1 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = C825A0B24BA99AE396353C83 /* SwiftTerm */; };
+		96CDA622EEE9C3706BBFF65B /* SpeechTranscriptionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CC9C946849F852C0B194055 /* SpeechTranscriptionModels.swift */; };
 		98995C5422E6B6C6FE7434A7 /* HostPermissionBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92C771A1BDC0269B5AC9B8C6 /* HostPermissionBanner.swift */; };
 		992878A27E071D7380C32E95 /* PluginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2038621764DEFC3C43FEA05 /* PluginManager.swift */; };
+		9BEA51AD8D6F32D2832BC4EB /* SpeechTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 614C26FBCD9B564911883ACF /* SpeechTranscriptionService.swift */; };
 		9D0ACACEC481AC2EB8C42F2A /* ProcessTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFF0576AB6D5F27AC6E68E92 /* ProcessTabView.swift */; };
 		9D6B268A8115D86664724753 /* VoiceLibraryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBF03DABAB9FAB6E33B46BDE /* VoiceLibraryTab.swift */; };
 		9E7081ED0038EE8867ADADD5 /* SkillsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9430E6625C0F220F9051F31 /* SkillsTabView.swift */; };
@@ -195,16 +212,19 @@
 		C77B4F6939884B36F73EB45C /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1879663548E380CB2414733A /* BackupManager.swift */; };
 		C87F24E951A075FE182FF745 /* ManagedUserDisplayName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58D6A0A3A03533CF7E7AC045 /* ManagedUserDisplayName.swift */; };
 		C995644F8A8C786C0B5D689D /* CustomProviderFormFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB700C239BC180E618B6D07 /* CustomProviderFormFields.swift */; };
+		C9CCE88EF05F0D46D0A2087C /* GatewayHubPureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBCFE68A68EC98233B63635 /* GatewayHubPureTests.swift */; };
 		CA51DA2CCAB88BC95CF91EC4 /* SecurityAuditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BCB213B1B4677F1FBAC5433 /* SecurityAuditView.swift */; };
 		CA751AF8D61283E7E3107E20 /* ChatCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88D218BB20FD6CDE3C8F6D5F /* ChatCommand.swift */; };
 		CAA89BB29813540DB36DC7E8 /* CronTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEDD6A6BF4920CF366FF0F12 /* CronTabView.swift */; };
 		CB096E3233B4F7D7AC19486C /* HelperImpl+UserGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = C82D2957B3849E370E6D64F1 /* HelperImpl+UserGateway.swift */; };
 		CC20BDD4E3F835E079B27B26 /* MaintenanceTerminalSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01DAC10B65138DAA2DE36A20 /* MaintenanceTerminalSession.swift */; };
+		CDE156BA229192AFB1407B36 /* HermesWebUIView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2A04F7B0C9040ECB98BFCD /* HermesWebUIView.swift */; };
 		CF0D3BE0D8896AAEA25843F1 /* onboard.html in Resources */ = {isa = PBXBuildFile; fileRef = 451BD17BA16A789AB35460D1 /* onboard.html */; };
 		CF7382CBC9959C1D07911D7D /* DashboardCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442171CEA410BEA9920973CC /* DashboardCollector.swift */; };
 		CF8C13CAF990140BBA9EBFFB /* UserDeleteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5FEA97D01801A3BFDAAECB9 /* UserDeleteService.swift */; };
 		CF9F809B95CDA2464FC36087 /* VoiceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = C587B0EBFC1DB0062C0195FF /* VoiceProfile.swift */; };
 		D23EBBF179753EEFDD97C0B2 /* AddBotSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F26137ECBA9185EB4744FD6 /* AddBotSheet.swift */; };
+		D42E65D987D8B6B0C47BD8BB /* OpenCLINetworkDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7E54CF4523B98949C64414 /* OpenCLINetworkDiagnostics.swift */; };
 		D432C1E91240F394761755E7 /* GatewaySkillsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD98DD90A8AB1C5CAF9681D2 /* GatewaySkillsStore.swift */; };
 		D45808438EB33367D81D4835 /* GatewayChannelModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45C19EA10CE619103184757E /* GatewayChannelModels.swift */; };
 		D492D8603E31FF510215DA25 /* ManagedUserDisplayName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58D6A0A3A03533CF7E7AC045 /* ManagedUserDisplayName.swift */; };
@@ -236,13 +256,17 @@
 		EFB354F72C60BB435A62D4B4 /* NetworkPolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54673332FA3CBD020381CD20 /* NetworkPolicyView.swift */; };
 		F038BD4755FE71793AC88B55 /* HelperImpl+Hermes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89DB8110D061B70D84B4392F /* HelperImpl+Hermes.swift */; };
 		F13F8D9CE464C91C4DF946C0 /* CLIHelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBDE77F357454890EF4F97AF /* CLIHelperClient.swift */; };
+		F17EE8285B7C26431B4A3916 /* CommandOutputCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 068B155BCFE1B8F504316DCE /* CommandOutputCapture.swift */; };
+		F2E666F4F9A1C76E49718906 /* OpenCLINetworkDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7E54CF4523B98949C64414 /* OpenCLINetworkDiagnostics.swift */; };
 		F3BACBA96D148CEBC298F69A /* FileInputAcceptFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC4D03808505276353A3AD2 /* FileInputAcceptFilter.swift */; };
 		F3DB84F3DA6F906957AFB80C /* HermesIMPlatformDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EACE9A00A249D24BACFC8D2 /* HermesIMPlatformDirectory.swift */; };
 		F4729432DEE4FC8B67C7DDEF /* HelperSharedTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0680BCD6FCF288D2B143355 /* HelperSharedTypes.swift */; };
 		F4821DC2D2B8E40EDECCE4BB /* HermesTeamWizardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C407027BD93490400EE402 /* HermesTeamWizardState.swift */; };
 		F5D8A254A219E6AD20B6909E /* PromptMemoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 226544013116B0A691E3CB60 /* PromptMemoryModels.swift */; };
+		F6E3AEE963C9AB671CF4D2F1 /* CommandOutputCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 068B155BCFE1B8F504316DCE /* CommandOutputCapture.swift */; };
 		F7301DCF176A07CEF3E14128 /* UserAdoptionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */; };
 		F7840BAD3978447C9CF012D5 /* AgentListEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7642815724059E4D93CC56E0 /* AgentListEditor.swift */; };
+		F79BAA313A9D92AD5AA63033 /* HermesTeamWizardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE9AA6083143C136DE0FA54 /* HermesTeamWizardTests.swift */; };
 		F7E5A9A08C640A5E7684F7B1 /* UserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */; };
 		FB35463F40D9D7B9C7166E4E /* OpenDirectory.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 05980B1012E839BAA33AD8CE /* OpenDirectory.framework */; };
 		FB7D971D2B9D0FD2554D23AE /* ShrimpTerminalConsole.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E425508BA41878AC00716C8 /* ShrimpTerminalConsole.swift */; };
@@ -253,7 +277,21 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		4D18FAF8A11D935E6BD0141A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 025A14E364EF7CA0B9809AE1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B7B2F454B4C6A7D06DC5FB21;
+			remoteInfo = ClawdHome;
+		};
 		AFF17C87071F0C6916331330 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 025A14E364EF7CA0B9809AE1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 28071483B3C812F008318E5F;
+			remoteInfo = ClawdHomeHelper;
+		};
+		C13C2C4A27AA85A9D0451059 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 025A14E364EF7CA0B9809AE1 /* Project object */;
 			proxyType = 1;
@@ -267,11 +305,14 @@
 		0511A43DA0C20592D7181ABD /* RoleMarketView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoleMarketView.swift; sourceTree = "<group>"; };
 		05980B1012E839BAA33AD8CE /* OpenDirectory.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = OpenDirectory.framework; sourceTree = "<group>"; };
 		0600D2F59788F6F8E907084B /* CreateAgentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAgentSheet.swift; sourceTree = "<group>"; };
+		068B155BCFE1B8F504316DCE /* CommandOutputCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandOutputCapture.swift; sourceTree = "<group>"; };
 		09AC66C79FE1B7EABAA7A9EE /* ConfigCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigCommand.swift; sourceTree = "<group>"; };
 		0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInitPresentationRouting.swift; sourceTree = "<group>"; };
 		0B045F82432FF233FDA7D7F5 /* AgentBotListEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBotListEditor.swift; sourceTree = "<group>"; };
+		0BBCFE68A68EC98233B63635 /* GatewayHubPureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayHubPureTests.swift; sourceTree = "<group>"; };
 		0BCB213B1B4677F1FBAC5433 /* SecurityAuditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityAuditView.swift; sourceTree = "<group>"; };
 		0DFA0D3288E6276A9630CE4B /* AppLockScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockScreen.swift; sourceTree = "<group>"; };
+		0E7E54CF4523B98949C64414 /* OpenCLINetworkDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCLINetworkDiagnostics.swift; sourceTree = "<group>"; };
 		0E9752B678217A482704DF5A /* HermesConfigWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesConfigWriter.swift; sourceTree = "<group>"; };
 		0EACE9A00A249D24BACFC8D2 /* HermesIMPlatformDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesIMPlatformDirectory.swift; sourceTree = "<group>"; };
 		0EB9584EDF129A0295EBB14A /* BackupManagerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManagerSheet.swift; sourceTree = "<group>"; };
@@ -288,8 +329,10 @@
 		21010714E9E3C485F8F95B10 /* ModelDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDetailView.swift; sourceTree = "<group>"; };
 		21D5AE60DA0449BC16B42DAA /* FallbackManagerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackManagerSheet.swift; sourceTree = "<group>"; };
 		226544013116B0A691E3CB60 /* PromptMemoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptMemoryModels.swift; sourceTree = "<group>"; };
+		26146AAD44960591291B75E9 /* SpeechModelAdvisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechModelAdvisor.swift; sourceTree = "<group>"; };
 		287C8C8C9920E754BBF4920C /* ShrimpTerminalSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrimpTerminalSession.swift; sourceTree = "<group>"; };
 		2BD15AFBF24DE05D57194904 /* Charts.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Charts.framework; path = System/Library/Frameworks/Charts.framework; sourceTree = SDKROOT; };
+		2DAF9A2EC9326CBAEEBAC8F4 /* ShrimpPoolLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrimpPoolLogicTests.swift; sourceTree = "<group>"; };
 		2F837F1CD97FBADD4A87A567 /* ClawdHomeHelper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClawdHomeHelper.entitlements; sourceTree = "<group>"; };
 		304E3BEE50A0653474FF27FC /* DaemonInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaemonInstaller.swift; sourceTree = "<group>"; };
 		32ACC218308D2CE4322109FC /* TerminalLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalLogView.swift; sourceTree = "<group>"; };
@@ -318,6 +361,7 @@
 		48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserAdoptionFlow.swift; sourceTree = "<group>"; };
 		48D89D26AB1F2A1F57A4C957 /* InitCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InitCommand.swift; sourceTree = "<group>"; };
 		49D033FFF56C00EB989EF8FD /* BrowserAccountModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserAccountModels.swift; sourceTree = "<group>"; };
+		49FE016D8935F7B2F5451DC0 /* OpenCLINetworkSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCLINetworkSupportTests.swift; sourceTree = "<group>"; };
 		4A1CD2C5DBEEFC059991B495 /* GatewayHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayHub.swift; sourceTree = "<group>"; };
 		4A4D0168443D77B00A4092E7 /* AddUserSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddUserSheet.swift; sourceTree = "<group>"; };
 		4B639FCB2D3020F3E95F7EFC /* AppLockStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockStore.swift; sourceTree = "<group>"; };
@@ -340,11 +384,14 @@
 		5AF8BBAC6A6AC388EF29FA64 /* BrowserAccountManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserAccountManager.swift; sourceTree = "<group>"; };
 		5C63492C6F439FBCA71D8BF5 /* NStatCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NStatCollector.swift; sourceTree = "<group>"; };
 		5C6946296FDE26A0A2A7A8EC /* ProcessManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessManager.swift; sourceTree = "<group>"; };
+		5CE9AA6083143C136DE0FA54 /* HermesTeamWizardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesTeamWizardTests.swift; sourceTree = "<group>"; };
 		5D7D1F12DB908202E9E91105 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		5ECF5E624B00E077920548F8 /* AdoptTeamSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdoptTeamSheet.swift; sourceTree = "<group>"; };
 		5F97A493AAFD488D32EC70F5 /* ClawdHome.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClawdHome.entitlements; sourceTree = "<group>"; };
 		5FB700C239BC180E618B6D07 /* CustomProviderFormFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomProviderFormFields.swift; sourceTree = "<group>"; };
 		60E2BC3AA8DD32C2E7B370D0 /* WizardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardComponents.swift; sourceTree = "<group>"; };
+		614C26FBCD9B564911883ACF /* SpeechTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscriptionService.swift; sourceTree = "<group>"; };
+		623824A7AAB125FAF8C54E45 /* HermesWebUIManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesWebUIManager.swift; sourceTree = "<group>"; };
 		642F3F921C3D218DB8393578 /* HelperImpl+Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Config.swift"; sourceTree = "<group>"; };
 		6474BB5EEF5B87B65666E978 /* NetworkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkModels.swift; sourceTree = "<group>"; };
 		6482AE0816A0181D42B69AB4 /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
@@ -353,6 +400,7 @@
 		67B0925580BD2EF371BC98D4 /* WizardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardModels.swift; sourceTree = "<group>"; };
 		6805588FE98C2E1FE665C5F1 /* ModelManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerView.swift; sourceTree = "<group>"; };
 		69E0B89C871BDA2D5F629EB4 /* VaultPermissionGuardian.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultPermissionGuardian.swift; sourceTree = "<group>"; };
+		6CC9C946849F852C0B194055 /* SpeechTranscriptionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscriptionModels.swift; sourceTree = "<group>"; };
 		6CC9E8292B772B2D7305F978 /* HelperImpl+Install.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Install.swift"; sourceTree = "<group>"; };
 		6DACAEF3ABEDBC65F590466B /* QuickFileTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickFileTransfer.swift; sourceTree = "<group>"; };
 		6E1B997BD537C60950ED9DD3 /* UserDirectoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDirectoryService.swift; sourceTree = "<group>"; };
@@ -361,15 +409,18 @@
 		764D573FDE4C0B1FF7EB5E7B /* ConfigTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigTabView.swift; sourceTree = "<group>"; };
 		77787365CF9FCFC1BABE9B81 /* PersonaDefView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonaDefView.swift; sourceTree = "<group>"; };
 		77A62354E2723BF8150EDAF6 /* ManagedUser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedUser.swift; sourceTree = "<group>"; };
+		79479208C4E512A6C5CB90FD /* SpeechHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechHistoryStore.swift; sourceTree = "<group>"; };
 		7F26137ECBA9185EB4744FD6 /* AddBotSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddBotSheet.swift; sourceTree = "<group>"; };
 		800B6FF59BBD8AF1F7721480 /* UpgradeConfirmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradeConfirmSheet.swift; sourceTree = "<group>"; };
 		806D35D06FA4AFEDDAA912AD /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
+		81449D5B0C2D9E19A73FB325 /* ProcessManagerCommandCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessManagerCommandCaptureTests.swift; sourceTree = "<group>"; };
 		81E5226083EF9356F8C51363 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
 		822EF3CEFF50ACB37FF8DEEA /* GatewayWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayWatchdog.swift; sourceTree = "<group>"; };
 		8499A0606D3BE5C3E2920A7C /* OpenClawDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenClawDetailView.swift; sourceTree = "<group>"; };
 		88D218BB20FD6CDE3C8F6D5F /* ChatCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCommand.swift; sourceTree = "<group>"; };
 		89D6CAF4FF1A5DD31BFE266E /* GlobalModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalModelStore.swift; sourceTree = "<group>"; };
 		89DB8110D061B70D84B4392F /* HelperImpl+Hermes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Hermes.swift"; sourceTree = "<group>"; };
+		8B556AECE640AC260C25C05B /* ClawdHomeHelperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClawdHomeHelperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E37D8B7B0C66ACFBDB383D1 /* MemoryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryTabView.swift; sourceTree = "<group>"; };
 		922B9F0332920FE79B0EF0B8 /* ModelConfigWizard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelConfigWizard.swift; sourceTree = "<group>"; };
 		92C771A1BDC0269B5AC9B8C6 /* HostPermissionBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostPermissionBanner.swift; sourceTree = "<group>"; };
@@ -380,10 +431,13 @@
 		95EC78AB0531DB2D03762D85 /* HermesAutostartList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesAutostartList.swift; sourceTree = "<group>"; };
 		98F2D77C8262C551CBD26BA2 /* AppUpdateState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateState.swift; sourceTree = "<group>"; };
 		9A692ECF0806042C37B632CB /* CloneClawSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneClawSheet.swift; sourceTree = "<group>"; };
+		9B217E37A39C1851DA831BB7 /* OpenCLINetworkSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCLINetworkSupport.swift; sourceTree = "<group>"; };
 		9B9025469C59B7EE328F10ED /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		9BC44BB879E689F76FD08BB2 /* ClawdHomeCLI */ = {isa = PBXFileReference; includeInIndex = 0; path = ClawdHomeCLI; sourceTree = BUILT_PRODUCTS_DIR; };
 		9C19F01A93D19BBDF5814CC6 /* DiagnosticsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsSheet.swift; sourceTree = "<group>"; };
+		9C2A04F7B0C9040ECB98BFCD /* HermesWebUIView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesWebUIView.swift; sourceTree = "<group>"; };
 		9CB22903A652976B892FA384 /* HealthCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCheck.swift; sourceTree = "<group>"; };
+		9CC213E660C052D13A71E7E9 /* SpeechTranscriptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscriptionView.swift; sourceTree = "<group>"; };
 		9EFDF0452F0C6492C04DDB63 /* GlobalSecretsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSecretsStore.swift; sourceTree = "<group>"; };
 		A0680BCD6FCF288D2B143355 /* HelperSharedTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperSharedTypes.swift; sourceTree = "<group>"; };
 		A2377E2C629645068605ED7E /* HermesCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesCommand.swift; sourceTree = "<group>"; };
@@ -403,12 +457,14 @@
 		AEDDABB73D85CDE4CFFBDDC8 /* UserDetailHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDetailHelpers.swift; sourceTree = "<group>"; };
 		AF5F77D9351528C6DEEFC633 /* ShrimpPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrimpPool.swift; sourceTree = "<group>"; };
 		B0C17363344B936997067010 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		B0DFE630678B2D4F64020968 /* ManagedUserStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedUserStateTests.swift; sourceTree = "<group>"; };
 		B1E7A075B154CD7DCEB68CB3 /* HermesIMPlatforms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesIMPlatforms.swift; sourceTree = "<group>"; };
 		B20AA8CD71AB761800F6128E /* VaultManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultManager.swift; sourceTree = "<group>"; };
 		B2C86690A71173471BC77C57 /* FormatUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatUtils.swift; sourceTree = "<group>"; };
 		B2FCA2FCC5FE69859F138BFD /* VaultFilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFilesView.swift; sourceTree = "<group>"; };
 		B3E83E7E56811D071D7716FC /* HermesQRBindingStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesQRBindingStep.swift; sourceTree = "<group>"; };
 		B5FEA97D01801A3BFDAAECB9 /* UserDeleteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDeleteService.swift; sourceTree = "<group>"; };
+		B602547DF8E4759034B0623C /* HermesWebViewCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesWebViewCoordinatorTests.swift; sourceTree = "<group>"; };
 		B60647F2C674DA123E7DA59A /* UserPasswordSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPasswordSheet.swift; sourceTree = "<group>"; };
 		B62AE0CAFA22F67436019A51 /* BackupModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupModels.swift; sourceTree = "<group>"; };
 		B82A9FF38295968F2C08B29B /* HelperLogging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperLogging.swift; sourceTree = "<group>"; };
@@ -426,17 +482,21 @@
 		C409AF7F1CC045A211F7F27E /* WizardConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardConnection.swift; sourceTree = "<group>"; };
 		C587B0EBFC1DB0062C0195FF /* VoiceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceProfile.swift; sourceTree = "<group>"; };
 		C5A39CB77EAD5FD2A03768D4 /* ClawdHomeHelper */ = {isa = PBXFileReference; includeInIndex = 0; path = ClawdHomeHelper; sourceTree = BUILT_PRODUCTS_DIR; };
+		C7EE59CFB2C94CE54AA96F38 /* SpeechToolOutputParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechToolOutputParser.swift; sourceTree = "<group>"; };
 		C82D2957B3849E370E6D64F1 /* HelperImpl+UserGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+UserGateway.swift"; sourceTree = "<group>"; };
+		C8BA2DC681D56F1CCDFB39F5 /* ClawdHomeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClawdHomeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8CA7E043030EBA6AECA81CC /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = SystemConfiguration.framework; sourceTree = "<group>"; };
 		C9D840800176C46190E9991E /* UnixHTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnixHTTPClient.swift; sourceTree = "<group>"; };
 		CAA3C56D1FE192B7799A3FDC /* GatewayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayManager.swift; sourceTree = "<group>"; };
 		CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedVersion.swift; sourceTree = "<group>"; };
 		CED3398200712E64635E9F4A /* HermesDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesDetailView.swift; sourceTree = "<group>"; };
+		D126F59DADF0F55B2B272430 /* SpeechFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechFeatureTests.swift; sourceTree = "<group>"; };
 		D143389A65EDC5DC54EAADDA /* PortAllocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortAllocator.swift; sourceTree = "<group>"; };
 		D3397C022C871EFE21A58224 /* HermesSetupSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesSetupSheet.swift; sourceTree = "<group>"; };
 		D43A99B25B70AE3C7A8C23AB /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D6C76557D6C46315D058A794 /* ShellRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellRunner.swift; sourceTree = "<group>"; };
 		D816568C199A8844EC29A4B0 /* InstanceCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstanceCommand.swift; sourceTree = "<group>"; };
+		D932B00C4752A2F08B001E4D /* HelperServiceLocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperServiceLocator.swift; sourceTree = "<group>"; };
 		DA495FBE50F338DEF7A55573 /* ConnectionCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionCollector.swift; sourceTree = "<group>"; };
 		DBF03DABAB9FAB6E33B46BDE /* VoiceLibraryTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceLibraryTab.swift; sourceTree = "<group>"; };
 		DC0DC69D82EDF1233E53C335 /* AgentModelEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentModelEditSheet.swift; sourceTree = "<group>"; };
@@ -544,12 +604,17 @@
 				4A1CD2C5DBEEFC059991B495 /* GatewayHub.swift */,
 				FD98DD90A8AB1C5CAF9681D2 /* GatewaySkillsStore.swift */,
 				A2F39F27916E7B56B4688842 /* HelperClient.swift */,
+				D932B00C4752A2F08B001E4D /* HelperServiceLocator.swift */,
 				1AD0A32D83DB0459EA291534 /* HostPermissionCenter.swift */,
 				6499789FC14381687CB547E1 /* IMBotProvisioner.swift */,
 				9363CE8F8DF377157FAE1D71 /* ModelPingService.swift */,
 				AB9CA89FBC9C8542073AE403 /* PromptLibraryStore.swift */,
 				ABBB28C4048F9B2A39AE099C /* ProviderKeychainStore.swift */,
 				AF5F77D9351528C6DEEFC633 /* ShrimpPool.swift */,
+				79479208C4E512A6C5CB90FD /* SpeechHistoryStore.swift */,
+				26146AAD44960591291B75E9 /* SpeechModelAdvisor.swift */,
+				C7EE59CFB2C94CE54AA96F38 /* SpeechToolOutputParser.swift */,
+				614C26FBCD9B564911883ACF /* SpeechTranscriptionService.swift */,
 				C9D840800176C46190E9991E /* UnixHTTPClient.swift */,
 				5177F3CC658EC613A8D76CF1 /* UpdateChecker.swift */,
 				34938F121B712D4BEADB0796 /* UpdateCheckPolicy.swift */,
@@ -568,6 +633,16 @@
 			path = Formatting;
 			sourceTree = "<group>";
 		};
+		4C38114ED8F704B78D722DCE /* ClawdHomeHelperTests */ = {
+			isa = PBXGroup;
+			children = (
+				49FE016D8935F7B2F5451DC0 /* OpenCLINetworkSupportTests.swift */,
+				81449D5B0C2D9E19A73FB325 /* ProcessManagerCommandCaptureTests.swift */,
+			);
+			name = ClawdHomeHelperTests;
+			path = tests/ClawdHomeHelperTests;
+			sourceTree = "<group>";
+		};
 		565FBE4A1A0F9F0B10D1E2CA /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -582,8 +657,10 @@
 			isa = PBXGroup;
 			children = (
 				DD78AF08CF47E52FD656EA06 /* ClawdHome */,
+				A5247BA585B7FDC8E0140EE6 /* ClawdHomeAppXCTests */,
 				FCBCEB99FF3DAFB768FCD9D4 /* ClawdHomeCLI */,
 				864DE3DC7E2E0D8EEDDCE311 /* ClawdHomeHelper */,
+				4C38114ED8F704B78D722DCE /* ClawdHomeHelperTests */,
 				CEF5FBE683C099D4AEA01D41 /* Shared */,
 				565FBE4A1A0F9F0B10D1E2CA /* Frameworks */,
 				849301842B00AAF8E21D222B /* Products */,
@@ -631,8 +708,10 @@
 			isa = PBXGroup;
 			children = (
 				F7D8BDF74255B3A14CF069B0 /* ClawdHome.app */,
+				C8BA2DC681D56F1CCDFB39F5 /* ClawdHomeAppTests.xctest */,
 				9BC44BB879E689F76FD08BB2 /* ClawdHomeCLI */,
 				C5A39CB77EAD5FD2A03768D4 /* ClawdHomeHelper */,
+				8B556AECE640AC260C25C05B /* ClawdHomeHelperTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -676,9 +755,24 @@
 				77A62354E2723BF8150EDAF6 /* ManagedUser.swift */,
 				502BBF84DE690AD43299985F /* ModelsStatus.swift */,
 				41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */,
+				6CC9C946849F852C0B194055 /* SpeechTranscriptionModels.swift */,
 				C587B0EBFC1DB0062C0195FF /* VoiceProfile.swift */,
 			);
 			path = Models;
+			sourceTree = "<group>";
+		};
+		A5247BA585B7FDC8E0140EE6 /* ClawdHomeAppXCTests */ = {
+			isa = PBXGroup;
+			children = (
+				0BBCFE68A68EC98233B63635 /* GatewayHubPureTests.swift */,
+				5CE9AA6083143C136DE0FA54 /* HermesTeamWizardTests.swift */,
+				B602547DF8E4759034B0623C /* HermesWebViewCoordinatorTests.swift */,
+				B0DFE630678B2D4F64020968 /* ManagedUserStateTests.swift */,
+				2DAF9A2EC9326CBAEEBAC8F4 /* ShrimpPoolLogicTests.swift */,
+				D126F59DADF0F55B2B272430 /* SpeechFeatureTests.swift */,
+			);
+			name = ClawdHomeAppXCTests;
+			path = tests/ClawdHomeAppXCTests;
 			sourceTree = "<group>";
 		};
 		CEF5FBE683C099D4AEA01D41 /* Shared */ = {
@@ -699,6 +793,7 @@
 				58D6A0A3A03533CF7E7AC045 /* ManagedUserDisplayName.swift */,
 				6474BB5EEF5B87B65666E978 /* NetworkModels.swift */,
 				DFEA3246D788EC5F1AE06F4F /* OpenclawConfigSerializerV2.swift */,
+				0E7E54CF4523B98949C64414 /* OpenCLINetworkDiagnostics.swift */,
 				F76A73EBA6C37473C494E20D /* ProcessModels.swift */,
 				226544013116B0A691E3CB60 /* PromptMemoryModels.swift */,
 				48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */,
@@ -746,6 +841,7 @@
 				1879663548E380CB2414733A /* BackupManager.swift */,
 				5AF8BBAC6A6AC388EF29FA64 /* BrowserAccountManager.swift */,
 				C1EAFFDC5338D0ACC3A06CDD /* CloneClawManager.swift */,
+				068B155BCFE1B8F504316DCE /* CommandOutputCapture.swift */,
 				ABE86644B5FC4578CCB9C6FF /* ConfigWriter.swift */,
 				DA495FBE50F338DEF7A55573 /* ConnectionCollector.swift */,
 				442171CEA410BEA9920973CC /* DashboardCollector.swift */,
@@ -756,11 +852,13 @@
 				4B68AC78663361B35065DD8F /* HermesGatewayManager.swift */,
 				B1E7A075B154CD7DCEB68CB3 /* HermesIMPlatforms.swift */,
 				F6385281719FDB35F18456F6 /* HermesInstaller.swift */,
+				623824A7AAB125FAF8C54E45 /* HermesWebUIManager.swift */,
 				A3054CF3A88705201107FB7F /* HermesWizardState.swift */,
 				F9091EC70CE63EDC745444F7 /* InstallManager.swift */,
 				B9DBC78DA4D1FFD0EB50D466 /* LocalLLMManager.swift */,
 				EB4BFDC6320B7C035E22C884 /* NodeDownloader.swift */,
 				5C63492C6F439FBCA71D8BF5 /* NStatCollector.swift */,
+				9B217E37A39C1851DA831BB7 /* OpenCLINetworkSupport.swift */,
 				37C2B17425B19E3FD55EC7AF /* PersonaGitManager.swift */,
 				C2038621764DEFC3C43FEA05 /* PluginManager.swift */,
 				5C6946296FDE26A0A2A7A8EC /* ProcessManager.swift */,
@@ -815,6 +913,7 @@
 				1DDA04FF248DF6DFABA79529 /* GatewayProviderKeySheet.swift */,
 				CED3398200712E64635E9F4A /* HermesDetailView.swift */,
 				D3397C022C871EFE21A58224 /* HermesSetupSheet.swift */,
+				9C2A04F7B0C9040ECB98BFCD /* HermesWebUIView.swift */,
 				92C771A1BDC0269B5AC9B8C6 /* HostPermissionBanner.swift */,
 				E9F9AD8700941AFBF1F34673 /* LogViewerSheet.swift */,
 				8E37D8B7B0C66ACFBDB383D1 /* MemoryTabView.swift */,
@@ -832,6 +931,7 @@
 				AB940018E9820EB6455FA34C /* SessionsTabView.swift */,
 				D43A99B25B70AE3C7A8C23AB /* SettingsView.swift */,
 				A9430E6625C0F220F9051F31 /* SkillsTabView.swift */,
+				9CC213E660C052D13A71E7E9 /* SpeechTranscriptionView.swift */,
 				32ACC218308D2CE4322109FC /* TerminalLogView.swift */,
 				800B6FF59BBD8AF1F7721480 /* UpgradeConfirmSheet.swift */,
 				AEDDABB73D85CDE4CFFBDDC8 /* UserDetailHelpers.swift */,
@@ -882,6 +982,42 @@
 			productReference = C5A39CB77EAD5FD2A03768D4 /* ClawdHomeHelper */;
 			productType = "com.apple.product-type.tool";
 		};
+		5C42FA7ADA4535D0D6A728ED /* ClawdHomeHelperTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E27D42FAF8B4D7EDA16E90F2 /* Build configuration list for PBXNativeTarget "ClawdHomeHelperTests" */;
+			buildPhases = (
+				035498E17868B1848D858C9A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				ADFD26A715CA31C9F4A39BFC /* PBXTargetDependency */,
+			);
+			name = ClawdHomeHelperTests;
+			packageProductDependencies = (
+			);
+			productName = ClawdHomeHelperTests;
+			productReference = 8B556AECE640AC260C25C05B /* ClawdHomeHelperTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		6A476073F35CD6E960C744FD /* ClawdHomeAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0D6AD5079C07314B84B510EA /* Build configuration list for PBXNativeTarget "ClawdHomeAppTests" */;
+			buildPhases = (
+				3BF7A93E9E587AF361A85A31 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E33B1B36A46878B9C7EA91A6 /* PBXTargetDependency */,
+			);
+			name = ClawdHomeAppTests;
+			packageProductDependencies = (
+			);
+			productName = ClawdHomeAppTests;
+			productReference = C8BA2DC681D56F1CCDFB39F5 /* ClawdHomeAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		A30D3CA2C62FA586954D2F04 /* ClawdHomeCLI */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 43994C609417710498108E2E /* Build configuration list for PBXNativeTarget "ClawdHomeCLI" */;
@@ -908,6 +1044,7 @@
 				CBDE9FD33BA5CFBDA763506A /* Frameworks */,
 				1E11B3E365C4A88CB25B517A /* Inject Git Build Number */,
 				217CF341688DD108EF049819 /* Embed Helper into App Bundle */,
+				884361A2AC35839A936F5338 /* Embed Speech Tool into App Bundle */,
 			);
 			buildRules = (
 			);
@@ -961,8 +1098,10 @@
 			projectRoot = "";
 			targets = (
 				B7B2F454B4C6A7D06DC5FB21 /* ClawdHome */,
+				6A476073F35CD6E960C744FD /* ClawdHomeAppTests */,
 				A30D3CA2C62FA586954D2F04 /* ClawdHomeCLI */,
 				28071483B3C812F008318E5F /* ClawdHomeHelper */,
+				5C42FA7ADA4535D0D6A728ED /* ClawdHomeHelperTests */,
 			);
 		};
 /* End PBXProject section */
@@ -1021,6 +1160,25 @@
 			shellPath = /bin/sh;
 			shellScript = "# DEBUG 模式下跳过嵌入 helper，避免 SMAppService 检测到 app bundle 中的\n# helper 变化后自动替换正在运行的 /Library/PrivilegedHelperTools/ 二进制。\n# 开发阶段使用 make install-helper 手动管理 helper。\nif [ \"${CONFIGURATION}\" = \"Debug\" ]; then\n  echo \"⏭ DEBUG: skip embedding helper (use 'make install-helper' instead)\"\n  exit 0\nfi\nDEST=\"${CODESIGNING_FOLDER_PATH}/Contents/Library/LaunchDaemons\"\nmkdir -p \"$DEST\"\ncp \"${BUILT_PRODUCTS_DIR}/ClawdHomeHelper\" \"$DEST/ClawdHomeHelper\"\nchmod +x \"$DEST/ClawdHomeHelper\"\ncp \"${SRCROOT}/Resources/ai.clawdhome.mac.helper.plist\" \"$DEST/\"\n";
 		};
+		884361A2AC35839A936F5338 /* Embed Speech Tool into App Bundle */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Speech Tool into App Bundle";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/bash \"${SRCROOT}/scripts/build-speech-tool.sh\"\n";
+		};
 		A99DCFF1121F876C8AFAB831 /* Generate Helper Version */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -1044,6 +1202,30 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		035498E17868B1848D858C9A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F17EE8285B7C26431B4A3916 /* CommandOutputCapture.swift in Sources */,
+				F2E666F4F9A1C76E49718906 /* OpenCLINetworkDiagnostics.swift in Sources */,
+				1725D0DC4180EF0AF7DD345F /* OpenCLINetworkSupportTests.swift in Sources */,
+				7802A17AFB6D37823EF81E5A /* ProcessManagerCommandCaptureTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3BF7A93E9E587AF361A85A31 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C9CCE88EF05F0D46D0A2087C /* GatewayHubPureTests.swift in Sources */,
+				F79BAA313A9D92AD5AA63033 /* HermesTeamWizardTests.swift in Sources */,
+				5C18744A625AA256F6209249 /* HermesWebViewCoordinatorTests.swift in Sources */,
+				4C8CB1CCE51E04083065D234 /* ManagedUserStateTests.swift in Sources */,
+				48FF00842914C2BCF38EE753 /* ShrimpPoolLogicTests.swift in Sources */,
+				88766C05E7B7C5A9833AF8CA /* SpeechFeatureTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		58F5F81CFA617EFD078BCC5B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1112,6 +1294,7 @@
 				35293BE0C7E82BADEFB540F7 /* HealthCheck.swift in Sources */,
 				69BF685059BE6B7AEB250E07 /* HelperClient.swift in Sources */,
 				13E72438B5B5A0997D964566 /* HelperProtocol.swift in Sources */,
+				0EC5C12D39CC3F67DE6BA491 /* HelperServiceLocator.swift in Sources */,
 				462985A17FC6A34B92A464CE /* HelperSharedTypes.swift in Sources */,
 				BB1B829AD74CEC55CAA80BF1 /* HermesDetailView.swift in Sources */,
 				F3DB84F3DA6F906957AFB80C /* HermesIMPlatformDirectory.swift in Sources */,
@@ -1120,6 +1303,7 @@
 				27C97FA9F5B16B80D8EB0443 /* HermesSetupSheet.swift in Sources */,
 				88EC653755F61E5113FC2B85 /* HermesTeamWizard.swift in Sources */,
 				F4821DC2D2B8E40EDECCE4BB /* HermesTeamWizardState.swift in Sources */,
+				CDE156BA229192AFB1407B36 /* HermesWebUIView.swift in Sources */,
 				98995C5422E6B6C6FE7434A7 /* HostPermissionBanner.swift in Sources */,
 				0CADD0BA47C3D056667999BB /* HostPermissionCenter.swift in Sources */,
 				2CF7C0595A716DFF0C0584B0 /* IMAccountListEditor.swift in Sources */,
@@ -1143,6 +1327,7 @@
 				A9B78E60A9F1EBB090E30958 /* ModelsStatus.swift in Sources */,
 				FBCAA5C027073F120856AC08 /* NetworkModels.swift in Sources */,
 				EFB354F72C60BB435A62D4B4 /* NetworkPolicyView.swift in Sources */,
+				19D3252B659C8CE08911BEE8 /* OpenCLINetworkDiagnostics.swift in Sources */,
 				70C3DBC1085ECB2535ED19ED /* OpenClawDetailView.swift in Sources */,
 				A6667FA9E8B0C2C35B9BB6C0 /* OpenclawConfigSerializerV2.swift in Sources */,
 				8DA5C8174C08A39388CA8388 /* PersonaDefView.swift in Sources */,
@@ -1165,6 +1350,12 @@
 				FB7D971D2B9D0FD2554D23AE /* ShrimpTerminalConsole.swift in Sources */,
 				D6E0B1621438E54CF0FC23B1 /* ShrimpTerminalSession.swift in Sources */,
 				9E7081ED0038EE8867ADADD5 /* SkillsTabView.swift in Sources */,
+				683FE4575750E0FCAED09BBD /* SpeechHistoryStore.swift in Sources */,
+				681630BD590FD909762BB4AE /* SpeechModelAdvisor.swift in Sources */,
+				09949319D7306C4C88E68EEC /* SpeechToolOutputParser.swift in Sources */,
+				96CDA622EEE9C3706BBFF65B /* SpeechTranscriptionModels.swift in Sources */,
+				9BEA51AD8D6F32D2832BC4EB /* SpeechTranscriptionService.swift in Sources */,
+				37A75037470CE4F24E8F6868 /* SpeechTranscriptionView.swift in Sources */,
 				E0ED6F92E9AE39B2FEDD39E7 /* TTSManagerTab.swift in Sources */,
 				8DA89622EFC5E38763E1A569 /* TerminalEngine.swift in Sources */,
 				2372A09285FD2D12851D0C62 /* TerminalLogView.swift in Sources */,
@@ -1216,6 +1407,7 @@
 				5F3A658D7E11C06F8F4F62D0 /* LocalAIModels.swift in Sources */,
 				D492D8603E31FF510215DA25 /* ManagedUserDisplayName.swift in Sources */,
 				29F70411C52A922AF79A99AD /* NetworkModels.swift in Sources */,
+				959CD8D3347EDCD04E013F4E /* OpenCLINetworkDiagnostics.swift in Sources */,
 				B1D4396243061AF94FA02B60 /* OpenclawConfigSerializerV2.swift in Sources */,
 				2D80339CFCC686BF405471AE /* Output.swift in Sources */,
 				532614A1A20BC13444A50815 /* ProcessModels.swift in Sources */,
@@ -1240,6 +1432,7 @@
 				C128E0FD980B6706D8E01A40 /* BrowserAccountModels.swift in Sources */,
 				1549B24326311C26E1701BA8 /* CloneClawManager.swift in Sources */,
 				288E715EE589A7D76A68455D /* CloneClawModels.swift in Sources */,
+				F6E3AEE963C9AB671CF4D2F1 /* CommandOutputCapture.swift in Sources */,
 				3B5E95B51DE262D04BC56FBA /* ConfigWriter.swift in Sources */,
 				27EAFF1F05E455130B72B22C /* ConnectionCollector.swift in Sources */,
 				CF7382CBC9959C1D07911D7D /* DashboardCollector.swift in Sources */,
@@ -1269,6 +1462,7 @@
 				3A03237B75B09194CF0193FF /* HermesGatewayManager.swift in Sources */,
 				EAE109F85C1B6AE01667DC15 /* HermesIMPlatforms.swift in Sources */,
 				17E5D8B68FE1128317AAB824 /* HermesInstaller.swift in Sources */,
+				872634AF3CE0CA293DB18FD5 /* HermesWebUIManager.swift in Sources */,
 				EBE0317E6293A88D48C9397B /* HermesWizardState.swift in Sources */,
 				5A9570E544EE11988AAA01BC /* IMAccountModelsV2.swift in Sources */,
 				7038876B62DAABF3E0D5672A /* InstallManager.swift in Sources */,
@@ -1279,6 +1473,8 @@
 				236B40A5073B4CF61B88CB83 /* NStatCollector.swift in Sources */,
 				647F82D1797FC9D80FF86C16 /* NetworkModels.swift in Sources */,
 				3D7B3D66E56E6D32CFC39D1F /* NodeDownloader.swift in Sources */,
+				D42E65D987D8B6B0C47BD8BB /* OpenCLINetworkDiagnostics.swift in Sources */,
+				6066FD6A33AF14652C8A9E6F /* OpenCLINetworkSupport.swift in Sources */,
 				C1D0DF6E8649DB1726E57E86 /* OpenclawConfigSerializerV2.swift in Sources */,
 				DCE2C8C6147052102BB81D08 /* PersonaGitManager.swift in Sources */,
 				992878A27E071D7380C32E95 /* PluginManager.swift in Sources */,
@@ -1306,9 +1502,37 @@
 			target = 28071483B3C812F008318E5F /* ClawdHomeHelper */;
 			targetProxy = AFF17C87071F0C6916331330 /* PBXContainerItemProxy */;
 		};
+		ADFD26A715CA31C9F4A39BFC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 28071483B3C812F008318E5F /* ClawdHomeHelper */;
+			targetProxy = C13C2C4A27AA85A9D0451059 /* PBXContainerItemProxy */;
+		};
+		E33B1B36A46878B9C7EA91A6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B7B2F454B4C6A7D06DC5FB21 /* ClawdHome */;
+			targetProxy = 4D18FAF8A11D935E6BD0141A /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		076642B0FB305F24302BE0D6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.clawdhome.mac.helper.tests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
 		09A4A693CEA119E58F824C27 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1333,6 +1557,24 @@
 			};
 			name = Debug;
 		};
+		1EDAED78909622BB38D0C135 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.clawdhome.mac.helper.tests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
 		502E67AF446BAB04893A96A2 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1356,6 +1598,44 @@
 				SWIFT_VERSION = 5.9;
 			};
 			name = Release;
+		};
+		8114D93153DFC6B5B25F4745 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.clawdhome.mac.app.tests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClawdHome.app/Contents/MacOS/ClawdHome";
+			};
+			name = Release;
+		};
+		8738A1E5D21287813E054801 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.clawdhome.mac.app.tests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClawdHome.app/Contents/MacOS/ClawdHome";
+			};
+			name = Debug;
 		};
 		C5337D0F3A75CCEE99557194 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -1562,6 +1842,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0D6AD5079C07314B84B510EA /* Build configuration list for PBXNativeTarget "ClawdHomeAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8738A1E5D21287813E054801 /* Debug */,
+				8114D93153DFC6B5B25F4745 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		2F0889EC57489C033AD535BB /* Build configuration list for PBXNativeTarget "ClawdHome" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1594,6 +1883,15 @@
 			buildConfigurations = (
 				FF35997EB9619824F06AAAE1 /* Debug */,
 				DA1806681C80BF665BB80539 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E27D42FAF8B4D7EDA16E90F2 /* Build configuration list for PBXNativeTarget "ClawdHomeHelperTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				076642B0FB305F24302BE0D6 /* Debug */,
+				1EDAED78909622BB38D0C135 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

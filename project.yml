@@ -6,11 +6,33 @@ packages:
     from: "1.0.0"
 
 options:
-  minimumXcodeVersion: "15.0"
+  minimumXcodeVersion: "16.0"
   deploymentTarget:
     macOS: "14.0"
   defaultConfig: Debug
   knownRegions: [Base, en, zh-Hans, zh-Hant]
+
+schemes:
+  ClawdHome:
+    build:
+      targets:
+        ClawdHome: [build]
+  ClawdHomeAppTests:
+    build:
+      targets:
+        ClawdHome: [build]
+        ClawdHomeAppTests: [test]
+    test:
+      targets:
+        - name: ClawdHomeAppTests
+  ClawdHomeHelperTests:
+    build:
+      targets:
+        ClawdHomeHelper: [build]
+        ClawdHomeHelperTests: [test]
+    test:
+      targets:
+        - name: ClawdHomeHelperTests
 
 configs:
   Debug: debug
@@ -57,6 +79,10 @@ targets:
           cp "${BUILT_PRODUCTS_DIR}/ClawdHomeHelper" "$DEST/ClawdHomeHelper"
           chmod +x "$DEST/ClawdHomeHelper"
           cp "${SRCROOT}/Resources/ai.clawdhome.mac.helper.plist" "$DEST/"
+        basedOnDependencyAnalysis: false
+      - name: "Embed Speech Tool into App Bundle"
+        script: |
+          /bin/bash "${SRCROOT}/scripts/build-speech-tool.sh"
         basedOnDependencyAnalysis: false
     settings:
       base:
@@ -146,3 +172,37 @@ targets:
         DEVELOPMENT_TEAM: ""
         ENABLE_HARDENED_RUNTIME: YES
         SKIP_INSTALL: YES
+
+  ClawdHomeHelperTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: tests/ClawdHomeHelperTests
+      - path: ClawdHomeHelper/Operations/CommandOutputCapture.swift
+        type: file
+      - path: Shared/OpenCLINetworkDiagnostics.swift
+        type: file
+    dependencies:
+      - target: ClawdHomeHelper
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.clawdhome.mac.helper.tests
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        GENERATE_INFOPLIST_FILE: YES
+
+  ClawdHomeAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: tests/ClawdHomeAppXCTests
+    dependencies:
+      - target: ClawdHome
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.clawdhome.mac.app.tests
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        GENERATE_INFOPLIST_FILE: YES

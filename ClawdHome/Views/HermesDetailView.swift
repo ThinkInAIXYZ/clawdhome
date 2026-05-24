@@ -64,7 +64,18 @@ struct HermesDetailView: View {
     // T6.1 轮询回调（profileID → status）
     let onRefreshProfileStatus: (String) async -> Void
 
+    // WebUI 伴生服务状态 (PR-WebUI)
+    let webuiVersion: String?
+    let webuiRunning: Bool
+    let webuiPort: Int
+    let isInstallingWebUI: Bool
+    let webuiInstallLog: String
+    let onInstallWebUI: () -> Void
+    let onRefreshWebUIStatus: () async -> Void
+
     @Environment(HelperClient.self) private var helperClient
+
+    @State private var showTerminalBackup = false
 
     @State private var isRightPanelExpanded = false
     @State private var pendingCloseTabID: UUID?
@@ -100,6 +111,17 @@ struct HermesDetailView: View {
 
     private var showMultiAgentEntrypoints: Bool {
         HermesFeaturePolicy.shouldShowMultiAgentEntrypoints
+    }
+
+    private var isShowingWebUI: Bool {
+        guard mode == .chat else { return false }
+        guard !showTerminalBackup else { return false }
+        guard !isInstallingWebUI else { return false }
+        guard webuiVersion != nil else { return false }
+        guard let selectedProfile = selectedProfileID else { return false }
+        guard let status = profileStatuses[selectedProfile], status.running else { return false }
+        guard webuiPort > 0 else { return false }
+        return true
     }
 
     var body: some View {
@@ -141,7 +163,7 @@ struct HermesDetailView: View {
                     GatewayLogViewer(username: user.username, runtime: .hermes, externalSearchQuery: $hermesLogSearchText)
                 }
             }
-            .padding(.top, 44)
+            .padding(.top, isShowingWebUI ? 0 : 44)
 
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 6) {
@@ -231,7 +253,8 @@ struct HermesDetailView: View {
                         .zIndex(5)
                 }
             }
-            .padding(.top, 44)
+            .padding(.top, isShowingWebUI ? 12 : 44)
+            .padding(.trailing, isShowingWebUI ? 12 : 0)
 
             PromptMemoryOverlay(
                 username: user.username,
@@ -244,16 +267,22 @@ struct HermesDetailView: View {
                 }
             )
         }
-        .padding(20)
+        .padding(isShowingWebUI ? 0 : 20)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             configureChatTabsIfNeeded()
-            Task { await refreshBrowserAccountStatus() }
+            Task {
+                await refreshBrowserAccountStatus()
+                await onRefreshWebUIStatus()
+            }
         }
         .onChange(of: user.username) { _, _ in
             configureChatTabsIfNeeded()
             browserAccountStatus = nil
-            Task { await refreshBrowserAccountStatus() }
+            Task {
+                await refreshBrowserAccountStatus()
+                await onRefreshWebUIStatus()
+            }
         }
         .alert(
             L10n.k("hermes.profile.close_chat_tab_title", fallback: "关闭会话标签？"),
@@ -346,8 +375,160 @@ struct HermesDetailView: View {
     }
 
     private var chatBody: some View {
-        terminalColumn
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ZStack(alignment: .bottomTrailing) {
+            if showTerminalBackup {
+                terminalColumn
+                    .transition(.opacity)
+            } else if isInstallingWebUI {
+                // 显示安装进度和详细日志
+                VStack(spacing: 20) {
+                    ProgressView(L10n.k("hermes.webui.installing", fallback: "正在克隆并配置 WebUI 管理中心..."))
+                        .progressViewStyle(.circular)
+                        .controlSize(.large)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L10n.k("common.label.log", fallback: "安装日志"))
+                            .font(.headline)
+                        ScrollView {
+                            Text(webuiInstallLog)
+                                .font(.system(.body, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                        }
+                        .frame(height: 280)
+                        .background(Color.black.opacity(0.85))
+                        .cornerRadius(8)
+                        .foregroundColor(.green)
+                    }
+                    .padding(.horizontal)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if webuiVersion == nil {
+                // 显示引导一键配置 WebUI 的卡片
+                VStack(spacing: 24) {
+                    Spacer()
+                    Image(systemName: "square.stack.3d.up.fill")
+                        .font(.system(size: 64))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.blue, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: .purple.opacity(0.3), radius: 10, x: 0, y: 5)
+                    
+                    VStack(spacing: 8) {
+                        Text(L10n.k("hermes.webui.onboard_title", fallback: "一键配置现代 Web 对话大厅"))
+                            .font(.title2.weight(.semibold))
+                        Text(L10n.k("hermes.webui.onboard_desc", fallback: "集成 nesquena/hermes-webui 网页前端，提供精美、多 Profile 隔离的会话和资源管理面板。"))
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 450)
+                    }
+                    
+                    Button {
+                        onInstallWebUI()
+                    } label: {
+                        Label(L10n.k("hermes.webui.install_now", fallback: "一键配置"), systemImage: "bolt.fill")
+                            .font(.body.weight(.medium))
+                            .frame(width: 140, height: 32)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.primary.opacity(0.02))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        )
+                )
+                .padding(20)
+            } else if let selectedProfile = selectedProfileID,
+                      let status = profileStatuses[selectedProfile],
+                      status.running {
+                // 网关正在运行中且 WebUI 已就绪
+                if webuiPort > 0 {
+                    HermesWebUIView(url: URL(string: "http://127.0.0.1:\(webuiPort)")!)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                } else {
+                    ProgressView()
+                }
+            } else {
+                // 网关未启动时的引导卡片，或者作为默认兜底展示以确保可用性
+                VStack(spacing: 20) {
+                    Spacer()
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 56))
+                        .foregroundStyle(.secondary)
+                    
+                    VStack(spacing: 6) {
+                        Text(L10n.k("hermes.webui.gateway_offline_title", fallback: "Hermes 引擎未在线"))
+                            .font(.headline)
+                        Text(L10n.k("hermes.webui.gateway_offline_desc", fallback: "请先在右侧栏或 Profile 卡片中启动该实例的 Gateway 网关进程。"))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 380)
+                    }
+                    
+                    Button {
+                        if let selectedProfile = selectedProfileID {
+                            onStartProfile(selectedProfile)
+                        } else {
+                            onStartOrRestart()
+                        }
+                    } label: {
+                        Label(L10n.k("common.action.start", fallback: "启动网关"), systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // 悬浮在右下角的跨界直达切换徽标，在任何情况下均渲染，为用户提供完美的可触达性和切换机制
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showTerminalBackup.toggle()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    if showTerminalBackup {
+                        Image(systemName: webuiVersion == nil ? "square.stack.3d.up.fill" : "globe")
+                        Text(webuiVersion == nil ? L10n.k("hermes.webui.switch_onboard", fallback: "网页配置") : L10n.k("hermes.webui.switch_web", fallback: "网页端"))
+                            .font(.caption.weight(.semibold))
+                    } else {
+                        Image(systemName: "terminal.fill")
+                        Text(L10n.k("hermes.webui.switch_terminal", fallback: "调试终端"))
+                            .font(.caption.weight(.semibold))
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.9))
+                        .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(16)
+            .zIndex(10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var configBody: some View {
@@ -2125,11 +2306,19 @@ struct HermesDetailContainer: View {
     @State private var deleteAdminPassword = ""
     @State private var deleteError: String? = nil
     @State private var hermesLatestVersion: String? = nil
+    @State private var hermesLatestInstallRef: String? = nil
     @State private var isCheckingHermesUpdate = false
     @State private var isUpgradingHermes = false
     @State private var hermesUpgradeStatusMessage: String? = nil
     @State private var isDetailSidebarCollapsed = false
     @State private var showStopWithTerminalsAlert = false
+
+    // WebUI 伴生服务状态 (PR-WebUI)
+    @State private var webuiVersion: String? = nil
+    @State private var webuiRunning = false
+    @State private var webuiPort = 0
+    @State private var isInstallingWebUI = false
+    @State private var webuiInstallLog = ""
 
     private var detailWindowTitle: String {
         user.fullName.isEmpty ? user.username : user.fullName
@@ -2144,7 +2333,9 @@ struct HermesDetailContainer: View {
     }
 
     private var canUpgradeHermes: Bool {
-        guard let installed = user.hermesVersion, let latest = hermesLatestVersion else { return false }
+        guard let installed = user.hermesVersion,
+              let latest = hermesLatestVersion,
+              hermesLatestInstallRef != nil else { return false }
         return compareVersions(installed, latest) == .orderedAscending
     }
 
@@ -2202,7 +2393,14 @@ struct HermesDetailContainer: View {
                         profileBindingsItems = items
                         showProfileBindings = true
                     },
-                    onRefreshProfileStatus: { id in await refreshProfileStatus(id) }
+                    onRefreshProfileStatus: { id in await refreshProfileStatus(id) },
+                    webuiVersion: webuiVersion,
+                    webuiRunning: webuiRunning,
+                    webuiPort: webuiPort,
+                    isInstallingWebUI: isInstallingWebUI,
+                    webuiInstallLog: webuiInstallLog,
+                    onInstallWebUI: { Task { await installWebUI() } },
+                    onRefreshWebUIStatus: { await refreshWebUIStatus() }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -2732,6 +2930,7 @@ struct HermesDetailContainer: View {
         await checkHermesUpgrade()
         await loadProfiles()
         await refreshAllProfileStatuses()
+        await refreshWebUIStatus()
     }
 
     private func refreshStatus() async {
@@ -2748,25 +2947,27 @@ struct HermesDetailContainer: View {
         defer { isCheckingHermesUpdate = false }
 
         do {
-            let latest = try await fetchHermesLatestVersion()
-            hermesLatestVersion = latest
+            let latest = try await fetchHermesLatestRelease()
+            hermesLatestVersion = latest.displayVersion
+            hermesLatestInstallRef = latest.installRef
 
             guard let installed = user.hermesVersion, installed != "unknown" else {
                 hermesUpgradeStatusMessage = nil
                 return
             }
 
-            if compareVersions(installed, latest) == .orderedAscending {
+            if compareVersions(installed, latest.displayVersion) == .orderedAscending {
                 hermesUpgradeStatusMessage = L10n.f(
                     "shrimp.settings.dependency.bridge.update_available",
                     fallback: "已安装（%@），可升级到 %@",
                     installed,
-                    latest
+                    latest.displayVersion
                 )
             } else {
                 hermesUpgradeStatusMessage = L10n.k("views.settings_view.up_to_date", fallback: "当前已是最新版本")
             }
         } catch {
+            hermesLatestInstallRef = nil
             hermesUpgradeStatusMessage = error.localizedDescription
         }
     }
@@ -2784,7 +2985,7 @@ struct HermesDetailContainer: View {
         defer { isUpgradingHermes = false }
 
         do {
-            try await helperClient.installHermes(username: user.username, version: hermesLatestVersion)
+            try await helperClient.installHermes(username: user.username, version: hermesLatestInstallRef)
             await refreshStatus()
             await checkHermesUpgrade()
         } catch {
@@ -2792,7 +2993,7 @@ struct HermesDetailContainer: View {
         }
     }
 
-    private func fetchHermesLatestVersion() async throws -> String {
+    private func fetchHermesLatestRelease() async throws -> HermesLatestRelease {
         if let fromRelease = try await fetchHermesLatestVersionFromGitHubRelease() {
             return fromRelease
         }
@@ -2804,7 +3005,7 @@ struct HermesDetailContainer: View {
         ])
     }
 
-    private func fetchHermesLatestVersionFromGitHubRelease() async throws -> String? {
+    private func fetchHermesLatestVersionFromGitHubRelease() async throws -> HermesLatestRelease? {
         guard let url = URL(string: "https://api.github.com/repos/NousResearch/hermes-agent/releases/latest") else {
             return nil
         }
@@ -2820,10 +3021,10 @@ struct HermesDetailContainer: View {
               let tagName = json["tag_name"] as? String else {
             return nil
         }
-        return normalizeVersion(tagName)
+        return HermesLatestRelease(displayVersion: normalizeVersion(tagName), installRef: tagName)
     }
 
-    private func fetchHermesLatestVersionFromPyPI() async throws -> String? {
+    private func fetchHermesLatestVersionFromPyPI() async throws -> HermesLatestRelease? {
         guard let url = URL(string: "https://pypi.org/pypi/hermes-agent/json") else {
             return nil
         }
@@ -2838,7 +3039,7 @@ struct HermesDetailContainer: View {
               let version = info["version"] as? String else {
             return nil
         }
-        return normalizeVersion(version)
+        return HermesLatestRelease(displayVersion: normalizeVersion(version), installRef: nil)
     }
 
     private func normalizeVersion(_ raw: String) -> String {
@@ -2867,6 +3068,11 @@ struct HermesDetailContainer: View {
                 let digits = component.prefix { $0.isNumber }
                 return Int(digits) ?? 0
             }
+    }
+
+    private struct HermesLatestRelease {
+        let displayVersion: String
+        let installRef: String?
     }
 
     private func refreshAllProfileStatuses() async {
@@ -3115,5 +3321,76 @@ struct HermesDetailContainer: View {
             deleteError = error.localizedDescription
         }
         isDeleting = false
+    }
+
+    // MARK: - Hermes WebUI (PR-WebUI)
+
+    private func refreshWebUIStatus() async {
+        let version = await helperClient.getHermesWebUIVersion(username: user.username)
+        self.webuiVersion = version
+        
+        let status = await helperClient.getHermesWebUIStatus(username: user.username)
+        self.webuiRunning = status.running
+        self.webuiPort = status.port
+        
+        // 没启动就自动静默启动，启动了就自动加载
+        if version != nil && !status.running {
+            let profileID = selectedProfileID ?? chatTabManager.selectedTabID?.uuidString ?? "main"
+            if let gatewayStatus = profileStatuses[profileID], gatewayStatus.running {
+                do {
+                    let port = try await helperClient.startHermesWebUI(
+                        username: user.username,
+                        uid: user.macUID ?? 501
+                    )
+                    self.webuiRunning = true
+                    self.webuiPort = port
+                } catch {
+                    // 静默捕获拉起错误，避免阻碍页面基础渲染
+                }
+            }
+        }
+    }
+
+    private func installWebUI() async {
+        isInstallingWebUI = true
+        webuiInstallLog = L10n.k("hermes.webui.preparing", fallback: "准备配置基础环境...\n")
+        
+        let logPath = "/tmp/clawdhome-webui-install-\(user.username).log"
+        // 启动日志轮询读取
+        let logTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            if let data = try? Data(contentsOf: URL(fileURLWithPath: logPath)),
+               let str = String(data: data, encoding: .utf8) {
+                self.webuiInstallLog = str
+            }
+        }
+        
+        do {
+            _ = try await helperClient.installHermesWebUI(username: user.username, logPath: logPath)
+            logTimer.invalidate()
+            
+            if let data = try? Data(contentsOf: URL(fileURLWithPath: logPath)),
+               let str = String(data: data, encoding: .utf8) {
+                self.webuiInstallLog = str
+            }
+            
+            await refreshWebUIStatus()
+            
+            // 如果当前 profile 网关处于运行中，自动启动这唯一的伴生 WebUI 服务
+            if let selected = selectedProfileID,
+               let status = profileStatuses[selected],
+               status.running {
+                _ = try? await helperClient.startHermesWebUI(
+                    username: user.username,
+                    uid: user.macUID ?? 501
+                )
+                await refreshWebUIStatus()
+            }
+            
+            isInstallingWebUI = false
+        } catch {
+            logTimer.invalidate()
+            self.webuiInstallLog += "\n配置失败: \(error.localizedDescription)\n"
+            isInstallingWebUI = false
+        }
     }
 }

@@ -21,7 +21,7 @@ BUILD_ARCHS ?= arm64
 
 .PHONY: help bump-build build build-cli build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-prepare release-build release-publish release-dry-run release-notes-draft notes-rename changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli test-cli-onboard-env test-cli-onboard-help test-cli-onboard test-cli-onboard-step test-cli-onboard-clean
 
-WEBSITE_DIR  ?= ../clawdhome_website
+WEBSITE_DIR  ?= $(HOME)/Documents/GitHub/clawdhome_website
 WEBSITE_REPO ?= deepjerry-ai/clawdhome_website
 
 help:

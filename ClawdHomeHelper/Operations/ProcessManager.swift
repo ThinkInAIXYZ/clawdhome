@@ -62,24 +62,30 @@ enum ProcessManager {
     }
 
     private static func collectProcessesBasic(username: String) -> [ProcessEntry] {
+        guard let output = CommandOutputCapture.run(
+            executablePath: "/bin/ps",
+            arguments: [
+                "-U", username,
+                "-o", "pid=,ppid=,pcpu=,rss=,stat=,etime=,command="
+            ]
+        ) else {
+            helperLog("[proc] ps run failed user=\(username)", level: .error)
+            return []
+        }
 
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/ps")
-        // 字段顺序：pid ppid %cpu rss(KB) stat etime command
-        // etime 格式 [[DD-]HH:]MM:SS，单 token；command 放最后，含空格也安全
-        task.arguments = ["-U", username, "-o",
-                          "pid=,ppid=,pcpu=,rss=,stat=,etime=,command="]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError  = Pipe()
-        do { try task.run() } catch { return [] }
-        task.waitUntilExit()
+        let stdout = String(data: output.stdout, encoding: .utf8) ?? ""
+        let stderr = String(data: output.stderr, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-        let data   = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8) ?? ""
+        if output.terminationStatus != 0 {
+            helperLog(
+                "[proc] ps exit user=\(username) status=\(output.terminationStatus) stderr=\(stderr)",
+                level: .warn
+            )
+        }
 
         var entries: [ProcessEntry] = []
-        for line in output.split(separator: "\n", omittingEmptySubsequences: true) {
+        for line in stdout.split(separator: "\n", omittingEmptySubsequences: true) {
             let t = String(line).trimmingCharacters(in: .whitespaces)
             guard !t.isEmpty else { continue }
             // 拆出前 6 个 token（pid ppid cpu rss stat etime），其余合并为 command
@@ -110,6 +116,17 @@ enum ProcessManager {
                 elapsedSeconds: parseEtime(etime),
                 listeningPorts: []
             ))
+        }
+        if entries.isEmpty {
+            let preview = stdout
+                .replacingOccurrences(of: "\n", with: "\\n")
+                .prefix(240)
+            helperLog(
+                "[proc] ps empty user=\(username) status=\(output.terminationStatus) stdout=\(preview) stderr=\(stderr)",
+                level: .warn
+            )
+        } else {
+            helperLog("[proc] ps ok user=\(username) count=\(entries.count)", level: .debug, channel: .diagnostics)
         }
         return entries.sorted { $0.pid < $1.pid }
     }
@@ -155,29 +172,21 @@ enum ProcessManager {
 
     /// 运行 lsof，返回 (pid, n字段地址) 列表
     private static func runLsof(_ args: [String]) -> [(pid: Int32, addr: String)] {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        task.arguments = args
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError  = Pipe()
-        do { try task.run() } catch { return [] }
-
-        let deadline = Date().addingTimeInterval(lsofTimeout)
-        while task.isRunning && Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.03)
+        guard let output = CommandOutputCapture.run(
+            executablePath: "/usr/sbin/lsof",
+            arguments: args,
+            timeout: lsofTimeout
+        ) else {
+            return []
         }
-        if task.isRunning {
-            task.terminate()
-            _ = try? pipe.fileHandleForReading.readToEnd()
+        if output.terminationStatus != 0 {
             return []
         }
 
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
-                            encoding: .utf8) ?? ""
+        let stdout = String(data: output.stdout, encoding: .utf8) ?? ""
         var pairs: [(pid: Int32, addr: String)] = []
         var currentPID: Int32 = 0
-        for line in output.split(separator: "\n") {
+        for line in stdout.split(separator: "\n") {
             let s = String(line)
             if s.hasPrefix("p") {
                 currentPID = Int32(s.dropFirst()) ?? 0

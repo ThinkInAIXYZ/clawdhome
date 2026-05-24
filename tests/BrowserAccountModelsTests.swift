@@ -68,6 +68,30 @@ struct BrowserAccountModelsTests {
             "CDP websocket URL should include localhost, port, and browser path"
         )
 
+        let unresolvedSession = BrowserAccountSession(
+            username: "agent.one",
+            profilePath: paths.profileDirectory.path,
+            devToolsActivePortPath: paths.devToolsActivePortFile.path,
+            httpEndpoint: "",
+            webSocketDebuggerURL: "",
+            cdpPort: 9222,
+            launchedAt: 1_715_000_000,
+            consoleUsername: "admin"
+        )
+        let resolvedSession = unresolvedSession.resolving(activePort)
+        expect(
+            resolvedSession.httpEndpoint == "http://127.0.0.1:39123",
+            "session should adopt the parsed CDP HTTP endpoint when its stored endpoint is blank"
+        )
+        expect(
+            resolvedSession.webSocketDebuggerURL == "ws://127.0.0.1:39123/devtools/browser/abc-def",
+            "session should adopt the parsed CDP websocket endpoint when its stored debugger URL is blank"
+        )
+        expect(
+            resolvedSession.cdpPort == 39123,
+            "session should update the stored CDP port when DevToolsActivePort reports a different live port"
+        )
+
         expect(
             BrowserAccountPaths.isValidUsername("agent-01.alpha"),
             "valid macOS-style usernames should be accepted"

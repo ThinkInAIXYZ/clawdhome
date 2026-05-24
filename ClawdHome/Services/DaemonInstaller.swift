@@ -76,8 +76,10 @@ final class DaemonInstaller {
     /// 适用于 Helper 卡死、XPC 无响应等场景
     @discardableResult
     func forceRestart() -> Bool {
+        let commands = HelperServiceLocator.restartLabels().map { "launchctl kickstart -k system/\($0)" }
+        let command = commands.joined(separator: "; ")
         let script = """
-        do shell script "launchctl kickstart -k system/ai.clawdhome.mac.helper" with administrator privileges
+        do shell script "\(command)" with administrator privileges
         """
         var error: NSDictionary?
         NSAppleScript(source: script)?.executeAndReturnError(&error)

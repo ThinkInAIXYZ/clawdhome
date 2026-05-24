@@ -10,7 +10,8 @@ final class WizardConnection {
     private var connection: NSXPCConnection?
 
     init() {
-        let conn = NSXPCConnection(machServiceName: kHelperMachServiceName, options: .privileged)
+        let machServiceName = HelperServiceLocator.preferredMachServiceName()
+        let conn = NSXPCConnection(machServiceName: machServiceName, options: .privileged)
         conn.remoteObjectInterface = NSXPCInterface(with: ClawdHomeHelperProtocol.self)
         conn.resume()
         connection = conn

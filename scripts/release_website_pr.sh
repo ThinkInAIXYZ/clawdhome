@@ -5,7 +5,7 @@
 #   bash scripts/release_website_pr.sh \
 #     --version 1.10.0 \
 #     --notes-dir release-notes \
-#     --website-dir ../clawdhome_website \
+#     --website-dir ~/Documents/GitHub/clawdhome_website \
 #     --website-repo deepjerry-ai/clawdhome_website \
 #     [--skip-push]
 #
@@ -42,6 +42,28 @@ log()  { echo "▶ $*"; }
 ok()   { echo "✅ $*"; }
 warn() { echo "⚠️  $*"; }
 
+run_with_timeout_retry() {
+  local timeout_sec="$1"
+  local retries="$2"
+  shift 2
+  local attempt=1
+  local rc=0
+  while [ "$attempt" -le "$retries" ]; do
+    log "执行（第 ${attempt}/${retries} 次）：$*"
+    if perl -e 'alarm shift @ARGV; exec @ARGV' "$timeout_sec" "$@"; then
+      return 0
+    fi
+    rc=$?
+    warn "命令失败（exit=$rc）：$*"
+    if [ "$attempt" -lt "$retries" ]; then
+      warn "3 秒后重试..."
+      sleep 3
+    fi
+    attempt=$((attempt + 1))
+  done
+  return "$rc"
+}
+
 [ -n "$VERSION" ]     || { warn "release_website_pr: 未指定 --version，跳过"; exit 0; }
 [ -d "$WEBSITE_DIR" ] || { warn "website 目录不存在（${WEBSITE_DIR}），跳过"; exit 0; }
 
@@ -74,7 +96,7 @@ fi
 
 if [ "$HAS_REMOTE" = true ]; then
   log "同步 website origin/main..."
-  git -C "$WEBSITE_DIR" fetch origin main --quiet 2>/dev/null || \
+  run_with_timeout_retry 90 2 git -C "$WEBSITE_DIR" fetch origin main --quiet 2>/dev/null || \
     warn "fetch origin/main 失败，继续使用本地 HEAD"
 fi
 
@@ -194,10 +216,20 @@ if [ "$SKIP_PUSH" = false ]; then
   # 确保 remote main 存在（gh pr create 需要 base 分支在 remote）
   if ! git -C "$WEBSITE_DIR" show-ref --quiet "refs/remotes/origin/main" 2>/dev/null; then
     log "remote main 不存在，先推送本地 main..."
-    git -C "$WEBSITE_DIR" -c http.version=HTTP/1.1 push origin main || \
+    run_with_timeout_retry 120 2 git -C "$WEBSITE_DIR" -c http.version=HTTP/1.1 push origin main || \
       warn "推送 main 失败，PR 可能无法创建"
   fi
-  git -C "$WEBSITE_DIR" -c http.version=HTTP/1.1 push origin "$BRANCH"
+  run_with_timeout_retry 120 2 git -C "$WEBSITE_DIR" -c http.version=HTTP/1.1 push origin "$BRANCH" || {
+    warn "推送 $BRANCH 失败，请检查网络或远端权限"
+    exit 1
+  }
+
+  if git -C "$WEBSITE_DIR" ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+    ok "远端分支校验通过：origin/$BRANCH"
+  else
+    warn "未检测到远端分支 origin/$BRANCH，后续 PR 创建可能失败"
+    exit 1
+  fi
 
   PR_BODY=$(printf '## 更新内容\n\n### 中文\n\n%s\n\n---\n\n### English\n\n%s\n' \
     "$(cat "$ZH_NOTES")" "$(cat "$EN_NOTES")")

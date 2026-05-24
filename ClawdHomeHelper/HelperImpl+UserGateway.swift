@@ -149,6 +149,30 @@ extension ClawdHomeHelperImpl {
         }
     }
 
+    func uninstallGateway(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("Gateway 卸载注册 @\(username)")
+        do {
+            try GatewayManager.uninstallGateway(username: username)
+            reply(true, nil)
+        } catch {
+            helperLog("Gateway 卸载注册失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func restoreGatewayRegistration(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("Gateway 恢复 system 注册 @\(username)")
+        do {
+            let uid = try UserManager.uid(for: username)
+            try GatewayManager.startGateway(username: username, uid: uid)
+            try GatewayManager.stopGateway(username: username, uid: uid)
+            reply(true, nil)
+        } catch {
+            helperLog("Gateway 恢复 system 注册失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
     func logoutUser(username: String, withReply reply: @escaping (Bool, String?) -> Void) {
         helperLog("用户注销 @\(username)")
         do {

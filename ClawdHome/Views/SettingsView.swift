@@ -50,6 +50,9 @@ private struct GeneralSettingsTab: View {
     @AppStorage("proxyPassword") private var proxyPassword = ""
     @AppStorage("proxyNoProxy") private var proxyNoProxy = "localhost,127.0.0.1"
     @AppStorage("debugForceEmptyClawPool") private var debugForceEmptyClawPool = false
+    @AppStorage("hf_endpoint_preference") private var hfEndpointPreference = ""
+    @AppStorage("custom_hf_endpoint") private var customHFEndpoint = ""
+    @AppStorage("hf_token_preference") private var hfTokenPreference = ""
     @State private var isApplyingProxy = false
     @State private var proxyMessage: String? = nil
     @State private var proxyError: String? = nil
@@ -116,6 +119,30 @@ private struct GeneralSettingsTab: View {
                 Text(L10n.k("views.settings_view.text_6f04bbdd", fallback: "切换后会立即作用到所有窗口。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section(L10n.k("settings.speech_transcription.section", fallback: "语音识别设置")) {
+                Picker(L10n.k("settings.speech_transcription.hf_endpoint", fallback: "模型下载源"), selection: $hfEndpointPreference) {
+                    Text(L10n.k("settings.speech_transcription.hf_endpoint.default", fallback: "默认 (Hugging Face)")).tag("")
+                    Text(L10n.k("settings.speech_transcription.hf_endpoint.mirror", fallback: "HF 镜像站 (hf-mirror.com)")).tag("https://hf-mirror.com")
+                    Text(L10n.k("settings.speech_transcription.hf_endpoint.custom", fallback: "自定义…")).tag("custom")
+                }
+                
+                if hfEndpointPreference == "custom" {
+                    TextField(
+                        L10n.k("settings.speech_transcription.hf_endpoint.custom_url", fallback: "自定义端点 URL"),
+                        text: $customHFEndpoint
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .disableAutocorrection(true)
+                }
+
+                SecureField(
+                    L10n.k("settings.speech_transcription.hf_token", fallback: "Hugging Face Token"),
+                    text: $hfTokenPreference
+                )
+                .textFieldStyle(.roundedBorder)
+                .disableAutocorrection(true)
             }
 
             Section(L10n.k("views.settings_view.gateway", fallback: "Gateway")) {

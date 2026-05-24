@@ -55,10 +55,23 @@ There are no unit tests configured in this project.
 ```
 ClawdHome.app (user context, SwiftUI)
     └── XPC (NSXPCConnection, Mach service) ──→ ClawdHomeHelper (root LaunchDaemon)
-                                                   └── per-user OpenClaw gateway instances
+                                                   ├── per-user browser-account isolation layer
+                                                   │    └── managed Chrome profile + Browser Bridge/CDP session
+                                                   └── per-user OpenClaw / Hermes runtime instances
 ```
 
 The app **never** performs privileged operations directly. All system-level actions route through the XPC helper.
+
+### Browser Isolation Layer
+
+ClawdHome has a second isolation boundary in addition to macOS user separation: a **per-Shrimp browser-account layer**. This layer lives under the Shrimp user's `~/.clawdhome/browser` namespace and exposes a managed browser profile plus transport metadata that runtimes can consume.
+
+- Isolation unit: one Shrimp user owns one browser-account namespace; other Shrimp users cannot read its cookies, session files, profile selectors, or CDP metadata.
+- Shared inside the boundary: OpenClaw and Hermes intentionally reuse the same browser-account layer for the same Shrimp so they can share login state without sharing the host operator's real browser profile.
+- Transport fan-out: the browser-account layer can provide `OPENCLI_PROFILE` for Browser Bridge/OpenCLI integration and `BROWSER_CDP_URL` / DevTools session metadata for CDP-aware runtimes.
+- Security intent: automation traffic is routed to a ClawdHome-managed browser profile, not to the operator's default Chrome profile, so "external browser" support still stays inside the Shrimp boundary.
+
+Detailed reference: `docs/browser-account-technical-spec.md`
 
 ### Two Targets (defined in `project.yml`, built via XcodeGen)
 
@@ -91,7 +104,10 @@ The helper binary is embedded into the app bundle at `Contents/Library/LaunchDae
 - **Operations/** — privileged operations organized by domain:
   - `UserManager` — create/delete macOS users via `sysadminctl`/`dscl`.
   - `GatewayManager` — start/stop/restart gateways via `launchctl`.
+  - `HermesGatewayManager` — start/stop/restart Hermes gateways via `launchctl`.
   - `InstallManager` — install Node.js/OpenClaw via npm.
+  - `HermesInstaller` — install/upgrade Hermes Agent and build its isolated runtime env.
+  - `BrowserAccountManager` — provision the managed browser profile, Browser Bridge/OpenCLI wrappers, session files, and CDP metadata shared by runtimes within one Shrimp boundary.
   - `UserFileManager` — file CRUD within user home directories.
   - `ProcessManager` — list/kill user processes.
   - `ConfigWriter` — read/write OpenClaw JSON config files.
@@ -146,6 +162,9 @@ Full reference with examples and anti-patterns: **`docs/i18n.md`** (§ "UI Trans
 | `/var/lib/clawdhome/models/` | Local AI models (omlx) — root only |
 | `/Users/Shared/ClawdHome/` | Cross-user shared file space (public folder, per-shrimp vaults) |
 | `~<user>/.clawdhome/` | Per-user ClawdHome config and browser-tool directory, shared by OpenClaw, Hermes, and future runtimes |
+| `~/Library/Application Support/ClawdHome/BrowserProfiles/<shrimp>/` | Managed Chrome profile owned by one Shrimp browser account; Browser Bridge extension and DevToolsActivePort live here |
+| `~<shrimp>/.clawdhome/browser/session.json` | Active browser session metadata (profile path, CDP endpoint, websocket debugger URL) for the Shrimp-scoped browser account |
+| `~<shrimp>/.clawdhome/browser/opencli-profile.json` | Persisted Browser Bridge/OpenCLI profile selector for the Shrimp-scoped browser account |
 | `~<shrimp>/.clawdhome/runtime.json` | Runtime type anchor: `{"runtime":"hermes"}` or `{"runtime":"openclaw"}` — written on install, read by identification engine; absent → falls back to openclaw detection |
 | `~<shrimp>/.openclaw/` | Per-Shrimp OpenClaw config and data |
 | `~<shrimp>/.npm-global/` | Per-Shrimp npm global install directory |
@@ -174,6 +193,14 @@ A single Shrimp can host multiple Hermes profiles (agent personas), each living 
 **Known follow-ups** (deliberately out of the multi-profile workflow scope):
 - i18n: new Hermes UI views still use raw CJK literals (~116 unique strings); a separate PR will migrate them to `L10n.k(...)` / `L10n.f(...)` and clear the project's pre-existing i18n debt in `AddProviderModelSheet` / `ShrimpInitWizardV2` / `ShrimpSettingsV2View`.
 - `hermes-intentional-stop` sentinel: hermes intentionally does **not** mirror OpenClaw's intentional-stop mechanism — autostart is whitelist-driven (D7).
+
+## Runtime Browser Integration
+
+The browser-account layer is runtime-agnostic; OpenClaw and Hermes consume it through different environment/config injection points.
+
+- OpenClaw receives the Shrimp-scoped browser selectors through the shared user runtime environment (notably `OPENCLI_PROFILE`) and the `BROWSER` wrapper command that targets ClawdHome's managed browser tool.
+- Hermes receives the same `BROWSER` wrapper plus `OPENCLI_PROFILE`, and when a reachable DevTools endpoint exists it also receives `BROWSER_CDP_URL`; ClawdHome additionally syncs that endpoint into Hermes `config.yaml` as `browser.cdp_url`.
+- Because both engines read from the same Shrimp browser-account namespace, switching engines does not require re-login, while cross-Shrimp leakage is still blocked by the macOS user boundary.
 
 ## Conventions
 

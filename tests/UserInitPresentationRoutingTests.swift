@@ -84,6 +84,48 @@ struct UserInitPresentationRoutingTests {
             "cached runtime hints should bypass the loading gate"
         )
 
+        guard !shouldAllowUserPoolEntry(
+            versionChecked: false,
+            hasInstalledRuntimeHint: false,
+            isGatewayOperationalHint: false,
+            isAdmin: false,
+            isMacOSUser: true
+        ) else {
+            fputs(
+                "FAIL: unresolved macOS shrimp entries should stay locked until runtime loading completes\n",
+                stderr
+            )
+            exit(1)
+        }
+
+        guard shouldAllowUserPoolEntry(
+            versionChecked: false,
+            hasInstalledRuntimeHint: true,
+            isGatewayOperationalHint: false,
+            isAdmin: false,
+            isMacOSUser: true
+        ) else {
+            fputs(
+                "FAIL: cached runtime hints should still allow pool entry before the next version poll finishes\n",
+                stderr
+            )
+            exit(1)
+        }
+
+        guard shouldAllowUserPoolEntry(
+            versionChecked: false,
+            hasInstalledRuntimeHint: false,
+            isGatewayOperationalHint: true,
+            isAdmin: false,
+            isMacOSUser: true
+        ) else {
+            fputs(
+                "FAIL: operational gateway hints should still allow pool entry before the next version poll finishes\n",
+                stderr
+            )
+            exit(1)
+        }
+
         guard shouldEmbedOverviewGatewayConsole(
             selectedTabRawValue: "overview",
             initPresentationRoute: .detailTabs,

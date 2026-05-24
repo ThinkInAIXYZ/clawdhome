@@ -69,6 +69,18 @@ import Foundation
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
+    /// 卸载指定用户的 openclaw gateway（bootout + 删除 plist）
+    func uninstallGateway(
+        username: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 恢复指定用户的 openclaw gateway system 注册（写回/刷新 plist，但最终保持停止态）
+    func restoreGatewayRegistration(
+        username: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
     /// 查询指定用户的 gateway 运行状态，返回 (isRunning, pid)
     func getGatewayStatus(
         username: String,
@@ -941,6 +953,13 @@ import Foundation
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
+    /// 恢复指定 profile 的 hermes gateway system 注册（写回/刷新 plist，但最终保持停止态）
+    func restoreHermesGatewayRegistration(
+        username: String,
+        profileID: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
     // MARK: - Hermes 配置写入（profile-aware）
     // applyHermesInitConfig / getHermesInitSummary / validateHermesInitConfig
     // 老接口保留，内部转发到 profileID="main"（PR-3 会完整实现 profileID 路径分发）
@@ -1029,6 +1048,42 @@ import Foundation
         username: String,
         profileID: String,
         withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    // MARK: - Hermes WebUI 伴生服务管理 (PR-WebUI)
+
+    /// 以指定用户身份下载/安装 hermes-webui（克隆仓库，运行 bootstrap.py 配置 venv）
+    func installHermesWebUI(
+        username: String,
+        version: String?,
+        logPath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 查询指定用户已安装的 hermes-webui 版本（未安装返回空字符串）
+    func getHermesWebUIVersion(
+        username: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// 启动指定 Shrimp 实例的 hermes-webui 伴生进程
+    func startHermesWebUI(
+        username: String,
+        uid: Int,
+        withReply reply: @escaping (Bool, String?, Int) -> Void
+    )
+
+    /// 停止指定 Shrimp 实例的 hermes-webui 伴生进程
+    func stopHermesWebUI(
+        username: String,
+        uid: Int,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// 获取指定 Shrimp 实例的 hermes-webui 伴生进程状态（isRunning, pid, port）
+    func getHermesWebUIStatus(
+        username: String,
+        withReply reply: @escaping (Bool, Int32, Int) -> Void
     )
 
     // MARK: - Hermes IM 绑定（PR-3）

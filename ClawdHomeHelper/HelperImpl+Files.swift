@@ -468,10 +468,23 @@ extension ClawdHomeHelperImpl {
 
     func getProcessListSnapshot(username: String, withReply reply: @escaping (String) -> Void) {
         let snapshot = ProcessManager.listProcessSnapshot(username: username)
-        let json = (try? JSONEncoder().encode(snapshot))
-            .flatMap { String(data: $0, encoding: .utf8) }
-            ?? #"{"entries":[],"portsLoading":false,"updatedAt":0}"#
-        reply(json)
+        do {
+            let data = try JSONEncoder().encode(snapshot)
+            let json = String(data: data, encoding: .utf8)
+                ?? #"{"entries":[],"portsLoading":false,"updatedAt":0}"#
+            helperLog(
+                "[proc] snapshot reply user=\(username) count=\(snapshot.entries.count) portsLoading=\(snapshot.portsLoading)",
+                level: .debug,
+                channel: .diagnostics
+            )
+            reply(json)
+        } catch {
+            helperLog(
+                "[proc] snapshot encode failed user=\(username) count=\(snapshot.entries.count) error=\(error.localizedDescription)",
+                level: .error
+            )
+            reply(#"{"entries":[],"portsLoading":false,"updatedAt":0}"#)
+        }
     }
 
     func getProcessDetail(pid: Int32, withReply reply: @escaping (String) -> Void) {

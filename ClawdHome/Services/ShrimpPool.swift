@@ -50,6 +50,7 @@ final class ShrimpPool {
     private var hiddenMachineBuffer: [MachineStats] = []
     private var hiddenNetBuffer: [(inBps: Double, outBps: Double)] = []
     private var hiddenLatestSnapshot: DashboardSnapshot? = nil
+    private var freezeWarningCache: [String: (checkedAt: Date, gatewayRunning: Bool, warning: String?)] = [:]
 
     // MARK: - 初始化
 
@@ -58,6 +59,8 @@ final class ShrimpPool {
         self.descriptionStore = ClawDescriptionStore()
         self.freezeStateStore = ClawFreezeStateStore()
     }
+
+    private static let freezeWarningCacheTTL: TimeInterval = 15
 
     // MARK: - 生命周期
 
@@ -126,6 +129,7 @@ final class ShrimpPool {
     func removeUser(username: String) {
         users.removeAll { $0.username == username }
         freezeStateStore.setFrozenState(nil, for: username)
+        freezeWarningCache.removeValue(forKey: username.lowercased())
     }
 
     func setDescription(_ text: String, for username: String) {
@@ -141,6 +145,7 @@ final class ShrimpPool {
         previousAutostartEnabled: Bool? = nil,
         for username: String
     ) {
+        freezeWarningCache.removeValue(forKey: username.lowercased())
         if frozen {
             freezeStateStore.setFrozenState(
                 ClawFreezeStateRecord(
@@ -399,7 +404,7 @@ final class ShrimpPool {
 
     /// 根据向导 JSON 和运行时安装状态判断向导是否"已完成"（即点击进详情而非向导）。
     /// 与 UserEntryWindowResolver.shouldTreatAsUnfinishedWizardState 保持同等逻辑。
-    private nonisolated static func resolveWizardCompleted(stateJSON: String, hasRuntime: Bool) -> Bool {
+    internal nonisolated static func resolveWizardCompleted(stateJSON: String, hasRuntime: Bool) -> Bool {
         guard !stateJSON.isEmpty, let state = InitWizardState.from(json: stateJSON) else {
             // 无 state 文件：无运行时则仍需进向导
             return hasRuntime
@@ -414,26 +419,45 @@ final class ShrimpPool {
     }
 
     private func evaluateFreezeWarning(user: ManagedUser, gatewayRunning: Bool) async -> String? {
-        guard user.isFrozen, let mode = user.freezeMode else { return nil }
+        guard user.isFrozen, let mode = user.freezeMode else {
+            freezeWarningCache.removeValue(forKey: user.username.lowercased())
+            return nil
+        }
+
+        let cacheKey = user.username.lowercased()
+        if let cached = freezeWarningCache[cacheKey],
+           cached.gatewayRunning == gatewayRunning,
+           Date().timeIntervalSince(cached.checkedAt) <= Self.freezeWarningCacheTTL {
+            return cached.warning
+        }
 
         let runtime: ProcessEmergencyFreezeResolver.Runtime = (user.hermesVersion != nil) ? .hermes : .openclaw
         let processes = await helperClient.getProcessList(username: user.username)
         let runtimeProcesses = processes.filter { ProcessEmergencyFreezeResolver.isRuntimeRelated($0, runtime: runtime) }
 
+        let warning: String?
         switch mode {
         case .pause:
             if let resumed = runtimeProcesses.first(where: { !$0.state.uppercased().hasPrefix("T") }) {
-                return String(format: L10n.k("services.shrimp_pool.paused_process_resumed_pid", fallback: "检测到暂停进程恢复运行（PID %d）"), resumed.pid)
+                warning = String(format: L10n.k("services.shrimp_pool.paused_process_resumed_pid", fallback: "检测到暂停进程恢复运行（PID %d）"), resumed.pid)
+            } else {
+                warning = nil
             }
-            return nil
         case .normal, .flash:
             if gatewayRunning {
-                return L10n.k("services.shrimp_pool.gateway_start", fallback: "检测到 Gateway 异常启动")
+                warning = L10n.k("services.shrimp_pool.gateway_start", fallback: "检测到 Gateway 异常启动")
+            } else if let restarted = runtimeProcesses.first {
+                warning = String(format: L10n.k("services.shrimp_pool.openclaw_abnormal_start_pid", fallback: "检测到 openclaw 相关进程异常启动（PID %d）"), restarted.pid)
+            } else {
+                warning = nil
             }
-            if let restarted = runtimeProcesses.first {
-                return String(format: L10n.k("services.shrimp_pool.openclaw_abnormal_start_pid", fallback: "检测到 openclaw 相关进程异常启动（PID %d）"), restarted.pid)
-            }
-            return nil
         }
+
+        freezeWarningCache[cacheKey] = (
+            checkedAt: Date(),
+            gatewayRunning: gatewayRunning,
+            warning: warning
+        )
+        return warning
     }
 }

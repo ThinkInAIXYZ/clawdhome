@@ -166,6 +166,28 @@ struct ClawPoolView: View {
         return nil
     }
 
+    private func poolEntryGatewayOperationalHint(for claw: ManagedUser) -> Bool {
+        if claw.prefersHermesRuntime {
+            return claw.isRunning
+        }
+        switch gatewayHub.readinessMap[claw.username] {
+        case .ready, .starting, .zombie:
+            return true
+        case .stopped, .none:
+            return claw.isRunning
+        }
+    }
+
+    private func canOpenPoolEntry(for claw: ManagedUser) -> Bool {
+        shouldAllowUserPoolEntry(
+            versionChecked: claw.versionChecked,
+            hasInstalledRuntimeHint: claw.runtimeVersionLabel != nil,
+            isGatewayOperationalHint: poolEntryGatewayOperationalHint(for: claw),
+            isAdmin: claw.isAdmin,
+            isMacOSUser: claw.clawType == .macosUser
+        )
+    }
+
     private func visibleProfileDescription(for claw: ManagedUser) -> String? {
         let description = claw.profileDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !description.isEmpty else { return nil }
@@ -562,13 +584,13 @@ struct ClawPoolView: View {
                         Button(role: .destructive) {
                             pendingFlashFreezeClawID = claw.id
                         } label: {
-                            Label(L10n.k("views.user_list_view.mode_title", fallback: "重新执行\(mode.title)"), systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+                            Label(L10n.f("views.user_list_view.mode_title", fallback: "重新执行%@", mode.title), systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
                         }
                     } else {
                         Button {
                             Task { await freezeClaw(claw, mode: mode) }
                         } label: {
-                            Label(L10n.k("views.user_list_view.mode_title", fallback: "重新执行\(mode.title)"), systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+                            Label(L10n.f("views.user_list_view.mode_title", fallback: "重新执行%@", mode.title), systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
                         }
                     }
                 }
@@ -916,6 +938,7 @@ struct ClawPoolView: View {
         ClawCard(
             claw: claw,
             isSelected: selectedClaw == claw.id,
+            isEntryEnabled: canOpenPoolEntry(for: claw),
             isOpeningWebUI: isOpeningWebUI,
             agents: userAgents,
             isAgentExpanded: isExpanded,
@@ -1020,6 +1043,8 @@ struct ClawPoolView: View {
     }
 
     private func openPreferredWindow(for claw: ManagedUser) {
+        guard canOpenPoolEntry(for: claw) else { return }
+
         let usernameKey = claw.username.lowercased()
         let now = Date()
         if windowOpenInFlightUsernames.contains(usernameKey) {
@@ -1300,7 +1325,12 @@ struct ClawPoolView: View {
     private func freezeClaw(_ claw: ManagedUser, mode: FreezeMode) async {
         quickActionError = nil
         appLog("freeze start user=\(claw.username) mode=\(mode.statusLabel)")
+        var previousAutostart: Bool?
+        var autostartChanged = false
         do {
+            previousAutostart = await helperClient.getUserAutostart(username: claw.username)
+            try await helperClient.setUserAutostart(username: claw.username, enabled: false)
+            autostartChanged = true
             let freezeRuntime: ProcessEmergencyFreezeResolver.Runtime =
                 (claw.hermesVersion != nil) ? .hermes : .openclaw
             if mode != .pause {
@@ -1315,9 +1345,15 @@ struct ClawPoolView: View {
                     // 速冻为兜底路径：即使 stopGateway 失败也继续强制终止进程。
                     if mode != .flash { throw error }
                 }
+                if freezeRuntime == .hermes {
+                    try await helperClient.uninstallHermesGatewayOrThrow(username: claw.username, profileID: "main")
+                } else {
+                    try await helperClient.uninstallGateway(username: claw.username)
+                }
             }
 
             if mode == .pause {
+                // 暂停冻结需要保留挂起中的进程内存态，不能卸载 launchd job，否则进程会被终止。
                 let processes = await helperClient.getProcessList(username: claw.username)
                 let targets = ProcessEmergencyFreezeResolver.resolvePauseTargets(
                     processes: processes,
@@ -1341,7 +1377,7 @@ struct ClawPoolView: View {
                     true,
                     mode: mode,
                     pausedPIDs: pausedPIDs,
-                    previousAutostartEnabled: nil,
+                    previousAutostartEnabled: previousAutostart,
                     for: claw.username
                 )
                 appLog("freeze success user=\(claw.username) mode=\(mode.statusLabel) paused=\(pausedPIDs.count)")
@@ -1366,12 +1402,6 @@ struct ClawPoolView: View {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
                     throw HelperError.operationFailed(L10n.k("views.user_list_view.claw_username_pid_pidlist", fallback: "@\(claw.username) 速冻部分失败，未终止 PID: \(pidList)"))
                 }
-                // 二次 stop，防止状态滞后导致 launchd/job 被重新拉起。
-                if freezeRuntime == .hermes {
-                    try? await helperClient.stopHermesGateway(username: claw.username)
-                } else {
-                    try? await helperClient.stopGateway(username: claw.username)
-                }
                 // 速冻后立即复核：若关键进程被外部拉起，给出明确提示。
                 try? await Task.sleep(for: .milliseconds(250))
                 let remaining = await helperClient.getProcessList(username: claw.username)
@@ -1385,11 +1415,18 @@ struct ClawPoolView: View {
                 true,
                 mode: mode,
                 pausedPIDs: [],
-                previousAutostartEnabled: nil,
+                previousAutostartEnabled: previousAutostart,
                 for: claw.username
             )
             appLog("freeze success user=\(claw.username) mode=\(mode.statusLabel)")
         } catch {
+            if autostartChanged, let previousAutostart {
+                do {
+                    try await helperClient.setUserAutostart(username: claw.username, enabled: previousAutostart)
+                } catch {
+                    appLog("freeze rollback autostart failed user=\(claw.username) error=\(error.localizedDescription)", level: .error)
+                }
+            }
             quickActionError = String(format: L10n.k("views.user_list_view.action_failed_for_user_mode", fallback: "@%@ %@失败：%@"), claw.username, mode.title, error.localizedDescription)
             appLog("freeze failed user=\(claw.username) mode=\(mode.statusLabel) error=\(error.localizedDescription)", level: .error)
         }
@@ -1414,6 +1451,16 @@ struct ClawPoolView: View {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
                     throw HelperError.operationFailed(L10n.k("views.user_list_view.unpause_partial_failed_pid_list", fallback: "@\(claw.username) 解除暂停部分失败，未恢复 PID: \(pidList)"))
                 }
+            }
+            if mode != .pause, claw.freezePreviousAutostartEnabled == true {
+                if claw.hermesVersion != nil {
+                    try await helperClient.restoreHermesGatewayRegistration(username: claw.username, profileID: "main")
+                } else {
+                    try await helperClient.restoreGatewayRegistration(username: claw.username)
+                }
+            }
+            if let restoreAutostart = claw.freezePreviousAutostartEnabled {
+                try await helperClient.setUserAutostart(username: claw.username, enabled: restoreAutostart)
             }
             pool.setFrozen(false, for: claw.username)
             appLog("unfreeze success user=\(claw.username)")
@@ -1460,6 +1507,7 @@ private enum ToolSheet: Identifiable {
 private struct ClawCard: View {
     let claw: ManagedUser
     let isSelected: Bool
+    var isEntryEnabled: Bool = true
     var isOpeningWebUI: Bool = false
     var agents: [AgentProfile] = []
     var isAgentExpanded: Bool = false
@@ -1603,6 +1651,7 @@ private struct ClawCard: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160)
+            .opacity(isEntryEnabled ? 1 : 0.72)
             .background(
                 isSelected
                     ? Color.accentColor.opacity(0.08)
@@ -1658,6 +1707,7 @@ private struct ClawCard: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(!isEntryEnabled)
         .simultaneousGesture(TapGesture(count: 2).onEnded {
             onDoubleClick?()
         })

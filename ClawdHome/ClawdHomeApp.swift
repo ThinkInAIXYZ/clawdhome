@@ -1473,15 +1473,41 @@ private struct ClawDetailWindow: View {
     let username: String
 
     @Environment(ShrimpPool.self) private var pool
+    @Environment(GatewayHub.self) private var gatewayHub
     @Environment(\.dismiss)       private var dismiss
 
     private var user: ManagedUser? {
         pool.users.first { $0.username == username }
     }
 
+    private func poolEntryGatewayOperationalHint(for user: ManagedUser) -> Bool {
+        if user.prefersHermesRuntime {
+            return user.isRunning
+        }
+        switch gatewayHub.readinessMap[user.username] {
+        case .ready, .starting, .zombie:
+            return true
+        case .stopped, .none:
+            return user.isRunning
+        }
+    }
+
     var body: some View {
         if let user {
-            if user.prefersHermesRuntime {
+            if !shouldAllowUserPoolEntry(
+                versionChecked: user.versionChecked,
+                hasInstalledRuntimeHint: user.runtimeVersionLabel != nil,
+                isGatewayOperationalHint: poolEntryGatewayOperationalHint(for: user),
+                isAdmin: user.isAdmin,
+                isMacOSUser: user.clawType == .macosUser
+            ) {
+                NavigationStack {
+                    ProgressView(L10n.k("user.detail.auto.text_f522c76d24", fallback: "检查环境…"))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .navigationTitle(user.fullName.isEmpty ? user.username : user.fullName)
+                        .navigationSubtitle("@\(user.username)")
+                }
+            } else if user.prefersHermesRuntime {
                 HermesDetailContainer(user: user, onDeleted: {
                     dismiss()
                     Task { @MainActor in

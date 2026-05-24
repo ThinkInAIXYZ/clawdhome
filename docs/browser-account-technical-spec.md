@@ -24,6 +24,43 @@ Browser Account 的核心目标：
 - 私有状态文件：session 文件为目标用户所有，权限 `0600`。
 - 兼容旧路径：`.openclaw` 仅用于旧 session/profile 读取和 reset 清理，不再作为新安装路径。
 
+## 2.1 分层隔离模型
+
+Browser Account 不是一个 UI 小功能，而是 ClawdHome 的第二层隔离边界。
+
+```text
+宿主操作者账号 / 默认浏览器
+    └── 不直接暴露给 runtime
+
+Shrimp macOS 用户边界（第一层隔离）
+    ├── ~/.openclaw / ~/.hermes / ~/.clawdhome
+    └── Browser Account 命名空间（第二层隔离）
+         ├── managed Chrome profile
+         ├── Browser Bridge / OpenCLI profile selector
+         └── CDP session metadata
+
+runtime 消费层
+    ├── OpenClaw
+    └── Hermes
+```
+
+解释：
+
+- 第一层隔离是 macOS 用户边界，负责隔离文件、进程、Keychain、配置目录。
+- 第二层隔离是 Browser Account 边界，负责隔离网页登录态、Browser Bridge profile、CDP endpoint 和浏览器工具入口。
+- OpenClaw 与 Hermes 对同一只 Shrimp 会共享第二层隔离，这样引擎切换不需要重复登录。
+- “支持外部浏览器”在 ClawdHome 语境里，指 runtime 使用 Shrimp 托管浏览器账号，而不是直接使用操作者自己的默认 Chrome profile。
+
+## 2.2 共享与隔离矩阵
+
+| 资源 | 同一 Shrimp 内 OpenClaw / Hermes | 不同 Shrimp 之间 | 与宿主操作者默认浏览器 |
+| --- | --- | --- | --- |
+| `~/.clawdhome/browser/session.json` | 共享 | 隔离 | 隔离 |
+| `~/.clawdhome/browser/opencli-profile.json` | 共享 | 隔离 | 隔离 |
+| 托管 Chrome profile | 共享 | 隔离 | 隔离 |
+| Browser Bridge 扩展连接态 | 共享 | 隔离 | 隔离 |
+| runtime 配置目录（`.openclaw` / `.hermes`） | 各自独立 | 隔离 | 隔离 |
+
 ## 3. 关键路径与权限
 
 | 路径 | 归属 | 权限 | 用途 |
@@ -60,6 +97,21 @@ Browser Account 的核心目标：
 | Runtime env - OpenClaw | `ClawdHomeHelper/Operations/UserEnvContract.swift` | OpenClaw PATH 中优先放入 browser wrapper |
 | Runtime env - Hermes | `ClawdHomeHelper/Operations/HermesInstaller.swift`、`HermesGatewayManager.swift` | 注入 `BROWSER=clawdhome-browser open %s` |
 | Models | `Shared/BrowserAccountModels.swift` | 路径常量、session/status、DevToolsActivePort 解析 |
+
+## 4.1 Runtime 接入矩阵
+
+当前代码里的运行时接入关系如下：
+
+| Runtime | 共享 Browser Account | `BROWSER` wrapper | `OPENCLI_PROFILE` | `BROWSER_CDP_URL` | 额外配置同步 |
+| --- | --- | --- | --- | --- | --- |
+| OpenClaw | 是 | 通过 PATH wrapper 间接消费 | 是 | 是 | 无 |
+| Hermes | 是 | 直接注入 | 是 | 可达时注入 | 同步到 `browser.cdp_url` |
+
+补充说明：
+
+- OpenClaw 当前更偏向消费 Browser Bridge / `opencli` wrapper / `open` wrapper 这条链路。
+- Hermes 同时消费 Browser Bridge 和 CDP 两条链路，因此在启动环境和 `config.yaml` 中都保留了 CDP endpoint。
+- 这份矩阵描述的是“当前实现状态”，不是未来唯一方案；如果后续要给 OpenClaw 增加显式 CDP 注入，应在这里更新矩阵。
 
 ## 5. 数据模型
 
@@ -261,6 +313,15 @@ OpenClaw 相关入口：
 
 `prepareBrowserAccountForRuntimeInstall` 会安装工具、首次打开 Chrome 写 session、关闭该 profile，并写入 `install-warmup.json`。同一用户再次初始化时不会重复打开 Chrome。
 
+OpenClaw 当前使用 Browser Account 的关键方式：
+
+- 通过用户隔离 PATH 命中 `open` / `chrome` / `open-cli` / `opencli` wrappers。
+- 通过 `OPENCLI_PROFILE` 选择 Shrimp 级 Browser Bridge profile。
+- 在可达时通过 `BROWSER_CDP_URL` 获取该 Shrimp 当前浏览器实例的 CDP endpoint。
+- 复用 Browser Account 预热写出的 `session.json`，让后续 `clawdhome-browser open <url>` 能进入同一托管 profile。
+
+这意味着 OpenClaw 已经可以使用“外部浏览器”，但这里的外部浏览器仍然是 ClawdHome 托管的 Shrimp 浏览器账号，不是宿主操作者的默认浏览器。
+
 ## 13. Hermes 集成
 
 Hermes 相关入口：
@@ -285,9 +346,14 @@ Hermes OAuth 关键点：
 
 - `HermesInstaller.orderedRuntimeEnvironment` 注入：
   `BROWSER=/Users/<username>/.clawdhome/tools/clawdhome-browser/clawdhome-browser open %s`
+- `HermesInstaller.orderedRuntimeEnvironment` 在 session 可达时追加 `BROWSER_CDP_URL=<ws/http endpoint>`，并在有 Browser Bridge profile 时追加 `OPENCLI_PROFILE=<profile>`。
 - `HermesGatewayManager` 写入 LaunchDaemon `EnvironmentVariables.BROWSER`。
+- `HermesGatewayManager` 在 gateway plist 中按需写入 `BROWSER_CDP_URL` 和 `OPENCLI_PROFILE`。
 - Python `webbrowser.open()` 和 Google OAuth 不再自行探测 Arc/Safari/Chrome，而是走 ClawdHome Browser。
+- `HermesConfigWriter.syncBrowserCDPEndpoint` 会把当前 endpoint 同步到 `config.yaml` 的 `browser.cdp_url`。
 - 诊断项会检查 Hermes gateway plist 中的 `BROWSER` 是否符合预期。
+
+Hermes 因为显式消费 CDP endpoint，所以在“外部浏览器”能力上比 OpenClaw 走得更深一层；但两者共享的仍然是同一份 Shrimp Browser Account 边界。
 
 ## 14. Reset 流程
 
@@ -312,6 +378,7 @@ profile 不直接删除，而是改名为 `.backup-<yyyyMMdd-HHmmss>`。
 - launcher 只读取调用者 home 下的 session，不接受任意 profile/port 参数。
 - 每个用户独立 Chrome profile。
 - `.clawdhome/browser` 目录归目标用户，避免 root-created 目录导致 wrapper 日志写入失败。
+- runtime 看到的是 Shrimp 级托管浏览器，不是宿主操作者自己的默认浏览器。
 
 非目标：
 
