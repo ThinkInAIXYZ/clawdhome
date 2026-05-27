@@ -1074,7 +1074,9 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
     // MARK: TerminalViewDelegate
 
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
-        sendInput(Data(data))
+        let payload = Data(data)
+        guard !TerminalControlSequence.shouldSuppressAutoResponse(payload) else { return }
+        sendInput(payload)
     }
 
     func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {

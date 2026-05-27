@@ -3,6 +3,47 @@ import ApplicationServices
 import Carbon
 import Observation
 
+enum HostPermissionRequirement: Equatable {
+    case accessibility
+    case chromeAutomation
+}
+
+enum HostPermissionSettingsDestination: Equatable {
+    case accessibility
+    case automation
+}
+
+enum HostPermissionPromptPolicy {
+    static func missingBrowserAutomationPermissions(
+        accessibilityStatus: HostPermissionCenter.PermissionStatus,
+        chromeInstalled: Bool,
+        chromeAutomationStatus: HostPermissionCenter.PermissionStatus
+    ) -> [HostPermissionRequirement] {
+        var missing: [HostPermissionRequirement] = []
+
+        if accessibilityStatus != .granted {
+            missing.append(.accessibility)
+        }
+        if chromeInstalled, chromeAutomationStatus != .granted {
+            missing.append(.chromeAutomation)
+        }
+
+        return missing
+    }
+
+    static func preferredSettingsDestination(
+        for missingPermissions: [HostPermissionRequirement]
+    ) -> HostPermissionSettingsDestination? {
+        if missingPermissions.contains(.accessibility) {
+            return .accessibility
+        }
+        if missingPermissions.contains(.chromeAutomation) {
+            return .automation
+        }
+        return nil
+    }
+}
+
 @MainActor
 @Observable
 final class HostPermissionCenter {
@@ -37,6 +78,14 @@ final class HostPermissionCenter {
         chromeInstalled && chromeAutomationStatus != .granted
     }
 
+    func missingBrowserAutomationPermissions() -> [HostPermissionRequirement] {
+        HostPermissionPromptPolicy.missingBrowserAutomationPermissions(
+            accessibilityStatus: accessibilityStatus,
+            chromeInstalled: chromeInstalled,
+            chromeAutomationStatus: chromeAutomationStatus
+        )
+    }
+
     func refresh() {
         isRefreshing = true
         defer { isRefreshing = false }
@@ -58,6 +107,15 @@ final class HostPermissionCenter {
         refresh()
     }
 
+    func requestBrowserAutomationPermissions(_ permissions: [HostPermissionRequirement]) {
+        if permissions.contains(.accessibility) {
+            requestAccessibilityPermission()
+        }
+        if permissions.contains(.chromeAutomation) {
+            requestChromeAutomationPermission()
+        }
+    }
+
     func openAccessibilitySettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
             return
@@ -70,6 +128,17 @@ final class HostPermissionCenter {
             return
         }
         NSWorkspace.shared.open(url)
+    }
+
+    func openSettings(for permissions: [HostPermissionRequirement]) {
+        switch HostPermissionPromptPolicy.preferredSettingsDestination(for: permissions) {
+        case .accessibility:
+            openAccessibilitySettings()
+        case .automation:
+            openAutomationSettings()
+        case nil:
+            break
+        }
     }
 
     private func evaluateChromeAutomationPermission(askUserIfNeeded: Bool) -> PermissionStatus {

@@ -138,7 +138,7 @@ struct MachineStatsGrid: View {
         result.append(CardData(
             title: "CPU",
             value: stats.map { String(format: "%.0f%%", $0.cpuPercent) } ?? "—",
-            icon: "cpu", color: .blue,
+            icon: "cpu", theme: .blue,
             samples: history.map { $0.cpuPercent },
             range: 0...100
         ))
@@ -146,7 +146,7 @@ struct MachineStatsGrid: View {
             result.append(CardData(
                 title: "GPU",
                 value: stats?.gpuPercent.map { String(format: "%.0f%%", $0) } ?? "—",
-                icon: "gpu", color: .teal,
+                icon: "gpu", theme: .purple,
                 samples: history.compactMap { $0.gpuPercent },
                 range: 0...100
             ))
@@ -155,7 +155,7 @@ struct MachineStatsGrid: View {
             title: L10n.k("common.resource.memory", fallback: "内存"),
             value: stats.map { String(format: "%.0f/%.0f GB",
                 $0.memUsedMB / 1024, $0.memTotalMB / 1024) } ?? "—",
-            icon: "memorychip", color: .purple,
+            icon: "memorychip", theme: .teal,
             samples: history.map { $0.memUsedMB / max($0.memTotalMB, 1) * 100 },
             range: 0...100
         ))
@@ -165,7 +165,7 @@ struct MachineStatsGrid: View {
             value2: "↑ \(FormatUtils.formatBps(currentNetOut))",
             cumulativeIn: FormatUtils.formatTotalBytes(totalNetIn),
             cumulativeOut: FormatUtils.formatTotalBytes(totalNetOut),
-            icon: "arrow.up.arrow.down", color: .cyan,
+            icon: "arrow.up.arrow.down", theme: .emerald,
             samples: netTotalSamples,
             range: netRange
         ))
@@ -173,7 +173,7 @@ struct MachineStatsGrid: View {
             title: L10n.k("common.resource.disk", fallback: "磁盘"),
             value: stats.map { String(format: "%.0f/%.0f GB",
                 $0.diskUsedGB, $0.diskTotalGB) } ?? "—",
-            icon: "internaldrive", color: .green,
+            icon: "internaldrive", theme: .slate,
             samples: [],
             range: 0...100
         ))
@@ -181,7 +181,7 @@ struct MachineStatsGrid: View {
             result.append(CardData(
                 title: L10n.k("common.resource.temperature", fallback: "温度"),
                 value: String(format: "%.0f°C", temp),
-                icon: "thermometer.medium", color: .orange,
+                icon: "thermometer.medium", theme: .orange,
                 samples: history.compactMap { $0.cpuTempCelsius },
                 range: 0...110
             ))
@@ -209,7 +209,7 @@ struct MachineStatsGrid: View {
                             value: card.value,
                             value2: card.value2,
                             icon: card.icon,
-                            color: card.color,
+                            theme: card.theme,
                             samples: Array(card.samples.suffix(kSmallCardPoints)),
                             range: card.range,
                             maxPoints: kSmallCardPoints
@@ -236,7 +236,7 @@ private struct CardData {
     var cumulativeIn: String? = nil
     var cumulativeOut: String? = nil
     let icon: String
-    let color: Color
+    let theme: DesignSystem.GradientTheme
     let samples: [Double]
     let range: ClosedRange<Double>
 }
@@ -251,7 +251,7 @@ private struct ExpandedChartCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: card.icon)
-                    .foregroundStyle(card.color)
+                    .foregroundStyle(card.theme.mainColor)
                 Text(card.title).font(.headline)
                 Spacer()
                 // 当前速率
@@ -277,11 +277,10 @@ private struct ExpandedChartCard: View {
                     }
                 }
             }
-            MiniSparkline(samples: card.samples, range: card.range, color: card.color)
+            MiniSparkline(samples: card.samples, range: card.range, color: card.theme.mainColor)
                 .frame(height: 120)
         }
-        .padding(14)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+        .premiumCard(theme: card.theme)
         .contentShape(Rectangle())
         .onTapGesture { onDismiss() }
     }
@@ -293,14 +292,14 @@ struct SparklineStatCard: View {
     let value: String
     var value2: String? = nil
     let icon: String
-    let color: Color
+    let theme: DesignSystem.GradientTheme
     let samples: [Double]
     let range: ClosedRange<Double>
     var maxPoints: Int = kHistoryMax
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: icon).font(.caption2).foregroundStyle(color).frame(width: 12)
+            Image(systemName: icon).font(.caption2).foregroundStyle(theme.mainColor).frame(width: 12)
             VStack(alignment: .leading, spacing: 0) {
                 Text(value)
                     .font(.system(.callout, design: .monospaced))
@@ -318,14 +317,12 @@ struct SparklineStatCard: View {
                 }
             }
             if !samples.isEmpty {
-                MiniSparkline(samples: samples, range: range, color: color, maxPoints: maxPoints)
+                MiniSparkline(samples: samples, range: range, color: theme.mainColor, maxPoints: maxPoints)
                     .frame(height: 20)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 44)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        .premiumCard(theme: theme)
     }
 }
 
@@ -361,6 +358,19 @@ struct MiniSparkline: View {
                 )
                 .foregroundStyle(color)
                 .lineStyle(StrokeStyle(lineWidth: 1.5))
+                .interpolationMethod(.linear)
+                
+                AreaMark(
+                    x: .value("t", s.id),
+                    y: .value("v", s.value)
+                )
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [color.opacity(0.18), color.opacity(0.01)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .interpolationMethod(.linear)
             }
             .chartXAxis(.hidden)
@@ -461,7 +471,7 @@ struct ShrimpNetworkSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             if shrimps.isEmpty {
                 Text(L10n.k("dashboard.no_shrimps", fallback: "暂无虾"))
                     .foregroundStyle(.tertiary)
@@ -486,21 +496,21 @@ struct ShrimpNetworkSection: View {
                         value: cpuLabel,
                         subtitle: L10n.f("dashboard.card.active_shrimps", fallback: "活跃 %d 只虾", activeShrimps.count),
                         icon: "cpu",
-                        tint: .blue
+                        theme: .blue
                     )
                     ShrimpOverviewCard(
                         title: L10n.k("dashboard.card.memory_summary", fallback: "内存汇总"),
                         value: memLabel,
                         subtitle: L10n.k("dashboard.card.process_memory", fallback: "进程物理内存"),
                         icon: "memorychip",
-                        tint: .purple
+                        theme: .purple
                     )
                     ShrimpOverviewCard(
                         title: L10n.k("dashboard.card.storage_usage", fallback: "存储占用"),
                         value: FormatUtils.formatBytes(totalStorage),
                         subtitle: L10n.f("dashboard.card.avg_storage", fallback: "平均 %@", avgStorageLabel),
                         icon: "internaldrive",
-                        tint: .green
+                        theme: .emerald
                     )
                 }
 
@@ -529,7 +539,7 @@ struct ShrimpNetworkSection: View {
                     }
                 }
                 .padding(10)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                .premiumCard(theme: .slate)
 
                 if !topStorageShrimps.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
@@ -549,7 +559,7 @@ struct ShrimpNetworkSection: View {
                         }
                     }
                     .padding(10)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                    .premiumCard(theme: .slate)
                 }
 
                 Text(L10n.k("dashboard.summary_hint", fallback: "详细资源与连接明细已在「虾塘」中完整提供，仪表盘仅保留汇总。"))
@@ -565,17 +575,54 @@ private struct ShrimpStatusPill: View {
     let value: String
     let tint: Color
 
+    @State private var isBreathing = false
+    @Environment(\.colorScheme) var colorScheme
+
     var body: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(tint.opacity(0.85))
-                .frame(width: 6, height: 6)
-            Text(title).foregroundStyle(.secondary)
-            Text(value).monospacedDigit()
+            // 呼吸发光圆点
+            ZStack {
+                Circle()
+                    .fill(tint)
+                    .frame(width: 6, height: 6)
+                
+                if tint == .green || tint == .yellow || tint == .red {
+                    Circle()
+                        .stroke(tint, lineWidth: 2)
+                        .scaleEffect(isBreathing ? 2.2 : 1.0)
+                        .opacity(isBreathing ? 0.0 : 0.6)
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .onAppear {
+                if tint == .green || tint == .yellow || tint == .red {
+                    withAnimation(
+                        .easeInOut(duration: 1.8)
+                        .repeatForever(autoreverses: false)
+                    ) {
+                        isBreathing = true
+                    }
+                }
+            }
+            
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(tint == .secondary ? .secondary : tint)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.quaternary, in: Capsule())
+        .padding(.vertical, 5)
+        .background(
+            Capsule()
+                .fill(tint.opacity(colorScheme == .dark ? 0.12 : 0.06))
+        )
+        .overlay(
+            Capsule()
+                .stroke(tint.opacity(0.24), lineWidth: 0.7)
+        )
     }
 }
 
@@ -584,17 +631,21 @@ private struct ShrimpOverviewCard: View {
     let value: String
     let subtitle: String
     let icon: String
-    let tint: Color
+    let theme: DesignSystem.GradientTheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .foregroundStyle(theme.mainColor)
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Text(value)
                 .font(.system(.title3, design: .monospaced))
-                .fontWeight(.semibold)
-                .foregroundStyle(tint)
+                .fontWeight(.bold)
+                .foregroundStyle(theme.mainColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(subtitle)
@@ -602,13 +653,47 @@ private struct ShrimpOverviewCard: View {
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
         }
-        .frame(maxWidth: .infinity, minHeight: 86, alignment: .leading)
-        .padding(10)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .premiumCard(theme: theme)
     }
 }
 
 // MARK: - 资产概览
+
+private struct AssetMicroTile: View {
+    let title: String
+    let value: String
+    let icon: String
+    let theme: DesignSystem.GradientTheme
+    
+    var body: some View {
+        HStack(spacing: 10) {
+            // 渐变背板图标
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(theme.gradient.opacity(0.12))
+                    .frame(width: 32, height: 32)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(theme.gradient)
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.system(.subheadline, design: .monospaced))
+                    .fontWeight(.bold)
+                Text(title)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .premiumCard(theme: theme)
+    }
+}
 
 struct AssetOverviewSection: View {
     let shrimps: [ShrimpNetStats]
@@ -619,36 +704,46 @@ struct AssetOverviewSection: View {
     private var totalSkills: Int { shrimps.reduce(0) { $0 + $1.skillCount } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // 存储概览
-            HStack(spacing: 8) {
-                Label(FormatUtils.formatBytes(totalOpenclawBytes), systemImage: "internaldrive")
-                Text(L10n.f("dashboard.asset.total_data", fallback: "数据总量（%d 只虾 .openclaw/）", shrimps.count))
-                    .foregroundStyle(.secondary)
-            }
+        LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 10),
+            GridItem(.flexible(), spacing: 10)
+        ], spacing: 10) {
+            AssetMicroTile(
+                title: L10n.f("dashboard.asset.total_data", fallback: "数据总量（%d 只虾 .openclaw/）", shrimps.count),
+                value: FormatUtils.formatBytes(totalOpenclawBytes),
+                icon: "internaldrive",
+                theme: .blue
+            )
+            
             if totalHomeBytes > 0 {
-                HStack(spacing: 8) {
-                    Label(FormatUtils.formatBytes(totalHomeBytes), systemImage: "house")
-                    Text(L10n.k("dashboard.asset.total_home", fallback: "家目录总量（含所有用户文件）"))
-                        .foregroundStyle(.secondary)
-                }
+                AssetMicroTile(
+                    title: L10n.k("dashboard.asset.total_home", fallback: "家目录总量（含所有用户文件）"),
+                    value: FormatUtils.formatBytes(totalHomeBytes),
+                    icon: "house",
+                    theme: .teal
+                )
             }
-            HStack(spacing: 8) {
-                Label(FormatUtils.formatBytes(totalMemBytes), systemImage: "brain.head.profile")
-                Text(L10n.f("dashboard.asset.total_memory", fallback: "记忆总量（%d 只虾合计）", shrimps.count))
-                    .foregroundStyle(.secondary)
-            }
-            HStack(spacing: 8) {
-                Label(L10n.f("dashboard.asset.skills_items", fallback: "%d 个", totalSkills), systemImage: "sparkles")
-                Text(L10n.k("dashboard.asset.skills_total", fallback: "技能总数（用户自定义）"))
-                    .foregroundStyle(.secondary)
-            }
-            HStack(spacing: 8) {
-                Label("—", systemImage: "bitcoinsign.circle")
-                Text(L10n.k("dashboard.asset.token_coming_soon", fallback: "Token 消耗（待接入）"))
-                    .foregroundStyle(.tertiary)
-            }
-            .help(L10n.k("common.coming_soon", fallback: "即将支持"))
+            
+            AssetMicroTile(
+                title: L10n.f("dashboard.asset.total_memory", fallback: "记忆总量（%d 只虾合计）", shrimps.count),
+                value: FormatUtils.formatBytes(totalMemBytes),
+                icon: "brain.head.profile",
+                theme: .purple
+            )
+            
+            AssetMicroTile(
+                title: L10n.k("dashboard.asset.skills_total", fallback: "技能总数（用户自定义）"),
+                value: L10n.f("dashboard.asset.skills_items", fallback: "%d 个", totalSkills),
+                icon: "sparkles",
+                theme: .emerald
+            )
+            
+            AssetMicroTile(
+                title: L10n.k("dashboard.asset.token_coming_soon", fallback: "Token 消耗（待接入）"),
+                value: "—",
+                icon: "bitcoinsign.circle",
+                theme: .slate
+            )
         }
     }
 }

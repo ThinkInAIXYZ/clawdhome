@@ -102,6 +102,7 @@ struct ClawdHomeApp: App {
                     .environment(modelStore)
                     .environment(keychainStore)
                     .environment(gatewayHub)
+                    .environment(hostPermissionCenter)
                     .environment(maintenanceWindowRegistry)
                     .environment(promptLibraryStore)
                     .environment(\.locale, appLanguage.locale)

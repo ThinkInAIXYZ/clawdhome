@@ -16,6 +16,11 @@ private enum ANSI {
     static let clearLine = "\r\u{001B}[K"
 }
 
+private enum BuildInfo {
+    static let version = "1.1.291"
+    static let buildTime = "2026-05-25 22:26:04"
+}
+
 private enum SpeechToolError: LocalizedError {
     case missingCommand
     case missingValue(String)
@@ -162,6 +167,7 @@ struct ClawdHomeSpeechMain {
             print("\u{001B}[2J\u{001B}[H") // 终端清屏并将光标置顶
             printMascot()
             print("\(ANSI.bold)=== ClawdHomeSpeech 语音转译独立控制台 ===\(ANSI.reset)")
+            print("\(ANSI.dim)当前版本：\(BuildInfo.version) · 编译时间：\(BuildInfo.buildTime)\(ANSI.reset)\n")
             
             let config = loadHFConfig()
             if !config.endpoint.isEmpty {
@@ -466,40 +472,123 @@ struct ClawdHomeSpeechMain {
         let cacheDir = cacheDirectory(for: modelID)
         let resolved = resolveModelID(from: modelID)
         
-        // 炫酷 Loading Spinner 终端旋转特效
-        let spinnerChars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        var spinnerIndex = 0
-        
-        let spinnerTask = Task {
-            while !Task.isCancelled {
-                let char = spinnerChars[spinnerIndex]
-                print("\(ANSI.clearLine)\(ANSI.purple)\(char) 正在载入 MLX 推理模型并运行离线加速转译，请稍候...\(ANSI.reset)", terminator: "")
-                fflush(stdout)
-                spinnerIndex = (spinnerIndex + 1) % spinnerChars.count
-                try? await Task.sleep(nanoseconds: 80_000_000)
-            }
-        }
-        
-        let start = CFAbsoluteTimeGetCurrent()
+        // 模型标准采样率（Whisper 规范）
+        let modelSampleRate = 16000
+        // 滑动窗口参数：30 秒/块（模型训练窗口），2 秒重叠防止边界截断
+        let chunkSeconds = 30
+        let overlapSeconds = 2
+        let chunkSamples = chunkSeconds * modelSampleRate     // 480000 samples
+        let overlapSamples = overlapSeconds * modelSampleRate  // 32000 samples
+        let stepSamples = chunkSamples - overlapSamples        // 448000 samples/step
+
         do {
-            let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: 24000)
+            // 以模型实际需要的 16kHz 加载，避免多余采样点占用内存
+            let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: modelSampleRate)
+            let totalSamples = audio.count
+            let audioDurationSec = Double(totalSamples) / Double(modelSampleRate)
+
             let isDownloaded = isModelDownloaded(at: cacheDir)
+
+            // 加载模型前先显示进度（长音频加载模型本身也要时间）
+            print("\(ANSI.clearLine)\(ANSI.purple)⠙ 正在载入 MLX 推理模型...\(ANSI.reset)", terminator: "")
+            fflush(stdout)
+
             let model = try await Qwen3ASRModel.fromPretrained(
                 modelId: resolved,
                 cacheDir: cacheDir,
                 offlineMode: isDownloaded
             )
-            let transcript = model.transcribe(audio: audio, sampleRate: 24000, language: nil)
-            let elapsed = CFAbsoluteTimeGetCurrent() - start
-            
-            spinnerTask.cancel()
-            
-            print("\(ANSI.clearLine)\(ANSI.green)✓ 转译圆满完成！耗时 \(String(format: "%.2f", elapsed)) 秒\(ANSI.reset)\n")
-            print("\(ANSI.bold)=== 离线转译文本结果 ===\(ANSI.reset)")
-            print(transcript.isEmpty ? "\(ANSI.dim)（无语音内容识别出）\(ANSI.reset)" : transcript)
-            print("\(ANSI.bold)===========================\(ANSI.reset)\n")
+
+            // 短音频（≤ 30 秒）：直接转译，不分块
+            if totalSamples <= chunkSamples {
+                print("\(ANSI.clearLine)\(ANSI.purple)⠙ 正在转译（单段模式）...\(ANSI.reset)")
+                fflush(stdout)
+                
+                let transcribeStart = CFAbsoluteTimeGetCurrent()
+                let transcript = model.transcribe(
+                    audio: audio,
+                    sampleRate: modelSampleRate,
+                    language: nil,
+                    maxTokens: 1024
+                ).trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                let elapsed = CFAbsoluteTimeGetCurrent() - transcribeStart
+                let speedRatio = elapsed > 0 ? (audioDurationSec / elapsed) : 0.0
+                let speedText = speedRatio > 0 ? String(format: "%.1fx", speedRatio) : "--.-x"
+                
+                print("\(ANSI.clearLine)\(ANSI.green)✓ 转译圆满完成！耗时 \(String(format: "%.2f", elapsed)) 秒 (平均速率: \(speedText))\(ANSI.reset)\n")
+                print("\(ANSI.bold)=== 离线转译文本结果 ===\(ANSI.reset)")
+                print(transcript.isEmpty ? "\(ANSI.dim)（无语音内容识别出）\(ANSI.reset)" : transcript)
+                print("\(ANSI.bold)===========================\(ANSI.reset)\n")
+                
+                if !transcript.isEmpty {
+                    let segments = [TranscribeSegment(index: 1, startTime: 0.0, endTime: audioDurationSec, text: transcript)]
+                    saveTranscribeFiles(segments: segments, audioURL: audioURL, fullTranscript: transcript)
+                }
+            } else {
+                // 长音频：滑动窗口分块转译，逐块打印进度
+                let totalChunks = Int(ceil(Double(totalSamples - overlapSamples) / Double(stepSamples)))
+                print("\(ANSI.clearLine)\(ANSI.cyan)\u{1F4CB} 音频时长 \(String(format: "%.1f", audioDurationSec)) 秒，分 \(totalChunks) 块转译（每块 \(chunkSeconds) 秒）\(ANSI.reset)")
+                fflush(stdout)
+
+                var segments: [TranscribeSegment] = []
+                var chunkIndex = 0
+                var offset = 0
+                let transcribeStart = CFAbsoluteTimeGetCurrent()
+
+                while offset < totalSamples {
+                    let end = min(offset + chunkSamples, totalSamples)
+                    let chunk = Array(audio[offset..<end])
+                    chunkIndex += 1
+
+                    let chunkStartSec = Double(offset) / Double(modelSampleRate)
+                    let chunkEndSec = Double(end) / Double(modelSampleRate)
+                    let progress = Int(Double(chunkIndex) / Double(totalChunks) * 100)
+                    let bar = String(repeating: "\u{2588}", count: progress / 5) + String(repeating: "\u{2591}", count: 20 - progress / 5)
+                    
+                    let elapsed = CFAbsoluteTimeGetCurrent() - transcribeStart
+                    let speedRatio = elapsed > 0 ? (chunkEndSec / elapsed) : 0.0
+                    let speedText = speedRatio > 0 ? String(format: "%.1fx", speedRatio) : "--.-x"
+                    
+                    print("\(ANSI.clearLine)\(ANSI.green)[\(bar)] \(progress)%\(ANSI.reset) 块 \(chunkIndex)/\(totalChunks)  [\(String(format: "%.0f", chunkStartSec))s - \(String(format: "%.0f", chunkEndSec))s] · 速率: \(ANSI.yellow)\(speedText)\(ANSI.reset)", terminator: "")
+                    fflush(stdout)
+
+                    let chunkText = model.transcribe(
+                        audio: chunk,
+                        sampleRate: modelSampleRate,
+                        language: nil,
+                        maxTokens: 1024
+                    ).trimmingCharacters(in: .whitespacesAndNewlines)
+                    
+                    if !chunkText.isEmpty {
+                        segments.append(TranscribeSegment(
+                            index: chunkIndex,
+                            startTime: chunkStartSec,
+                            endTime: chunkEndSec,
+                            text: chunkText
+                        ))
+                    }
+
+                    // 滑步前进（最后一块直接结束）
+                    if end >= totalSamples { break }
+                    offset += stepSamples
+                }
+
+                let elapsed = CFAbsoluteTimeGetCurrent() - transcribeStart
+                let avgSpeedRatio = elapsed > 0 ? (audioDurationSec / elapsed) : 0.0
+                let avgSpeedText = avgSpeedRatio > 0 ? String(format: "%.1fx", avgSpeedRatio) : "--.-x"
+                
+                let fullTranscript = segments.map { $0.text }.joined(separator: " ")
+                print("\n\(ANSI.green)✓ 转译圆满完成！共 \(chunkIndex) 块，耗时 \(String(format: "%.2f", elapsed)) 秒 (平均速率: \(avgSpeedText))\(ANSI.reset)\n")
+                print("\(ANSI.bold)=== 离线转译文本结果 ===\(ANSI.reset)")
+                print(fullTranscript.isEmpty ? "\(ANSI.dim)（无语音内容识别出）\(ANSI.reset)" : fullTranscript)
+                print("\(ANSI.bold)===========================\(ANSI.reset)\n")
+                
+                if !fullTranscript.isEmpty {
+                    saveTranscribeFiles(segments: segments, audioURL: audioURL, fullTranscript: fullTranscript)
+                }
+            }
         } catch {
-            spinnerTask.cancel()
             print("\(ANSI.clearLine)\(ANSI.red)✗ 转译失败：\(error.localizedDescription)\(ANSI.reset)")
             if error.localizedDescription.contains("Invalid metadata") || error.localizedDescription.contains("File metadata") {
                 print("""
@@ -511,7 +600,7 @@ struct ClawdHomeSpeechMain {
             }
             print("")
         }
-        
+
         print("按回车键继续...", terminator: "")
         fflush(stdout)
         _ = readLine()
@@ -610,7 +699,9 @@ struct ClawdHomeSpeechMain {
         ) else {
             return false
         }
-        return contents.contains { $0.pathExtension == "safetensors" || $0.lastPathComponent == "vocab.json" }
+        let hasSafetensors = contents.contains { $0.pathExtension == "safetensors" }
+        let hasVocab = contents.contains { $0.lastPathComponent == "vocab.json" }
+        return hasSafetensors && hasVocab
     }
 
     private static func isModelDownloaded(at dir: URL) -> Bool {
@@ -621,7 +712,9 @@ struct ClawdHomeSpeechMain {
         ) else {
             return false
         }
-        return contents.contains { $0.pathExtension == "safetensors" || $0.lastPathComponent == "vocab.json" }
+        let hasSafetensors = contents.contains { $0.pathExtension == "safetensors" }
+        let hasVocab = contents.contains { $0.lastPathComponent == "vocab.json" }
+        return hasSafetensors && hasVocab
     }
 
     private static func speechCacheBaseDirectory() -> URL {
@@ -774,7 +867,10 @@ struct ClawdHomeSpeechMain {
         }
 
         let resolvedModelID = resolveModelID(from: modelSpecifier)
-        let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: 24000)
+
+        // 模型标准采样率（Whisper 规范）
+        let modelSampleRate = 16000
+        let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: modelSampleRate)
 
         let isDownloaded = isModelDownloaded(at: cacheDirectory)
         let model = try await Qwen3ASRModel.fromPretrained(
@@ -794,11 +890,45 @@ struct ClawdHomeSpeechMain {
         )
 
         let start = CFAbsoluteTimeGetCurrent()
-        let transcript = model.transcribe(
-            audio: audio,
-            sampleRate: 24000,
-            language: language
-        )
+
+        // 滑动窗口参数：30 秒/块（模型训练窗口），2 秒重叠防止边界截断
+        let chunkSamples = 30 * modelSampleRate     // 480000 samples
+        let overlapSamples = 2 * modelSampleRate     // 32000 samples
+        let stepSamples = chunkSamples - overlapSamples
+
+        let totalSamples = audio.count
+        let transcript: String
+
+        if totalSamples <= chunkSamples {
+            // 短音频：直接转译
+            transcript = model.transcribe(
+                audio: audio,
+                sampleRate: modelSampleRate,
+                language: language,
+                maxTokens: 1024
+            )
+        } else {
+            // 长音频：滑动窗口分块转译，逐块结果拼接
+            var segments: [String] = []
+            var offset = 0
+            while offset < totalSamples {
+                let end = min(offset + chunkSamples, totalSamples)
+                let chunk = Array(audio[offset..<end])
+                let chunkText = model.transcribe(
+                    audio: chunk,
+                    sampleRate: modelSampleRate,
+                    language: language,
+                    maxTokens: 1024
+                )
+                if !chunkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    segments.append(chunkText)
+                }
+                if end >= totalSamples { break }
+                offset += stepSamples
+            }
+            transcript = segments.joined(separator: " ")
+        }
+
         let elapsed = CFAbsoluteTimeGetCurrent() - start
 
         return TranscribeResponse(
@@ -860,6 +990,60 @@ struct ClawdHomeSpeechMain {
         FileHandle.standardError.write(data)
         FileHandle.standardError.write(Data([0x0A]))
     }
+
+    private static func formatSRTTime(_ seconds: Double) -> String {
+        let totalMs = Int(seconds * 1000)
+        let ms = totalMs % 1000
+        let s = (totalMs / 1000) % 60
+        let m = (totalMs / 60000) % 60
+        let h = totalMs / 3600000
+        return String(format: "%02d:%02d:%02d,%03d", h, m, s, ms)
+    }
+
+    private static func saveTranscribeFiles(segments: [TranscribeSegment], audioURL: URL, fullTranscript: String) {
+        let fileDirectory = audioURL.deletingLastPathComponent()
+        let fileBaseName = audioURL.deletingPathExtension().lastPathComponent
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timestamp = formatter.string(from: Date())
+        
+        let txtURL = fileDirectory.appendingPathComponent("\(fileBaseName)_\(timestamp).txt")
+        let srtURL = fileDirectory.appendingPathComponent("\(fileBaseName)_\(timestamp).srt")
+        let timelineURL = fileDirectory.appendingPathComponent("\(fileBaseName)_\(timestamp)_timeline.txt")
+        
+        // 1. 生成字幕内容 (SRT)
+        var srtContent = ""
+        for (idx, seg) in segments.enumerated() {
+            srtContent += "\(idx + 1)\n"
+            srtContent += "\(formatSRTTime(seg.startTime)) --> \(formatSRTTime(seg.endTime))\n"
+            srtContent += "\(seg.text)\n\n"
+        }
+        
+        // 2. 生成简易时间轴内容 (Timeline)
+        var timelineContent = ""
+        for seg in segments {
+            let startMin = Int(seg.startTime) / 60
+            let startSec = Int(seg.startTime) % 60
+            let endMin = Int(seg.endTime) / 60
+            let endSec = Int(seg.endTime) % 60
+            timelineContent += String(format: "[%02d:%02d - %02d:%02d]  %@\n", startMin, startSec, endMin, endSec, seg.text)
+        }
+        
+        do {
+            try fullTranscript.write(to: txtURL, atomically: true, encoding: .utf8)
+            try srtContent.write(to: srtURL, atomically: true, encoding: .utf8)
+            try timelineContent.write(to: timelineURL, atomically: true, encoding: .utf8)
+            
+            print("\(ANSI.green)✓ 转译结果已自动保存至音频同级目录：\(ANSI.reset)")
+            print("  \(ANSI.dim)1. 纯文本: \(ANSI.reset)\(txtURL.path)")
+            print("  \(ANSI.dim)2. 标准字幕(SRT): \(ANSI.reset)\(srtURL.path)")
+            print("  \(ANSI.dim)3. 时间轴对照: \(ANSI.reset)\(timelineURL.path)")
+            print("")
+        } catch {
+            print("\(ANSI.red)✗ 保存转译文件失败: \(error.localizedDescription)\(ANSI.reset)\n")
+        }
+    }
 }
 
 private struct AnyEncodable: Encodable {
@@ -872,4 +1056,11 @@ private struct AnyEncodable: Encodable {
     func encode(to encoder: Encoder) throws {
         try encodeImpl(encoder)
     }
+}
+
+private struct TranscribeSegment {
+    let index: Int
+    let startTime: Double
+    let endTime: Double
+    let text: String
 }

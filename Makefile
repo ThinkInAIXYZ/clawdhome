@@ -19,15 +19,16 @@ SIGN_PKG ?= false
 NOTARIZE ?= true
 BUILD_ARCHS ?= arm64
 
-.PHONY: help bump-build build build-cli build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-prepare release-build release-publish release-dry-run release-notes-draft notes-rename changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli test-cli-onboard-env test-cli-onboard-help test-cli-onboard test-cli-onboard-step test-cli-onboard-clean
+.PHONY: help bump-build build build-cli build-speech build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-prepare release-build release-publish release-dry-run release-notes-draft notes-rename changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli test-cli-onboard-env test-cli-onboard-help test-cli-onboard test-cli-onboard-step test-cli-onboard-clean
 
 WEBSITE_DIR  ?= $(HOME)/Documents/GitHub/clawdhome_website
 WEBSITE_REPO ?= deepjerry-ai/clawdhome_website
 
 help:
 	@echo "可用目标："
-	@echo "  build            Debug 构建（构建时自动递增本地 Build 号）"
+	@echo "  build            Debug 构建（构建时自动递增本地 Build 号，并包含 Speech 和 CLI 构建）"
 	@echo "  build-cli        Debug 构建 CLI（仅 CLI，不含 App/Helper）"
+	@echo "  build-speech     构建独立 ClawdHomeSpeech ASR 语音识别程序（输出到 build/Executables）"
 	@echo "  run-cli          构建并运行 CLI（传参: make run-cli ARGS='shrimp list'）"
 	@echo "  test-cli         构建并运行 CLI 集成测试"
 	@echo "  test-cli-onboard-env   初始化本地测试配置文件（若不存在）"
@@ -108,6 +109,9 @@ bump-build:
 	 echo "Build 号由本地计数器自动递增（当前：$${B}，下次构建：$${NEXT}）"
 
 # ── 构建 ──────────────────────────────────────────────────────────────────────
+
+build-speech:
+	@SRCROOT="$(shell pwd)" CONFIGURATION=Release bash scripts/build-speech-tool.sh
 
 build: bump-build
 	@BUILD_NO=$$(BUILD_COUNTER_FILE="$(BUILD_COUNTER_FILE)" INITIAL_BUILD_NUMBER="$(INITIAL_BUILD_NUMBER)" bash "$(BUILD_COUNTER_SCRIPT)" reserve); \

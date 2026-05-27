@@ -16,7 +16,7 @@ schemes:
   ClawdHome:
     build:
       targets:
-        ClawdHome: [build]
+        ClawdHome: [run, test, profile, analyze, archive]
   ClawdHomeAppTests:
     build:
       targets:

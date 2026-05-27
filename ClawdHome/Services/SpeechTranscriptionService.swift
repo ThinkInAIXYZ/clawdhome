@@ -87,6 +87,8 @@ final class SpeechTranscriptionService {
     private(set) var isTranscribing = false
     private(set) var isPreparingModel = false
     private(set) var lastErrorMessage: String?
+    private(set) var transcriptionProgressFraction: Double = 0
+    private(set) var transcriptionStatusMessage: String?
     private(set) var preparedModelBytes: Int64 = 0
     private(set) var preparedModelEstimatedTotalBytes: Int64 = 0
     private(set) var downloadSpeedBytesPerSecond: Double = 0
@@ -180,6 +182,8 @@ final class SpeechTranscriptionService {
         isTranscribing = true
         cancellationRequested = false
         lastErrorMessage = nil
+        transcriptionProgressFraction = 0
+        transcriptionStatusMessage = nil
 
         do {
             let response = try await runTranscription(for: fileURL, modelID: selectedModelID)
@@ -346,7 +350,9 @@ final class SpeechTranscriptionService {
         ) else {
             return false
         }
-        return contents.contains { $0.pathExtension == "safetensors" || $0.lastPathComponent == "vocab.json" }
+        let hasSafetensors = contents.contains { $0.pathExtension == "safetensors" }
+        let hasVocab = contents.contains { $0.lastPathComponent == "vocab.json" }
+        return hasSafetensors && hasVocab
     }
 
     var selectedModelDescriptor: SpeechModelDescriptor? {
@@ -473,7 +479,14 @@ final class SpeechTranscriptionService {
             "--model-id", modelID.rawValue,
             "--cache-dir", cacheURL.path
         ]
-        let data = try await runTool(arguments: arguments)
+        let data = try await runTool(
+            arguments: arguments,
+            onProgress: { [weak self] event in
+                Task { @MainActor in
+                    self?.applyTranscriptionProgress(event)
+                }
+            }
+        )
         let response = try JSONDecoder().decode(ToolTranscribeResponse.self, from: data)
         if response.ok {
             return response
@@ -563,7 +576,8 @@ final class SpeechTranscriptionService {
                 }
 
                 if process.terminationStatus == 0 {
-                    continuation.resume(returning: stdoutData)
+                    let cleanedData = SpeechTranscriptionService.extractJSONData(from: stdoutData)
+                    continuation.resume(returning: cleanedData)
                     return
                 }
 
@@ -768,5 +782,20 @@ final class SpeechTranscriptionService {
             return available.uint64Value
         }
         return 0
+    }
+    
+    private func applyTranscriptionProgress(_ event: SpeechToolProgressEvent) {
+        guard event.command == "transcribe" else { return }
+        transcriptionProgressFraction = min(max(event.fractionCompleted, 0), 1)
+        transcriptionStatusMessage = event.message
+    }
+
+    nonisolated private static func extractJSONData(from data: Data) -> Data {
+        if let firstBraceIndex = data.firstIndex(of: 0x7B), // '{'
+           let lastBraceIndex = data.lastIndex(of: 0x7D),  // '}'
+           firstBraceIndex < lastBraceIndex {
+            return data.subdata(in: firstBraceIndex..<(lastBraceIndex + 1))
+        }
+        return data
     }
 }

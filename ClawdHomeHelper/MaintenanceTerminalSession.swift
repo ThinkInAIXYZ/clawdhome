@@ -13,6 +13,7 @@ final class MaintenanceTerminalSession {
     private let outputPipe: Pipe
     private let lock = NSLock()
     private var outputBuffer = Data()
+    private var controlSequenceCarryover = Data()
     private var ttyDevicePath: String?
     private var lastResize: (cols: Int, rows: Int)?
     private(set) var exited = false
@@ -149,11 +150,16 @@ final class MaintenanceTerminalSession {
             let chunk = fh.availableData
             guard let self else { return }
             if chunk.isEmpty { return }
-            // 在 Helper 侧立即响应 CPR 查询（\033[6n），避免 TUI 应用因
-            // XPC 轮询延迟（>250ms）等待超时后退化到无 CPR 模式。
-            self.respondToCPRIfNeeded(chunk)
             self.lock.lock()
-            self.outputBuffer.append(chunk)
+            let intercepted = TerminalControlSequence.interceptOutputChunk(
+                chunk,
+                carryover: self.controlSequenceCarryover
+            )
+            self.controlSequenceCarryover = intercepted.carryover
+            for response in intercepted.responses {
+                try? self.stdinPipe.fileHandleForWriting.write(contentsOf: response)
+            }
+            self.outputBuffer.append(intercepted.visibleData)
             self.lock.unlock()
         }
 
@@ -163,10 +169,19 @@ final class MaintenanceTerminalSession {
             let tail = reader.readDataToEndOfFile()
             self.lock.lock()
             if !tail.isEmpty {
-                self.outputBuffer.append(tail)
+                let intercepted = TerminalControlSequence.interceptOutputChunk(
+                    tail,
+                    carryover: self.controlSequenceCarryover
+                )
+                self.controlSequenceCarryover = intercepted.carryover
+                for response in intercepted.responses {
+                    try? self.stdinPipe.fileHandleForWriting.write(contentsOf: response)
+                }
+                self.outputBuffer.append(intercepted.visibleData)
             }
             self.exited = true
             self.exitCode = proc.terminationStatus
+            self.controlSequenceCarryover = Data()
             self.ttyDevicePath = nil
             self.lock.unlock()
             helperLog("[maintenance] session terminated id=\(self.id) user=\(self.username) exit=\(proc.terminationStatus)")
@@ -238,25 +253,5 @@ final class MaintenanceTerminalSession {
         if process.isRunning {
             process.terminate()
         }
-    }
-
-    // MARK: - CPR 即时响应
-
-    /// 扫描输出 chunk 中的 CPR 查询（\033[6n），立即通过 stdin 回写当前终端尺寸。
-    /// TUI 应用（如 hermes）通常在启动时发出 CPR 并设置极短超时（~50ms）；
-    /// 若依赖 app 侧 SwiftTerm 经 XPC 轮询（>250ms）响应，会直接超时并退化。
-    private func respondToCPRIfNeeded(_ data: Data) {
-        // 快路径：无 ESC 字节时跳过
-        guard data.contains(0x1B) else { return }
-        guard let text = String(data: data, encoding: .utf8),
-              text.contains("\u{1B}[6n") else { return }
-        lock.lock()
-        let size = lastResize ?? (cols: 120, rows: 40)
-        lock.unlock()
-        // 回报光标在终端左上角（1;1），让 TUI 应用知晓 CPR 可用并自行定位。
-        // 注：script -q 不输出 banner，终端启动时光标确实在 (1,1)。
-        _ = size
-        let cpr = "\u{1B}[1;1R"
-        try? stdinPipe.fileHandleForWriting.write(contentsOf: Data(cpr.utf8))
     }
 }

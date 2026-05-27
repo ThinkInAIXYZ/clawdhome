@@ -80,19 +80,19 @@ private struct GeneralSettingsTab: View {
 
     var body: some View {
         Form {
-            Section(L10n.k("settings.permissions.section", zh: "系统权限", en: "System Permissions")) {
+            Section(L10n.k("settings.permissions.section", fallback: "系统权限")) {
                 HStack {
-                    Text(L10n.k("settings.permissions.accessibility", zh: "辅助功能", en: "Accessibility"))
+                    Text(L10n.k("settings.permissions.accessibility", fallback: "辅助功能"))
                     Spacer()
                     permissionTag(for: hostPermissionCenter.accessibilityStatus)
                 }
                 HStack {
-                    Text(L10n.k("settings.permissions.chrome_automation", zh: "Chrome 自动化", en: "Chrome Automation"))
+                    Text(L10n.k("settings.permissions.chrome_automation", fallback: "Chrome 自动化"))
                     Spacer()
                     if hostPermissionCenter.chromeInstalled {
                         permissionTag(for: hostPermissionCenter.chromeAutomationStatus)
                     } else {
-                        Text(L10n.k("settings.permissions.chrome_not_installed", zh: "未安装 Chrome", en: "Chrome not installed"))
+                        Text(L10n.k("settings.permissions.chrome_not_installed", fallback: "未安装 Chrome"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -105,7 +105,7 @@ private struct GeneralSettingsTab: View {
                         permissionActionButtons
                     }
                 }
-                Text(L10n.k("settings.permissions.hint", zh: "用于浏览器自动化与授权回调。若缺失权限，相关功能会失败。", en: "Used for browser automation and auth callbacks. Related features will fail if missing."))
+                Text(L10n.k("settings.permissions.hint", fallback: "用于浏览器自动化与授权回调。若缺失权限，相关功能会失败。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -318,18 +318,18 @@ private struct GeneralSettingsTab: View {
 
     @ViewBuilder
     private var permissionActionButtons: some View {
-        Button(L10n.k("settings.permissions.action.accessibility", zh: "授权辅助功能", en: "Allow Accessibility")) {
+        Button(L10n.k("settings.permissions.action.accessibility", fallback: "授权辅助功能")) {
             hostPermissionCenter.requestAccessibilityPermission()
         }
         .buttonStyle(.bordered)
 
-        Button(L10n.k("settings.permissions.action.chrome_automation", zh: "授权 Chrome 自动化", en: "Allow Chrome Automation")) {
+        Button(L10n.k("settings.permissions.action.chrome_automation", fallback: "授权 Chrome 自动化")) {
             hostPermissionCenter.requestChromeAutomationPermission()
         }
         .buttonStyle(.bordered)
         .disabled(!hostPermissionCenter.chromeInstalled)
 
-        Button(L10n.k("settings.permissions.action.refresh", zh: "刷新权限状态", en: "Refresh Permission Status")) {
+        Button(L10n.k("settings.permissions.action.refresh", fallback: "刷新权限状态")) {
             hostPermissionCenter.refresh()
         }
         .buttonStyle(.bordered)

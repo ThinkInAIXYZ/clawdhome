@@ -1,114 +1,105 @@
 import SwiftUI
 
-struct HostPermissionBanner: View {
+struct HostPermissionPromptRequest: Identifiable, Equatable {
+    let id = UUID()
+    let actionLabel: String
+    let missingPermissions: [HostPermissionRequirement]
+}
+
+extension View {
+    func hostPermissionPrompt(
+        _ request: Binding<HostPermissionPromptRequest?>
+    ) -> some View {
+        modifier(HostPermissionPromptModifier(request: request))
+    }
+}
+
+private struct HostPermissionPromptModifier: ViewModifier {
     @Environment(HostPermissionCenter.self) private var permissionCenter
+    @Binding var request: HostPermissionPromptRequest?
 
-    var body: some View {
-        if permissionCenter.hasIssues {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "hand.raised.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.orange)
-                        .frame(width: 20, height: 20)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(L10n.k("host_permission.banner.title", zh: "需要系统权限授权", en: "Permission needed"))
-                            .font(.caption)
-                            .fontWeight(.medium)
-                        Text(summaryText)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                if permissionCenter.accessibilityMissing {
-                    Button(L10n.k("host_permission.banner.action.accessibility", zh: "授权辅助功能", en: "UI Access")) {
-                        permissionCenter.requestAccessibilityPermission()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                if permissionCenter.chromeAutomationMissing {
-                    Button(L10n.k("host_permission.banner.action.chrome_automation", zh: "授权 Chrome 自动化", en: "Enable Chrome")) {
-                        permissionCenter.requestChromeAutomationPermission()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        secondaryActions
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        secondaryActions
-                    }
-                }
+    func body(content: Content) -> some View {
+        content.alert(
+            request?.title ?? "",
+            isPresented: isPresented,
+            presenting: request
+        ) { request in
+            Button(L10n.k("host_permission.prompt.action.authorize_now", fallback: "继续授权")) {
+                permissionCenter.requestBrowserAutomationPermissions(request.missingPermissions)
+                self.request = nil
             }
-            .padding(10)
-            .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(.orange.opacity(0.18), lineWidth: 1)
-            )
+            Button(L10n.k("host_permission.banner.action.open_settings", fallback: "打开系统设置")) {
+                permissionCenter.openSettings(for: request.missingPermissions)
+                self.request = nil
+            }
+            Button(L10n.k("common.action.cancel", fallback: "取消"), role: .cancel) {
+                self.request = nil
+            }
+        } message: { request in
+            Text(request.message)
         }
     }
 
-    private var summaryText: String {
-        var parts: [String] = []
-        if permissionCenter.accessibilityMissing {
-            parts.append(L10n.k("host_permission.banner.missing.accessibility", zh: "辅助功能（UI 自动化）", en: "Accessibility (UI automation)"))
-        }
-        if permissionCenter.chromeAutomationMissing {
-            switch permissionCenter.chromeAutomationStatus {
-            case .requiresConsent:
-                parts.append(L10n.k("host_permission.banner.missing.chrome_pending", zh: "Chrome 自动化（待同意）", en: "Chrome automation (pending consent)"))
-            case .denied:
-                parts.append(L10n.k("host_permission.banner.missing.chrome_denied", zh: "Chrome 自动化（已拒绝）", en: "Chrome automation (denied)"))
-            case .unavailable:
-                parts.append(L10n.k("host_permission.banner.missing.chrome_unavailable", zh: "Chrome 自动化（不可用）", en: "Chrome automation (unavailable)"))
-            case .granted:
-                break
+    private var isPresented: Binding<Bool> {
+        Binding(
+            get: { request != nil },
+            set: {
+                if !$0 {
+                    request = nil
+                }
             }
-        }
-        if parts.isEmpty {
-            return L10n.k("host_permission.banner.summary.ready", zh: "所有必需权限已就绪", en: "All required permissions are ready")
-        }
+        )
+    }
+}
+
+private extension HostPermissionPromptRequest {
+    var title: String {
+        L10n.k("host_permission.banner.title", fallback: "需要系统权限授权")
+    }
+
+    var message: String {
+        L10n.f(
+            "host_permission.prompt.message",
+            fallback: "执行“%@”前，需要先授权：%@。你也可以稍后去设置里手动授权，完成后再重试。",
+            actionLabel,
+            missingPermissionsText
+        )
+    }
+
+    var missingPermissionsText: String {
+        let separator = Self.isChineseUI ? "、" : ", "
+        return missingPermissions
+            .map(\.displayName)
+            .joined(separator: separator)
+    }
+
+    static var isChineseUI: Bool {
         let selected = UserDefaults.standard.string(forKey: "appLanguage") ?? AppLanguage.system.rawValue
-        let isChineseUI: Bool
         switch AppLanguage(rawValue: selected) ?? .system {
         case .chineseSimplified:
-            isChineseUI = true
+            return true
         case .english:
-            isChineseUI = false
+            return false
         case .system:
-            isChineseUI = (Locale.preferredLanguages.first?.lowercased().hasPrefix("zh") ?? false)
+            return Locale.preferredLanguages.first?.lowercased().hasPrefix("zh") ?? false
         }
-        let separator = isChineseUI ? "、" : ", "
-        return L10n.f("host_permission.banner.summary.missing", zh: "缺失权限：%@。授权后可自动执行浏览器相关操作。", en: "Missing: %@. Grant access for browser automation.", parts.joined(separator: separator))
     }
+}
 
-    @ViewBuilder
-    private var secondaryActions: some View {
-        Button(L10n.k("host_permission.banner.action.open_settings", zh: "打开系统设置", en: "Open Settings")) {
-            if permissionCenter.accessibilityMissing {
-                permissionCenter.openAccessibilitySettings()
-            } else if permissionCenter.chromeAutomationMissing {
-                permissionCenter.openAutomationSettings()
-            }
+private extension HostPermissionRequirement {
+    var displayName: String {
+        switch self {
+        case .accessibility:
+            return L10n.k("settings.permissions.accessibility", fallback: "辅助功能")
+        case .chromeAutomation:
+            return L10n.k("settings.permissions.chrome_automation", fallback: "Chrome 自动化")
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+    }
+}
 
-        Button(L10n.k("host_permission.banner.action.refresh", zh: "刷新", en: "Refresh")) {
-            permissionCenter.refresh()
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+// 兼容现有工程文件引用；首页常驻权限浮层已停用。
+struct HostPermissionBanner: View {
+    var body: some View {
+        EmptyView()
     }
 }

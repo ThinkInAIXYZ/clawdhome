@@ -52,6 +52,7 @@ struct OpenClawDetailView: View {
     @Environment(ShrimpPool.self)   private var pool
     @Environment(UpdateChecker.self) private var updater
     @Environment(GatewayHub.self) private var gatewayHub
+    @Environment(HostPermissionCenter.self) private var hostPermissionCenter
     @Environment(MaintenanceWindowRegistry.self) private var maintenanceWindowRegistry
     @Environment(\.openWindow) private var openWindow
     @State private var isLoading = false
@@ -165,6 +166,7 @@ struct OpenClawDetailView: View {
     @State private var showAddManualLoginSite = false
     @State private var manualLoginSiteName = ""
     @State private var manualLoginSiteURL = ""
+    @State private var hostPermissionPromptRequest: HostPermissionPromptRequest?
     @AppStorage("browser.manualLogin.customSites") private var manualLoginCustomSitesRaw = "[]"
     // Tab
     @State private var selectedTab: ClawTab = .overview
@@ -867,6 +869,7 @@ struct OpenClawDetailView: View {
         } message: {
             Text(quickTransferAlertMessage ?? "")
         }
+        .hostPermissionPrompt($hostPermissionPromptRequest)
         .sheet(isPresented: $showGatewayNodeRepairSheet) {
             VStack(alignment: .leading, spacing: 14) {
                 Text(L10n.k("user.detail.gateway.node_missing.title", fallback: "检测到 Node.js 环境缺失"))
@@ -3088,6 +3091,11 @@ struct OpenClawDetailView: View {
 
     @MainActor
     private func openBrowserAccount() async {
+        guard prepareBrowserAutomationAction(
+            L10n.k("content_view.browser.open_browser", fallback: "打开浏览器")
+        ) else {
+            return
+        }
         isOpeningBrowserAccount = true
         actionError = nil
         defer { isOpeningBrowserAccount = false }
@@ -3105,6 +3113,11 @@ struct OpenClawDetailView: View {
 
     @MainActor
     private func openManualLoginSite(_ site: BrowserManualLoginSite) async {
+        guard prepareBrowserAutomationAction(
+            L10n.k("content_view.browser.open_browser", fallback: "打开浏览器")
+        ) else {
+            return
+        }
         isOpeningBrowserAccount = true
         actionError = nil
         defer { isOpeningBrowserAccount = false }
@@ -3127,6 +3140,20 @@ struct OpenClawDetailView: View {
         sites.append(site)
         manualLoginCustomSitesRaw = BrowserManualLoginSite.encodeCustomSites(sites)
         Task { await openManualLoginSite(site) }
+    }
+
+    @MainActor
+    private func prepareBrowserAutomationAction(_ actionLabel: String) -> Bool {
+        hostPermissionCenter.refresh()
+        let missing = hostPermissionCenter.missingBrowserAutomationPermissions()
+        guard !missing.isEmpty else {
+            return true
+        }
+        hostPermissionPromptRequest = HostPermissionPromptRequest(
+            actionLabel: actionLabel,
+            missingPermissions: missing
+        )
+        return false
     }
 
     @MainActor

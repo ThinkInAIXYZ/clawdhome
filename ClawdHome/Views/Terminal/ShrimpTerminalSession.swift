@@ -420,7 +420,9 @@ final class ShrimpTerminalSession: NSObject, ObservableObject, TerminalViewDeleg
 
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
         guard !isReplaying else { return }
-        sendInput(Data(data))
+        let payload = Data(data)
+        guard !TerminalControlSequence.shouldSuppressAutoResponse(payload) else { return }
+        sendInput(payload)
     }
 
     func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {

@@ -31,6 +31,7 @@ struct ContentView: View {
     @State private var browserSessionPromptUsername: String?
     @State private var browserSessionPromptSuppressed = false
     @State private var browserSessionPromptCheckInFlight = false
+    @State private var hostPermissionPromptRequest: HostPermissionPromptRequest?
     // 0 = 跟随系统, 1 = 浅色, 2 = 深色
     @AppStorage("colorSchemePreference") private var colorSchemePreference: Int = 0
 
@@ -49,12 +50,6 @@ struct ContentView: View {
         && !isChromeInstalled
         && !lockStore.isLocked
         && (navSelection == .dashboard || navSelection == .clawPool || navSelection == nil)
-    }
-
-    private var sidebarPermissionCardBottomPadding: CGFloat {
-        let baseFooterHeight: CGFloat = 44
-        let updateBannerHeight: CGFloat = (updater.appNeedsUpdate || updater.isAwaitingAppRelaunch) ? 42 : 0
-        return baseFooterHeight + updateBannerHeight
     }
 
     var body: some View {
@@ -146,15 +141,6 @@ struct ContentView: View {
                         .padding(.vertical, 10)
                     }
                 }
-                .overlay(alignment: .bottomLeading) {
-                    if hostPermissionCenter.hasIssues {
-                        HostPermissionBanner()
-                            .frame(maxWidth: 272, alignment: .leading)
-                            .padding(.horizontal, 8)
-                            .padding(.bottom, sidebarPermissionCardBottomPadding)
-                            .transition(.move(edge: .leading).combined(with: .opacity))
-                    }
-                }
             } detail: {
                 switch navSelection {
                 case .dashboard, nil:
@@ -233,7 +219,6 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: helperClient.isConnected)
-        .animation(.easeInOut(duration: 0.18), value: hostPermissionCenter.hasIssues)
         .animation(.easeInOut(duration: 0.18), value: shouldShowChromeInstallHint)
         .alert(
             L10n.k("content_view.browser.init_session_title", fallback: "初始化浏览器 Session？"),
@@ -250,13 +235,19 @@ struct ContentView: View {
             Button(L10n.k("content_view.browser.open_browser", fallback: "打开浏览器")) {
                 browserSessionPromptSuppressed = true
                 browserSessionPromptUsername = nil
-                Task {
-                    try? await helperClient.openBrowserAccount(username: username)
+                Task { @MainActor in
+                    guard prepareBrowserAutomationAction(
+                        L10n.k("content_view.browser.open_browser", fallback: "打开浏览器")
+                    ) else {
+                        return
+                    }
+                    _ = try? await helperClient.openBrowserAccount(username: username)
                 }
             }
         } message: { username in
             Text(L10n.f("content_view.browser.init_session_message", fallback: "检测到 %@ 的浏览器工具已安装，但还没有初始化 session。是否现在打开 Chrome 完成初始化？", username))
         }
+        .hostPermissionPrompt($hostPermissionPromptRequest)
         .overlay {
             if lockStore.isLocked {
                 AppLockScreen()
@@ -292,6 +283,20 @@ struct ContentView: View {
             let visible = (newValue == .dashboard || newValue == nil)
             pool.setDashboardVisible(visible)
         }
+    }
+
+    @MainActor
+    private func prepareBrowserAutomationAction(_ actionLabel: String) -> Bool {
+        hostPermissionCenter.refresh()
+        let missing = hostPermissionCenter.missingBrowserAutomationPermissions()
+        guard !missing.isEmpty else {
+            return true
+        }
+        hostPermissionPromptRequest = HostPermissionPromptRequest(
+            actionLabel: actionLabel,
+            missingPermissions: missing
+        )
+        return false
     }
 
     private func refreshChromeInstallStatus() {
