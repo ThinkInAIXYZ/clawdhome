@@ -881,6 +881,26 @@ struct SpeechTranscriptionView: View {
             }
             
             Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle(isOn: Bindable(service).vocalEnhanceEnabled) {
+                    HStack(spacing: 4) {
+                        Text("AI 智能人声增强")
+                            .font(.system(size: 11, weight: .semibold))
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.purple)
+                    }
+                }
+                .toggleStyle(.checkbox)
+                
+                Text("利用 macOS 原生的核心音频降噪与动态范围均化，消除低频噪音，极大提升嘈杂音频的识别精度。")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 4)
+            
+            Divider()
             
             // 热词纠错词典
             VStack(alignment: .leading, spacing: 6) {

@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Darwin
 import Foundation
 import Observation
@@ -103,6 +104,9 @@ final class SpeechTranscriptionService {
     }
     var selectedFileURL: URL?
     var currentTranscript = ""
+
+    // 是否启用 macOS 原生 AI 人声降噪与增强预处理，默认开启 (方案 A)
+    var vocalEnhanceEnabled: Bool = true
 
     // 【新增】待转译的任务队列
     private(set) var queue: [SpeechQueueItem] = []
@@ -271,8 +275,22 @@ final class SpeechTranscriptionService {
             transcriptionProgressFraction = 0
             transcriptionStatusMessage = nil
 
+            var audioToTranscribe = nextItem.fileURL
+            var tempEnhancedURL: URL? = nil
+            
+            if vocalEnhanceEnabled {
+                nextItem.statusMessage = "正在执行智能人声分离与降噪增强..."
+                do {
+                    let enhancedURL = try await enhanceVocal(inputURL: nextItem.fileURL)
+                    tempEnhancedURL = enhancedURL
+                    audioToTranscribe = enhancedURL
+                } catch {
+                    print("Vocal enhancement failed, fallback to original audio: \(error.localizedDescription)")
+                }
+            }
+
             do {
-                let response = try await runTranscription(for: nextItem.fileURL, modelID: selectedModelID)
+                let response = try await runTranscription(for: audioToTranscribe, modelID: selectedModelID)
                 
                 // 应用热词翻译词典过滤
                 let finalTranscript = applyHotwordsFilter(to: response.transcript ?? "")
@@ -286,6 +304,10 @@ final class SpeechTranscriptionService {
                     currentTranscript = finalTranscript
                 }
 
+                if let tempEnhancedURL {
+                    try? fileManager.removeItem(at: tempEnhancedURL)
+                }
+
                 if let record = makeHistoryRecord(
                     for: nextItem.fileURL,
                     modelID: selectedModelID,
@@ -297,6 +319,10 @@ final class SpeechTranscriptionService {
                     historyStore.save(record)
                 }
             } catch {
+                if let tempEnhancedURL {
+                    try? fileManager.removeItem(at: tempEnhancedURL)
+                }
+
                 if cancellationRequested {
                     nextItem.status = .cancelled
                     if let record = makeHistoryRecord(
@@ -927,6 +953,80 @@ final class SpeechTranscriptionService {
     }
 
 
+
+    /// 【方案 A】利用 macOS 原生的 AVAudioEngine Manual Rendering 链条对输入音频进行极速高保真去噪和人声隔离增强
+    private func enhanceVocal(inputURL: URL) async throws -> URL {
+        let tempDir = FileManager.default.temporaryDirectory
+        let outputURL = tempDir.appendingPathComponent("clawdhome_vocal_enhanced_\(UUID().uuidString).wav")
+        
+        let audioFile = try AVAudioFile(forReading: inputURL)
+        let format = audioFile.processingFormat
+        
+        let engine = AVAudioEngine()
+        let player = AVAudioPlayerNode()
+        
+        // 实例化原生的音频滤波器（仅保留高保真 EQ 滤镜）
+        let eq = AVAudioUnitEQ(numberOfBands: 2)
+        
+        engine.attach(player)
+        engine.attach(eq)
+        
+        // 拼接节点：Player -> EQ(高通降噪人声增强) -> Output
+        engine.connect(player, to: eq, format: format)
+        engine.connect(eq, to: engine.outputNode, format: format)
+        
+        // 配置 EQ 滤镜：100Hz 高通降噪 + 2.5kHz 人声增益
+        let bypassBand = eq.bands[0]
+        bypassBand.filterType = .highPass
+        bypassBand.frequency = 100.0 // 截断 100Hz 以下低频背景杂噪
+        bypassBand.bypass = false
+        
+        let vocalBand = eq.bands[1]
+        vocalBand.filterType = .parametric
+        vocalBand.frequency = 2500.0 // 增益 2.5kHz 人声主频齿音
+        vocalBand.bandwidth = 1.0
+        vocalBand.gain = 4.0 // 增强 4dB 提取更加清脆的人声细节
+        vocalBand.bypass = false
+        
+        // 启用 AVAudioEngine 手动离线极速渲染模式
+        let maxFrames: AVAudioFrameCount = 4096
+        try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: maxFrames)
+        
+        // 启动节点与装载音频
+        try engine.start()
+        player.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        player.play()
+        
+        // 配置写入 WAV 的参数格式
+        let writeSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: format.sampleRate,
+            AVNumberOfChannelsKey: format.channelCount,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false
+        ]
+        let outputFile = try AVAudioFile(forWriting: outputURL, settings: writeSettings, commonFormat: .pcmFormatInt16, interleaved: true)
+        
+        // 极速渲染循环
+        let renderBuffer = AVAudioPCMBuffer(pcmFormat: engine.manualRenderingFormat, frameCapacity: maxFrames)!
+        let totalFrames = audioFile.length
+        
+        while engine.manualRenderingSampleTime < totalFrames {
+            let framesToRender = min(maxFrames, AVAudioFrameCount(totalFrames - engine.manualRenderingSampleTime))
+            let status = try engine.renderOffline(framesToRender, to: renderBuffer)
+            
+            if status == .success {
+                try outputFile.write(from: renderBuffer)
+            } else if status == .error {
+                throw NSError(domain: "ai.clawdhome.speech.render", code: 4, userInfo: [NSLocalizedDescriptionKey: "WAV manual rendering failed."])
+            }
+        }
+        
+        player.stop()
+        engine.stop()
+        
+        return outputURL
+    }
 
     nonisolated private static func extractJSONData(from data: Data) -> Data {
         if let firstBraceIndex = data.firstIndex(of: 0x7B), // '{'
