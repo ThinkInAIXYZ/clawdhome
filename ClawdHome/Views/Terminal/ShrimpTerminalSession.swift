@@ -103,7 +103,7 @@ struct ShrimpTerminalNSView: NSViewRepresentable {
 // MARK: - ShrimpTerminalSession
 
 @MainActor
-final class ShrimpTerminalSession: NSObject, ObservableObject, TerminalViewDelegate {
+final class ShrimpTerminalSession: NSObject, ObservableObject, @preconcurrency TerminalViewDelegate {
     private let helperClient: HelperClient
     private let username: String
     private let command: [String]
@@ -140,7 +140,9 @@ final class ShrimpTerminalSession: NSObject, ObservableObject, TerminalViewDeleg
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.handleAppDidBecomeActive()
+            Task { @MainActor [weak self] in
+                self?.handleAppDidBecomeActive()
+            }
         }
     }
 

@@ -1350,7 +1350,7 @@ enum BrowserAccountManager {
 
     private static func removeBrowserShellEnvironment(username: String) throws {
         for path in ["/Users/\(username)/.zprofile", "/Users/\(username)/.zshrc"] {
-            guard var existing = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+            guard let existing = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
             guard let start = existing.range(of: "# ClawdHome browser account"),
                   let end = existing.range(of: "# End ClawdHome browser account", range: start.lowerBound..<existing.endIndex) else {
                 continue
@@ -1402,11 +1402,11 @@ enum BrowserAccountManager {
         try FilePermissionHelper.chmod(launcherDirectory, mode: "755")
         try browserPipeLauncherScript.write(toFile: pipeLauncherPath, atomically: true, encoding: .utf8)
         try FilePermissionHelper.chown(pipeLauncherPath, owner: "root", group: "wheel")
-        try? FilePermissionHelper.clearACL(pipeLauncherPath)
+        _ = try? FilePermissionHelper.clearACL(pipeLauncherPath)
         try FilePermissionHelper.chmod(pipeLauncherPath, mode: "755")
         try run("/usr/bin/clang", args: [sourcePath, "-o", launcherPath])
         try FilePermissionHelper.chown(launcherPath, owner: "root", group: "wheel")
-        try? FilePermissionHelper.clearACL(launcherPath)
+        _ = try? FilePermissionHelper.clearACL(launcherPath)
         try FilePermissionHelper.chmod(launcherPath, mode: "4755")
         try verifyPrivilegedBrowserLauncher(launcherPath)
     }
@@ -1715,7 +1715,7 @@ enum BrowserAccountManager {
         guard requiredMarkers.allSatisfy({ content.contains($0) }) else { return }
         try fm.removeItem(atPath: path)
         let parent = (path as NSString).deletingLastPathComponent
-        try? FilePermissionHelper.chown(parent, owner: owner)
+        _ = try? FilePermissionHelper.chown(parent, owner: owner)
     }
 
     private static func openCLIWrapperScript(username: String, toolPath: String, realPath: String, daemonPath: String) -> String {

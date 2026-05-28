@@ -63,6 +63,23 @@ assert_contains() {
     fi
 }
 
+assert_not_contains() {
+    local desc="$1"
+    local unexpected="$2"
+    shift 2
+    local output
+    output=$("$@" 2>&1) || true
+    if echo "$output" | grep -q "$unexpected"; then
+        echo -e "  ${RED}✗${NC} $desc (不应出现: '$unexpected')"
+        echo "    实际输出: $(echo "$output" | head -8)"
+        FAILURES+=("$desc")
+        FAIL=$((FAIL + 1))
+    else
+        echo -e "  ${GREEN}✓${NC} $desc"
+        PASS=$((PASS + 1))
+    fi
+}
+
 assert_json_field() {
     local desc="$1"
     local field="$2"
@@ -119,10 +136,47 @@ section "1. 基础命令"
 
 assert_contains "version 输出 CLI 版本" "clawdhome" "$CLI" --version
 assert_contains "help 输出用法" "Commands:" "$CLI" --help
+assert_not_contains "help 不再暴露 hermes 顶级命令" "hermes <subcommand>" "$CLI" --help
+assert_contains "help 暴露 ai 能力命令" "ai <capability>" "$CLI" --help
+assert_fail "hermes 顶级命令已移除" "$CLI" hermes ls
 assert_ok "version 子命令连接 Helper" "$CLI" version
 
 # JSON 模式
 assert_json_field "version --json 输出 JSON" "cli" "$CLI" version --json
+
+# ── 1.1 AI 能力命令 ───────────────────────────────────────
+
+section "1.1 AI 能力命令"
+
+FAKE_SPEECH_TOOL="$(mktemp)"
+FAKE_SPEECH_ARGS="$(mktemp)"
+FAKE_AUDIO_FILE="$(mktemp /tmp/clawdhome-cli-asr.XXXXXX.wav)"
+cat > "$FAKE_SPEECH_TOOL" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" > "${CLAWDHOME_FAKE_SPEECH_ARGS:?}"
+case "$1" in
+  probe)
+    printf '{"ok":true,"command":"probe","message":"speech tool available","supportedModelIDs":["qwen3-asr-1.7b-8bit","qwen3-asr-0.6b"]}\n'
+    ;;
+  prepare-model)
+    printf '{"ok":true,"command":"prepare-model","modelID":"%s","elapsedSeconds":0.1,"error":null}\n' "$3"
+    ;;
+  transcribe)
+    printf '{"ok":true,"command":"transcribe","modelID":"qwen3-asr-0.6b","transcript":"hello transcript","elapsedSeconds":0.2,"error":null}\n'
+    ;;
+  *)
+    printf '{"ok":false,"command":"%s","error":"unexpected command"}\n' "$1"
+    exit 2
+    ;;
+esac
+EOF
+chmod +x "$FAKE_SPEECH_TOOL"
+
+assert_json_field "ai asr doctor --json 输出 JSON" "ok" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr doctor --json
+assert_contains "ai asr pull 调用 prepare-model" "Qwen3-ASR 0.6B" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr pull qwen3-asr-0.6b
+assert_contains "ai asr transcribe 输出转译文本" "hello transcript" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr transcribe "$FAKE_AUDIO_FILE" --model qwen3-asr-0.6b
+assert_contains "Intel 上 ai asr 明确提示不支持" "requires Apple Silicon" env CLAWDHOME_CPU_ARCH_OVERRIDE=x86_64 CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr doctor
+rm -f "$FAKE_SPEECH_TOOL" "$FAKE_SPEECH_ARGS" "$FAKE_AUDIO_FILE"
 
 # ── 2. ps ─────────────────────────────────────────────────
 

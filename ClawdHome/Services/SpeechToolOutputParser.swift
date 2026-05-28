@@ -5,6 +5,7 @@ struct SpeechToolProgressEvent: Codable, Equatable {
     let command: String
     let fractionCompleted: Double
     let message: String
+    let transcript: String?
 }
 
 enum SpeechToolOutputParser {

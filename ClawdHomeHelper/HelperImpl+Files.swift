@@ -431,19 +431,24 @@ extension ClawdHomeHelperImpl {
         }
     }
 
-    func downloadLocalModel(_ modelId: String, withReply reply: @escaping (Bool, String?) -> Void) {
-        helperLog("[omlx] XPC downloadLocalModel \(modelId)")
+    func prepareLocalModelDownload(_ modelId: String, withReply reply: @escaping (Bool, String?, String?) -> Void) {
+        helperLog("[omlx] XPC prepareLocalModelDownload \(modelId)")
         let admin = resolveConsoleUsername()
         guard !admin.isEmpty else {
-            reply(false, LocalAIError.adminNotAvailable.localizedDescription)
+            reply(false, LocalAIError.adminNotAvailable.localizedDescription, nil)
             return
         }
         do {
-            try LocalLLMManager.downloadModel(modelId: modelId, adminUsername: admin)
-            reply(true, nil)
+            let plan = try LocalLLMManager.prepareModelDownload(modelId: modelId, adminUsername: admin)
+            let data = try JSONEncoder().encode(plan)
+            guard let json = String(data: data, encoding: .utf8) else {
+                reply(false, "无法编码模型下载计划", nil)
+                return
+            }
+            reply(true, nil, json)
         } catch {
-            helperLog("[omlx] 下载失败 \(modelId): \(error.localizedDescription)", level: .error)
-            reply(false, error.localizedDescription)
+            helperLog("[omlx] 准备下载目录失败 \(modelId): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription, nil)
         }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 enum SpeechToolAvailabilityReason: String, Codable {
     case supported
@@ -157,3 +158,46 @@ let curatedSpeechModels: [SpeechModelDescriptor] = [
         estimatedDiskGB: 1.1
     ),
 ]
+
+/// 任务在队列中的状态
+enum SpeechQueueItemStatus: String, Codable {
+    case waiting      = "waiting"      // 等待中
+    case transcribing = "transcribing" // 转译中
+    case completed    = "completed"    // 已完成
+    case failed       = "failed"       // 失败
+    case cancelled    = "cancelled"    // 已取消
+}
+
+/// 队列中的单个音频任务项
+@Observable
+final class SpeechQueueItem: Identifiable, Hashable {
+    let id: UUID
+    let fileURL: URL
+    var status: SpeechQueueItemStatus
+    var progressFraction: Double
+    var statusMessage: String?
+    var transcriptText: String
+    var elapsedSeconds: Double
+    var errorSummary: String?
+    
+    init(fileURL: URL) {
+        self.id = UUID()
+        self.fileURL = fileURL
+        self.status = .waiting
+        self.progressFraction = 0
+        self.statusMessage = nil
+        self.transcriptText = ""
+        self.elapsedSeconds = 0
+        self.errorSummary = nil
+    }
+
+    
+    static func == (lhs: SpeechQueueItem, rhs: SpeechQueueItem) -> Bool {
+        lhs.id == rhs.id
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+

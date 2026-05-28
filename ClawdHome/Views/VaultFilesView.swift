@@ -34,9 +34,30 @@ struct VaultFilesView: View {
     // MARK: - 头部
 
     private var header: some View {
-        Text(L10n.k("vault_files.subtitle", fallback: "专属安全空间 — 虾之间数据互不可见，您决定每只虾能接触哪些文件。产出物一键在 Finder 中查阅，文件交换尽在掌握"))
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "folder.badge.person.crop")
+                    .foregroundStyle(DesignSystem.GradientTheme.teal.gradient)
+                    .font(.system(size: 14, weight: .bold))
+                
+                Text(L10n.k("vault_files.subtitle", fallback: "专属安全空间 — 虾之间数据互不可见，您决定每只虾能接触哪些文件。产出物一键在 Finder 中查阅，文件交换尽在掌握"))
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13, weight: .medium))
+            }
+            
+            // 极细的装饰渐变分割线
+            RoundedRectangle(cornerRadius: 1)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.teal.opacity(0.4), Color.blue.opacity(0.1), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 1.5)
+                .frame(maxWidth: 400)
+        }
+        .padding(.horizontal, 4)
     }
 
     // MARK: - 卡片网格

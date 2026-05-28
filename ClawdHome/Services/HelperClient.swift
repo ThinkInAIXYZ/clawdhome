@@ -1932,7 +1932,7 @@ final class HelperClient {
     /// 直接写入 ~/.openclaw/openclaw.json 指定 dot-path（不启动 CLI）
     /// value 必须是 JSON-serializable（String / [String] / Bool / Number 等）
     func setConfigDirect(username: String, path: String, value: Any) async throws {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        guard controlProxy != nil else { throw HelperError.notConnected }
         let valueJSON = try serializeJSONValue(value)
         try await setConfigDirectJSON(username: username, path: path, valueJSON: valueJSON)
     }
@@ -2707,10 +2707,16 @@ final class HelperClient {
 
     func downloadLocalModel(_ modelId: String) async throws {
         guard let proxy = installProxy else { throw HelperError.notConnected }
-        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
-            proxy.downloadLocalModel(modelId) { ok, msg in done((ok, msg)) }
+        let (ok, msg, planJSON): (Bool, String?, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.prepareLocalModelDownload(modelId) { ok, msg, planJSON in done((ok, msg, planJSON)) }
         }
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+        guard let planJSON,
+              let data = planJSON.data(using: .utf8),
+              let plan = try? JSONDecoder().decode(LocalModelDownloadPlan.self, from: data) else {
+            throw HelperError.operationFailed("模型下载计划无效")
+        }
+        try await LocalModelDownloader.download(plan: plan)
     }
 
     func deleteLocalModel(_ modelId: String) async throws {

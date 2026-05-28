@@ -104,6 +104,19 @@ final class SpeechTranscriptionService {
     var selectedFileURL: URL?
     var currentTranscript = ""
 
+    // 【新增】待转译的任务队列
+    private(set) var queue: [SpeechQueueItem] = []
+    
+    // 【新增】当前选中的队列任务项（右侧展示其对应的转译结果）
+    var selectedQueueItem: SpeechQueueItem? {
+        didSet {
+            if let item = selectedQueueItem {
+                self.selectedFileURL = item.fileURL
+                self.currentTranscript = item.transcriptText
+            }
+        }
+    }
+
     private var runningProcess: Process?
     private var cancellationRequested = false
     private var downloadMonitorTask: Task<Void, Never>?
@@ -158,20 +171,86 @@ final class SpeechTranscriptionService {
     }
 
     func selectFile(_ url: URL) {
-        selectedFileURL = url
+        // 清理原有的队列，将新选择的文件作为唯一的队列项
+        queue.removeAll()
+        let item = SpeechQueueItem(fileURL: url)
+        queue.append(item)
+        selectedQueueItem = item
         lastErrorMessage = nil
+    }
+
+    // 【新增】多音频文件批量追加至队列
+    func enqueueFiles(_ urls: [URL]) {
+        let newItems = urls.map { SpeechQueueItem(fileURL: $0) }
+        self.queue.append(contentsOf: newItems)
+        
+        if selectedQueueItem == nil {
+            selectedQueueItem = newItems.first
+        }
+        lastErrorMessage = nil
+    }
+
+    // 【新增】从队列中删除特定的单个任务项
+    func removeQueueItem(id: UUID) {
+        queue.removeAll { $0.id == id }
+        if selectedQueueItem?.id == id {
+            selectedQueueItem = queue.first
+        }
+        if queue.isEmpty {
+            clearSelection()
+        }
+    }
+
+    // 【新增】清空队列中已完成、失败或已取消的项目
+    func cleanQueue() {
+        queue.removeAll { $0.status == .completed || $0.status == .failed || $0.status == .cancelled }
+        if !queue.contains(where: { $0.id == selectedQueueItem?.id }) {
+            selectedQueueItem = queue.first
+        }
+        if queue.isEmpty {
+            clearSelection()
+        }
+    }
+
+    // 【新增】基于专名词典对 ASR 识别出的文本进行后处理一键纠错
+    func applyHotwordsFilter(to text: String) -> String {
+        let rawHotwords = UserDefaults.standard.string(forKey: "asr_hotwords_setting") ?? ""
+        var filteredText = text
+        
+        let lines = rawHotwords.components(separatedBy: .newlines)
+        for line in lines {
+            let parts = line.components(separatedBy: "->")
+            guard parts.count == 2 else { continue }
+            let wrong = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            let right = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !wrong.isEmpty {
+                filteredText = filteredText.replacingOccurrences(of: wrong, with: right)
+            }
+        }
+        return filteredText
     }
 
     func clearSelection() {
         selectedFileURL = nil
+        selectedQueueItem = nil
+        queue.removeAll()
         currentTranscript = ""
         lastErrorMessage = nil
     }
 
+    // 重构的串行排队智能转写调度主流程
     func transcribeSelectedFile() async {
         guard !isTranscribing else { return }
-        guard let fileURL = selectedFileURL else {
-            lastErrorMessage = "No audio file selected."
+        
+        // 如果队列为空，但是先前通过某种方式选中了单文件，则自动将其入队
+        if queue.isEmpty, let fileURL = selectedFileURL {
+            let item = SpeechQueueItem(fileURL: fileURL)
+            queue.append(item)
+            selectedQueueItem = item
+        }
+        
+        guard !queue.isEmpty else {
+            lastErrorMessage = "No audio files in queue."
             return
         }
         guard availability.isAvailable else {
@@ -182,55 +261,78 @@ final class SpeechTranscriptionService {
         isTranscribing = true
         cancellationRequested = false
         lastErrorMessage = nil
-        transcriptionProgressFraction = 0
-        transcriptionStatusMessage = nil
 
-        do {
-            let response = try await runTranscription(for: fileURL, modelID: selectedModelID)
-            currentTranscript = response.transcript ?? ""
-            if let record = makeHistoryRecord(
-                for: fileURL,
-                modelID: selectedModelID,
-                transcript: currentTranscript,
-                elapsedSeconds: response.elapsedSeconds ?? 0,
-                status: .completed,
-                errorSummary: nil
-            ) {
-                historyStore.save(record)
-            }
-            history = historyStore.load()
-        } catch {
-            if cancellationRequested {
+        // 基于串行 FIFO 逐个处理未开始的任务
+        while !cancellationRequested, let nextItem = queue.first(where: { $0.status == .waiting }) {
+            selectedQueueItem = nextItem
+            nextItem.status = .transcribing
+            nextItem.progressFraction = 0
+            
+            transcriptionProgressFraction = 0
+            transcriptionStatusMessage = nil
+
+            do {
+                let response = try await runTranscription(for: nextItem.fileURL, modelID: selectedModelID)
+                
+                // 应用热词翻译词典过滤
+                let finalTranscript = applyHotwordsFilter(to: response.transcript ?? "")
+                
+                nextItem.status = .completed
+                nextItem.progressFraction = 1.0
+                nextItem.transcriptText = finalTranscript
+                nextItem.elapsedSeconds = response.elapsedSeconds ?? 0
+                
+                if selectedQueueItem?.id == nextItem.id {
+                    currentTranscript = finalTranscript
+                }
+
                 if let record = makeHistoryRecord(
-                    for: fileURL,
+                    for: nextItem.fileURL,
                     modelID: selectedModelID,
-                    transcript: "",
-                    elapsedSeconds: 0,
-                    status: .cancelled,
+                    transcript: finalTranscript,
+                    elapsedSeconds: nextItem.elapsedSeconds,
+                    status: .completed,
                     errorSummary: nil
                 ) {
                     historyStore.save(record)
                 }
-                history = historyStore.load()
-            } else {
-                lastErrorMessage = error.localizedDescription
-                if let record = makeHistoryRecord(
-                    for: fileURL,
-                    modelID: selectedModelID,
-                    transcript: "",
-                    elapsedSeconds: 0,
-                    status: .failed,
-                    errorSummary: error.localizedDescription
-                ) {
-                    historyStore.save(record)
+            } catch {
+                if cancellationRequested {
+                    nextItem.status = .cancelled
+                    if let record = makeHistoryRecord(
+                        for: nextItem.fileURL,
+                        modelID: selectedModelID,
+                        transcript: "",
+                        elapsedSeconds: 0,
+                        status: .cancelled,
+                        errorSummary: nil
+                    ) {
+                        historyStore.save(record)
+                    }
+                } else {
+                    nextItem.status = .failed
+                    nextItem.errorSummary = error.localizedDescription
+                    lastErrorMessage = error.localizedDescription
+                    
+                    if let record = makeHistoryRecord(
+                        for: nextItem.fileURL,
+                        modelID: selectedModelID,
+                        transcript: "",
+                        elapsedSeconds: 0,
+                        status: .failed,
+                        errorSummary: error.localizedDescription
+                    ) {
+                        historyStore.save(record)
+                    }
                 }
-                history = historyStore.load()
             }
+            history = historyStore.load()
         }
 
         runningProcess = nil
         isTranscribing = false
     }
+
 
     func prepareSelectedModel() async {
         guard !isPreparingModel else { return }
@@ -296,6 +398,14 @@ final class SpeechTranscriptionService {
     func cancelCurrentTranscription() {
         guard isTranscribing else { return }
         cancellationRequested = true
+        runningProcess?.terminate()
+    }
+
+    func cancelAllQueueTranscriptions() {
+        cancellationRequested = true
+        for item in queue where item.status == .waiting || item.status == .transcribing {
+            item.status = .cancelled
+        }
         runningProcess?.terminate()
     }
 
@@ -784,11 +894,39 @@ final class SpeechTranscriptionService {
         return 0
     }
     
-    private func applyTranscriptionProgress(_ event: SpeechToolProgressEvent) {
+    func applyTranscriptionProgress(_ event: SpeechToolProgressEvent) {
+        if event.command == "load-model" {
+            transcriptionStatusMessage = event.message
+            if let activeItem = queue.first(where: { $0.status == .transcribing }) {
+                activeItem.statusMessage = event.message
+                activeItem.progressFraction = 0.02
+            }
+            return
+        }
+        
         guard event.command == "transcribe" else { return }
         transcriptionProgressFraction = min(max(event.fractionCompleted, 0), 1)
         transcriptionStatusMessage = event.message
+        
+        if let activeItem = queue.first(where: { $0.status == .transcribing }) {
+            activeItem.progressFraction = transcriptionProgressFraction
+            activeItem.statusMessage = event.message
+
+            if let transcript = event.transcript?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !transcript.isEmpty {
+                let filteredTranscript = applyHotwordsFilter(to: transcript)
+                activeItem.transcriptText = filteredTranscript
+
+                // 只有当用户当前选中的是正在转写中的任务时，才实时显示在右侧文本框
+                // 避免将“已转写 5%”这类进度状态误写为 ASR 正文。
+                if selectedQueueItem?.id == activeItem.id {
+                    currentTranscript = filteredTranscript
+                }
+            }
+        }
     }
+
+
 
     nonisolated private static func extractJSONData(from data: Data) -> Data {
         if let firstBraceIndex = data.firstIndex(of: 0x7B), // '{'

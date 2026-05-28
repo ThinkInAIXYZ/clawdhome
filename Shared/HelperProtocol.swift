@@ -721,8 +721,8 @@ import Foundation
     /// 停止 omlx LaunchDaemon
     func stopLocalLLM(withReply reply: @escaping (Bool, String?) -> Void)
 
-    /// 下载模型（huggingface_hub），modelId = HuggingFace repo id（如 "mlx-community/Qwen2.5-7B-Instruct-4bit"）
-    func downloadLocalModel(_ modelId: String, withReply reply: @escaping (Bool, String?) -> Void)
+    /// 准备模型下载目录（下载由 App 侧 swift-huggingface 执行）
+    func prepareLocalModelDownload(_ modelId: String, withReply reply: @escaping (Bool, String?, String?) -> Void)
 
     /// 删除已下载模型
     func deleteLocalModel(_ modelId: String, withReply reply: @escaping (Bool, String?) -> Void)

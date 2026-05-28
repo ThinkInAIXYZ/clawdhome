@@ -142,6 +142,23 @@ struct ClawFreezeStateStore {
     }
 }
 
+struct ClawOrderStore {
+    private let defaults: UserDefaults
+    private let storageKey = "claw.order.byUsername"
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func loadOrder() -> [String] {
+        defaults.stringArray(forKey: storageKey) ?? []
+    }
+
+    func saveOrder(_ usernames: [String]) {
+        defaults.set(usernames, forKey: storageKey)
+    }
+}
+
 /// 代表一个由 ClawdHome 管理的 macOS 标准用户
 /// 使用 @Observable 替代 ObservableObject（iOS/macOS 代码规范）
 @Observable

@@ -70,6 +70,15 @@ private struct ProgressResponse: Codable {
     let command: String
     let fractionCompleted: Double
     let message: String
+    let transcript: String?
+
+    init(kind: String, command: String, fractionCompleted: Double, message: String, transcript: String? = nil) {
+        self.kind = kind
+        self.command = command
+        self.fractionCompleted = fractionCompleted
+        self.message = message
+        self.transcript = transcript
+    }
 }
 
 // 线程安全高频插值下载进度状态监控类，保障高并发刷新下无 Data Race 且绝对原子安全
@@ -881,7 +890,7 @@ struct ClawdHomeSpeechMain {
                 try? writeProgress(
                     ProgressResponse(
                         kind: "progress",
-                        command: "transcribe",
+                        command: "load-model",
                         fractionCompleted: progress,
                         message: message
                     )
@@ -901,19 +910,61 @@ struct ClawdHomeSpeechMain {
 
         if totalSamples <= chunkSamples {
             // 短音频：直接转译
+            try? writeProgress(
+                ProgressResponse(
+                    kind: "progress",
+                    command: "transcribe",
+                    fractionCompleted: 0.1,
+                    message: "正在提取声学特征进行转译..."
+                )
+            )
             transcript = model.transcribe(
                 audio: audio,
                 sampleRate: modelSampleRate,
                 language: language,
                 maxTokens: 1024
             )
+            try? writeProgress(
+                ProgressResponse(
+                    kind: "progress",
+                    command: "transcribe",
+                    fractionCompleted: 1.0,
+                    message: "已完成 100%",
+                    transcript: transcript
+                )
+            )
         } else {
             // 长音频：滑动窗口分块转译，逐块结果拼接
             var segments: [String] = []
             var offset = 0
+            let audioDurationSec = Double(totalSamples) / Double(modelSampleRate)
+            
             while offset < totalSamples {
                 let end = min(offset + chunkSamples, totalSamples)
                 let chunk = Array(audio[offset..<end])
+                
+                let progressFraction = Double(end) / Double(totalSamples)
+                let currentEndSec = Double(end) / Double(modelSampleRate)
+                let elapsed = CFAbsoluteTimeGetCurrent() - start
+                
+                let speedRatio = elapsed > 0 ? (currentEndSec / elapsed) : 0.0
+                let message: String
+                if speedRatio > 0 {
+                    let etaSec = max((audioDurationSec - currentEndSec) / speedRatio, 0)
+                    message = String(format: "已转写 %.0f%% (速率 %.1fx, 剩余 %.0fs)", progressFraction * 100, speedRatio, etaSec)
+                } else {
+                    message = String(format: "已转写 %.0f%%", progressFraction * 100)
+                }
+                
+                try? writeProgress(
+                    ProgressResponse(
+                        kind: "progress",
+                        command: "transcribe",
+                        fractionCompleted: progressFraction,
+                        message: message
+                    )
+                )
+                
                 let chunkText = model.transcribe(
                     audio: chunk,
                     sampleRate: modelSampleRate,
@@ -922,12 +973,22 @@ struct ClawdHomeSpeechMain {
                 )
                 if !chunkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     segments.append(chunkText)
+                    try? writeProgress(
+                        ProgressResponse(
+                            kind: "progress",
+                            command: "transcribe",
+                            fractionCompleted: progressFraction,
+                            message: message,
+                            transcript: segments.joined(separator: " ")
+                        )
+                    )
                 }
                 if end >= totalSamples { break }
                 offset += stepSamples
             }
             transcript = segments.joined(separator: " ")
         }
+
 
         let elapsed = CFAbsoluteTimeGetCurrent() - start
 

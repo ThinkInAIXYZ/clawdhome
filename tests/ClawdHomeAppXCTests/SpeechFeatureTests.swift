@@ -152,4 +152,71 @@ final class SpeechFeatureTests: XCTestCase {
         XCTAssertTrue(markdown.contains("- Elapsed: 3.50s"))
         XCTAssertTrue(markdown.contains("hello world"))
     }
+
+    @MainActor
+    func testCancelAllQueueTranscriptionsCancelsWaitingItems() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpeechCancelQueueTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let service = SpeechTranscriptionService(historyStore: SpeechHistoryStore(fileURL: tempURL))
+        service.enqueueFiles([
+            URL(fileURLWithPath: "/tmp/first.wav"),
+            URL(fileURLWithPath: "/tmp/second.wav")
+        ])
+
+        service.cancelAllQueueTranscriptions()
+
+        XCTAssertEqual(service.queue.map(\.status), [.cancelled, .cancelled])
+    }
+
+    func testTranscriptionProgressEventDecodesPartialTranscript() {
+        let progressLine = #"{"command":"transcribe","fractionCompleted":0.5,"kind":"progress","message":"已转写 50%","transcript":"这是实时识别文本"}"#
+
+        let progress = SpeechToolOutputParser.progressEvent(from: progressLine)
+
+        XCTAssertEqual(progress?.message, "已转写 50%")
+        XCTAssertEqual(progress?.transcript, "这是实时识别文本")
+    }
+
+    @MainActor
+    func testTranscriptionProgressDoesNotUseStatusMessageAsTranscript() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpeechProgressTranscriptTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let service = SpeechTranscriptionService(historyStore: SpeechHistoryStore(fileURL: tempURL))
+        service.enqueueFiles([URL(fileURLWithPath: "/tmp/live.m4a")])
+        let item = service.queue[0]
+        item.status = .transcribing
+        service.selectedQueueItem = item
+
+        service.applyTranscriptionProgress(
+            SpeechToolProgressEvent(
+                kind: "progress",
+                command: "transcribe",
+                fractionCompleted: 0.05,
+                message: "已转写 5% (速率 24.4x, 剩余 90s)",
+                transcript: nil
+            )
+        )
+
+        XCTAssertEqual(service.currentTranscript, "")
+        XCTAssertEqual(item.transcriptText, "")
+        XCTAssertEqual(item.statusMessage, "已转写 5% (速率 24.4x, 剩余 90s)")
+
+        service.applyTranscriptionProgress(
+            SpeechToolProgressEvent(
+                kind: "progress",
+                command: "transcribe",
+                fractionCompleted: 0.12,
+                message: "已转写 12%",
+                transcript: "真正的 ASR 文本"
+            )
+        )
+
+        XCTAssertEqual(service.currentTranscript, "真正的 ASR 文本")
+        XCTAssertEqual(item.transcriptText, "真正的 ASR 文本")
+        XCTAssertEqual(item.statusMessage, "已转写 12%")
+    }
 }

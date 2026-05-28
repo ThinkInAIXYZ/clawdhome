@@ -949,7 +949,7 @@ struct InstanceInitWizardV2: View {
                         Image(systemName: "hammer.fill")
                             .font(.system(size: 10))
                             .foregroundStyle(.orange)
-                            .symbolEffect(.bounce, options: .repeating)
+                            .symbolEffect(.pulse, options: .repeating)
                     case .pending:
                         Text("\(phase.rawValue)")
                             .font(.system(size: 9, weight: .medium))
@@ -998,7 +998,7 @@ struct InstanceInitWizardV2: View {
                         Image(systemName: "hammer.fill")
                             .font(.system(size: 10))
                             .foregroundStyle(.orange)
-                            .symbolEffect(.bounce, options: .repeating)
+                            .symbolEffect(.pulse, options: .repeating)
                     case .pending:
                         Text("\(phase.rawValue)")
                             .font(.system(size: 9, weight: .medium))

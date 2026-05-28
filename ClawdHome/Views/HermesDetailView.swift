@@ -1694,7 +1694,9 @@ final class HermesChatTerminalSession: NSObject, ObservableObject, @preconcurren
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.handleAppDidBecomeActive()
+            Task { @MainActor [weak self] in
+                self?.handleAppDidBecomeActive()
+            }
         }
     }
 

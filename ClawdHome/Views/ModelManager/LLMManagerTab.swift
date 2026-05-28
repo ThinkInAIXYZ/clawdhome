@@ -12,6 +12,7 @@ struct LLMManagerTab: View {
     @State private var configuredSecretKeys: Set<String> = []
     @State private var searchText: String = ""
     @State private var collapsedGroups: Set<String> = []
+    @State private var hoveredCardId: UUID? = nil
 
     private var deleteTarget: ProviderTemplate? {
         guard let id = deleteConfirmId else { return nil }
@@ -289,10 +290,10 @@ struct LLMManagerTab: View {
             }
         }()
 
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 0) {
             
             // 头部：图标、别名与状态发光徽章
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
                 ZStack {
                     Circle()
                         .fill(hasKey ? cardTheme.mainColor.opacity(0.1) : Color.secondary.opacity(0.06))
@@ -304,12 +305,10 @@ struct LLMManagerTab: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(provider.name.isEmpty ? provider.providerDisplayName : provider.name)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                    }
+                    Text(provider.name.isEmpty ? provider.providerDisplayName : provider.name)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
                     
                     // 用呼吸状态指示灯呈现凭据状态
                     PremiumStatusBadge(style: hasKey ? .ready : .planned)
@@ -317,7 +316,7 @@ struct LLMManagerTab: View {
                 
                 Spacer()
                 
-                // 操作按钮组
+                // 操作按钮组 - 悬停时淡入，平时隐藏，极大净化静态视觉噪音
                 HStack(spacing: 8) {
                     Button { editingProvider = provider } label: {
                         Image(systemName: "pencil")
@@ -341,9 +340,13 @@ struct LLMManagerTab: View {
                     .buttonStyle(.plain)
                     .help(L10n.k("views.model_manager.llmmanager_tab.account_78fbf7", fallback: "移除该账户"))
                 }
+                .opacity(hoveredCardId == provider.id ? 1.0 : 0.0)
             }
+            .frame(height: 38)
             
-            // 自定义 URL 展示区
+            Spacer(minLength: 0)
+            
+            // 下方展示区：保证高度绝对单行对齐
             if isCustom, let url = provider.customBaseURL, !url.isEmpty {
                 HStack(spacing: 6) {
                     Image(systemName: "link")
@@ -359,40 +362,45 @@ struct LLMManagerTab: View {
                 .padding(.vertical, 4)
                 .background(Color.secondary.opacity(0.05))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-
-            // 模型列表 - 渲染为精美的多排标签胶囊，极佳的视觉减负与排列美化
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(provider.modelIds, id: \.self) { modelId in
-                    let entry = builtInModelGroups.flatMap(\.models).first { $0.id == modelId }
-                    let label = entry?.label ?? modelId
-                    
-                    HStack(spacing: 6) {
-                        Image(systemName: "circle.fill")
-                            .font(.system(size: 4))
-                            .foregroundStyle(hasKey ? Color.green.opacity(0.6) : Color.secondary.opacity(0.4))
-                        
-                        Text(label)
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(.primary)
-                        
-                        if label != modelId {
-                            Text(modelId)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                .help(url) // 悬停展示完整链接
+            } else {
+                // 模型列表 - 渲染为精美的单行横向滚动胶囊，极佳的视觉减负与对齐美化
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(provider.modelIds, id: \.self) { modelId in
+                            let entry = builtInModelGroups.flatMap(\.models).first { $0.id == modelId }
+                            let label = entry?.label ?? modelId
+                            
+                            HStack(spacing: 5) {
+                                Image(systemName: "circle.fill")
+                                    .font(.system(size: 4))
+                                    .foregroundStyle(hasKey ? Color.green.opacity(0.6) : Color.secondary.opacity(0.4))
+                                
+                                Text(label)
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .foregroundStyle(.primary)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.secondary.opacity(colorScheme == .dark ? 0.08 : 0.04))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .help(modelId) // 鼠标悬停显示完整 modelId，兼顾查阅体验
                         }
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.secondary.opacity(colorScheme == .dark ? 0.08 : 0.04))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
             }
         }
-        // 绑定统一设计语言中的高级自适应玻璃卡片，支持悬停微动与彩色晕染
+        .frame(height: 92) // 限制内部容器高度，加上 premiumCard 自带的 18 Padding * 2，刚好是 128pt 完美卡片高度
         .premiumCard(theme: cardTheme, isAvailable: true)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                if hovering {
+                    hoveredCardId = provider.id
+                } else if hoveredCardId == provider.id {
+                    hoveredCardId = nil
+                }
+            }
+        }
     }
 
     private func refreshConfiguredSecrets() {

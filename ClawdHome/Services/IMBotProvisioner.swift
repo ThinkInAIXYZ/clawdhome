@@ -89,7 +89,10 @@ public final class StandardChannelLoginProvisioner: IMBotProvisioner {
     public let platform: IMPlatform
     private let helperClient: HelperClient
     private var _cancelled = false
-    private let lock = NSLock()
+    private let cancellationQueue = DispatchQueue(label: "ai.clawdhome.imbot.standard.cancel")
+    private var isCancelled: Bool {
+        cancellationQueue.sync { _cancelled }
+    }
 
     init(platform: IMPlatform, helperClient: HelperClient) {
         precondition(platform.supportsStandardChannelLogin,
@@ -103,8 +106,7 @@ public final class StandardChannelLoginProvisioner: IMBotProvisioner {
         accountKey: String,
         progress: @escaping @Sendable (String) -> Void
     ) async throws -> IMBotCredential {
-        lock.lock(); let c = _cancelled; lock.unlock()
-        if c { throw IMBotProvisionerError.cancelled }
+        if isCancelled { throw IMBotProvisionerError.cancelled }
 
         let channelId = platform.openclawChannelId
         // openclaw channels login --channel <channelId> --account <accountKey>
@@ -113,8 +115,7 @@ public final class StandardChannelLoginProvisioner: IMBotProvisioner {
 
         let (ok, output) = await helperClient.runChannelLogin(username: username, args: args)
 
-        lock.lock(); let c2 = _cancelled; lock.unlock()
-        if c2 { throw IMBotProvisionerError.cancelled }
+        if isCancelled { throw IMBotProvisionerError.cancelled }
 
         guard ok else {
             throw IMBotProvisionerError.helperError(output)
@@ -134,7 +135,7 @@ public final class StandardChannelLoginProvisioner: IMBotProvisioner {
     }
 
     public func cancel() {
-        lock.lock(); _cancelled = true; lock.unlock()
+        cancellationQueue.sync { _cancelled = true }
     }
 }
 
@@ -161,7 +162,10 @@ public final class FeishuDeviceFlowProvisioner: IMBotProvisioner {
     private let baseURL: URL
     private let urlSession: URLSession
     private var _cancelled = false
-    private let lock = NSLock()
+    private let cancellationQueue = DispatchQueue(label: "ai.clawdhome.imbot.feishu.cancel")
+    private var isCancelled: Bool {
+        cancellationQueue.sync { _cancelled }
+    }
 
     // 轮询参数上限
     private let maxPollAttempts = 120    // 最多轮询 120 次
@@ -182,8 +186,7 @@ public final class FeishuDeviceFlowProvisioner: IMBotProvisioner {
         accountKey: String,
         progress: @escaping @Sendable (String) -> Void
     ) async throws -> IMBotCredential {
-        lock.lock(); let c = _cancelled; lock.unlock()
-        if c { throw IMBotProvisionerError.cancelled }
+        if isCancelled { throw IMBotProvisionerError.cancelled }
 
         // Step 1: begin
         let beginResult = try await beginRegistration()
@@ -205,7 +208,7 @@ public final class FeishuDeviceFlowProvisioner: IMBotProvisioner {
     }
 
     public func cancel() {
-        lock.lock(); _cancelled = true; lock.unlock()
+        cancellationQueue.sync { _cancelled = true }
     }
 
     // MARK: - Step 1: begin
@@ -266,7 +269,7 @@ public final class FeishuDeviceFlowProvisioner: IMBotProvisioner {
         maxAttempts: Int,
         progress: @escaping @Sendable (String) -> Void
     ) async throws -> IMBotCredential {
-        var url = baseURL.appendingPathComponent("/oauth/v1/app/registration")
+        let url = baseURL.appendingPathComponent("/oauth/v1/app/registration")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -274,13 +277,11 @@ public final class FeishuDeviceFlowProvisioner: IMBotProvisioner {
         request.httpBody = try JSONEncoder().encode(pollBody)
 
         for attempt in 1...maxAttempts {
-            lock.lock(); let c = _cancelled; lock.unlock()
-            if c { throw IMBotProvisionerError.cancelled }
+            if isCancelled { throw IMBotProvisionerError.cancelled }
 
             try await Task.sleep(nanoseconds: UInt64(pollIntervalSeconds) * 1_000_000_000)
 
-            lock.lock(); let c2 = _cancelled; lock.unlock()
-            if c2 { throw IMBotProvisionerError.cancelled }
+            if isCancelled { throw IMBotProvisionerError.cancelled }
 
             let (data, response) = try await urlSession.data(for: request)
             try assertHTTPSuccess(response: response, data: data)

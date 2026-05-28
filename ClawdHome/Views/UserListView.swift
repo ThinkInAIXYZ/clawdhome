@@ -84,6 +84,37 @@ private enum UserEntryWindowResolver {
     }
 }
 
+private enum ClawReorderDrag {
+    private static let payloadPrefix = "clawdhome-reorder:"
+
+    static func payload(for username: String) -> String {
+        "\(payloadPrefix)\(username)"
+    }
+
+    static func username(from payload: String) -> String? {
+        guard payload.hasPrefix(payloadPrefix) else { return nil }
+        let username = String(payload.dropFirst(payloadPrefix.count))
+        return username.isEmpty ? nil : username
+    }
+}
+
+private extension View {
+    func clawReorderDropTarget(
+        item: ManagedUser,
+        pool: ShrimpPool
+    ) -> some View {
+        dropDestination(for: String.self) { values, _ in
+            guard let sourceUsername = values.compactMap(ClawReorderDrag.username(from:)).first,
+                  sourceUsername != item.username else {
+                return false
+            }
+            return withAnimation(.easeInOut(duration: 0.2)) {
+                pool.moveUser(fromUsername: sourceUsername, toUsername: item.username)
+            }
+        }
+    }
+}
+
 struct ClawPoolView: View {
     var onLoadUsers: () -> Void = {}
     var onGoToRoleMarket: () -> Void = {}
@@ -743,26 +774,31 @@ struct ClawPoolView: View {
     private var tableContent: some View {
         Table(displayedUsers, selection: $selectedClaw) {
             TableColumn("") { claw in
-                if claw.clawType == .macosUser {
-                    if !claw.versionChecked {
-                        Text("🦞")
-                            .font(.system(size: 14))
-                            .frame(width: 16, height: 16)
-                    } else if claw.prefersHermesRuntime {
-                        HermesLogoMark()
-                            .frame(width: 16, height: 16)
-                    } else if claw.openclawVersion != nil {
-                        OpenClawLogoMark()
-                            .frame(width: 16, height: 16)
+                HStack(spacing: 6) {
+                    if claw.clawType == .macosUser {
+                        if !claw.versionChecked {
+                            Text("🦞")
+                                .font(.system(size: 14))
+                                .frame(width: 16, height: 16)
+                        } else if claw.prefersHermesRuntime {
+                            HermesLogoMark()
+                                .frame(width: 16, height: 16)
+                        } else if claw.openclawVersion != nil {
+                            OpenClawLogoMark()
+                                .frame(width: 16, height: 16)
+                        } else {
+                            Text("🦞")
+                                .font(.system(size: 14))
+                                .frame(width: 16, height: 16)
+                        }
                     } else {
-                        Text("🦞")
-                            .font(.system(size: 14))
-                            .frame(width: 16, height: 16)
+                        Image(systemName: claw.clawType.icon)
+                            .foregroundStyle(.secondary)
                     }
-                } else {
-                    Image(systemName: claw.clawType.icon)
-                        .foregroundStyle(.secondary)
                 }
+                .contentShape(Rectangle())
+                .clawReorderDropTarget(item: claw, pool: pool)
+                .draggable(ClawReorderDrag.payload(for: claw.username))
             }
             .width(24)
 
@@ -787,6 +823,8 @@ struct ClawPoolView: View {
                     }
                 }
                 .contentShape(Rectangle())
+                .clawReorderDropTarget(item: claw, pool: pool)
+                .draggable(ClawReorderDrag.payload(for: claw.username))
                 .onTapGesture(count: 2) {
                     openPreferredWindow(for: claw)
                 }
@@ -794,7 +832,10 @@ struct ClawPoolView: View {
             .width(min: 100, ideal: 140)
 
             TableColumn(L10n.k("views.user_list_view.type", fallback: "类型")) { claw in
-                Text(claw.clawType.displayName).foregroundStyle(.secondary)
+                Text(claw.clawType.displayName)
+                    .foregroundStyle(.secondary)
+                    .clawReorderDropTarget(item: claw, pool: pool)
+                    .draggable(ClawReorderDrag.payload(for: claw.username))
             }
             .width(80)
 
@@ -802,75 +843,91 @@ struct ClawPoolView: View {
                 Text(claw.identifier)
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.secondary)
+                    .clawReorderDropTarget(item: claw, pool: pool)
+                    .draggable(ClawReorderDrag.payload(for: claw.username))
             }
             .width(min: 80, ideal: 120)
 
             TableColumn(L10n.k("views.user_list_view.version", fallback: "版本")) { claw in
-                if let v = claw.runtimeVersionLabel {
-                    HStack(spacing: 3) {
-                        Text(claw.runtimeDisplayName)
-                            .foregroundStyle(.secondary)
-                        Text(v).monospacedDigit()
-                            .foregroundStyle((!claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion)) ? .orange : .primary)
-                        if !claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.orange)
+                Group {
+                    if let v = claw.runtimeVersionLabel {
+                        HStack(spacing: 3) {
+                            Text(claw.runtimeDisplayName)
+                                .foregroundStyle(.secondary)
+                            Text(v).monospacedDigit()
+                                .foregroundStyle((!claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion)) ? .orange : .primary)
+                            if !claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion) {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
                         }
+                        .help((!claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion))
+                              ? L10n.k("views.user_list_view.upgrade_v_updater_latestversion", fallback: "可升级到 v\(updater.latestVersion ?? "")")
+                              : "")
+                    } else {
+                        Text("—").foregroundStyle(.tertiary)
                     }
-                    .help((!claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion))
-                          ? L10n.k("views.user_list_view.upgrade_v_updater_latestversion", fallback: "可升级到 v\(updater.latestVersion ?? "")")
-                          : "")
-                } else {
-                    Text("—").foregroundStyle(.tertiary)
                 }
+                .clawReorderDropTarget(item: claw, pool: pool)
+                .draggable(ClawReorderDrag.payload(for: claw.username))
             }
             .width(110)
 
             TableColumn(L10n.k("views.user_list_view.status", fallback: "状态")) { claw in
                 clawStatusView(claw)
+                    .clawReorderDropTarget(item: claw, pool: pool)
+                    .draggable(ClawReorderDrag.payload(for: claw.username))
             }
             .width(90)
 
             TableColumn(L10n.k("views.user_list_view.runtime", fallback: "运行时长")) { claw in
-                if let started = claw.startedAt {
-                    Text(started, style: .relative).foregroundStyle(.secondary).monospacedDigit()
-                } else {
-                    Text("—").foregroundStyle(.tertiary)
+                Group {
+                    if let started = claw.startedAt {
+                        Text(started, style: .relative).foregroundStyle(.secondary).monospacedDigit()
+                    } else {
+                        Text("—").foregroundStyle(.tertiary)
+                    }
                 }
+                .clawReorderDropTarget(item: claw, pool: pool)
+                .draggable(ClawReorderDrag.payload(for: claw.username))
             }
             .width(80)
 
             TableColumn(L10n.k("views.user_list_view.resource_usage", fallback: "资源占用")) { claw in
                 let hasStorage = claw.openclawDirBytes > 0
-                if claw.cpuPercent != nil || claw.memRssMB != nil || hasStorage {
-                    HStack(spacing: 5) {
-                        if let cpu = claw.cpuPercent {
-                            HStack(spacing: 2) {
-                                Image(systemName: "cpu").font(.system(size: 8)).foregroundStyle(.blue)
-                                Text(String(format: "%.0f%%", cpu)).foregroundStyle(.blue)
+                Group {
+                    if claw.cpuPercent != nil || claw.memRssMB != nil || hasStorage {
+                        HStack(spacing: 5) {
+                            if let cpu = claw.cpuPercent {
+                                HStack(spacing: 2) {
+                                    Image(systemName: "cpu").font(.system(size: 8)).foregroundStyle(.blue)
+                                    Text(String(format: "%.0f%%", cpu)).foregroundStyle(.blue)
+                                }
+                            }
+                            if let mem = claw.memRssMB {
+                                HStack(spacing: 2) {
+                                    Image(systemName: "memorychip").font(.system(size: 8)).foregroundStyle(.purple)
+                                    Text(mem >= 1024
+                                         ? String(format: "%.1fG", mem / 1024)
+                                         : String(format: "%.0fM", mem)).foregroundStyle(.purple)
+                                }
+                            }
+                            if hasStorage {
+                                HStack(spacing: 2) {
+                                    Image(systemName: "internaldrive").font(.system(size: 8)).foregroundStyle(.green)
+                                    Text(FormatUtils.formatBytes(claw.openclawDirBytes)).foregroundStyle(.green)
+                                }
                             }
                         }
-                        if let mem = claw.memRssMB {
-                            HStack(spacing: 2) {
-                                Image(systemName: "memorychip").font(.system(size: 8)).foregroundStyle(.purple)
-                                Text(mem >= 1024
-                                     ? String(format: "%.1fG", mem / 1024)
-                                     : String(format: "%.0fM", mem)).foregroundStyle(.purple)
-                            }
-                        }
-                        if hasStorage {
-                            HStack(spacing: 2) {
-                                Image(systemName: "internaldrive").font(.system(size: 8)).foregroundStyle(.green)
-                                Text(FormatUtils.formatBytes(claw.openclawDirBytes)).foregroundStyle(.green)
-                            }
-                        }
+                        .font(.caption)
+                        .monospacedDigit()
+                    } else {
+                        Text("—").foregroundStyle(.tertiary)
                     }
-                    .font(.caption)
-                    .monospacedDigit()
-                } else {
-                    Text("—").foregroundStyle(.tertiary)
                 }
+                .clawReorderDropTarget(item: claw, pool: pool)
+                .draggable(ClawReorderDrag.payload(for: claw.username))
             }
             .width(150)
 
@@ -896,6 +953,7 @@ struct ClawPoolView: View {
                     .buttonStyle(.plain)
                     .help(L10n.k("views.user_list_view.open_terminal_action", fallback: "打开终端"))
                 }
+                .clawReorderDropTarget(item: claw, pool: pool)
             }
             .width(88)
         }
@@ -1522,141 +1580,42 @@ private struct ClawCard: View {
     let onDropFiles: ([URL]) -> Void
 
     @Environment(UpdateChecker.self) private var updater
+    @Environment(ShrimpPool.self) private var pool
     @State private var isDropTargeted = false
+    @State private var isHovered = false
+
+    private var cardBackground: Color {
+        if isSelected {
+            return Color.accentColor.opacity(0.08)
+        } else if isHovered && isEntryEnabled {
+            return Color.primary.opacity(0.03)
+        } else {
+            return Color(nsColor: .controlBackgroundColor)
+        }
+    }
+
+    private var cardStrokeColor: Color {
+        if claw.isFrozen {
+            return freezeColor(claw.freezeMode ?? .normal).opacity(0.8)
+        } else if isSelected {
+            return Color.accentColor
+        } else if isHovered && isEntryEnabled {
+            return Color.accentColor.opacity(0.4)
+        } else {
+            return Color.secondary.opacity(0.18)
+        }
+    }
+
+    private var cardStrokeWidth: CGFloat {
+        isSelected ? 1.5 : 1
+    }
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(spacing: 10) {
-                Spacer(minLength: 0)
-                // 图标 + 状态角标
-                ZStack(alignment: .bottomTrailing) {
-                    if claw.clawType == .macosUser {
-                        if !claw.versionChecked {
-                            Text("🦞")
-                                .font(.system(size: 30))
-                                .frame(width: 44, height: 44)
-                        } else if claw.prefersHermesRuntime {
-                            HermesLogoMark()
-                                .frame(width: 32, height: 32)
-                                .frame(width: 44, height: 44)
-                        } else if claw.openclawVersion != nil {
-                            OpenClawLogoMark()
-                                .frame(width: 32, height: 32)
-                                .frame(width: 44, height: 44)
-                        } else {
-                            Text("🦞")
-                                .font(.system(size: 30))
-                                .frame(width: 44, height: 44)
-                        }
-                    } else {
-                        Image(systemName: claw.clawType.icon)
-                            .font(.system(size: 32))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 44, height: 44)
-                    }
-                    statusDot
-                }
-
-                // 用户名（仅 @username，角色信息统一在底部 pill 区域展示）
-                HStack(spacing: 4) {
-                    Text("@\(claw.username)")
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                    if claw.isAdmin {
-                        Image(systemName: "shield.fill")
-                            .font(.caption2)
-                            .foregroundStyle(Color.accentColor)
-                    }
-                }
-
-                // 副标签（版本 / 初始化步骤 / 未初始化）
-                Group {
-                    if claw.hasFreezeWarning {
-                        Label(L10n.k("views.user_list_view.freeze_warning", fallback: "冻结异常"), systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                            .help(claw.freezeWarning ?? "")
-                    } else if claw.isFrozen {
-                        let mode = claw.freezeMode ?? .normal
-                        Label(mode.statusLabel, systemImage: freezeSymbol(mode))
-                            .foregroundStyle(freezeColor(mode))
-                    } else if let step = claw.initStep {
-                        Text(step).foregroundStyle(.blue)
-                    } else if claw.isWizardCompleted == false {
-                        Text(L10n.k("views.user_list_view.init_pending", fallback: "初始化待完成")).foregroundStyle(.secondary)
-                    } else if let v = claw.runtimeVersionLabel {
-                        let outdated = !claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion)
-                        HStack(spacing: 2) {
-                            Text("\(claw.runtimeDisplayName) \(v)").monospacedDigit()
-                                .foregroundStyle(outdated ? Color.orange : Color.secondary.opacity(0.6))
-                            if outdated {
-                                Image(systemName: "arrow.up.circle.fill")
-                                    .foregroundStyle(Color.orange)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if outdated, let onUpgrade {
-                                onUpgrade()
-                            }
-                        }
-                    } else if !claw.versionChecked {
-                        ProgressView()
-                            .controlSize(.mini)
-                    } else {
-                        Text(L10n.k("views.user_list_view.not_initialized", fallback: "未初始化")).foregroundStyle(.tertiary)
-                    }
-                }
-                .font(.caption2)
-                .lineLimit(1)
-
-                // 角色摘要（向导未完成时隐藏，避免误导）
-                if claw.initStep == nil && claw.isWizardCompleted != false {
-                    agentSummarySection
-                }
-
-                // 操作按钮行
-                HStack(spacing: 8) {
-                    if claw.openclawVersion != nil, !claw.prefersHermesRuntime {
-                        Button { onOpenWebUI() } label: {
-                            if isOpeningWebUI {
-                                ProgressView()
-                                    .controlSize(.small)
-                            } else {
-                                Image(systemName: "globe")
-                                    .font(.caption)
-                                    .foregroundStyle(Color.accentColor)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .help(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"))
-                        .disabled(claw.isFrozen || isOpeningWebUI)
-                    }
-                    Button { onTerminal() } label: {
-                        Image(systemName: "terminal")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.k("views.user_list_view.open_terminal_action", fallback: "打开终端"))
-
-                    Button { onOpenVault() } label: {
-                        Image(systemName: "folder.badge.person.crop")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.k("views.user_list_view.open_vault", fallback: "打开共享文件夹"))
-                }
-                Spacer(minLength: 0)
-            }
+        cardInnerBody
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160)
             .opacity(isEntryEnabled ? 1 : 0.72)
-            .background(
-                isSelected
-                    ? Color.accentColor.opacity(0.08)
-                    : Color(nsColor: .controlBackgroundColor)
-            )
+            .background(cardBackground)
             .saturation(claw.isFrozen ? saturationForFrozen(mode: claw.freezeMode ?? .normal) : 1)
             .overlay {
                 if claw.isFrozen {
@@ -1679,12 +1638,7 @@ private struct ClawCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(
-                        claw.isFrozen
-                            ? freezeColor(claw.freezeMode ?? .normal).opacity(0.8)
-                            : (isSelected ? Color.accentColor : Color.secondary.opacity(0.18)),
-                        lineWidth: isSelected ? 1.5 : 1
-                    )
+                    .stroke(cardStrokeColor, lineWidth: cardStrokeWidth)
             )
             .overlay {
                 if isDropTargeted {
@@ -1705,21 +1659,158 @@ private struct ClawCard: View {
                         .allowsHitTesting(false)
                 }
             }
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+            .onHover { hover in
+                isHovered = hover
+            }
+            .onTapGesture {
+                if isEntryEnabled {
+                    onTap()
+                }
+            }
+            .simultaneousGesture(TapGesture(count: 2).onEnded {
+                if isEntryEnabled {
+                    onDoubleClick?()
+                }
+            })
+            .dropDestination(for: URL.self) { droppedURLs, _ in
+                let fileURLs = droppedURLs.filter(\.isFileURL)
+                guard !fileURLs.isEmpty else { return false }
+                onDropFiles(fileURLs)
+                return true
+            } isTargeted: { targeted in
+                isDropTargeted = targeted
+            }
+            .clawReorderDropTarget(item: claw, pool: pool)
+            .help(L10n.k("views.user_list_view.filefolder_openclaw_clawdhome_upload", fallback: "可将文件或文件夹拖入该虾卡片，快传到 ~/clawdhome_shared/private/upload"))
+            .draggable(ClawReorderDrag.payload(for: claw.username))
+    }
+
+    @ViewBuilder
+    private var cardInnerBody: some View {
+        VStack(spacing: 10) {
+            Spacer(minLength: 0)
+            // 图标 + 状态角标
+            ZStack(alignment: .bottomTrailing) {
+                if claw.clawType == .macosUser {
+                    if !claw.versionChecked {
+                        Text("🦞")
+                            .font(.system(size: 30))
+                            .frame(width: 44, height: 44)
+                    } else if claw.prefersHermesRuntime {
+                        HermesLogoMark()
+                            .frame(width: 32, height: 32)
+                            .frame(width: 44, height: 44)
+                    } else if claw.openclawVersion != nil {
+                        OpenClawLogoMark()
+                            .frame(width: 32, height: 32)
+                            .frame(width: 44, height: 44)
+                    } else {
+                        Text("🦞")
+                            .font(.system(size: 30))
+                            .frame(width: 44, height: 44)
+                    }
+                } else {
+                    Image(systemName: claw.clawType.icon)
+                        .font(.system(size: 32))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                }
+                statusDot
+            }
+
+            // 用户名（仅 @username，角色信息统一在底部 pill 区域展示）
+            HStack(spacing: 4) {
+                Text("@\(claw.username)")
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                if claw.isAdmin {
+                    Image(systemName: "shield.fill")
+                        .font(.caption2)
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+
+            // 副标签（版本 / 初始化步骤 / 未初始化）
+            Group {
+                if claw.hasFreezeWarning {
+                    Label(L10n.k("views.user_list_view.freeze_warning", fallback: "冻结异常"), systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .help(claw.freezeWarning ?? "")
+                } else if claw.isFrozen {
+                    let mode = claw.freezeMode ?? .normal
+                    Label(mode.statusLabel, systemImage: freezeSymbol(mode))
+                        .foregroundStyle(freezeColor(mode))
+                } else if let step = claw.initStep {
+                    Text(step).foregroundStyle(.blue)
+                } else if claw.isWizardCompleted == false {
+                    Text(L10n.k("views.user_list_view.init_pending", fallback: "初始化待完成")).foregroundStyle(.secondary)
+                } else if let v = claw.runtimeVersionLabel {
+                    let outdated = !claw.prefersHermesRuntime && updater.needsUpdate(claw.openclawVersion)
+                    HStack(spacing: 2) {
+                        Text("\(claw.runtimeDisplayName) \(v)").monospacedDigit()
+                            .foregroundStyle(outdated ? Color.orange : Color.secondary.opacity(0.6))
+                        if outdated {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .foregroundStyle(Color.orange)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if outdated, let onUpgrade {
+                            onUpgrade()
+                        }
+                    }
+                } else if !claw.versionChecked {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else {
+                    Text(L10n.k("views.user_list_view.not_initialized", fallback: "未初始化")).foregroundStyle(.tertiary)
+                }
+            }
+            .font(.caption2)
+            .lineLimit(1)
+
+            // 角色摘要（向导未完成时隐藏，避免误导）
+            if claw.initStep == nil && claw.isWizardCompleted != false {
+                agentSummarySection
+            }
+
+            // 操作按钮行
+            HStack(spacing: 8) {
+                if claw.openclawVersion != nil, !claw.prefersHermesRuntime {
+                    Button { onOpenWebUI() } label: {
+                        if isOpeningWebUI {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "globe")
+                                .font(.caption)
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"))
+                    .disabled(claw.isFrozen || isOpeningWebUI)
+                }
+                Button { onTerminal() } label: {
+                    Image(systemName: "terminal")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(L10n.k("views.user_list_view.open_terminal_action", fallback: "打开终端"))
+
+                Button { onOpenVault() } label: {
+                    Image(systemName: "folder.badge.person.crop")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(L10n.k("views.user_list_view.open_vault", fallback: "打开共享文件夹"))
+            }
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
-        .disabled(!isEntryEnabled)
-        .simultaneousGesture(TapGesture(count: 2).onEnded {
-            onDoubleClick?()
-        })
-        .dropDestination(for: URL.self) { droppedURLs, _ in
-            let fileURLs = droppedURLs.filter(\.isFileURL)
-            guard !fileURLs.isEmpty else { return false }
-            onDropFiles(fileURLs)
-            return true
-        } isTargeted: { targeted in
-            isDropTargeted = targeted
-        }
-        .help(L10n.k("views.user_list_view.filefolder_openclaw_clawdhome_upload", fallback: "可将文件或文件夹拖入该虾卡片，快传到 ~/clawdhome_shared/private/upload"))
     }
 
     @Environment(GatewayHub.self) private var gatewayHub

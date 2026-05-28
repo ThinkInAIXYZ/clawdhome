@@ -392,7 +392,7 @@ struct AddBotSheet: View {
                 let credential = try await p.provision(
                     username: username,
                     accountKey: key
-                ) { [key] msg in
+                ) { msg in
                     Task { @MainActor in
                         provisionProgress += msg + "\n"
                     }

@@ -38,6 +38,7 @@ final class ShrimpPool {
     private let helperClient: HelperClient
     private let descriptionStore: ClawDescriptionStore
     private let freezeStateStore: ClawFreezeStateStore
+    private let orderStore: ClawOrderStore
 
     // MARK: - 内部轮询任务
 
@@ -58,6 +59,7 @@ final class ShrimpPool {
         self.helperClient = helperClient
         self.descriptionStore = ClawDescriptionStore()
         self.freezeStateStore = ClawFreezeStateStore()
+        self.orderStore = ClawOrderStore()
     }
 
     private static let freezeWarningCacheTTL: TimeInterval = 15
@@ -117,7 +119,19 @@ final class ShrimpPool {
                     }
                     return user
                 }
-                users = newUsers
+                
+                // 按保存的顺序进行重排，新用户默认追加到最末端并按字母自然排序
+                let order = orderStore.loadOrder()
+                let sortedUsers = newUsers.sorted { u1, u2 in
+                    let idx1 = order.firstIndex(of: u1.username) ?? Int.max
+                    let idx2 = order.firstIndex(of: u2.username) ?? Int.max
+                    if idx1 == idx2 {
+                        return u1.username.localizedCompare(u2.username) == .orderedAscending
+                    }
+                    return idx1 < idx2
+                }
+                
+                users = sortedUsers
                 loadError = nil
             } catch {
                 loadError = error.localizedDescription
@@ -130,12 +144,45 @@ final class ShrimpPool {
         users.removeAll { $0.username == username }
         freezeStateStore.setFrozenState(nil, for: username)
         freezeWarningCache.removeValue(forKey: username.lowercased())
+        // 从排序持久化列表中移除该用户名，保持数据整洁
+        var order = orderStore.loadOrder()
+        order.removeAll { $0 == username }
+        orderStore.saveOrder(order)
     }
 
     func setDescription(_ text: String, for username: String) {
         descriptionStore.setDescription(text, for: username)
         guard let user = users.first(where: { $0.username == username }) else { return }
         user.profileDescription = descriptionStore.description(for: username)
+    }
+
+    nonisolated static func movedUsernames(_ usernames: [String], moving sourceUsername: String, to destinationUsername: String) -> [String] {
+        guard sourceUsername != destinationUsername,
+              let fromIndex = usernames.firstIndex(of: sourceUsername),
+              let toIndex = usernames.firstIndex(of: destinationUsername) else {
+            return usernames
+        }
+
+        var reordered = usernames
+        let moving = reordered.remove(at: fromIndex)
+        reordered.insert(moving, at: toIndex)
+        return reordered
+    }
+
+    @discardableResult
+    func moveUser(fromUsername sourceUsername: String, toUsername destinationUsername: String) -> Bool {
+        let currentOrder = users.map(\.username)
+        let reorderedNames = Self.movedUsernames(currentOrder, moving: sourceUsername, to: destinationUsername)
+        guard reorderedNames != currentOrder else { return false }
+
+        let usersByName = Dictionary(uniqueKeysWithValues: users.map { ($0.username, $0) })
+        users = reorderedNames.compactMap { usersByName[$0] }
+        orderStore.saveOrder(reorderedNames)
+        return true
+    }
+
+    func moveUser(fromSourceUser sourceUser: ManagedUser, toDestinationUser destUser: ManagedUser) {
+        moveUser(fromUsername: sourceUser.username, toUsername: destUser.username)
     }
 
     func setFrozen(

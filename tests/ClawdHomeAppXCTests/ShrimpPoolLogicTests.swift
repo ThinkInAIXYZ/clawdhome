@@ -6,6 +6,21 @@ import XCTest
 
 final class ShrimpPoolLogicTests: XCTestCase {
 
+    func testMoveUsernameOrderMatchesDropEnteredSemantics() {
+        XCTAssertEqual(
+            ShrimpPool.movedUsernames(["alice", "bob", "charlie"], moving: "alice", to: "bob"),
+            ["bob", "alice", "charlie"]
+        )
+        XCTAssertEqual(
+            ShrimpPool.movedUsernames(["alice", "bob", "charlie"], moving: "charlie", to: "bob"),
+            ["alice", "charlie", "bob"]
+        )
+        XCTAssertEqual(
+            ShrimpPool.movedUsernames(["alice", "bob"], moving: "missing", to: "bob"),
+            ["alice", "bob"]
+        )
+    }
+
     /// 测试 ShrimpPool.resolveWizardCompleted 静态逻辑 (向导是否已完成的判定分支)
     @MainActor
     func testResolveWizardCompletedBranches() {

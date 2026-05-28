@@ -12,6 +12,7 @@
 		01E2EB52392A730451E7F61D /* AwakeningWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5251FBFE31D537EBF8F2C581 /* AwakeningWizardView.swift */; };
 		0373437553BE2695E5525662 /* GatewayWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 822EF3CEFF50ACB37FF8DEEA /* GatewayWatchdog.swift */; };
 		03A2120E2AF19C2CCA7879D4 /* HelperImpl+Files.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00BA42C0EC4C8B25A8BFCE7 /* HelperImpl+Files.swift */; };
+		03D6D582E94B11A98ACB533C /* LocalModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C1503C0DDE39FEBC660A05 /* LocalModelDownloader.swift */; };
 		0449D4859584DB3CBA25245B /* HelperLogging.swift in Sources */ = {isa = PBXBuildFile; fileRef = B82A9FF38295968F2C08B29B /* HelperLogging.swift */; };
 		0473E31023503AFC1874A775 /* PortAllocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D143389A65EDC5DC54EAADDA /* PortAllocator.swift */; };
 		07B6092C2C29BC1A19385B32 /* UserAdoptionFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C0E63E7FA11917EE0F610A /* UserAdoptionFlow.swift */; };
@@ -36,11 +37,13 @@
 		1725D0DC4180EF0AF7DD345F /* OpenCLINetworkSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FE016D8935F7B2F5451DC0 /* OpenCLINetworkSupportTests.swift */; };
 		17E5D8B68FE1128317AAB824 /* HermesInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6385281719FDB35F18456F6 /* HermesInstaller.swift */; };
 		1824EF17F688509BB58B146C /* HermesCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2377E2C629645068605ED7E /* HermesCommand.swift */; };
+		18329CF61FAD49E5A91D0BCE /* AICommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EBC9D851C8A4C42A16F93B2 /* AICommand.swift */; };
 		18454F2283EC4E5E627584DE /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62AE0CAFA22F67436019A51 /* BackupModels.swift */; };
 		19D3252B659C8CE08911BEE8 /* OpenCLINetworkDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7E54CF4523B98949C64414 /* OpenCLINetworkDiagnostics.swift */; };
 		1A9602934F0304C7AA1905A6 /* FileInputAcceptFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC4D03808505276353A3AD2 /* FileInputAcceptFilter.swift */; };
 		1BEAF513D61007FDC9394FFF /* ModelDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21010714E9E3C485F8F95B10 /* ModelDetailView.swift */; };
 		1CED2CBF329329B97F77FEFF /* UnixHTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D840800176C46190E9991E /* UnixHTTPClient.swift */; };
+		1D49200BB72DF966C3C6FFD7 /* LocalModelDownloadPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECAE11116719CC7828122B76 /* LocalModelDownloadPlan.swift */; };
 		1D4EDB9DB0495FE0EFA54FE4 /* ClawPoolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67AB0A69D9F15FA551CD2FFE /* ClawPoolView.swift */; };
 		1D89B835DEDF080130A04031 /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62AE0CAFA22F67436019A51 /* BackupModels.swift */; };
 		1EF1D1156BEAC282AC695473 /* DaemonSetupBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8FE553DC729ACE5F8E46933 /* DaemonSetupBanner.swift */; };
@@ -111,6 +114,7 @@
 		5C18744A625AA256F6209249 /* HermesWebViewCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B602547DF8E4759034B0623C /* HermesWebViewCoordinatorTests.swift */; };
 		5C24D821B52B296FB1663DF8 /* ModelPrioritySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED27F46F57A2556B2A4A6512 /* ModelPrioritySheet.swift */; };
 		5C4286A2BA6C2A17C2E8D16A /* ApplyCredentialSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BF8C6365FBBA9CA2C07D90 /* ApplyCredentialSheet.swift */; };
+		5DB799548F27F55987F9AB1F /* LocalModelDownloadPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECAE11116719CC7828122B76 /* LocalModelDownloadPlan.swift */; };
 		5F3A658D7E11C06F8F4F62D0 /* LocalAIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */; };
 		5FF1FC550784127BA01FA09D /* LocalLLMManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9DBC78DA4D1FFD0EB50D466 /* LocalLLMManager.swift */; };
 		6066FD6A33AF14652C8A9E6F /* OpenCLINetworkSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B217E37A39C1851DA831BB7 /* OpenCLINetworkSupport.swift */; };
@@ -119,6 +123,7 @@
 		62FEC4E2E0447CE225724632 /* AgentModelEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0DC69D82EDF1233E53C335 /* AgentModelEditSheet.swift */; };
 		645CD594F1E088E7A3515D0D /* WizardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E2BC3AA8DD32C2E7B370D0 /* WizardComponents.swift */; };
 		647F82D1797FC9D80FF86C16 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6474BB5EEF5B87B65666E978 /* NetworkModels.swift */; };
+		6579790175876C62872B85F1 /* LocalLLMDownloadPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB94382EC6E3A371992B65B /* LocalLLMDownloadPlanTests.swift */; };
 		681630BD590FD909762BB4AE /* SpeechModelAdvisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26146AAD44960591291B75E9 /* SpeechModelAdvisor.swift */; };
 		683FE4575750E0FCAED09BBD /* SpeechHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79479208C4E512A6C5CB90FD /* SpeechHistoryStore.swift */; };
 		69BF685059BE6B7AEB250E07 /* HelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F39F27916E7B56B4688842 /* HelperClient.swift */; };
@@ -197,6 +202,7 @@
 		B1A3933F19F442391C42B150 /* PromptMemoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 226544013116B0A691E3CB60 /* PromptMemoryModels.swift */; };
 		B1D4396243061AF94FA02B60 /* OpenclawConfigSerializerV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEA3246D788EC5F1AE06F4F /* OpenclawConfigSerializerV2.swift */; };
 		B33BF87630AE1CBD7D47F438 /* FileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71156CAD7673A87034AF0D8 /* FileModels.swift */; };
+		B40C28F7294947CF7866D229 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 7BD8CB032E8F003382616537 /* HuggingFace */; };
 		B4186F49E2F4E5365DA22652 /* VaultManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20AA8CD71AB761800F6128E /* VaultManager.swift */; };
 		B45B188B70EB3363A5969F16 /* DirectProviderConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB4CB51EC92B102C97A3DAF4 /* DirectProviderConfig.swift */; };
 		B57160D717A6898E887EADDD /* CloneClawModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */; };
@@ -235,6 +241,7 @@
 		D52DD786FA8DF4AF93FB00ED /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43A99B25B70AE3C7A8C23AB /* SettingsView.swift */; };
 		D53CB1F3E94D9A56F97653A9 /* UserInitPresentationRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5775BE93F05639CCBFCC06 /* UserInitPresentationRouting.swift */; };
 		D62D974485C073E7D1CB9E9B /* MemoryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E37D8B7B0C66ACFBDB383D1 /* MemoryTabView.swift */; };
+		D63BFC913868283A4BE6FC30 /* LocalModelDownloadPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECAE11116719CC7828122B76 /* LocalModelDownloadPlan.swift */; };
 		D6E0B1621438E54CF0FC23B1 /* ShrimpTerminalSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287C8C8C9920E754BBF4920C /* ShrimpTerminalSession.swift */; };
 		D6EF58593D4B981753E3AA4D /* DiagnosticsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C19F01A93D19BBDF5814CC6 /* DiagnosticsSheet.swift */; };
 		D70C9279F930D35A75C85E24 /* ManagedUserDisplayName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58D6A0A3A03533CF7E7AC045 /* ManagedUserDisplayName.swift */; };
@@ -250,6 +257,7 @@
 		E0ED6F92E9AE39B2FEDD39E7 /* TTSManagerTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C3E609AB9C9441B29AE88E3 /* TTSManagerTab.swift */; };
 		E2AF48EFF2D8470BF06BF3CA /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D52045A2822C8DE4579737 /* AppLanguage.swift */; };
 		E31BC807CD66ED973B4DDB0B /* HelperImpl+Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE60C673397402540C236C95 /* HelperImpl+Diagnostics.swift */; };
+		E3EAF149F11566518F759C7F /* LocalModelDownloadPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECAE11116719CC7828122B76 /* LocalModelDownloadPlan.swift */; };
 		E3ECEABC524FDC6F6A9E7E38 /* TerminalControlSequence.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2AB7F0ED50DF0DEC5820E5C /* TerminalControlSequence.swift */; };
 		E6FF122DB4FEB06A401BFC96 /* AgentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F115A85A4379CCBE8899FDB8 /* AgentManager.swift */; };
 		E7E82F61DD2D204B321B1710 /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62AE0CAFA22F67436019A51 /* BackupModels.swift */; };
@@ -352,6 +360,8 @@
 		37C2B17425B19E3FD55EC7AF /* PersonaGitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonaGitManager.swift; sourceTree = "<group>"; };
 		38A912F0A5514717350027B5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		397BF349AA548AE5115CAD7F /* HelperImpl+BrowserAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+BrowserAccount.swift"; sourceTree = "<group>"; };
+		3CB94382EC6E3A371992B65B /* LocalLLMDownloadPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMDownloadPlanTests.swift; sourceTree = "<group>"; };
+		3EBC9D851C8A4C42A16F93B2 /* AICommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AICommand.swift; sourceTree = "<group>"; };
 		3F177240AE99ADC3F3D2AD8F /* roles.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = roles.html; sourceTree = "<group>"; };
 		40305CC98880248434C11684 /* FeishuChannelOnboardingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeishuChannelOnboardingSheet.swift; sourceTree = "<group>"; };
 		41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderKeyConfig.swift; sourceTree = "<group>"; };
@@ -517,6 +527,7 @@
 		EB4BFDC6320B7C035E22C884 /* NodeDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeDownloader.swift; sourceTree = "<group>"; };
 		EB4CB51EC92B102C97A3DAF4 /* DirectProviderConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectProviderConfig.swift; sourceTree = "<group>"; };
 		EC3A7281B970E8EFA6FCAD2B /* HermesPendingBindingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesPendingBindingsSheet.swift; sourceTree = "<group>"; };
+		ECAE11116719CC7828122B76 /* LocalModelDownloadPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalModelDownloadPlan.swift; sourceTree = "<group>"; };
 		ED27F46F57A2556B2A4A6512 /* ModelPrioritySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPrioritySheet.swift; sourceTree = "<group>"; };
 		EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAIModels.swift; sourceTree = "<group>"; };
 		EEDD6A6BF4920CF366FF0F12 /* CronTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CronTabView.swift; sourceTree = "<group>"; };
@@ -535,6 +546,7 @@
 		F76A73EBA6C37473C494E20D /* ProcessModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessModels.swift; sourceTree = "<group>"; };
 		F7D8BDF74255B3A14CF069B0 /* ClawdHome.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClawdHome.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F9091EC70CE63EDC745444F7 /* InstallManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallManager.swift; sourceTree = "<group>"; };
+		F9C1503C0DDE39FEBC660A05 /* LocalModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalModelDownloader.swift; sourceTree = "<group>"; };
 		FBDE77F357454890EF4F97AF /* CLIHelperClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIHelperClient.swift; sourceTree = "<group>"; };
 		FD98DD90A8AB1C5CAF9681D2 /* GatewaySkillsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewaySkillsStore.swift; sourceTree = "<group>"; };
 		FF68B65CAD11828B98734EAC /* UserEnvContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserEnvContract.swift; sourceTree = "<group>"; };
@@ -557,6 +569,7 @@
 				FB35463F40D9D7B9C7166E4E /* OpenDirectory.framework in Frameworks */,
 				8DF359DE93EFFFFA2E49695F /* Charts.framework in Frameworks */,
 				96C93E87A53551D90828E5D1 /* SwiftTerm in Frameworks */,
+				B40C28F7294947CF7866D229 /* HuggingFace in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -615,6 +628,7 @@
 				D932B00C4752A2F08B001E4D /* HelperServiceLocator.swift */,
 				1AD0A32D83DB0459EA291534 /* HostPermissionCenter.swift */,
 				6499789FC14381687CB547E1 /* IMBotProvisioner.swift */,
+				F9C1503C0DDE39FEBC660A05 /* LocalModelDownloader.swift */,
 				9363CE8F8DF377157FAE1D71 /* ModelPingService.swift */,
 				AB9CA89FBC9C8542073AE403 /* PromptLibraryStore.swift */,
 				ABBB28C4048F9B2A39AE099C /* ProviderKeychainStore.swift */,
@@ -644,6 +658,7 @@
 		4C38114ED8F704B78D722DCE /* ClawdHomeHelperTests */ = {
 			isa = PBXGroup;
 			children = (
+				3CB94382EC6E3A371992B65B /* LocalLLMDownloadPlanTests.swift */,
 				49FE016D8935F7B2F5451DC0 /* OpenCLINetworkSupportTests.swift */,
 				81449D5B0C2D9E19A73FB325 /* ProcessManagerCommandCaptureTests.swift */,
 			);
@@ -678,6 +693,7 @@
 		68742DCC279A67E0D783172C /* Commands */ = {
 			isa = PBXGroup;
 			children = (
+				3EBC9D851C8A4C42A16F93B2 /* AICommand.swift */,
 				88D218BB20FD6CDE3C8F6D5F /* ChatCommand.swift */,
 				09AC66C79FE1B7EABAA7A9EE /* ConfigCommand.swift */,
 				4D1FC0407326B7C36C904EC2 /* ExecCommand.swift */,
@@ -799,6 +815,7 @@
 				A0680BCD6FCF288D2B143355 /* HelperSharedTypes.swift */,
 				46BB2187C1CBAE602D47A53E /* IMAccountModelsV2.swift */,
 				EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */,
+				ECAE11116719CC7828122B76 /* LocalModelDownloadPlan.swift */,
 				58D6A0A3A03533CF7E7AC045 /* ManagedUserDisplayName.swift */,
 				6474BB5EEF5B87B65666E978 /* NetworkModels.swift */,
 				DFEA3246D788EC5F1AE06F4F /* OpenclawConfigSerializerV2.swift */,
@@ -1065,6 +1082,7 @@
 			name = ClawdHome;
 			packageProductDependencies = (
 				C825A0B24BA99AE396353C83 /* SwiftTerm */,
+				7BD8CB032E8F003382616537 /* HuggingFace */,
 			);
 			productName = ClawdHome;
 			productReference = F7D8BDF74255B3A14CF069B0 /* ClawdHome.app */;
@@ -1077,7 +1095,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					28071483B3C812F008318E5F = {
 						DevelopmentTeam = "";
@@ -1103,6 +1121,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				74F355130984997690AD4FDF /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+				0770EEB9BDCC55A796C83C36 /* XCRemoteSwiftPackageReference "swift-huggingface" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -1218,6 +1237,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				F17EE8285B7C26431B4A3916 /* CommandOutputCapture.swift in Sources */,
+				6579790175876C62872B85F1 /* LocalLLMDownloadPlanTests.swift in Sources */,
+				D63BFC913868283A4BE6FC30 /* LocalModelDownloadPlan.swift in Sources */,
 				F2E666F4F9A1C76E49718906 /* OpenCLINetworkDiagnostics.swift in Sources */,
 				1725D0DC4180EF0AF7DD345F /* OpenCLINetworkSupportTests.swift in Sources */,
 				7802A17AFB6D37823EF81E5A /* ProcessManagerCommandCaptureTests.swift in Sources */,
@@ -1327,6 +1348,8 @@
 				42784EA2B3A334AF6AF8E881 /* LLMManagerTab.swift in Sources */,
 				DDC38ED579B3E862A571B156 /* LocalAIModels.swift in Sources */,
 				9685174F8F965C6D07F8FBCB /* LocalAITab.swift in Sources */,
+				E3EAF149F11566518F759C7F /* LocalModelDownloadPlan.swift in Sources */,
+				03D6D582E94B11A98ACB533C /* LocalModelDownloader.swift in Sources */,
 				315C6CEC2A97C5D4E9AB211A /* LogViewerSheet.swift in Sources */,
 				32D9B81BFBF01C467C5EF953 /* ManagedUser.swift in Sources */,
 				D70C9279F930D35A75C85E24 /* ManagedUserDisplayName.swift in Sources */,
@@ -1403,6 +1426,7 @@
 				EF130B9EF81C9F5788618250 /* AppUpdateState.swift in Sources */,
 				1D89B835DEDF080130A04031 /* BackupModels.swift in Sources */,
 				33EEEC7848F25E6176D19E8B /* BrowserAccountModels.swift in Sources */,
+				18329CF61FAD49E5A91D0BCE /* AICommand.swift in Sources */,
 				F13F8D9CE464C91C4DF946C0 /* CLIHelperClient.swift in Sources */,
 				CA751AF8D61283E7E3107E20 /* ChatCommand.swift in Sources */,
 				4607AB86E302C700777C3DEA /* CloneClawModels.swift in Sources */,
@@ -1419,6 +1443,7 @@
 				7242D9D28CCCC79B1DA5EAF2 /* InitCommand.swift in Sources */,
 				45A1AE95E1BB2122B2B05A66 /* InstanceCommand.swift in Sources */,
 				5F3A658D7E11C06F8F4F62D0 /* LocalAIModels.swift in Sources */,
+				1D49200BB72DF966C3C6FFD7 /* LocalModelDownloadPlan.swift in Sources */,
 				D492D8603E31FF510215DA25 /* ManagedUserDisplayName.swift in Sources */,
 				29F70411C52A922AF79A99AD /* NetworkModels.swift in Sources */,
 				959CD8D3347EDCD04E013F4E /* OpenCLINetworkDiagnostics.swift in Sources */,
@@ -1483,6 +1508,7 @@
 				7038876B62DAABF3E0D5672A /* InstallManager.swift in Sources */,
 				46AE452761C8D472CAEA4D2D /* LocalAIModels.swift in Sources */,
 				5FF1FC550784127BA01FA09D /* LocalLLMManager.swift in Sources */,
+				5DB799548F27F55987F9AB1F /* LocalModelDownloadPlan.swift in Sources */,
 				CC20BDD4E3F835E079B27B26 /* MaintenanceTerminalSession.swift in Sources */,
 				C87F24E951A075FE182FF745 /* ManagedUserDisplayName.swift in Sources */,
 				236B40A5073B4CF61B88CB83 /* NStatCollector.swift in Sources */,
@@ -1915,6 +1941,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		0770EEB9BDCC55A796C83C36 /* XCRemoteSwiftPackageReference "swift-huggingface" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-huggingface.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
 		74F355130984997690AD4FDF /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
@@ -1926,6 +1960,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		7BD8CB032E8F003382616537 /* HuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0770EEB9BDCC55A796C83C36 /* XCRemoteSwiftPackageReference "swift-huggingface" */;
+			productName = HuggingFace;
+		};
 		C825A0B24BA99AE396353C83 /* SwiftTerm */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 74F355130984997690AD4FDF /* XCRemoteSwiftPackageReference "SwiftTerm" */;

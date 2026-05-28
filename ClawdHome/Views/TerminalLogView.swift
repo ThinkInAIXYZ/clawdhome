@@ -980,18 +980,23 @@ final class HelperMaintenanceTerminalCoordinator: NSObject, TerminalViewDelegate
         inputQueueLock.unlock()
     }
 
+    private func markInputDrainForRestartIfNeeded() -> Bool {
+        inputQueueLock.lock()
+        defer { inputQueueLock.unlock() }
+        let shouldRestart = !pendingInputBuffer.isEmpty && !inputDrainInFlight
+        if shouldRestart {
+            inputDrainInFlight = true
+        }
+        return shouldRestart
+    }
+
     private func drainInputQueue(sessionID: String) async {
         while true {
             let chunk = dequeuePendingInputChunk()
             if chunk.isEmpty {
                 finishInputDrainIfIdle()
                 // 竞态保护：在 inFlight 复位后若又有新输入，重新拉起 drain。
-                inputQueueLock.lock()
-                let shouldRestart = !pendingInputBuffer.isEmpty && !inputDrainInFlight
-                if shouldRestart {
-                    inputDrainInFlight = true
-                }
-                inputQueueLock.unlock()
+                let shouldRestart = markInputDrainForRestartIfNeeded()
                 if shouldRestart {
                     continue
                 }
