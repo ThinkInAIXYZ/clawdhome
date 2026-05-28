@@ -1000,8 +1000,42 @@ struct SpeechTranscriptionView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
-        let elapsed = String(format: "%.1fs", record.elapsedSeconds)
-        return "\(formatter.string(from: record.createdAt)) · \(record.modelDisplayName) · \(elapsed)"
+        
+        let dateStr = formatter.string(from: record.createdAt)
+        let elapsedStr = String(format: "%.1fs", record.elapsedSeconds)
+        
+        // 音频文件大小智能格式化
+        let bytes = record.sourceFileSizeBytes
+        let sizeStr: String
+        if bytes >= 1_048_576 {
+            sizeStr = String(format: "%.1f MB", Double(bytes) / 1_048_576)
+        } else if bytes >= 1024 {
+            sizeStr = String(format: "%.0f KB", Double(bytes) / 1024)
+        } else {
+            sizeStr = "\(bytes) B"
+        }
+        
+        // 音频物理时长格式化
+        var durationStr = ""
+        if let duration = record.durationSeconds, duration > 0 {
+            let totalSeconds = Int(duration.rounded())
+            let minutes = totalSeconds / 60
+            let seconds = totalSeconds % 60
+            if minutes > 0 {
+                durationStr = "\(minutes)分\(seconds)秒"
+            } else {
+                durationStr = "\(totalSeconds)秒"
+            }
+        }
+        
+        var parts: [String] = [dateStr]
+        if !durationStr.isEmpty {
+            parts.append(durationStr)
+        }
+        parts.append(sizeStr)
+        parts.append("耗时 \(elapsedStr)")
+        
+        return parts.joined(separator: " · ")
     }
 
     private func revealRecordSource(_ record: SpeechHistoryRecord) {

@@ -366,6 +366,7 @@ final class SpeechTranscriptionService {
 
                 if let record = makeHistoryRecord(
                     for: nextItem.fileURL,
+                    durationSeconds: nextItem.durationSeconds,
                     modelID: selectedModelID,
                     transcript: finalTranscript,
                     elapsedSeconds: nextItem.elapsedSeconds,
@@ -385,6 +386,7 @@ final class SpeechTranscriptionService {
                     nextItem.stageProgress = 0.0
                     if let record = makeHistoryRecord(
                         for: nextItem.fileURL,
+                        durationSeconds: nextItem.durationSeconds,
                         modelID: selectedModelID,
                         transcript: "",
                         elapsedSeconds: 0,
@@ -402,6 +404,7 @@ final class SpeechTranscriptionService {
                     
                     if let record = makeHistoryRecord(
                         for: nextItem.fileURL,
+                        durationSeconds: nextItem.durationSeconds,
                         modelID: selectedModelID,
                         transcript: "",
                         elapsedSeconds: 0,
@@ -806,6 +809,7 @@ final class SpeechTranscriptionService {
 
     private func makeHistoryRecord(
         for fileURL: URL,
+        durationSeconds: Double?,
         modelID: SpeechModelID,
         transcript: String,
         elapsedSeconds: Double,
@@ -818,7 +822,7 @@ final class SpeechTranscriptionService {
             sourceFilePath: fileURL.path,
             sourceFileName: fileURL.lastPathComponent,
             sourceFileSizeBytes: size,
-            durationSeconds: nil,
+            durationSeconds: durationSeconds,
             engineID: "qwen3-asr",
             modelID: modelID,
             modelDisplayName: displayName(for: modelID),
