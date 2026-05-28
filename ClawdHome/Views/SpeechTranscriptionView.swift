@@ -383,14 +383,30 @@ struct SpeechTranscriptionView: View {
                         .foregroundColor(isSelected ? .blue : .primary)
                     
                     if item.status == .transcribing {
-                        Text(item.statusMessage ?? queueItemStatusLabel(item.status))
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text(item.statusMessage ?? queueItemStatusLabel(item.status))
+                            
+                            // 真正开始 ASR 转换阶段时，才开始显示速率
+                            if item.stage == .transcribing, let speed = item.asrSpeed {
+                                Text("⚡️ \(speed)")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(.purple)
+                            }
+                        }
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     } else if item.status == .completed {
-                        Text("✓ 完成 · \(String(format: "%.1fs", item.elapsedSeconds)) · \(item.transcriptText.count)字")
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            Text("✓ 完成 · \(String(format: "%.1fs", item.elapsedSeconds)) · \(item.transcriptText.count)字")
+                            if let speed = item.asrSpeed {
+                                Text("⚡️ \(speed)")
+                                    .foregroundStyle(.purple.opacity(0.8))
+                            }
+                        }
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     } else if item.status == .failed {
                         Text(item.errorSummary ?? "转写失败")
                             .font(.system(size: 9))
@@ -409,8 +425,9 @@ struct SpeechTranscriptionView: View {
                 
                 Spacer()
                 
-                if item.status == .transcribing {
-                    Text("\(Int((item.progressFraction * 100).rounded()))%")
+                // 真正开始 ASR 转换时，才在右侧显示 ASR 进度的百分比
+                if item.status == .transcribing && item.stage == .transcribing {
+                    Text("\(Int((item.stageProgress * 100).rounded()))%")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(.blue)
                         .frame(width: 34, alignment: .trailing)
@@ -437,10 +454,23 @@ struct SpeechTranscriptionView: View {
                         .fill(isSelected ? Color.blue.opacity(0.06) : Color(NSColor.controlBackgroundColor).opacity(0.25))
 
                     if item.status == .transcribing {
-                        GeometryReader { proxy in
+                        if item.stage == .transcribing {
+                            // 真正 ASR 转换阶段时，才开始显示专属进度条
+                            GeometryReader { proxy in
+                                RoundedRectangle(cornerRadius: 9)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.blue.opacity(0.18), Color.purple.opacity(0.12)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: max(0, proxy.size.width * CGFloat(min(max(item.stageProgress, 0), 1))))
+                            }
+                        } else if item.stage == .enhancing {
+                            // 人声增强降噪预处理阶段显示极其柔和的青色底色，没有进度条，代表预处理中
                             RoundedRectangle(cornerRadius: 9)
-                                .fill(Color.blue.opacity(isSelected ? 0.18 : 0.12))
-                                .frame(width: max(0, proxy.size.width * CGFloat(min(max(item.progressFraction, 0), 1))))
+                                .fill(Color.cyan.opacity(isSelected ? 0.08 : 0.04))
                         }
                     }
                 }

@@ -124,6 +124,7 @@ final class SpeechTranscriptionService {
     private var runningProcess: Process?
     private var cancellationRequested = false
     private var downloadMonitorTask: Task<Void, Never>?
+    private var asrStartTime: Date? = nil
 
     init(
         historyStore: SpeechHistoryStore = SpeechHistoryStore(),
@@ -271,6 +272,19 @@ final class SpeechTranscriptionService {
             selectedQueueItem = nextItem
             nextItem.status = .transcribing
             nextItem.progressFraction = 0
+            nextItem.stageProgress = 0
+            nextItem.asrSpeed = nil
+            
+            // 异步提取音频文件时长以作速率计算的基准
+            let asset = AVURLAsset(url: nextItem.fileURL)
+            if let duration = try? await asset.load(.duration) {
+                nextItem.durationSeconds = duration.seconds
+            } else {
+                let audioFile = try? AVAudioFile(forReading: nextItem.fileURL)
+                if let audioFile {
+                    nextItem.durationSeconds = Double(audioFile.length) / audioFile.processingFormat.sampleRate
+                }
+            }
             
             transcriptionProgressFraction = 0
             transcriptionStatusMessage = nil
@@ -279,13 +293,31 @@ final class SpeechTranscriptionService {
             var tempEnhancedURL: URL? = nil
             
             if vocalEnhanceEnabled {
-                nextItem.statusMessage = "正在执行智能人声分离与降噪增强..."
+                nextItem.stage = .enhancing
                 do {
-                    let enhancedURL = try await enhanceVocal(inputURL: nextItem.fileURL)
+                    // 执行原生降噪预处理：占用整体进度的前 10% 区间 (0% -> 10%)
+                    let enhancedURL = try await enhanceVocal(inputURL: nextItem.fileURL) { progress in
+                        Task { @MainActor in
+                            nextItem.stageProgress = progress
+                            nextItem.progressFraction = progress * 0.1
+                            nextItem.statusMessage = String(format: "人声分离与降噪中... %.0f%%", progress * 100)
+                        }
+                    }
                     tempEnhancedURL = enhancedURL
                     audioToTranscribe = enhancedURL
                 } catch {
                     print("Vocal enhancement failed, fallback to original audio: \(error.localizedDescription)")
+                }
+            }
+
+            // 真正开始 ASR 转换阶段 (预设为 10% 或 0% 的转录起点，并将状态标识刷新为 ASR 准备中)
+            if !cancellationRequested {
+                self.asrStartTime = Date() // 记录 ASR 真正转换的开始时间
+                await MainActor.run {
+                    nextItem.stage = .loadingModel
+                    nextItem.stageProgress = 0.0
+                    nextItem.progressFraction = vocalEnhanceEnabled ? 0.1 : 0.0
+                    nextItem.statusMessage = "准备启动本地 ASR 智能转译..."
                 }
             }
 
@@ -296,9 +328,33 @@ final class SpeechTranscriptionService {
                 let finalTranscript = applyHotwordsFilter(to: response.transcript ?? "")
                 
                 nextItem.status = .completed
+                nextItem.stage = .completed
+                nextItem.stageProgress = 1.0
                 nextItem.progressFraction = 1.0
                 nextItem.transcriptText = finalTranscript
                 nextItem.elapsedSeconds = response.elapsedSeconds ?? 0
+                
+                // 完成时计算最终平均速率
+                if let startTime = self.asrStartTime {
+                    let elapsed = nextItem.elapsedSeconds > 0 ? nextItem.elapsedSeconds : Date().timeIntervalSince(startTime)
+                    if elapsed > 0 {
+                        var speedText = ""
+                        if nextItem.durationSeconds > 0 {
+                            let speedX = nextItem.durationSeconds / elapsed
+                            speedText = String(format: "%.1fx", speedX)
+                        }
+                        let charCount = finalTranscript.count
+                        if charCount > 0 {
+                            let charSpeed = Double(charCount) / elapsed
+                            if !speedText.isEmpty {
+                                speedText += String(format: " (%.0f字/秒)", charSpeed)
+                            } else {
+                                speedText = String(format: "%.0f字/秒", charSpeed)
+                            }
+                        }
+                        nextItem.asrSpeed = speedText
+                    }
+                }
                 
                 if selectedQueueItem?.id == nextItem.id {
                     currentTranscript = finalTranscript
@@ -325,6 +381,8 @@ final class SpeechTranscriptionService {
 
                 if cancellationRequested {
                     nextItem.status = .cancelled
+                    nextItem.stage = .cancelled
+                    nextItem.stageProgress = 0.0
                     if let record = makeHistoryRecord(
                         for: nextItem.fileURL,
                         modelID: selectedModelID,
@@ -337,6 +395,8 @@ final class SpeechTranscriptionService {
                     }
                 } else {
                     nextItem.status = .failed
+                    nextItem.stage = .failed
+                    nextItem.stageProgress = 0.0
                     nextItem.errorSummary = error.localizedDescription
                     lastErrorMessage = error.localizedDescription
                     
@@ -924,8 +984,10 @@ final class SpeechTranscriptionService {
         if event.command == "load-model" {
             transcriptionStatusMessage = event.message
             if let activeItem = queue.first(where: { $0.status == .transcribing }) {
+                activeItem.stage = .loadingModel
+                activeItem.stageProgress = 0.0
                 activeItem.statusMessage = event.message
-                activeItem.progressFraction = 0.02
+                activeItem.progressFraction = vocalEnhanceEnabled ? 0.12 : 0.02
             }
             return
         }
@@ -935,8 +997,16 @@ final class SpeechTranscriptionService {
         transcriptionStatusMessage = event.message
         
         if let activeItem = queue.first(where: { $0.status == .transcribing }) {
-            activeItem.progressFraction = transcriptionProgressFraction
-            activeItem.statusMessage = event.message
+            activeItem.stage = .transcribing
+            activeItem.stageProgress = transcriptionProgressFraction
+            
+            // ASR 阶段，进度条从 10% (或 0%) 线性顺滑走到 100%
+            let asrProgress = transcriptionProgressFraction
+            let base = vocalEnhanceEnabled ? 0.1 : 0.0
+            let overallProgress = base + (asrProgress * (1.0 - base))
+            
+            activeItem.progressFraction = overallProgress
+            activeItem.statusMessage = String(format: "ASR 智能转译中... %.0f%%", asrProgress * 100)
 
             if let transcript = event.transcript?.trimmingCharacters(in: .whitespacesAndNewlines),
                !transcript.isEmpty {
@@ -949,13 +1019,42 @@ final class SpeechTranscriptionService {
                     currentTranscript = filteredTranscript
                 }
             }
+            
+            // 计算实时 ASR 转译速率 (仅在 asrStartTime 已记录时)
+            if let startTime = self.asrStartTime {
+                let elapsed = Date().timeIntervalSince(startTime)
+                if elapsed > 0.3 {
+                    var speedText = ""
+                    // 计算倍速
+                    if activeItem.durationSeconds > 0 {
+                        let processedAudio = activeItem.durationSeconds * transcriptionProgressFraction
+                        let speedX = processedAudio / elapsed
+                        speedText = String(format: "%.1fx", speedX)
+                    }
+                    
+                    // 计算字数转换速率
+                    let charCount = activeItem.transcriptText.count
+                    if charCount > 0 {
+                        let charSpeed = Double(charCount) / elapsed
+                        if !speedText.isEmpty {
+                            speedText += String(format: " (%.0f字/秒)", charSpeed)
+                        } else {
+                            speedText = String(format: "%.0f字/秒", charSpeed)
+                        }
+                    }
+                    
+                    if !speedText.isEmpty {
+                        activeItem.asrSpeed = speedText
+                    }
+                }
+            }
         }
     }
 
 
 
     /// 【方案 A】利用 macOS 原生的 AVAudioEngine Manual Rendering 链条对输入音频进行极速高保真去噪和人声隔离增强
-    private func enhanceVocal(inputURL: URL) async throws -> URL {
+    private func enhanceVocal(inputURL: URL, onProgress: @escaping (Double) -> Void) async throws -> URL {
         let tempDir = FileManager.default.temporaryDirectory
         let outputURL = tempDir.appendingPathComponent("clawdhome_vocal_enhanced_\(UUID().uuidString).wav")
         
@@ -1003,6 +1102,7 @@ final class SpeechTranscriptionService {
         // 极速渲染循环
         let renderBuffer = AVAudioPCMBuffer(pcmFormat: engine.manualRenderingFormat, frameCapacity: maxFrames)!
         let totalFrames = audioFile.length
+        var lastReportedProgress: Double = 0.0
         
         while engine.manualRenderingSampleTime < totalFrames {
             let framesToRender = min(maxFrames, AVAudioFrameCount(totalFrames - engine.manualRenderingSampleTime))
@@ -1010,6 +1110,14 @@ final class SpeechTranscriptionService {
             
             if status == .success {
                 try outputFile.write(from: renderBuffer)
+                
+                // 实时计算渲染帧数进度
+                let progress = Double(engine.manualRenderingSampleTime) / Double(totalFrames)
+                // 每增长 2% 进行一次通知，防高频线程通知导致 UI 渲染锁死
+                if progress - lastReportedProgress >= 0.02 || progress >= 0.99 {
+                    lastReportedProgress = progress
+                    onProgress(progress)
+                }
             } else if status == .error {
                 throw NSError(domain: "ai.clawdhome.speech.render", code: 4, userInfo: [NSLocalizedDescriptionKey: "WAV manual rendering failed."])
             }

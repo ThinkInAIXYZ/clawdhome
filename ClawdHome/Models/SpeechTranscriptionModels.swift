@@ -168,27 +168,46 @@ enum SpeechQueueItemStatus: String, Codable {
     case cancelled    = "cancelled"    // 已取消
 }
 
+/// 任务当前处理的具体环节阶段
+enum SpeechProcessingStage: String, Codable {
+    case waiting      = "waiting"      // 等待中
+    case enhancing    = "enhancing"    // 人声分离与降噪预处理
+    case loadingModel = "loadingModel" // 本地 ASR 模型加载
+    case transcribing = "transcribing" // ASR 智能转译
+    case completed    = "completed"    // 完成
+    case failed       = "failed"       // 失败
+    case cancelled    = "cancelled"    // 已取消
+}
+
 /// 队列中的单个音频任务项
 @Observable
 final class SpeechQueueItem: Identifiable, Hashable {
     let id: UUID
     let fileURL: URL
     var status: SpeechQueueItemStatus
+    var stage: SpeechProcessingStage
     var progressFraction: Double
+    var stageProgress: Double
     var statusMessage: String?
     var transcriptText: String
     var elapsedSeconds: Double
     var errorSummary: String?
+    var asrSpeed: String?     // ASR 转换速率，如 "3.4x (28字/秒)"
+    var durationSeconds: Double
     
     init(fileURL: URL) {
         self.id = UUID()
         self.fileURL = fileURL
         self.status = .waiting
+        self.stage = .waiting
         self.progressFraction = 0
+        self.stageProgress = 0
         self.statusMessage = nil
         self.transcriptText = ""
         self.elapsedSeconds = 0
         self.errorSummary = nil
+        self.asrSpeed = nil
+        self.durationSeconds = 0
     }
 
     
