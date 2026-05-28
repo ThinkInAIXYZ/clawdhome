@@ -997,15 +997,8 @@ final class SpeechTranscriptionService {
         player.scheduleFile(audioFile, at: nil, completionHandler: nil)
         player.play()
         
-        // 配置写入 WAV 的参数格式
-        let writeSettings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: format.sampleRate,
-            AVNumberOfChannelsKey: format.channelCount,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false
-        ]
-        let outputFile = try AVAudioFile(forWriting: outputURL, settings: writeSettings, commonFormat: .pcmFormatInt16, interleaved: true)
+        // 使用与渲染缓冲区完全一致的 processingFormat 格式进行高保真自适应写出
+        let outputFile = try AVAudioFile(forWriting: outputURL, settings: format.settings)
         
         // 极速渲染循环
         let renderBuffer = AVAudioPCMBuffer(pcmFormat: engine.manualRenderingFormat, frameCapacity: maxFrames)!
