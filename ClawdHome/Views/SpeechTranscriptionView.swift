@@ -1,10 +1,12 @@
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+import MarkdownUI
 
 struct SpeechTranscriptionView: View {
     var onBack: (() -> Void)? = nil
     @Environment(HelperClient.self) private var helperClient
+    @Environment(GlobalModelStore.self) private var modelStore
     @State private var service = SpeechTranscriptionService.shared
 
 
@@ -13,13 +15,38 @@ struct SpeechTranscriptionView: View {
     @State private var isDragTargeted = false
     // ASR 配置弹出面板是否显示
     @State private var showSettingsPopover = false
+    // AI 精整 Sheet 弹出状态
+    @State private var showRefineSheet = false
     // 复制成功短暂提示状态
     @State private var didCopied = false
+    
+    // 【新增】内容展现维度与预览格式切换定义
+    enum ContentDimension: String, CaseIterable, Identifiable {
+        case raw = "粗稿原文"
+        case refined = "AI 智能精装稿"
+        case srt = "实时字幕"
+        
+        var id: String { rawValue }
+    }
+    
+    enum PreviewFormat: String, CaseIterable, Identifiable {
+        case txt = "TXT"
+        case md = "MD"
+        
+        var id: String { rawValue }
+    }
+    
+    @State private var selectedContentTab: ContentDimension = .raw
+    @State private var previewFormat: PreviewFormat = .txt
+    @State private var editedRefinedText = ""
+    @State private var editedRawText = ""
+    @State private var isSaving = false
+    @State private var didSaved = false
     
     @AppStorage("hf_endpoint_preference") private var hfEndpointPreference = ""
     @AppStorage("custom_hf_endpoint") private var customHFEndpoint = ""
     @AppStorage("hf_token_preference") private var hfTokenPreference = ""
-    @AppStorage("asr_hotwords_setting") private var asrHotwordsSetting = ""
+
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +66,16 @@ struct SpeechTranscriptionView: View {
         }
         .navigationTitle(L10n.k("speech.title", fallback: "语音转文字"))
         .task {
+            editedRawText = service.currentTranscript
             await refreshService()
+        }
+        .onChange(of: service.currentTranscript) { _, newValue in
+            editedRawText = newValue
+        }
+        .sheet(isPresented: $showRefineSheet) {
+            AISpeechRefineSheet()
+                .environment(modelStore)
+                .environment(helperClient)
         }
     }
 
@@ -139,8 +175,8 @@ struct SpeechTranscriptionView: View {
                     .foregroundColor(showSettingsPopover ? .blue : .primary)
                 }
                 .buttonStyle(.plain)
-                .popover(isPresented: $showSettingsPopover, arrowEdge: .bottom) {
-                    v1SettingsPopoverContent
+                .sheet(isPresented: $showSettingsPopover) {
+                    v1SettingsSheetContent
                 }
             }
         }
@@ -151,12 +187,7 @@ struct SpeechTranscriptionView: View {
     // MARK: - =========================================================================
     
     private var v1WorkspaceLayout: some View {
-        VStack(spacing: 20) {
-            // ASR 模型快速选择与下载状态栏
-            if service.availability.isAvailable {
-                v1ModelBarCard
-            }
-            
+        VStack(spacing: 0) {
             // 核心转写工作流（左：导入与队列控制，右：结果展示）
             HStack(alignment: .top, spacing: 20) {
                 // 左侧：导入区 + 队列控制 + 历史记录
@@ -168,8 +199,9 @@ struct SpeechTranscriptionView: View {
                     }
                     
                     v1HistoryCard
+                        .frame(maxHeight: .infinity)
                 }
-                .frame(maxWidth: 360)
+                .frame(maxWidth: 360, maxHeight: .infinity)
                 
                 // 右侧：结果展示工作区
                 v1ResultWorkspaceCard
@@ -180,82 +212,99 @@ struct SpeechTranscriptionView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
     
-    // V1 极简模型选择与下载区
-    private var v1ModelBarCard: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.k("speech.model", fallback: "模型选择"))
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.secondary)
-                
-                Picker("", selection: $service.selectedModelID) {
-                    ForEach(curatedSpeechModels) { model in
-                        Text(model.displayName).tag(model.id)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 300)
-            }
-            
-            Spacer()
-            
-            // 模型就绪/准备卡片
-            VStack(alignment: .trailing, spacing: 4) {
-                if service.isPreparingModel {
-                    HStack(spacing: 8) {
-                        ProgressView(value: service.preparationProgressFraction)
-                            .progressViewStyle(.linear)
-                            .frame(width: 120)
-                        
-                        Text(service.preparationProgressPercentText)
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.blue)
-                        
-                        Button {
-                            service.cancelModelPreparation()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                } else if service.isSelectedModelDownloaded {
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark.shield.fill")
-                            .foregroundStyle(.green)
-                            .shadow(color: Color.green.opacity(0.3), radius: 3)
-                        Text(L10n.k("speech.download_progress.ready_title", fallback: "模型就绪"))
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Button {
-                        Task { await service.prepareSelectedModel() }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.down.circle")
-                            Text(L10n.k("speech.download", fallback: "下载模型"))
-                        }
-                        .font(.system(size: 12, weight: .medium))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.blue.opacity(0.1))
-                        .foregroundColor(.blue)
-                        .cornerRadius(6)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(service.isPreparingModel || service.isTranscribing)
-                }
-            }
-        }
-        .padding(14)
-        .premiumCard(theme: .blue)
-    }
+
     
-    // V1 批量音频队列导入区
+    // V1 批量音频队列导入区 (整合模型选择与状态下载条的一体化设计)
     private var v1QueueDropZoneCard: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // ASR 引擎模型选择微卡片 (局部芯片样式)
+            if service.availability.isAvailable {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Label(L10n.k("speech.model", fallback: "模型选择"), systemImage: "cpu")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.secondary)
+                        
+                        Spacer()
+                        
+                        // 精美紧凑的就绪标志
+                        if !service.isPreparingModel && service.isSelectedModelDownloaded {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.shield.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.green)
+                                    .shadow(color: Color.green.opacity(0.15), radius: 2)
+                                Text(L10n.k("speech.download_progress.ready_title", fallback: "模型就绪"))
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.green)
+                            }
+                        }
+                    }
+                    
+                    HStack(spacing: 8) {
+                        Picker("", selection: $service.selectedModelID) {
+                            ForEach(curatedSpeechModels) { model in
+                                Text(model.displayName).tag(model.id)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        
+                        // 未下载状态迷你下载按钮
+                        if !service.isPreparingModel && !service.isSelectedModelDownloaded {
+                            Button {
+                                Task { await service.prepareSelectedModel() }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.down.circle")
+                                    Text(L10n.k("speech.download", fallback: "下载"))
+                                }
+                                .font(.system(size: 10, weight: .bold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.blue.opacity(0.12))
+                                .foregroundColor(.blue)
+                                .cornerRadius(5)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(service.isPreparingModel || service.isTranscribing)
+                        }
+                    }
+                    
+                    // 正在准备模型时的微型进度条与百分比
+                    if service.isPreparingModel {
+                        HStack(spacing: 8) {
+                            ProgressView(value: service.preparationProgressFraction)
+                                .progressViewStyle(.linear)
+                            
+                            Text(service.preparationProgressPercentText)
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.blue)
+                            
+                            Button {
+                                service.cancelModelPreparation()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.top, 2)
+                    }
+                }
+                .padding(10)
+                .background(Color.primary.opacity(0.02))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.primary.opacity(0.04), lineWidth: 1)
+                )
+                
+                Divider()
+                    .opacity(0.4)
+            }
+
             // 标题栏
             HStack {
                 Label(L10n.k("speech.import", fallback: "音频导入队列"), systemImage: "list.number")
@@ -611,114 +660,181 @@ struct SpeechTranscriptionView: View {
     // V1 结果展示工作区
     private var v1ResultWorkspaceCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                HStack(spacing: 6) {
-                    Label(L10n.k("speech.result", fallback: "转写结果"), systemImage: "doc.text.magnifyingglass")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.secondary)
-                    
-                    if !service.currentTranscript.isEmpty {
-                        Text(L10n.f("speech.word_count", fallback: "%d 字", service.currentTranscript.count))
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            ViewThatFits(in: .horizontal) {
+                // 1. 首选长布局（行内完整版，适合超大屏幕 >= 650pt）
+                HStack(spacing: 8) {
+                    HStack(spacing: 6) {
+                        Label("内容整理", systemImage: "doc.text.magnifyingglass")
+                            .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.primary.opacity(0.05))
-                            .cornerRadius(4)
+                        wordCountBadge
+                    }
+                    
+                    Spacer(minLength: 16)
+                    
+                    Picker("", selection: $selectedContentTab) {
+                        Text("📝 粗稿原文").tag(ContentDimension.raw)
+                        Text("✨ AI 精装稿").tag(ContentDimension.refined)
+                        Text("🎬 实时字幕").tag(ContentDimension.srt)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 320)
+                    
+                    Spacer(minLength: 16)
+                    
+                    HStack(spacing: 6) {
+                        if selectedContentTab != .srt {
+                            Picker("", selection: $previewFormat) {
+                                Text("📄 源码").tag(PreviewFormat.txt)
+                                Text("👁️ 预览").tag(PreviewFormat.md)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 135) // 增大到 135 彻底修复“预览”与“AI润色”重叠问题
+                        }
+                        refineButton
+                        copyButton
+                        if isContentModified || didSaved {
+                            saveButton
+                                .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
+                        }
                     }
                 }
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(height: 28)
                 
-                Spacer()
-                
-                // 结果操作水晶按钮栏
+                // 2. 宽屏行内精简版（省略“内容整理”文字标题以节省水平空间，适合 >= 520pt）
                 HStack(spacing: 8) {
-                    Button {
-                        service.copyTranscript()
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { didCopied = true }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            withAnimation { didCopied = false }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: didCopied ? "checkmark" : "doc.on.doc")
-                                .foregroundStyle(didCopied ? .green : .primary)
-                                .scaleEffect(didCopied ? 1.15 : 1.0)
-                            Text(didCopied ? "已复制" : L10n.k("speech.copy", fallback: "复制"))
-                                .foregroundStyle(didCopied ? .green : .primary)
-                        }
-                        .font(.system(size: 11, weight: .medium))
-                        .padding(.horizontal, 10)
-                        .frame(height: 24)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(didCopied ? Color.green.opacity(0.08) : Color.primary.opacity(0.03))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(didCopied ? Color.green.opacity(0.2) : Color.primary.opacity(0.04), lineWidth: 0.5)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(service.currentTranscript.isEmpty)
+                    wordCountBadge
                     
-                    Button {
-                        try? service.export(format: .txt)
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.down.doc")
-                            Text("TXT")
-                        }
-                        .font(.system(size: 11, weight: .medium))
-                        .padding(.horizontal, 10)
-                        .frame(height: 24)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color.primary.opacity(0.03))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(service.currentTranscript.isEmpty)
+                    Spacer(minLength: 12)
                     
-                    Button {
-                        try? service.export(format: .markdown)
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                            Text("MD")
-                        }
-                        .font(.system(size: 11, weight: .medium))
-                        .padding(.horizontal, 10)
-                        .frame(height: 24)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color.primary.opacity(0.03))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
-                        )
+                    Picker("", selection: $selectedContentTab) {
+                        Text("📝 粗稿原文").tag(ContentDimension.raw)
+                        Text("✨ AI 精装稿").tag(ContentDimension.refined)
+                        Text("🎬 实时字幕").tag(ContentDimension.srt)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(service.currentTranscript.isEmpty)
+                    .pickerStyle(.segmented)
+                    .frame(width: 320)
+                    
+                    Spacer(minLength: 12)
+                    
+                    HStack(spacing: 6) {
+                        if selectedContentTab != .srt {
+                            Button {
+                                withAnimation {
+                                    previewFormat = previewFormat == .txt ? .md : .txt
+                                }
+                            } label: {
+                                Image(systemName: previewFormat == .txt ? "eye" : "doc.text")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .frame(width: 24, height: 24)
+                                    .background(Color.primary.opacity(0.04))
+                                    .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+                            .help(previewFormat == .txt ? "切换到预览模式" : "切换到编辑模式")
+                        }
+                        refineButton
+                        copyButton
+                        if isContentModified || didSaved {
+                            saveButton
+                                .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
+                        }
+                    }
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(height: 28)
+                
+                // 3. 窄屏极致图标版（精简三态 Picker 宽度至 200pt，且操作按钮全图标化，适合 >= 340pt）
+                HStack(spacing: 4) {
+                    wordCountBadge
+                    
+                    Spacer(minLength: 6)
+                    
+                    Picker("", selection: $selectedContentTab) {
+                        Text("📝 原稿").tag(ContentDimension.raw)
+                        Text("✨ 精装").tag(ContentDimension.refined)
+                        Text("🎬 字幕").tag(ContentDimension.srt)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 200)
+                    
+                    Spacer(minLength: 6)
+                    
+                    HStack(spacing: 4) {
+                        if selectedContentTab != .srt {
+                            Button {
+                                withAnimation {
+                                    previewFormat = previewFormat == .txt ? .md : .txt
+                                }
+                            } label: {
+                                Image(systemName: previewFormat == .txt ? "eye" : "doc.text")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .frame(width: 24, height: 24)
+                                    .background(Color.primary.opacity(0.04))
+                                    .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+                            .help(previewFormat == .txt ? "切换到预览模式" : "切换到编辑模式")
+                        }
+                        refineIconButton
+                        copyIconButton
+                        if isContentModified || didSaved {
+                            saveButton
+                                .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
+                        }
+                    }
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(height: 28)
+                
+                // 4. 极窄双行自适应版（双行物理排列，100% 确保窄窗口下所有控制元素完美外露不被切断遮挡，适合 < 340pt）
+                VStack(spacing: 6) {
+                    HStack(spacing: 4) {
+                        Picker("", selection: $selectedContentTab) {
+                            Text("📝 原稿").tag(ContentDimension.raw)
+                            Text("✨ 精装").tag(ContentDimension.refined)
+                            Text("🎬 字幕").tag(ContentDimension.srt)
+                        }
+                        .pickerStyle(.segmented)
+                        
+                        if selectedContentTab != .srt {
+                            Button {
+                                withAnimation {
+                                    previewFormat = previewFormat == .txt ? .md : .txt
+                                }
+                            } label: {
+                                Image(systemName: previewFormat == .txt ? "eye" : "doc.text")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .frame(width: 24, height: 24)
+                                    .background(Color.primary.opacity(0.04))
+                                    .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+                            .help(previewFormat == .txt ? "切换到预览模式" : "切换到编辑模式")
+                        }
+                    }
+                    
+                    HStack(spacing: 6) {
+                        wordCountBadge
+                        
+                        Spacer()
+                        
+                        refineIconButton
+                        copyIconButton
+                        if isContentModified || didSaved {
+                            saveButton
+                                .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
+                        }
+                    }
                 }
             }
-            .frame(height: 28)
+            .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isContentModified || didSaved)
             
+            // 3. 底层编辑与预览核心视窗
             ZStack(alignment: .topLeading) {
-                TextEditor(text: $service.currentTranscript)
-                    .font(.system(size: 13, design: .monospaced))
-                    .lineSpacing(6)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .scrollContentBackground(.hidden)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(NSColor.textBackgroundColor).opacity(0.22))
-                    )
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(NSColor.textBackgroundColor).opacity(0.22))
                     .cornerRadius(16)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
@@ -726,243 +842,436 @@ struct SpeechTranscriptionView: View {
                     )
                     .shadow(color: Color.black.opacity(0.01), radius: 8, x: 0, y: 4)
                 
-                if service.currentTranscript.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "bubble.left.and.bubble.right.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [Color.blue.opacity(0.4), Color.purple.opacity(0.3)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                        
-                        Text(L10n.k("speech.ui.waiting_placeholder", fallback: "等待开启智能识别任务，提取的离线文本会即时在此处流式展现，并支持高自由度二次编辑。"))
-                            .font(.system(size: 12))
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 32)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .allowsHitTesting(false)
+                switch selectedContentTab {
+                case .raw:
+                    rawContentEditor
+                case .refined:
+                    refinedContentEditor
+                case .srt:
+                    srtContentEditor
+                }
+            }
+        }
+        .onChange(of: service.selectedRecordID) { _, newID in
+            if let record = service.selectedHistoryRecord {
+                editedRefinedText = record.refinedText ?? ""
+                editedRawText = record.transcriptText
+                if record.refinedText != nil {
+                    // 若有润色好的笔记，自动高亮切换为精装版，提升尊贵感！
+                    selectedContentTab = .refined
+                } else {
+                    selectedContentTab = .raw
+                }
+            } else {
+                editedRefinedText = ""
+                editedRawText = service.currentTranscript
+                selectedContentTab = .raw
+            }
+        }
+        .onChange(of: service.selectedHistoryRecord?.refinedText) { _, newRefined in
+            if let newRefined {
+                if editedRefinedText != newRefined {
+                    editedRefinedText = newRefined
+                }
+            } else {
+                if !editedRefinedText.isEmpty {
+                    editedRefinedText = ""
                 }
             }
         }
     }
     
-    // V1 历史记录区域
-    private var v1HistoryCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label(L10n.k("speech.history_records", fallback: "历史转写"), systemImage: "clock.arrow.circlepath")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.secondary)
-                Spacer()
+    // A. 粗稿原文内容渲染区
+    @ViewBuilder
+    private var rawContentEditor: some View {
+        if service.currentTranscript.isEmpty {
+            waitingPlaceholderView
+        } else if previewFormat == .txt {
+            // 源码可编辑模式
+            TextEditor(text: $editedRawText)
+                .font(.system(size: 13, design: .monospaced))
+                .lineSpacing(6)
+                .padding(12)
+                .scrollContentBackground(.hidden)
+        } else {
+            // Markdown 渲染预览模式（升级为 MarkdownUI 经典 GFM GitHub 主题渲染）
+            ScrollView {
+                Markdown(service.currentTranscript)
+                    .markdownTheme(.gitHub)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: 28)
-                
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.primary.opacity(0.01))
-                
-                ScrollView {
-                    VStack(spacing: 8) {
-                        if service.history.isEmpty {
-                            VStack(spacing: 6) {
-                                Image(systemName: "tray.fill")
-                                    .font(.system(size: 16))
-                                    .foregroundStyle(.secondary.opacity(0.4))
-                                Text(L10n.k("speech.history_empty", fallback: "暂无历史记录"))
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.vertical, 32)
-                            .frame(maxWidth: .infinity)
-                        } else {
-                            ForEach(service.history) { record in
-                                let isSelected = service.currentTranscript == record.transcriptText && !record.transcriptText.isEmpty
-                                
-                                HStack(spacing: 8) {
-                                    Button {
-                                        withAnimation {
-                                            service.selectedQueueItem = nil
-                                            service.currentTranscript = record.transcriptText
-                                        }
-                                    } label: {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(record.sourceFileName)
-                                                .font(.system(size: 11, weight: .semibold))
-                                                .lineLimit(1)
-                                                .foregroundColor(isSelected ? .blue : .primary)
-                                            
-                                            Text(historySubtitle(for: record))
-                                                .font(.system(size: 9))
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                    
-                                    Spacer()
-                                    
-                                    Button {
-                                        revealRecordSource(record)
-                                    } label: {
-                                        Image(systemName: "folder")
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    
-                                    Button {
-                                        service.deleteHistoryRecord(id: record.id)
-                                    } label: {
-                                        Image(systemName: "trash")
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(.red.opacity(0.7))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .padding(10)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color(NSColor.controlBackgroundColor).opacity(isSelected ? 0.8 : 0.2))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(isSelected ? Color.blue.opacity(0.2) : Color.primary.opacity(0.04), lineWidth: 1)
-                                )
-                            }
-                        }
-                    }
-                    .padding(8)
-                }
-            }
-            .frame(maxHeight: 180)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.primary.opacity(0.05), lineWidth: 1)
-            )
         }
-        .padding(12)
-        .background(Color.primary.opacity(0.01))
-        .cornerRadius(12)
     }
 
-    // V1 引擎设置悬浮窗内容
-    private var v1SettingsPopoverContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(L10n.k("speech.engine_settings", fallback: "ASR 引擎设置"))
-                .font(.system(size: 13, weight: .bold))
-            
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.k("settings.speech_transcription.hf_endpoint", fallback: "模型下载源"))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                
-                Picker("", selection: $hfEndpointPreference) {
-                    Text(L10n.k("settings.speech_transcription.hf_endpoint.default", fallback: "默认 (Hugging Face)")).tag("")
-                    Text(L10n.k("settings.speech_transcription.hf_endpoint.mirror", fallback: "HF 镜像站 (hf-mirror.com)")).tag("https://hf-mirror.com")
-                    Text(L10n.k("settings.speech_transcription.hf_endpoint.custom", fallback: "自定义…")).tag("custom")
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
-            }
-            
-            if hfEndpointPreference == "custom" {
-                TextField(L10n.k("settings.speech_transcription.hf_endpoint.custom_url", fallback: "自定义端点 URL"), text: $customHFEndpoint)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 11))
-            }
-            
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Hugging Face Token")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    
-                    Spacer()
-                    
-                    if let tokenURL = URL(string: "https://huggingface.co/settings/tokens") {
-                        Link(destination: tokenURL) {
-                            Image(systemName: "questionmark.circle")
-                                .font(.system(size: 11))
-                        }
-                    }
-                }
-                
-                SecureField(L10n.k("settings.speech_transcription.hf_token.placeholder", fallback: "可选，用于提速或下载受限模型"), text: $hfTokenPreference)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 11))
-            }
-            
-            Text(L10n.k("settings.speech_transcription.hf_endpoint.hint", fallback: "提示：若镜像站因元数据校验失败报错，请尝试切回默认源。"))
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-            
-            if let recommended = service.recommendation.recommendedModel {
-                Text(L10n.f("speech.recommended", fallback: "当前设备推荐配置：%@ ASR", curatedSpeechModels.first(where: { $0.id == recommended })?.displayName ?? recommended.rawValue))
-                    .font(.system(size: 10))
-                    .foregroundStyle(.blue)
-            }
-            
-            Divider()
-
-            VStack(alignment: .leading, spacing: 6) {
-                Toggle(isOn: Bindable(service).vocalEnhanceEnabled) {
-                    HStack(spacing: 4) {
-                        Text("AI 智能人声增强")
-                            .font(.system(size: 11, weight: .semibold))
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.purple)
-                    }
-                }
-                .toggleStyle(.checkbox)
-                
-                Text("利用 macOS 原生的核心音频降噪与动态范围均化，消除低频噪音，极大提升嘈杂音频的识别精度。")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.bottom, 4)
-            
-            Divider()
-            
-            // 热词纠错词典
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Label("专名热词纠错", systemImage: "character.magnify")
-                        .font(.system(size: 11, weight: .semibold))
-                    Spacer()
-                }
-                
-                Text("每行一条规则，格式：错误识别 -> 正确词汇")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-                
-                TextEditor(text: $asrHotwordsSetting)
-                    .font(.system(size: 10, design: .monospaced))
-                    .frame(height: 80)
-                    .padding(6)
-                    .background(Color(NSColor.textBackgroundColor).opacity(0.3))
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+    // B. AI 智能精装稿渲染区
+    @ViewBuilder
+    private var refinedContentEditor: some View {
+        if service.selectedHistoryRecord?.refinedText == nil && editedRefinedText.isEmpty {
+            // 尚未润色的占位魔法按钮区
+            VStack(spacing: 16) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 32))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.purple, .blue, .pink],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                    .scrollContentBackground(.hidden)
+                    .scaleEffect(1.1)
                 
-                Text("示例：ClowdHome -> ClawdHome")
-                    .font(.system(size: 9, design: .monospaced))
+                Text("✨ 尚未进行 AI 智能精整与专名润色")
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
+                
+                Text("一键消除口癖语气词，智能理顺断句，提取会议纪要、随记便签，保留原笔记的同时保留精装润色版。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 48)
+                
+                Button {
+                    showRefineSheet = true
+                } label: {
+                    HStack {
+                        Image(systemName: "wand.and.stars")
+                        Text("立即开启智能精整魔法")
+                            .fontWeight(.bold)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .frame(height: 32)
+                    .background(
+                        LinearGradient(
+                            colors: [.purple, .blue],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(8)
+                    .shadow(color: Color.purple.opacity(0.18), radius: 6, x: 0, y: 3)
+                }
+                .buttonStyle(.plain)
+                .disabled(service.currentTranscript.isEmpty)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+        } else if previewFormat == .txt {
+            // 源码可编辑模式
+            TextEditor(text: $editedRefinedText)
+                .font(.system(size: 13, design: .monospaced))
+                .lineSpacing(6)
+                .padding(12)
+                .scrollContentBackground(.hidden)
+        } else {
+            // Markdown 渲染预览模式（升级为 MarkdownUI 经典 GFM GitHub 主题渲染）
+            ScrollView {
+                Markdown(editedRefinedText)
+                    .markdownTheme(.gitHub)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(16)
-        .frame(width: 300)
+    }
+
+    // C. 实时字幕渲染区
+    @ViewBuilder
+    private var srtContentEditor: some View {
+        if service.currentTranscript.isEmpty {
+            waitingPlaceholderView
+        } else {
+            // 只读字幕编辑器，方便划选及复制
+            TextEditor(text: .constant(currentSRTContent))
+                .font(.system(size: 13, design: .monospaced))
+                .lineSpacing(6)
+                .padding(12)
+                .scrollContentBackground(.hidden)
+        }
+    }
+    
+    
+    private var currentWordCount: Int {
+        switch selectedContentTab {
+        case .raw: return service.currentTranscript.count
+        case .refined: return editedRefinedText.count
+        case .srt: return currentSRTContent.count
+        }
+    }
+
+    private var isContentModified: Bool {
+        switch selectedContentTab {
+        case .raw:
+            let originalText = service.selectedHistoryRecord?.transcriptText ?? service.currentTranscript
+            return !editedRawText.isEmpty && editedRawText != originalText
+        case .refined:
+            let originalText = service.selectedHistoryRecord?.refinedText ?? ""
+            return !editedRefinedText.isEmpty && editedRefinedText != originalText
+        case .srt:
+            return false
+        }
+    }
+
+    private var saveButton: some View {
+        Button {
+            triggerSaveAction()
+        } label: {
+            HStack(spacing: 4) {
+                if isSaving {
+                    ProgressView()
+                        .scaleEffect(0.4)
+                        .frame(width: 12, height: 12)
+                } else {
+                    Image(systemName: didSaved ? "checkmark" : "checkmark.circle.fill")
+                        .foregroundStyle(didSaved ? .green : .white)
+                        .font(.system(size: 10, weight: .bold))
+                }
+                Text(didSaved ? "已保存" : "保存")
+                    .foregroundStyle(didSaved ? .green : .white)
+            }
+            .font(.system(size: 11, weight: .bold))
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(didSaved ? Color.green.opacity(0.12) : Color.blue.opacity(0.85))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(didSaved ? Color.green.opacity(0.3) : Color.blue.opacity(0.9), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isSaving)
+    }
+
+    private func triggerSaveAction() {
+        guard !isSaving else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isSaving = true
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            if selectedContentTab == .raw {
+                if service.selectedRecordID != nil {
+                    service.updateSelectedRecordTranscript(editedRawText)
+                } else {
+                    service.currentTranscript = editedRawText
+                }
+            } else if selectedContentTab == .refined {
+                service.updateSelectedRecordRefinedText(editedRefinedText)
+            }
+            
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                isSaving = false
+                didSaved = true
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    didSaved = false
+                }
+            }
+        }
+    }
+
+    // 智能字幕的物理文件路径读取
+    private var currentSRTContent: String {
+        guard let record = service.selectedHistoryRecord else {
+            return SpeechHistoryStore.generateSRT(from: service.currentTranscript, duration: 0)
+        }
+        let baseDir = SpeechHistoryStore.defaultFileURL().deletingLastPathComponent().appendingPathComponent("speech_transcription").appendingPathComponent("records")
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let dateString = formatter.string(from: record.createdAt)
+        let srtURL = baseDir.appendingPathComponent("\(dateString)_\(record.id.uuidString).srt")
+        if let srt = try? String(contentsOf: srtURL, encoding: .utf8) {
+            return srt
+        }
+        return SpeechHistoryStore.generateSRT(from: record.transcriptText, duration: record.durationSeconds ?? 0)
+    }
+    
+    private var waitingPlaceholderView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.system(size: 24))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [Color.blue.opacity(0.4), Color.purple.opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            
+            Text(L10n.k("speech.ui.waiting_placeholder", fallback: "等待开启智能识别任务，提取的离线文本会即时在此处流式展现，并支持高自由度二次编辑。"))
+                .font(.system(size: 12))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(false)
+    }
+    
+    private var wordCountBadge: some View {
+        Group {
+            let currentWordCount: Int = {
+                switch selectedContentTab {
+                case .raw: return service.currentTranscript.count
+                case .refined: return editedRefinedText.count
+                case .srt: return currentSRTContent.count
+                }
+            }()
+            if currentWordCount > 0 {
+                Text("\(currentWordCount) 字")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.primary.opacity(0.05))
+                    .cornerRadius(4)
+            }
+        }
+    }
+
+    private var refineButton: some View {
+        Button {
+            showRefineSheet = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(.purple)
+                Text(service.selectedHistoryRecord?.refinedText != nil ? "重新润色" : "AI 润色")
+            }
+            .font(.system(size: 11, weight: .bold))
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.purple.opacity(0.12), Color.blue.opacity(0.08)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.purple.opacity(0.3), Color.blue.opacity(0.2)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        lineWidth: 0.5
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(service.currentTranscript.isEmpty)
+    }
+
+    private var refineIconButton: some View {
+        Button {
+            showRefineSheet = true
+        } label: {
+            Image(systemName: "sparkles")
+                .foregroundStyle(.purple)
+                .font(.system(size: 11, weight: .bold))
+                .frame(width: 24, height: 24)
+                .background(Color.purple.opacity(0.08))
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.purple.opacity(0.2), lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(service.currentTranscript.isEmpty)
+        .help(service.selectedHistoryRecord?.refinedText != nil ? "重新润色" : "AI 智能润色")
+    }
+
+    private var copyButton: some View {
+        Button {
+            let textToCopy: String
+            switch selectedContentTab {
+            case .raw: textToCopy = service.currentTranscript
+            case .refined: textToCopy = editedRefinedText
+            case .srt: textToCopy = currentSRTContent
+            }
+            service.copyTranscript(textToCopy)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { didCopied = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation { didCopied = false }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: didCopied ? "checkmark" : "doc.on.doc")
+                    .foregroundStyle(didCopied ? .green : .primary)
+                Text(didCopied ? "已复制" : "复制")
+                    .foregroundStyle(didCopied ? .green : .primary)
+            }
+            .font(.system(size: 11, weight: .medium))
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(didCopied ? Color.green.opacity(0.08) : Color.primary.opacity(0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(didCopied ? Color.green.opacity(0.2) : Color.primary.opacity(0.04), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(currentWordCount == 0)
+    }
+
+    private var copyIconButton: some View {
+        Button {
+            let textToCopy: String
+            switch selectedContentTab {
+            case .raw: textToCopy = service.currentTranscript
+            case .refined: textToCopy = editedRefinedText
+            case .srt: textToCopy = currentSRTContent
+            }
+            service.copyTranscript(textToCopy)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { didCopied = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation { didCopied = false }
+            }
+        } label: {
+            Image(systemName: didCopied ? "checkmark" : "doc.on.doc")
+                .foregroundStyle(didCopied ? .green : .primary)
+                .font(.system(size: 10))
+                .frame(width: 24, height: 24)
+                .background(didCopied ? Color.green.opacity(0.08) : Color.primary.opacity(0.03))
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(didCopied ? Color.green.opacity(0.2) : Color.primary.opacity(0.04), lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(currentWordCount == 0)
+        .help(didCopied ? "已复制" : "复制当前内容")
+    }
+    
+    // V1 历史记录区域
+    private var v1HistoryCard: some View {
+        SpeechHistoryCard(selectedContentTab: $selectedContentTab)
+    }
+
+    // V1 引擎设置 Sheet 内容
+    private var v1SettingsSheetContent: some View {
+        ASRSettingsSheet(
+            hfEndpointPreference: $hfEndpointPreference,
+            customHFEndpoint: $customHFEndpoint,
+            hfTokenPreference: $hfTokenPreference,
+            service: service,
+            isPresented: $showSettingsPopover
+        )
     }
 
     // MARK: - =========================================================================
@@ -996,53 +1305,7 @@ struct SpeechTranscriptionView: View {
         return String(format: "%.1f MB", size / 1_048_576)
     }
 
-    private func historySubtitle(for record: SpeechHistoryRecord) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        
-        let dateStr = formatter.string(from: record.createdAt)
-        let elapsedStr = String(format: "%.1fs", record.elapsedSeconds)
-        
-        // 音频文件大小智能格式化
-        let bytes = record.sourceFileSizeBytes
-        let sizeStr: String
-        if bytes >= 1_048_576 {
-            sizeStr = String(format: "%.1f MB", Double(bytes) / 1_048_576)
-        } else if bytes >= 1024 {
-            sizeStr = String(format: "%.0f KB", Double(bytes) / 1024)
-        } else {
-            sizeStr = "\(bytes) B"
-        }
-        
-        // 音频物理时长格式化
-        var durationStr = ""
-        if let duration = record.durationSeconds, duration > 0 {
-            let totalSeconds = Int(duration.rounded())
-            let minutes = totalSeconds / 60
-            let seconds = totalSeconds % 60
-            if minutes > 0 {
-                durationStr = "\(minutes)分\(seconds)秒"
-            } else {
-                durationStr = "\(totalSeconds)秒"
-            }
-        }
-        
-        var parts: [String] = [dateStr]
-        if !durationStr.isEmpty {
-            parts.append(durationStr)
-        }
-        parts.append(sizeStr)
-        parts.append("耗时 \(elapsedStr)")
-        
-        return parts.joined(separator: " · ")
-    }
 
-    private func revealRecordSource(_ record: SpeechHistoryRecord) {
-        let url = URL(fileURLWithPath: record.sourceFilePath)
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
-    }
 
     private func refreshService() async {
         let llmStatus = await helperClient.getLocalLLMStatus()
@@ -1139,3 +1402,827 @@ struct ShimmeringProgressBar: View {
         }
     }
 }
+
+// MARK: - AI 智能精整与专名润色面板
+struct AISpeechRefineSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(GlobalModelStore.self) private var modelStore
+    @Environment(HelperClient.self) private var helperClient
+    
+    @State private var service = SpeechTranscriptionService.shared
+    
+    struct SelectedModelConfig: Hashable, Equatable {
+        let provider: ProviderTemplate
+        let modelId: String
+        
+        var displayName: String {
+            "\(provider.providerDisplayName)-\(provider.name) (\(modelId.components(separatedBy: "/").last ?? modelId))"
+        }
+        
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(provider.id)
+            hasher.combine(modelId)
+        }
+        
+        static func == (lhs: SelectedModelConfig, rhs: SelectedModelConfig) -> Bool {
+            return lhs.provider.id == rhs.provider.id && lhs.modelId == rhs.modelId
+        }
+    }
+    
+    @State private var selectedModel: SelectedModelConfig?
+    @State private var glossary = ""
+    @State private var refineMode = "原稿智能净化"
+    
+    @State private var isRefining = false
+    @State private var refinedText = ""
+    @State private var refineDuration: Double = 0
+    @State private var errorMessage: String? = nil
+    @State private var showCompareView = false
+    
+    @State private var copiedSuccess = false
+    
+    // 用于控制流式生成和打断生命周期的异步任务变量
+    @State private var refineTask: Task<Void, Never>? = nil
+    
+    // 平铺可用模型，完全遵循全局配置的排序顺序
+    private var availableModels: [SelectedModelConfig] {
+        modelStore.sortedActiveModels.map { item in
+            SelectedModelConfig(provider: item.provider, modelId: item.modelId)
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // 头部标题栏
+            HStack {
+                Label(showCompareView ? "AI 智能润色结果对比" : "AI 智能精整与专名润色", systemImage: "sparkles")
+                    .font(.headline)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.purple, .blue],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                
+                Spacer()
+                
+                // 只有在非流式精整阶段才允许通过 Esc 或点击叉号关闭，防止中途退出
+                if !isRefining {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.secondary.opacity(0.6))
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.escape)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            
+            Divider()
+            
+            if showCompareView {
+                // A. 双栏流式对比视图 (直接平滑呈现，带打字机输出)
+                VStack(spacing: 0) {
+                    if let error = errorMessage {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                            Text(error)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.red)
+                            Spacer()
+                        }
+                        .padding(8)
+                        .background(Color.red.opacity(0.06))
+                        .cornerRadius(6)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                    }
+                    
+                    HStack(spacing: 16) {
+                        // 左栏：原文粗稿
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "waveform")
+                                    .foregroundStyle(.secondary)
+                                Text("转写粗稿原文")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                            }
+                            .padding(.leading, 12)
+                            
+                            TextEditor(text: .constant(service.currentTranscript))
+                                .font(.system(size: 12, design: .monospaced))
+                                .lineSpacing(4)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .scrollContentBackground(.hidden)
+                                .background(Color.primary.opacity(0.02))
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.primary.opacity(0.04), lineWidth: 1)
+                                )
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        
+                        // 右栏：精装流式润色稿
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "sparkles")
+                                    .foregroundStyle(.purple)
+                                Text("AI 智能精装版")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(.purple)
+                                Spacer()
+                                
+                                if isRefining {
+                                    HStack(spacing: 6) {
+                                        ProgressView()
+                                            .scaleEffect(0.45)
+                                        Text("正在流式生成中...")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.purple)
+                                    }
+                                } else if !refinedText.isEmpty {
+                                    Group {
+                                        if refineDuration > 0 {
+                                            Text("\(refinedText.count) 字 · ⚡️ \(String(format: "%.1f", refineDuration))s")
+                                        } else {
+                                            Text("\(refinedText.count) 字")
+                                        }
+                                    }
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Color.primary.opacity(0.04))
+                                    .cornerRadius(4)
+                                }
+                            }
+                            .padding(.leading, 12)
+                            
+                            TextEditor(text: $refinedText)
+                                .font(.system(size: 12, design: .monospaced))
+                                .lineSpacing(4)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .scrollContentBackground(.hidden)
+                                .background(Color(NSColor.textBackgroundColor).opacity(0.4))
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(isRefining ? Color.purple.opacity(0.45) : Color.purple.opacity(0.18), lineWidth: 1)
+                                        .animation(.easeInOut(duration: 0.5), value: isRefining)
+                                )
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .padding(20)
+                    
+                    Divider()
+                    
+                    // 底部控制
+                    HStack(spacing: 12) {
+                        Button {
+                            refineTask?.cancel()
+                            showCompareView = false
+                            errorMessage = nil
+                        } label: {
+                            HStack {
+                                Image(systemName: "arrow.left")
+                                Text("返回配置")
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                        .disabled(isRefining) // 生成中禁用返回
+                        
+                        Spacer()
+                        
+                        Button {
+                            service.copyTranscript(refinedText)
+                            withAnimation { copiedSuccess = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                withAnimation { copiedSuccess = false }
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: copiedSuccess ? "checkmark" : "doc.on.doc")
+                                Text(copiedSuccess ? "已复制" : "仅复制精装版")
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                        .disabled(refinedText.isEmpty || isRefining)
+                        
+                        if isRefining {
+                            // 正在流式生成时，提供红色的强力“停止生成”按钮
+                            Button {
+                                refineTask?.cancel()
+                                isRefining = false
+                            } label: {
+                                HStack {
+                                    Image(systemName: "stop.circle.fill")
+                                    Text("🛑 停止生成")
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.regular)
+                            .tint(.red)
+                        } else {
+                            // 生成完毕或已打断时，恢复显示“保存并应用”按钮
+                            Button {
+                                if service.selectedRecordID != nil {
+                                    service.updateSelectedRecordRefinedText(refinedText)
+                                } else {
+                                    service.currentTranscript = refinedText
+                                }
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                    Text(service.selectedRecordID != nil ? "保存并应用到精装版" : "覆盖并应用到主文本框")
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.regular)
+                            .tint(.purple)
+                            .disabled(refinedText.isEmpty)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Color(NSColor.windowBackgroundColor).opacity(0.4))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                
+            } else {
+                // B. 精整配置表单
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        if let error = errorMessage {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.red)
+                                Text(error)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.red)
+                                Spacer()
+                            }
+                            .padding(8)
+                            .background(Color.red.opacity(0.06))
+                            .cornerRadius(6)
+                        }
+                        
+                        // 1. 润色模式
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("润色重塑模式")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.secondary)
+                            
+                            Picker("", selection: $refineMode) {
+                                Text("✨ 智能净化").tag("原稿智能净化")
+                                Text("📓 灵感随记").tag("灵感随记整理")
+                                Text("📋 会议纪要").tag("提炼会议纪要")
+                                Text("✍️ 专业重塑").tag("专业文稿重塑")
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                        }
+                        
+                        // 2. 选择 AI 智能引擎
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("选择 AI 精整引擎")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.secondary)
+                            
+                            if availableModels.isEmpty {
+                                HStack {
+                                    Text("⚠️ 还没有在「全局模型池」中配置模型，请先去配置账户。")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.orange)
+                                }
+                                .padding(8)
+                                .background(Color.orange.opacity(0.05))
+                                .cornerRadius(6)
+                            } else {
+                                Picker("", selection: $selectedModel) {
+                                    ForEach(availableModels, id: \.self) { model in
+                                        Text(model.displayName).tag(Optional(model))
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .labelsHidden()
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+                        
+                        // 3. 上下文正确专名词表
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("本段音频的背景与正确热词")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.tertiary)
+                                    .help("输入此录音里提到的正确人名、产品名或背景，AI 会根据它们来智能纠正所有同音错别字。")
+                                Spacer()
+                            }
+                            
+                            TextField("例如：ClawdHome, OpenClaw, 隔离沙箱", text: $glossary)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 12))
+                        }
+                        
+                        Spacer()
+                            .frame(height: 10)
+                        
+                        // 开始按钮
+                        Button {
+                            startRefinement()
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Image(systemName: "sparkles")
+                                Text("开始智能精整与专名润色")
+                                    .fontWeight(.bold)
+                                Spacer()
+                            }
+                            .foregroundColor(.white)
+                            .frame(height: 36)
+                            .background(
+                                LinearGradient(
+                                    colors: availableModels.isEmpty ? [.gray] : [.purple, .blue],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .cornerRadius(8)
+                            .shadow(color: Color.purple.opacity(availableModels.isEmpty ? 0 : 0.15), radius: 6, x: 0, y: 3)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(availableModels.isEmpty)
+                    }
+                    .padding(20)
+                }
+                .onAppear {
+                    // 默认优先加载全局配置的系统默认模型，否则 fallback 加载第一个模型
+                    if selectedModel == nil {
+                        if let defaultKey = modelStore.defaultModelKey,
+                           let matched = findDefaultModel(defaultKey: defaultKey) {
+                            selectedModel = matched
+                        } else if let first = availableModels.first {
+                            selectedModel = first
+                        }
+                    }
+                    
+                    // 2. 加载个性化与全局的 Glossary 记忆
+                    if let recordID = service.selectedRecordID {
+                        let savedGlossary = UserDefaults.standard.string(forKey: "speech_refine_glossary_\(recordID.uuidString)")
+                            ?? UserDefaults.standard.string(forKey: "speech_refine_glossary_global")
+                            ?? ""
+                        self.glossary = savedGlossary
+                        
+                        // 3. 加载个性化与全局的 Mode 记忆，若不存在则使用已有文本特征启发式猜测
+                        let savedMode = UserDefaults.standard.string(forKey: "speech_refine_mode_\(recordID.uuidString)")
+                            ?? UserDefaults.standard.string(forKey: "speech_refine_mode_global")
+                        
+                        if let savedMode, ["原稿智能净化", "灵感随记整理", "提炼会议纪要", "专业文稿重塑"].contains(savedMode) {
+                            self.refineMode = savedMode
+                        } else if let refined = service.selectedHistoryRecord?.refinedText {
+                            // 通过特征词进行启发式推导
+                            if refined.contains("# 📓 灵感随记") || refined.contains("📌 快速摘要") {
+                                self.refineMode = "灵感随记整理"
+                            } else if refined.contains("### 核心结论") || refined.contains("会议纪要") {
+                                self.refineMode = "提炼会议纪要"
+                            } else if refined.contains("### 📝 精整正文") {
+                                self.refineMode = "灵感随记整理"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(width: showCompareView ? 820 : 460, height: showCompareView ? 580 : 380)
+        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: showCompareView)
+    }
+    
+    private func findDefaultModel(defaultKey: String) -> SelectedModelConfig? {
+        availableModels.first { model in
+            let key = "\(model.modelId)_\(model.provider.id.uuidString)"
+            return key == defaultKey
+        }
+    }
+    
+    // 执行流式 AI 专名精整与即时吐字渲染
+    private func startRefinement() {
+        guard let config = selectedModel else {
+            errorMessage = "请先选择一个可用的 AI 引擎。"
+            return
+        }
+        
+        // 写入配置与词汇表持久化记忆
+        if let recordID = service.selectedRecordID {
+            UserDefaults.standard.set(glossary, forKey: "speech_refine_glossary_\(recordID.uuidString)")
+            UserDefaults.standard.set(refineMode, forKey: "speech_refine_mode_\(recordID.uuidString)")
+        }
+        UserDefaults.standard.set(glossary, forKey: "speech_refine_glossary_global")
+        UserDefaults.standard.set(refineMode, forKey: "speech_refine_mode_global")
+        
+        isRefining = true
+        refineDuration = 0
+        errorMessage = nil
+        refinedText = ""
+        showCompareView = true // 直接、优雅地平滑展开为双栏预览状态！
+        
+        refineTask = Task {
+            let startTime = Date()
+            do {
+                let stream = service.refineTranscriptStream(
+                    text: service.currentTranscript,
+                    provider: config.provider,
+                    modelId: config.modelId,
+                    glossary: glossary,
+                    mode: refineMode
+                )
+                
+                for try await chunk in stream {
+                    // 随时检测任务取消，支持秒级强力打断
+                    try Task.checkCancellation()
+                    
+                    await MainActor.run {
+                        self.refinedText += chunk
+                    }
+                }
+                
+                await MainActor.run {
+                    self.refineDuration = Date().timeIntervalSince(startTime)
+                    self.isRefining = false
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    self.isRefining = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                    self.isRefining = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 历史记录单行卡片组件
+struct SpeechHistoryRecordRow: View {
+    let record: SpeechHistoryRecord
+    let isSelected: Bool
+    @Binding var selectedContentTab: SpeechTranscriptionView.ContentDimension
+    let subtitle: String
+    let onReveal: () -> Void
+    
+    @State private var isHovered = false
+    fileprivate var service = SpeechTranscriptionService.shared
+    
+    private var cardBackground: Color {
+        if isSelected {
+            return Color(NSColor.controlBackgroundColor).opacity(0.8)
+        } else if isHovered {
+            return Color.primary.opacity(0.04)
+        } else {
+            return Color(NSColor.controlBackgroundColor).opacity(0.2)
+        }
+    }
+    
+    private var cardStrokeColor: Color {
+        if isSelected {
+            return Color.blue.opacity(0.2)
+        } else if isHovered {
+            return Color.blue.opacity(0.1)
+        } else {
+            return Color.primary.opacity(0.04)
+        }
+    }
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(record.sourceFileName)
+                        .font(.system(size: 11, weight: .semibold))
+                        .lineLimit(1)
+                        .foregroundColor(isSelected ? .blue : .primary)
+                    
+                    if record.vocalEnhanceEnabled == true {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.purple)
+                            .help("已启用智能人声增强与去噪")
+                    }
+                }
+                
+                Text(subtitle)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+            
+            Button {
+                onReveal()
+            } label: {
+                Image(systemName: "folder")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("在 Finder 中显示原始文件")
+            
+            Button {
+                service.deleteHistoryRecord(id: record.id)
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red.opacity(0.7))
+            }
+            .buttonStyle(.plain)
+            .help("删除该历史记录")
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(cardBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(cardStrokeColor, lineWidth: 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .onHover { hover in
+            isHovered = hover
+        }
+        .onTapGesture {
+            withAnimation {
+                service.selectedRecordID = record.id
+                if record.refinedText == nil && selectedContentTab == .refined {
+                    selectedContentTab = .raw
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 历史记录卡片及列表主组件
+struct SpeechHistoryCard: View {
+    @State private var service = SpeechTranscriptionService.shared
+    @Binding var selectedContentTab: SpeechTranscriptionView.ContentDimension
+    
+    private var headerSection: some View {
+        HStack {
+            Label(L10n.k("speech.history_records", fallback: "历史转写"), systemImage: "clock.arrow.circlepath")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.secondary)
+            Spacer()
+            
+            Button {
+                service.openHistoryDirectory()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 10))
+                    Text(L10n.k("speech.open_directory", fallback: "打开目录"))
+                }
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.primary.opacity(0.04))
+                .cornerRadius(6)
+            }
+            .buttonStyle(.plain)
+            .help("Open ASR history directory in Finder")
+        }
+        .frame(height: 28)
+    }
+    
+    private var emptyStateView: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "tray.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(.secondary.opacity(0.4))
+            Text(L10n.k("speech.history_empty", fallback: "暂无历史记录"))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 32)
+        .frame(maxWidth: .infinity)
+    }
+    
+    private var historyListView: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                if service.history.isEmpty {
+                    emptyStateView
+                } else {
+                    ForEach(service.history) { record in
+                        let isSelected = service.selectedRecordID == record.id
+                        SpeechHistoryRecordRow(
+                            record: record,
+                            isSelected: isSelected,
+                            selectedContentTab: $selectedContentTab,
+                            subtitle: historySubtitle(for: record),
+                            onReveal: { revealRecordSource(record) }
+                        )
+                    }
+                }
+            }
+            .padding(8)
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            headerSection
+            
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.primary.opacity(0.01))
+                
+                historyListView
+            }
+            .frame(minHeight: 120, maxHeight: .infinity)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.primary.opacity(0.05), lineWidth: 1)
+            )
+        }
+        .padding(12)
+        .background(Color.primary.opacity(0.01))
+        .cornerRadius(12)
+    }
+    
+    private func historySubtitle(for record: SpeechHistoryRecord) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        
+        let dateStr = formatter.string(from: record.createdAt)
+        let elapsedStr = String(format: "%.1fs", record.elapsedSeconds)
+        
+        // 音频文件大小智能格式化
+        let bytes = record.sourceFileSizeBytes
+        let sizeStr: String
+        if bytes >= 1_048_576 {
+            sizeStr = String(format: "%.1f MB", Double(bytes) / 1_048_576)
+        } else if bytes >= 1024 {
+            sizeStr = String(format: "%.0f KB", Double(bytes) / 1024)
+        } else {
+            sizeStr = "\(bytes) B"
+        }
+        
+        // 音频物理时长格式化
+        var durationStr = ""
+        if let duration = record.durationSeconds, duration > 0 {
+            let totalSeconds = Int(duration.rounded())
+            let minutes = totalSeconds / 60
+            let seconds = totalSeconds % 60
+            if minutes > 0 {
+                durationStr = "\(minutes)分\(seconds)秒"
+            } else {
+                durationStr = "\(totalSeconds)秒"
+            }
+        }
+        
+        var parts: [String] = [dateStr]
+        if !durationStr.isEmpty {
+            parts.append(durationStr)
+        }
+        parts.append(sizeStr)
+        parts.append("耗时 \(elapsedStr)")
+        
+        return parts.joined(separator: " · ")
+    }
+
+    private func revealRecordSource(_ record: SpeechHistoryRecord) {
+        let url = URL(fileURLWithPath: record.sourceFilePath)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+}
+
+struct ASRSettingsSheet: View {
+    @Binding var hfEndpointPreference: String
+    @Binding var customHFEndpoint: String
+    @Binding var hfTokenPreference: String
+    var service: SpeechTranscriptionService
+    @Binding var isPresented: Bool
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // 顶层标题栏
+            HStack {
+                Label(L10n.k("speech.engine_settings", fallback: "ASR 引擎设置"), systemImage: "waveform.and.mic")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Spacer()
+                Button(L10n.k("auto.model_config_wizard.done", fallback: "完成")) {
+                    isPresented = false
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.escape)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            
+            Divider()
+            
+            // 主体可滚动区域
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L10n.k("settings.speech_transcription.hf_endpoint", fallback: "模型下载源"))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        
+                        Picker("", selection: $hfEndpointPreference) {
+                            Text(L10n.k("settings.speech_transcription.hf_endpoint.default", fallback: "默认 (Hugging Face)")).tag("")
+                            Text(L10n.k("settings.speech_transcription.hf_endpoint.mirror", fallback: "HF 镜像站 (hf-mirror.com)")).tag("https://hf-mirror.com")
+                            Text(L10n.k("settings.speech_transcription.hf_endpoint.custom", fallback: "自定义…")).tag("custom")
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity)
+                    }
+                    
+                    if hfEndpointPreference == "custom" {
+                        TextField(L10n.k("settings.speech_transcription.hf_endpoint.custom_url", fallback: "自定义端点 URL"), text: $customHFEndpoint)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("Hugging Face Token")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            
+                            Spacer()
+                            
+                            if let tokenURL = URL(string: "https://huggingface.co/settings/tokens") {
+                                Link(destination: tokenURL) {
+                                    Image(systemName: "questionmark.circle")
+                                        .font(.system(size: 11))
+                                }
+                            }
+                        }
+                        
+                        SecureField(L10n.k("settings.speech_transcription.hf_token.placeholder", fallback: "可选，用于提速或下载受限模型"), text: $hfTokenPreference)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11))
+                    }
+                    
+                    Text(L10n.k("settings.speech_transcription.hf_endpoint.hint", fallback: "提示：若镜像站因元数据校验失败报错，请尝试切回默认源。"))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    
+                    if let recommended = service.recommendation.recommendedModel {
+                        Text(L10n.f("speech.recommended", fallback: "当前设备推荐配置：%@ ASR", curatedSpeechModels.first(where: { $0.id == recommended })?.displayName ?? recommended.rawValue))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.blue)
+                    }
+                    
+                    Divider()
+        
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle(isOn: Bindable(service).vocalEnhanceEnabled) {
+                            HStack(spacing: 4) {
+                                Text("AI 智能人声增强")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.purple)
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                        
+                        Text("利用 macOS 原生的核心音频降噪与动态范围均化，消除低频噪音，极大提升嘈杂音频的识别精度。")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(20)
+            }
+        }
+        .frame(width: 380, height: 360)
+    }
+}
+
