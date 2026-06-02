@@ -1713,10 +1713,9 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
         }
 
         let configuration = WKWebViewConfiguration()
-        // 内嵌控制台使用独立进程池，并保留持久化站点数据。
+        // 内嵌控制台保留持久化站点数据。
         // 原先 nonPersistent 会导致 Control UI 的本地会话/设备凭据在窗口关闭后丢失，
         // 在某些网关鉴权策略下表现为“首次可用，二次打开白屏”。
-        configuration.processPool = WKProcessPool()
         configuration.websiteDataStore = .default()
         configuration.userContentController.add(coordinator, name: "fileInputAccept")
         configuration.userContentController.add(coordinator, name: "promptMemory")
@@ -1833,15 +1832,13 @@ final class EmbeddedGatewayConsoleStore: ObservableObject {
               return "ok";
             })();
             """
-            webView.evaluateJavaScript(script) { [weak self] result, _ in
-                guard let self else { return }
-                guard let state = result as? String, state == "blank" else { return }
-                guard let target = self.loadedURL, let targetURL = URL(string: target) else { return }
-                self.loadState = .failed
-                self.lastRetryAt = .distantPast
-                webView.load(URLRequest(url: targetURL))
-                self.startLoadWatchdog(for: targetURL)
-            }
+            let result = try? await webView.evaluateJavaScript(script)
+            guard let state = result as? String, state == "blank" else { return }
+            guard let target = self.loadedURL, let targetURL = URL(string: target) else { return }
+            self.loadState = .failed
+            self.lastRetryAt = .distantPast
+            webView.load(URLRequest(url: targetURL))
+            self.startLoadWatchdog(for: targetURL)
         }
     }
 

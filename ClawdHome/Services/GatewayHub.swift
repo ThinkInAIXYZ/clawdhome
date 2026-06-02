@@ -198,7 +198,7 @@ final class GatewayHub {
 
     /// 将 dot-path + value 构建为嵌套字典
     /// 例: "channels.feishu.streaming", true → {"channels": {"feishu": {"streaming": true}}}
-    private static func buildNestedDict(path: String, value: Any) -> [String: Any] {
+    nonisolated internal static func buildNestedDict(path: String, value: Any) -> [String: Any] {
         let parts = path.split(separator: ".").map(String.init)
         guard let last = parts.last else { return [:] }
         var current: [String: Any] = [last: value]
@@ -209,7 +209,7 @@ final class GatewayHub {
     }
 
     /// 深度合并两个字典
-    private static func deepMerge(_ base: [String: Any], _ overlay: [String: Any]) -> [String: Any] {
+    nonisolated internal static func deepMerge(_ base: [String: Any], _ overlay: [String: Any]) -> [String: Any] {
         var result = base
         for (key, value) in overlay {
             if let baseDict = result[key] as? [String: Any],
@@ -539,7 +539,7 @@ final class GatewayHub {
     }
 
     /// openclaw gateway 端口分配规则：18000 + UID（与 GatewayManager.port(for:) 一致）
-    static func gatewayPort(for uid: Int) -> Int? {
+    nonisolated static func gatewayPort(for uid: Int) -> Int? {
         let port = 18000 + uid
         guard port > 1024, port < 65536 else { return nil }
         return port
@@ -560,7 +560,7 @@ final class GatewayHub {
 
     /// 解析 getGatewayURL() 返回的 URL，提取 port 和 token
     /// 格式：http://127.0.0.1:<port>/#token=<token>  或  http://127.0.0.1:<port>/
-    static func parse(gatewayURL: String) -> (port: Int, token: String)? {
+    nonisolated static func parse(gatewayURL: String) -> (port: Int, token: String)? {
         guard let url = URL(string: gatewayURL),
               let host = url.host, host == "127.0.0.1",
               let port = url.port

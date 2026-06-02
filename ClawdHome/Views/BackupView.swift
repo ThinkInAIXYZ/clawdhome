@@ -4,6 +4,15 @@
 import AppKit
 import SwiftUI
 
+struct BackupViewSelectionState: Equatable {
+    var backupTargetUsername: String?
+    var filterUsername: String?
+
+    mutating func pickToolbarBackupTarget(_ username: String) {
+        backupTargetUsername = username
+    }
+}
+
 struct BackupView: View {
     let users: [ManagedUser]
 
@@ -25,8 +34,8 @@ struct BackupView: View {
     // 定时备份结果
     @State private var lastBackupResult: BackupResult?
 
-    // Shrimp 筛选
-    @State private var selectedShrimpUser: String?
+    // Shrimp 备份目标与列表筛选分开，避免点击工具栏菜单污染筛选器
+    @State private var selectionState = BackupViewSelectionState()
 
     // 恢复确认
     @State private var restoreTarget: BackupListEntry?
@@ -73,9 +82,22 @@ struct BackupView: View {
                 .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
                 .padding(.top, 8)
                 .transition(.move(edge: .top).combined(with: .opacity))
+            } else if isBackingUp, let text = progressText {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(text)
+                        .font(.callout.weight(.medium))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.ultraThickMaterial, in: Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.spring(duration: 0.35), value: isRestoring)
+        .animation(.spring(duration: 0.35), value: isRestoring || isBackingUp)
         .alert(
             L10n.k("backup.restore.restart.title", fallback: "全局配置已恢复"),
             isPresented: $showRestartAlert
@@ -115,8 +137,12 @@ struct BackupView: View {
 
     @ViewBuilder
     private var scheduleSection: some View {
-        GroupBox(L10n.k("backup.schedule.title", fallback: "定时备份")) {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(L10n.k("backup.schedule.title", fallback: "定时备份"), systemImage: "clock.badge.checkmark")
+                .font(.system(.headline, design: .rounded))
+                .foregroundStyle(.primary)
+            
+            VStack(alignment: .leading, spacing: 12) {
                 // 开关 + 间隔
                 HStack {
                     Toggle(L10n.k("backup.schedule.enabled", fallback: "启用定时备份"), isOn: Binding(
@@ -126,11 +152,13 @@ struct BackupView: View {
                             Task { await saveConfig() }
                         }
                     ))
+                    .toggleStyle(.checkbox)
 
                     Spacer()
 
                     if config.schedule.enabled {
                         Text(L10n.k("backup.schedule.every", fallback: "每"))
+                            .font(.subheadline)
                         Picker("", selection: Binding(
                             get: { config.schedule.intervalHours },
                             set: { newVal in
@@ -144,14 +172,18 @@ struct BackupView: View {
                             Text("48 " + L10n.k("backup.schedule.hours", fallback: "小时")).tag(48)
                             Text("72 " + L10n.k("backup.schedule.hours", fallback: "小时")).tag(72)
                         }
+                        .pickerStyle(.menu)
                         .frame(width: 120)
                     }
                 }
 
+                Divider().opacity(0.5)
+
                 // 保留数
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(L10n.k("backup.retention.label", fallback: "保留最近"))
+                            .font(.subheadline)
                         Picker("", selection: Binding(
                             get: { config.retention.maxCount },
                             set: { newVal in
@@ -165,53 +197,69 @@ struct BackupView: View {
                             Text("14").tag(14)
                             Text("30").tag(30)
                         }
+                        .pickerStyle(.menu)
                         .frame(width: 80)
                         Text(L10n.k("backup.retention.suffix", fallback: "个备份"))
+                            .font(.subheadline)
                     }
                     Text(L10n.k("backup.retention.hint", fallback: "每个 Shrimp 和全局配置各自独立计数"))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
 
+                Divider().opacity(0.5)
+
                 // 备份目录
                 HStack {
+                    Image(systemName: "folder")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                     Text(config.backupDir)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer()
-                    Button(L10n.k("backup.dir.change", fallback: "更改...")) {
-                        chooseBackupDir()
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
-                    .font(.caption)
+                    
+                    HStack(spacing: 8) {
+                        Button(L10n.k("backup.dir.change", fallback: "更改...")) {
+                            chooseBackupDir()
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        .font(.caption)
 
-                    Button(L10n.k("backup.dir.reveal", fallback: "显示")) {
-                        let url = URL(fileURLWithPath: config.backupDir)
-                        if FileManager.default.fileExists(atPath: config.backupDir) {
-                            NSWorkspace.shared.open(url)
-                        } else {
-                            // 目录不存在（还未执行过备份），在 Finder 中显示父目录
-                            let parent = url.deletingLastPathComponent()
-                            if FileManager.default.fileExists(atPath: parent.path) {
-                                NSWorkspace.shared.open(parent)
+                        Button(L10n.k("backup.dir.reveal", fallback: "显示")) {
+                            let url = URL(fileURLWithPath: config.backupDir)
+                            if FileManager.default.fileExists(atPath: config.backupDir) {
+                                NSWorkspace.shared.open(url)
+                            } else {
+                                // 目录不存在（还未执行过备份），在 Finder 中显示父目录
+                                let parent = url.deletingLastPathComponent()
+                                if FileManager.default.fileExists(atPath: parent.path) {
+                                    NSWorkspace.shared.open(parent)
+                                }
                             }
                         }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
                 }
 
                 // 上次备份时间
                 if let lastRun = config.schedule.lastRunAt,
                    let date = Self.iso8601.date(from: lastRun) {
                     let relative = relativeDateFormatter.localizedString(for: date, relativeTo: Date())
-                    Text(L10n.f("backup.schedule.last_run", fallback: "上次备份：%@", relative))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.green)
+                        Text(L10n.f("backup.schedule.last_run", fallback: "上次备份：%@", relative))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 2)
                 }
 
                 // 定时备份失败告警
@@ -225,8 +273,8 @@ struct BackupView: View {
                     .foregroundStyle(.red)
                 }
             }
-            .padding(.top, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .premiumCard(theme: .teal)
         }
     }
 
@@ -238,16 +286,42 @@ struct BackupView: View {
             Button {
                 Task { await performBackupAll() }
             } label: {
-                if isBackingUp {
-                    ProgressView().controlSize(.small)
-                    Text(progressText ?? L10n.k("backup.action.backing_up", fallback: "备份中..."))
-                } else {
-                    Image(systemName: "arrow.clockwise.circle.fill")
-                    Text(L10n.k("backup.action.backup_all", fallback: "一键备份全部"))
-                }
+                Image(systemName: "arrow.clockwise.circle.fill")
+                Text(L10n.k("backup.action.backup_all", fallback: "一键备份全部"))
             }
             .buttonStyle(.borderedProminent)
             .disabled(isBackingUp || isRestoring || !helperClient.isConnected || users.isEmpty)
+
+            Menu {
+                ForEach(users) { user in
+                    Button {
+                        selectionState.pickToolbarBackupTarget(user.username)
+                    } label: {
+                        Label(
+                            "@\(user.username)",
+                            systemImage: selectionState.backupTargetUsername == user.username
+                                ? "checkmark.circle.fill"
+                                : (user.isRunning ? "play.circle.fill" : "circle")
+                        )
+                    }
+                }
+            } label: {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                Text(selectionState.backupTargetUsername.map { "@\($0)" } ?? L10n.k("backup.action.select_instance", fallback: "选择实例"))
+            }
+            .buttonStyle(.bordered)
+            .disabled(isBackingUp || isRestoring || !helperClient.isConnected || users.isEmpty)
+
+            Button {
+                if let username = selectionState.backupTargetUsername {
+                    Task { await performBackupShrimp(username) }
+                }
+            } label: {
+                Image(systemName: "arrow.clockwise.circle")
+                Text(L10n.k("backup.action.backup_selected", fallback: "备份选中实例"))
+            }
+            .buttonStyle(.bordered)
+            .disabled(isBackingUp || isRestoring || !helperClient.isConnected || selectionState.backupTargetUsername == nil)
 
             Button {
                 importBackupFile()
@@ -267,6 +341,7 @@ struct BackupView: View {
                     .lineLimit(2)
             }
         }
+        .padding(.vertical, 4)
     }
 
     // MARK: - 全局配置备份
@@ -275,29 +350,44 @@ struct BackupView: View {
     private var globalBackupsSection: some View {
         let globalEntries = allBackups.filter { $0.backupType == "global" }
 
-        GroupBox(L10n.f("backup.global.title", fallback: "全局配置备份（%@）", String(globalEntries.count))) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label(L10n.f("backup.global.title", fallback: "全局配置备份（%@）", String(globalEntries.count)), systemImage: "globe")
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                Button {
+                    Task { await performBackupGlobal() }
+                } label: {
+                    Image(systemName: "arrow.clockwise.circle")
+                    Text(L10n.k("backup.action.backup_global", fallback: "备份全局配置"))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isBackingUp || isRestoring || !helperClient.isConnected)
+            }
+
             VStack(alignment: .leading, spacing: 0) {
                 if globalEntries.isEmpty {
-                    Text(L10n.k("backup.no_backups", fallback: "暂无备份"))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 12)
+                    BackupEmptyPlaceholder(title: L10n.k("backup.no_backups", fallback: "暂无备份"))
                 } else {
                     ForEach(Array(globalEntries.enumerated()), id: \.element.id) { idx, entry in
                         backupRow(entry)
-                        if idx < globalEntries.count - 1 { Divider() }
+                        if idx < globalEntries.count - 1 { Divider().padding(.vertical, 4) }
                     }
                 }
             }
-            .padding(.top, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .premiumCard(theme: .slate)
         }
     }
 
     // MARK: - Shrimp 备份
 
     private var filteredShrimpEntries: [BackupListEntry] {
-        if let selected = selectedShrimpUser {
+        if let selected = selectionState.filterUsername {
             return allBackups.filter { $0.backupType == "shrimp" && $0.username == selected }
         }
         return allBackups.filter { $0.backupType == "shrimp" }
@@ -307,36 +397,48 @@ struct BackupView: View {
     private var shrimpBackupsSection: some View {
         let shrimpEntries = filteredShrimpEntries
 
-        GroupBox {
-            VStack(alignment: .leading, spacing: 0) {
-                if shrimpEntries.isEmpty {
-                    Text(L10n.k("backup.no_backups", fallback: "暂无备份"))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 12)
-                } else {
-                    ForEach(Array(shrimpEntries.enumerated()), id: \.element.id) { idx, entry in
-                        backupRow(entry)
-                        if idx < shrimpEntries.count - 1 { Divider() }
-                    }
-                }
-            }
-            .padding(.top, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } label: {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(L10n.f("backup.shrimp.title", fallback: "Shrimp 备份（%@）", String(shrimpEntries.count)))
+                Label(L10n.f("backup.shrimp.title", fallback: "Shrimp 备份（%@）", String(shrimpEntries.count)), systemImage: "person.crop.circle")
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundStyle(.primary)
 
                 Spacer()
 
-                Picker(L10n.k("backup.shrimp.filter", fallback: "筛选"), selection: $selectedShrimpUser) {
+                Picker(L10n.k("backup.shrimp.filter", fallback: "筛选"), selection: $selectionState.filterUsername) {
                     Text(L10n.k("backup.shrimp.all", fallback: "全部")).tag(nil as String?)
                     ForEach(users) { user in
                         Text("@\(user.username)").tag(user.username as String?)
                     }
                 }
+                .pickerStyle(.menu)
                 .frame(width: 140)
+
+                if let selected = selectionState.filterUsername {
+                    Button {
+                        Task { await performBackupShrimp(selected) }
+                    } label: {
+                        Image(systemName: "arrow.clockwise.circle")
+                        Text(L10n.k("backup.action.backup_selected", fallback: "备份此 Shrimp"))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(isBackingUp || isRestoring || !helperClient.isConnected)
+                }
             }
+
+            VStack(alignment: .leading, spacing: 0) {
+                if shrimpEntries.isEmpty {
+                    BackupEmptyPlaceholder(title: L10n.k("backup.no_backups", fallback: "暂无备份"))
+                } else {
+                    ForEach(Array(shrimpEntries.enumerated()), id: \.element.id) { idx, entry in
+                        backupRow(entry)
+                        if idx < shrimpEntries.count - 1 { Divider().padding(.vertical, 4) }
+                    }
+                }
+            }
+            .padding(14)
+            .premiumCard(theme: .slate)
         }
     }
 
@@ -344,28 +446,41 @@ struct BackupView: View {
 
     @ViewBuilder
     private func backupRow(_ entry: BackupListEntry) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            Image(systemName: entry.backupType == "global" ? "globe" : "person.crop.circle")
-                .foregroundStyle(entry.backupType == "global" ? .blue : .orange)
-                .frame(width: 20)
+        HStack(alignment: .center, spacing: 10) {
+            // 圆角发光图标徽章
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(entry.backupType == "global" ? Color.blue.opacity(0.12) : Color.orange.opacity(0.12))
+                    .frame(width: 32, height: 32)
+                
+                Image(systemName: entry.backupType == "global" ? "globe" : "person.crop.circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(entry.backupType == "global" ? Color.blue : Color.orange)
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(entry.backupType == "global" ? Color.blue.opacity(0.24) : Color.orange.opacity(0.24), lineWidth: 0.7)
+            )
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(entry.filename)
                         .font(.system(.caption, design: .monospaced))
+                        .fontWeight(.medium)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if let username = entry.username {
                         Text("@\(username)")
-                            .font(.caption2)
+                            .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 5)
+                            .padding(.horizontal, 6)
                             .padding(.vertical, 1)
-                            .background(Color.orange.opacity(0.8), in: Capsule())
+                            .background(Color.orange.opacity(0.85), in: Capsule())
                     }
                 }
                 HStack(spacing: 6) {
                     Text(formattedSize(entry.fileSize))
+                        .font(.system(size: 10, design: .monospaced))
                     if let date = Self.iso8601.date(from: entry.createdAt) {
                         Text("·")
                         Text(relativeDateFormatter.localizedString(for: date, relativeTo: Date()))
@@ -377,26 +492,28 @@ struct BackupView: View {
 
             Spacer()
 
-            Button(L10n.k("backup.action.restore", fallback: "恢复")) {
-                backupBeforeRestore = true
-                restoreTarget = entry
+            HStack(spacing: 12) {
+                Button(L10n.k("backup.action.restore", fallback: "恢复")) {
+                    backupBeforeRestore = true
+                    restoreTarget = entry
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .font(.system(size: 11, weight: .semibold))
+                .disabled(isBackingUp || isRestoring)
+                
+                Button(role: .destructive) {
+                    deleteTarget = entry
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .disabled(isBackingUp || isRestoring)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
-            .font(.caption)
-            .disabled(isBackingUp || isRestoring)
-
-            Button(role: .destructive) {
-                deleteTarget = entry
-            } label: {
-                Image(systemName: "trash")
-                    .foregroundStyle(.red)
-            }
-            .buttonStyle(.plain)
-            .font(.caption)
-            .disabled(isBackingUp || isRestoring)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
     }
 
     // MARK: - 恢复确认 Sheet
@@ -466,9 +583,6 @@ struct BackupView: View {
             configLoaded = true
             allBackups = try await helperClient.listBackups(destinationDir: config.backupDir)
             lastBackupResult = try await helperClient.getLastBackupResult()
-            if selectedShrimpUser == nil, let first = users.first {
-                selectedShrimpUser = first.username
-            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -488,6 +602,34 @@ struct BackupView: View {
         errorMessage = nil
         do {
             try await helperClient.backupAllV2(destinationDir: config.backupDir)
+            allBackups = try await helperClient.listBackups(destinationDir: config.backupDir)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isBackingUp = false
+        progressText = nil
+    }
+
+    private func performBackupShrimp(_ username: String) async {
+        isBackingUp = true
+        progressText = L10n.f("backup.action.backing_up_shrimp", fallback: "正在备份 @%@...", username)
+        errorMessage = nil
+        do {
+            try await helperClient.backupShrimp(username: username, destinationDir: config.backupDir)
+            allBackups = try await helperClient.listBackups(destinationDir: config.backupDir)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isBackingUp = false
+        progressText = nil
+    }
+
+    private func performBackupGlobal() async {
+        isBackingUp = true
+        progressText = L10n.k("backup.action.backing_up_global", fallback: "正在备份全局配置...")
+        errorMessage = nil
+        do {
+            try await helperClient.backupGlobal(destinationDir: config.backupDir)
             allBackups = try await helperClient.listBackups(destinationDir: config.backupDir)
         } catch {
             errorMessage = error.localizedDescription
@@ -567,14 +709,9 @@ struct BackupView: View {
             backupBeforeRestore = true
             restoreTarget = entry
         } else if filename.hasPrefix("shrimp-") {
-            // 提取用户名：文件名格式 shrimp-<username>-<timestamp>.tar.gz
-            // timestamp 格式: yyyy-MM-ddTHHmmss，从末尾匹配
-            let basename = filename.replacingOccurrences(of: ".tar.gz", with: "")
-            let username: String
-            if let range = basename.range(of: #"-\d{4}-\d{2}-\d{2}T\d{6}$"#, options: .regularExpression) {
-                username = String(basename[basename.index(basename.startIndex, offsetBy: 7)..<range.lowerBound])
-            } else {
-                username = String(basename.dropFirst(7).split(separator: "-").first ?? "")
+            guard let username = BackupFilenamePolicy.username(fromShrimpFilename: filename) else {
+                errorMessage = L10n.k("backup.import.unknown_format", fallback: "无法识别的备份文件格式")
+                return
             }
             let entry = BackupListEntry(
                 filename: filename,
@@ -598,5 +735,32 @@ struct BackupView: View {
         if b < 1024 { return "\(bytes) B" }
         if b < 1_048_576 { return String(format: "%.1f KB", b / 1024) }
         return String(format: "%.1f MB", b / 1_048_576)
+    }
+}
+
+// MARK: - 极奢空态保险箱占位
+
+struct BackupEmptyPlaceholder: View {
+    let title: String
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .stroke(style: StrokeStyle(lineWidth: 1.2, lineCap: .round, dash: [4, 4]))
+                    .foregroundStyle(.secondary.opacity(0.3))
+                    .frame(width: 42, height: 42)
+                
+                Image(systemName: "safe")
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
+            
+            Text(title)
+                .font(.system(.subheadline, design: .rounded))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 76)
+        .padding(.vertical, 8)
     }
 }

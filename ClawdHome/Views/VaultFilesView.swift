@@ -34,9 +34,30 @@ struct VaultFilesView: View {
     // MARK: - 头部
 
     private var header: some View {
-        Text(L10n.k("vault_files.subtitle", fallback: "专属安全空间 — 虾之间数据互不可见，您决定每只虾能接触哪些文件。产出物一键在 Finder 中查阅，文件交换尽在掌握"))
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "folder.badge.person.crop")
+                    .foregroundStyle(DesignSystem.GradientTheme.teal.gradient)
+                    .font(.system(size: 14, weight: .bold))
+                
+                Text(L10n.k("vault_files.subtitle", fallback: "专属安全空间 — 虾之间数据互不可见，您决定每只虾能接触哪些文件。产出物一键在 Finder 中查阅，文件交换尽在掌握"))
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13, weight: .medium))
+            }
+            
+            // 极细的装饰渐变分割线
+            RoundedRectangle(cornerRadius: 1)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.teal.opacity(0.4), Color.blue.opacity(0.1), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 1.5)
+                .frame(maxWidth: 400)
+        }
+        .padding(.horizontal, 4)
     }
 
     // MARK: - 卡片网格
@@ -53,7 +74,8 @@ struct VaultFilesView: View {
                     icon: "🦞",
                     iconColor: .blue,
                     badge: vaultBadge(for: user.username),
-                    isMigrating: migratingUsernames.contains(user.username)
+                    isMigrating: migratingUsernames.contains(user.username),
+                    user: user
                 ) {
                     Task { await openVault(username: user.username) }
                 }
@@ -65,7 +87,8 @@ struct VaultFilesView: View {
                 icon: "🌐",
                 iconColor: .green,
                 badge: publicBadge,
-                isMigrating: false
+                isMigrating: false,
+                user: nil
             ) {
                 Task { await openPublicFolder() }
             }
@@ -186,6 +209,7 @@ private struct VaultCard: View {
     let iconColor: Color
     let badge: String?
     let isMigrating: Bool
+    let user: ManagedUser?
     let onTap: () -> Void
 
     @State private var isHovered = false
@@ -193,23 +217,27 @@ private struct VaultCard: View {
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 8) {
-                ZStack {
-                    Image(systemName: "folder.fill")
-                        .font(.system(size: 40))
-                        .foregroundStyle(iconColor.opacity(0.7))
-                    Text(icon)
-                        .font(.system(size: 18))
-                        .offset(y: -2)
+                if let user = user {
+                    ShrimpAvatarView(claw: user, size: 44)
+                        .frame(height: 50)
+                } else {
+                    ZStack {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 40))
+                            .foregroundStyle(iconColor.opacity(0.7))
+                        Text(icon)
+                            .font(.system(size: 18))
+                            .offset(y: -2)
+                    }
+                    .frame(height: 50)
                 }
-                .frame(height: 50)
 
                 if isMigrating {
                     ProgressView()
                         .controlSize(.small)
                 } else {
-                    // 状态指示点
-                    Circle()
-                        .fill(Color.green.opacity(0.8))
+                    // 状态指示点占位，保证多卡片文字对齐
+                    Color.clear
                         .frame(width: 6, height: 6)
                 }
 

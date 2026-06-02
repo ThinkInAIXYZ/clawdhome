@@ -5,6 +5,10 @@ import Network
 import SwiftUI
 import WebKit
 
+private final class RoleMarketNetworkSnapshot {
+    var isAvailable = false
+}
+
 // MARK: - DNA 数据模型
 
 struct AgentDNA: Codable, Identifiable {
@@ -294,21 +298,21 @@ final class RoleMarketWebViewCache {
         // Check network synchronously via NWPathMonitor snapshot
         let monitor = NWPathMonitor()
         let queue = DispatchQueue(label: "ai.clawdhome.rolemarketpath")
-        var networkAvailable = false
+        let networkSnapshot = RoleMarketNetworkSnapshot()
         let sema = DispatchSemaphore(value: 0)
         monitor.pathUpdateHandler = { path in
-            networkAvailable = path.status == .satisfied
+            networkSnapshot.isAvailable = path.status == .satisfied
             sema.signal()
         }
         monitor.start(queue: queue)
         sema.wait()
         monitor.cancel()
 
-        loadRoleMarket(into: wv, networkAvailable: networkAvailable, coordinator: c)
+        loadRoleMarket(into: wv, networkAvailable: networkSnapshot.isAvailable, coordinator: c)
 
         self.coordinator = c
         self.webView = wv
-        appLog("[RoleMarketWebViewCache] WebView preloaded (network: \(networkAvailable))")
+        appLog("[RoleMarketWebViewCache] WebView preloaded (network: \(networkSnapshot.isAvailable))")
     }
 
     @MainActor

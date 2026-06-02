@@ -27,6 +27,22 @@ func resolveUserInitPresentation(
     return .detailTabs
 }
 
+func shouldAllowUserPoolEntry(
+    versionChecked: Bool,
+    hasInstalledRuntimeHint: Bool,
+    isGatewayOperationalHint: Bool,
+    isAdmin: Bool,
+    isMacOSUser: Bool
+) -> Bool {
+    guard !isAdmin, isMacOSUser else { return true }
+
+    if versionChecked {
+        return true
+    }
+
+    return hasInstalledRuntimeHint || isGatewayOperationalHint
+}
+
 func shouldOpenUserInitWizardFromEntry(
     hasForcedOnboarding: Bool,
     hasUnfinishedWizardState: Bool,

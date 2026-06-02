@@ -18,16 +18,20 @@ SIGN_APP ?= false
 SIGN_PKG ?= false
 NOTARIZE ?= true
 BUILD_ARCHS ?= arm64
+RELEASE_NOTES_AI ?= pi
+PI_PROVIDER ?= ta_omlx
+PI_MODEL ?= Qwopus3.6-35B-A3B-v1-oQ4
 
-.PHONY: help bump-build build build-cli build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-prepare release-build release-publish release-dry-run release-notes-draft notes-rename changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli test-cli-onboard-env test-cli-onboard-help test-cli-onboard test-cli-onboard-step test-cli-onboard-clean
+.PHONY: help bump-build build build-cli build-speech build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-prepare release-build release-publish release-dry-run release-notes-draft notes-rename changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli test-cli-onboard-env test-cli-onboard-help test-cli-onboard test-cli-onboard-step test-cli-onboard-clean
 
-WEBSITE_DIR  ?= ../clawdhome_website
+WEBSITE_DIR  ?= $(HOME)/Documents/GitHub/clawdhome_website
 WEBSITE_REPO ?= deepjerry-ai/clawdhome_website
 
 help:
 	@echo "可用目标："
-	@echo "  build            Debug 构建（构建时自动递增本地 Build 号）"
+	@echo "  build            Debug 构建（构建时自动递增本地 Build 号，并包含 Speech 和 CLI 构建）"
 	@echo "  build-cli        Debug 构建 CLI（仅 CLI，不含 App/Helper）"
+	@echo "  build-speech     构建独立 ClawdHomeSpeech ASR 语音识别程序（输出到 build/Executables）"
 	@echo "  run-cli          构建并运行 CLI（传参: make run-cli ARGS='shrimp list'）"
 	@echo "  test-cli         构建并运行 CLI 集成测试"
 	@echo "  test-cli-onboard-env   初始化本地测试配置文件（若不存在）"
@@ -41,7 +45,7 @@ help:
 	@echo "  version          显示当前语义化版本、当前 Build 号和当前 tag"
 	@echo "  version-next     预览下一个语义化版本号"
 	@echo "  changelog        预览基于 git log 自动生成的发布草稿"
-	@echo "  release-notes-draft  用 claude -p 生成中英文发布说明草稿并打开"
+	@echo "  release-notes-draft  用 pi/Qwopus 生成中英文发布说明草稿并打开"
 	@echo "  install-helper   安装开发 Helper 到系统（dev label，需要 sudo）"
 	@echo "  uninstall-helper 卸载开发 Helper（dev label，需要 sudo）"
 	@echo "  doctor-mode      诊断当前机器处于开发/发布/混合哪种模式"
@@ -54,7 +58,7 @@ help:
 	@echo "  pkg-signed       生成已签名未公证安装包（发布前本地验收推荐）"
 	@echo "  notarize-pkg     生成已签名且已公证安装包（读取 NOTARY_PROFILE / CLAWDHOME_NOTARY_PROFILE）"
 	@echo "  QUIET_XCODE=false 可显示完整 xcodebuild 输出（默认静默并写入 build/logs/）"
-	@echo "  release-notes-draft  生成中英文发布说明草稿（--no-claude 可用于无 claude 环境）"
+	@echo "  release-notes-draft  生成中英文发布说明草稿（RELEASE_NOTES_AI=claude 可切回 claude，--no-claude 可生成骨架）"
 	@echo "  notes-rename     重命名草稿版本号（make notes-rename FROM=1.10.0 TO=2.0.0）"
 	@echo "  release-prepare  Step 1：写 CHANGELOG + commit + tag（不构建）"
 	@echo "  release-build    Step 2：arm64 + x64 构建打包（需先 release-prepare）"
@@ -108,6 +112,9 @@ bump-build:
 	 echo "Build 号由本地计数器自动递增（当前：$${B}，下次构建：$${NEXT}）"
 
 # ── 构建 ──────────────────────────────────────────────────────────────────────
+
+build-speech:
+	@SRCROOT="$(shell pwd)" CONFIGURATION=Release bash scripts/build-speech-tool.sh
 
 build: bump-build
 	@BUILD_NO=$$(BUILD_COUNTER_FILE="$(BUILD_COUNTER_FILE)" INITIAL_BUILD_NUMBER="$(INITIAL_BUILD_NUMBER)" bash "$(BUILD_COUNTER_SCRIPT)" reserve); \
@@ -286,7 +293,7 @@ notarize-pkg: bump-build
 	@open dist/
 
 release-notes-draft:
-	bash scripts/release_notes_draft.sh
+	RELEASE_NOTES_AI="$(RELEASE_NOTES_AI)" PI_PROVIDER="$(PI_PROVIDER)" PI_MODEL="$(PI_MODEL)" bash scripts/release_notes_draft.sh
 
 notes-rename:
 	@[ -n "$(FROM)" ] && [ -n "$(TO)" ] || \

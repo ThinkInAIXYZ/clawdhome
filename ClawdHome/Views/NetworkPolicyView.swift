@@ -42,12 +42,11 @@ struct NetworkPolicyView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filtered.isEmpty {
-                ContentUnavailableView(
-                    connections.isEmpty ? L10n.k("auto.network_policy_view.no", fallback: "暂无活跃连接") : L10n.k("auto.network_policy_view.no_matching_results", fallback: "无匹配结果"),
-                    systemImage: "network",
-                    description: Text(connections.isEmpty
+                NetworkRadarPlaceholder(
+                    title: connections.isEmpty ? L10n.k("auto.network_policy_view.no", fallback: "暂无活跃连接") : L10n.k("auto.network_policy_view.no_matching_results", fallback: "无匹配结果"),
+                    description: connections.isEmpty
                         ? L10n.k("auto.network_policy_view.gateway_has_no_tcp_connections_when_idle_connections", fallback: "Gateway 空闲时无 TCP 连接，发起请求后会出现。")
-                        : L10n.k("auto.network_policy_view.text_757335e7e2", fallback: "尝试清除筛选条件。"))
+                        : L10n.k("auto.network_policy_view.text_757335e7e2", fallback: "尝试清除筛选条件。")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -87,9 +86,12 @@ struct NetworkPolicyView: View {
 
             // 搜索框
             HStack(spacing: 4) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
                 TextField(L10n.k("auto.network_policy_view.searchaddress_process", fallback: "搜索地址/进程"), text: $searchText)
                     .textFieldStyle(.plain)
+                    .font(.system(size: 11))
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
@@ -99,7 +101,14 @@ struct NetworkPolicyView: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.18), lineWidth: 0.8)
+            )
             .frame(maxWidth: 220)
 
             Toggle(isOn: $showLoopback) {
@@ -194,11 +203,125 @@ struct NetworkPolicyView: View {
         case "LISTEN":                                  .blue
         default:                                        .secondary
         }
-        Text(state)
-            .font(.system(size: 9, weight: .medium))
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
-            .foregroundStyle(color)
+        
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 4, height: 4)
+            Text(state)
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .foregroundStyle(color)
+        .background(color.opacity(0.1))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(color.opacity(0.24), lineWidth: 0.7)
+        )
+    }
+}
+
+// MARK: - 高级脉冲扫描雷达网络占位图
+
+struct NetworkRadarPlaceholder: View {
+    let title: String
+    let description: String
+    
+    @State private var rotationAngle: Double = 0
+    @State private var waveScale1: CGFloat = 1.0
+    @State private var waveOpacity1: Double = 0.5
+    @State private var waveScale2: CGFloat = 1.0
+    @State private var waveOpacity2: Double = 0.5
+
+    var body: some View {
+        VStack(spacing: 24) {
+            ZStack {
+                // 1. 同心圆雷达波圈
+                ForEach(1...3, id: \.self) { i in
+                    Circle()
+                        .stroke(Color.blue.opacity(0.06 * Double(4 - i)), lineWidth: 1.0)
+                        .frame(width: CGFloat(i * 64), height: CGFloat(i * 64))
+                }
+                
+                // 2. 极客十字网格线
+                Path { path in
+                    path.move(to: CGPoint(x: 96, y: 0))
+                    path.addLine(to: CGPoint(x: 96, y: 192))
+                    path.move(to: CGPoint(x: 0, y: 96))
+                    path.addLine(to: CGPoint(x: 192, y: 96))
+                }
+                .stroke(style: StrokeStyle(lineWidth: 0.8, lineCap: .round, dash: [4, 4]))
+                .foregroundStyle(Color.blue.opacity(0.12))
+                .frame(width: 192, height: 192)
+                
+                // 3. 延迟循环脉冲发光扩散涟漪
+                Circle()
+                    .stroke(Color.blue.opacity(0.3), lineWidth: 1.5)
+                    .scaleEffect(waveScale1)
+                    .opacity(waveOpacity1)
+                    .frame(width: 48, height: 48)
+                    .onAppear {
+                        withAnimation(.easeOut(duration: 3.2).repeatForever(autoreverses: false)) {
+                            waveScale1 = 3.6
+                            waveOpacity1 = 0.0
+                        }
+                    }
+                
+                Circle()
+                    .stroke(Color.blue.opacity(0.2), lineWidth: 1.0)
+                    .scaleEffect(waveScale2)
+                    .opacity(waveOpacity2)
+                    .frame(width: 48, height: 48)
+                    .onAppear {
+                        withAnimation(.easeOut(duration: 3.2).repeatForever(autoreverses: false).delay(1.6)) {
+                            waveScale2 = 3.6
+                            waveOpacity2 = 0.0
+                        }
+                    }
+
+                // 4. 360度平滑旋转扫描渐变扇形
+                Circle()
+                    .fill(
+                        AngularGradient(
+                            colors: [.blue.opacity(0.3), .clear],
+                            center: .center,
+                            angle: .degrees(0)
+                        )
+                    )
+                    .frame(width: 192, height: 192)
+                    .rotationEffect(.degrees(rotationAngle))
+                    .onAppear {
+                        withAnimation(.linear(duration: 4.5).repeatForever(autoreverses: false)) {
+                            rotationAngle = 360
+                        }
+                    }
+                
+                // 5. 极客发光核
+                ZStack {
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 6, height: 6)
+                    Circle()
+                        .stroke(Color.blue, lineWidth: 1.5)
+                        .scaleEffect(1.5)
+                        .opacity(0.4)
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .frame(width: 200, height: 200)
+            
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundStyle(.primary)
+                Text(description)
+                    .font(.system(.subheadline))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 320)
+            }
+        }
+        .padding(.vertical, 40)
     }
 }

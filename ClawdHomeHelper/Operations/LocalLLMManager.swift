@@ -1,5 +1,5 @@
 // ClawdHomeHelper/Operations/LocalLLMManager.swift
-// 管理 omlx LLM 服务：安装、启动、停止、模型列表、下载
+// 管理 omlx LLM 服务：安装、启动、停止、模型列表、下载目录准备
 // 以管理员账户运行（LaunchDaemon + UserName），不以 root 运行，Metal GPU 可用
 
 import Foundation
@@ -107,19 +107,22 @@ struct LocalLLMManager {
         helperLog("[omlx] 已删除模型: \(dirName)")
     }
 
-    static func downloadModel(modelId: String, adminUsername: String) throws {
+    static func prepareModelDownload(modelId: String, adminUsername: String) throws -> LocalModelDownloadPlan {
         ensureModelDir()
-        let dirName = modelId.components(separatedBy: "/").last ?? modelId
-        let localDir = "\(modelDir)/\(dirName)"
-        helperLog("[omlx] 安装 huggingface_hub")
-        try runAsAdmin(["pip3", "install", "-q", "huggingface_hub"], admin: adminUsername)
-        helperLog("[omlx] 开始下载 \(modelId)")
-        try runAsAdmin([
-            "python3", "-c",
-            "from huggingface_hub import snapshot_download; snapshot_download('\(modelId)', local_dir='\(localDir)')"
-        ], admin: adminUsername)
-        _ = try? run("/bin/chmod", args: ["-R", "755", localDir])
-        helperLog("[omlx] 下载完成: \(modelId)")
+        let plan = try downloadPlan(modelId: modelId)
+        let fm = FileManager.default
+        try fm.createDirectory(atPath: plan.destinationPath, withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: plan.cachePath, withIntermediateDirectories: true)
+        _ = try? run("/usr/sbin/chown", args: ["-R", "\(adminUsername):staff", plan.destinationPath])
+        _ = try? run("/usr/sbin/chown", args: ["-R", "\(adminUsername):staff", plan.cachePath])
+        _ = try? run("/bin/chmod", args: ["-R", "755", plan.destinationPath])
+        _ = try? run("/bin/chmod", args: ["-R", "755", plan.cachePath])
+        helperLog("[omlx] 已准备模型下载目录: \(plan.repoID)")
+        return plan
+    }
+
+    static func downloadPlan(modelId: String) throws -> LocalModelDownloadPlan {
+        try LocalModelDownloadPlan.make(modelId: modelId, modelRootPath: modelDir)
     }
 
     // MARK: - 内部工具
@@ -129,10 +132,6 @@ struct LocalLLMManager {
         guard !fm.fileExists(atPath: modelDir) else { return }
         try? fm.createDirectory(atPath: modelDir, withIntermediateDirectories: true)
         _ = try? run("/bin/chmod", args: ["755", modelDir])
-    }
-
-    private static func runAsAdmin(_ args: [String], admin: String) throws {
-        try run("/usr/bin/sudo", args: ["-u", admin, "-H", "/usr/bin/env"] + args)
     }
 
     private static func writePlist(_ content: String) throws {

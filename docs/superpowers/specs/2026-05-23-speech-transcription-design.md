@@ -4,15 +4,15 @@
 
 **Status:** Approved in chat, pending implementation plan
 
-**Goal:** Add a local audio-file speech-to-text workflow under AI Lab using `soniqo/speech-swift`, with model recommendation, model caching, result history, copy/export actions, and no raw audio duplication.
+**Goal:** Add a local audio-file speech-to-text workflow under AI Lab using `soniqo/speech-swift`, with model recommendation, model caching, result history, copy/export actions, no raw audio duplication, and preserved compatibility for Intel/macOS 14 builds by isolating the feature behind a dual-track architecture.
 
 ## Summary
 
-ClawdHome will add a new first-party speech transcription tool under AI Lab. Users will import a local audio file, run on-device transcription with `speech-swift`, review the transcript in-app, copy it, export it, and revisit it later from history.
+ClawdHome will add a new first-party speech transcription tool under AI Lab. Supported machines will import a local audio file, run on-device transcription with `speech-swift`, review the transcript in-app, copy it, export it, and revisit it later from history.
 
-This feature is app-local in its first version. It does not run through the privileged helper because the workflow is user-initiated, does not require root operations, and does not benefit from XPC isolation. The app target will own UI state, model loading, model recommendation, transcript persistence, and export.
+This feature is app-local in its first version. It does not run through the privileged helper because the workflow is user-initiated, does not require root operations, and does not benefit from XPC isolation. The app target will own UI state, model recommendation, transcript persistence, export, and runtime capability detection. The concrete `speech-swift` integration will live in a separate Apple-Silicon-only executable tool built via a standalone Swift package and embedded into the app bundle only for supported slices.
 
-The repository baseline will be upgraded to `Swift 6`, `Xcode 16+`, and `macOS 15+` to satisfy `speech-swift` requirements.
+The main ClawdHome app must remain compatible with Intel/macOS 14. The speech feature will therefore use a dual-track build: a speech module that is compiled only for Apple Silicon on macOS 15+, and a fallback path that compiles everywhere else and exposes an unavailable state in the UI.
 
 ## External Constraints
 
@@ -39,6 +39,7 @@ The repository baseline will be upgraded to `Swift 6`, `Xcode 16+`, and `macOS 1
 - Export transcript as `Markdown`
 - Delete history items
 - Reveal original source file in Finder when still present
+- Unsupported-platform fallback state in AI Lab
 
 ### Excluded
 
@@ -53,7 +54,24 @@ The repository baseline will be upgraded to `Swift 6`, `Xcode 16+`, and `macOS 1
 
 ## Architecture
 
-The feature is split into four app-side layers.
+The feature is split into five layers. Four are app-side product layers, and one is a platform-scoped execution tool.
+
+### 0. Speech Capability Layer
+
+This layer decides whether speech transcription is available in the current build and on the current machine.
+
+Responsibilities:
+
+- Build and embed a real speech tool only for `arm64` + `macOS 15+`
+- Skip embedding the tool on unsupported slices such as `x86_64`
+- Expose one app-facing service regardless of platform
+- Report unavailability reason for unsupported builds and runtimes
+
+Design notes:
+
+- The main `ClawdHome` target must not directly `import Qwen3ASR`.
+- The `speech-swift` dependency should be isolated behind a standalone Swift package executable, `ClawdHomeSpeech`, with deployment target `macOS 15`.
+- Unsupported environments should still build cleanly and present the AI Lab entry in a disabled or explanatory state.
 
 ### 1. SpeechTranscriptionService
 
@@ -70,8 +88,8 @@ Responsibilities:
 
 Design notes:
 
-- The service must hide the concrete `speech-swift` API from the view layer.
-- First implementation uses `Qwen3ASR`.
+- The service must hide the concrete speech backend from the view layer.
+- First implementation uses `Qwen3ASR` through the Apple-Silicon-only speech tool.
 - The service boundary must allow swapping to `ParakeetASR`, `OmnilingualASR`, or another backend later without redesigning AI Lab UI.
 
 ### 2. SpeechModelAdvisor
@@ -130,9 +148,17 @@ The helper remains the right place for system services and privileged state. Thi
 
 ## Dependency Integration
 
-The repository will add `speech-swift` as a Swift package dependency and wire only the required product into `ClawdHome`.
+The repository will add `speech-swift` through a standalone Swift package nested under `ClawdHomeSpeech/`, but it must not be linked directly into the main app target if that would force the whole app to adopt `macOS 15` or Apple-Silicon-only constraints.
 
-Initial model module target:
+Instead, the integration should be split as follows:
+
+- `ClawdHome` main app target keeps its existing broad compatibility path
+- A standalone Swift package executable, `ClawdHomeSpeech`, owns the concrete `speech-swift` imports
+- `ClawdHomeSpeech` is built only for `arm64` and uses deployment target `macOS 15`
+- A post-build script embeds `ClawdHomeSpeech` into the app bundle only when the built app slice includes `arm64`
+- `ClawdHome` talks to that executable through a service façade and presents an unavailable state when the bundled tool is absent
+
+Initial speech model module target:
 
 - `Qwen3ASR`
 
@@ -217,7 +243,10 @@ If the source file is later deleted, the history record remains valid for transc
 
 ## UI Placement
 
-The existing AI Lab "Speech to text" card becomes an active entry point and opens a dedicated speech transcription surface.
+The existing AI Lab "Speech to text" card becomes a capability-aware entry point.
+
+- On supported builds and machines, it opens the dedicated speech transcription surface.
+- On unsupported builds or runtimes, it opens a lightweight explanatory state or disabled card detail that clearly says the feature requires Apple Silicon and macOS 15+.
 
 The dedicated view should contain four sections.
 
@@ -268,13 +297,14 @@ Selecting a history item should reveal the full transcript and reuse the same co
 1. User opens AI Lab.
 2. User enters the speech transcription tool.
 3. The app computes machine readiness and recommended model.
-4. If the recommended model is not cached, the user downloads it.
-5. The user imports an audio file.
-6. The user starts transcription.
-7. The app shows running state and allows cancellation.
-8. The result appears in the transcript area.
-9. The app writes a history entry.
-10. The user copies or exports the result.
+4. If speech is unavailable on this machine or build, the app explains why and exits the flow.
+5. If the recommended model is not cached, the user downloads it.
+6. The user imports an audio file.
+7. The user starts transcription.
+8. The app shows running state and allows cancellation.
+9. The result appears in the transcript area.
+10. The app writes a history entry.
+11. The user copies or exports the result.
 
 ## File Handling
 
@@ -319,6 +349,12 @@ The feature must explicitly handle these cases.
 
 - Prevent transcription start
 - Present download action
+
+### Unsupported platform
+
+- Compile a fallback implementation instead of the real backend
+- Present a clear reason such as Intel CPU or macOS version too low
+- Do not expose broken or half-wired controls
 
 ### Download failure
 
@@ -367,20 +403,23 @@ If a task is running, the UI should disable actions that would start a second ta
 
 All new UI strings must use `L10n.k(...)` or `L10n.f(...)` and add both Chinese and English translations to `Stable.xcstrings`. English values must be real translations, not title-cased placeholders. Label lengths should follow the repository i18n style guide.
 
-## Platform Upgrade Impact
+## Platform and Build Impact
 
-This feature requires upgrading the repository baseline to:
+This feature changes the build graph, but it must not force the entire app to drop Intel/macOS 14 compatibility.
 
-- `Swift 6`
-- `Xcode 16+`
-- `macOS 15+`
+Required outcomes:
+
+- Main `ClawdHome` app remains shippable on Intel and on macOS 14
+- Speech transcription backend is available only on Apple Silicon with macOS 15+
+- Build configuration clearly separates supported and unsupported slices
 
 Expected impact areas:
 
 - `project.yml`
 - Regenerated Xcode project metadata
-- Swift 6 concurrency warnings promoted to build failures in touched code paths
+- Target architecture and deployment-target condition wiring
 - Package resolution and product linkage changes
+- Potential Swift 6 adoption in the speech-specific target, without unnecessarily forcing unrelated app code to migrate all at once
 
 Version one does not require microphone permission strings because it does not capture live audio. Those permissions should only be added when microphone recording is actually introduced.
 
@@ -402,23 +441,25 @@ Version one does not require microphone permission strings because it does not c
 
 ### Build verification
 
+- Intel-compatible build path without the speech backend
+- Apple-Silicon build path with the speech backend
 - `xcodegen generate`
 - `make build`
 - Existing relevant test targets, if they remain compatible after the Swift 6 upgrade
 
 ## Implementation Sequencing
 
-1. Upgrade repository baseline to `Swift 6` and `macOS 15`.
-2. Add `speech-swift` package and link required STT products to `ClawdHome`.
-3. Introduce shared app-side models for transcript tasks and history records.
-4. Implement `SpeechModelAdvisor`.
-5. Implement `SpeechHistoryStore`.
-6. Implement `SpeechTranscriptionService`.
-7. Build the dedicated speech transcription UI.
-8. Wire AI Lab entry to the new feature.
-9. Add copy, export, delete, and Finder reveal actions.
-10. Run build and targeted validation.
-11. Fix any Swift 6 migration fallout exposed by the new baseline.
+1. Update the spec and plan for dual-track compatibility instead of repo-wide baseline uplift.
+2. Add `speech-swift` package and isolate it behind a speech-specific standalone executable package.
+3. Wire build settings so unsupported architectures and OS versions compile the fallback path only.
+4. Introduce shared app-side models for transcript tasks and history records.
+5. Implement `SpeechModelAdvisor`.
+6. Implement `SpeechHistoryStore`.
+7. Implement `SpeechTranscriptionService` against a protocol with supported and unavailable implementations.
+8. Build the dedicated speech transcription UI.
+9. Wire AI Lab entry to the capability-aware feature.
+10. Add copy, export, delete, and Finder reveal actions.
+11. Run both supported and unsupported build-path validation.
 
 ## Execution Guidance
 

@@ -38,6 +38,7 @@ final class ShrimpPool {
     private let helperClient: HelperClient
     private let descriptionStore: ClawDescriptionStore
     private let freezeStateStore: ClawFreezeStateStore
+    private let orderStore: ClawOrderStore
 
     // MARK: - 内部轮询任务
 
@@ -50,6 +51,7 @@ final class ShrimpPool {
     private var hiddenMachineBuffer: [MachineStats] = []
     private var hiddenNetBuffer: [(inBps: Double, outBps: Double)] = []
     private var hiddenLatestSnapshot: DashboardSnapshot? = nil
+    private var freezeWarningCache: [String: (checkedAt: Date, gatewayRunning: Bool, warning: String?)] = [:]
 
     // MARK: - 初始化
 
@@ -57,7 +59,10 @@ final class ShrimpPool {
         self.helperClient = helperClient
         self.descriptionStore = ClawDescriptionStore()
         self.freezeStateStore = ClawFreezeStateStore()
+        self.orderStore = ClawOrderStore()
     }
+
+    private static let freezeWarningCacheTTL: TimeInterval = 15
 
     // MARK: - 生命周期
 
@@ -114,8 +119,25 @@ final class ShrimpPool {
                     }
                     return user
                 }
-                users = newUsers
+                
+                // 按保存的顺序进行重排，新用户默认追加到最末端并按字母自然排序
+                let order = orderStore.loadOrder()
+                let sortedUsers = newUsers.sorted { u1, u2 in
+                    let idx1 = order.firstIndex(of: u1.username) ?? Int.max
+                    let idx2 = order.firstIndex(of: u2.username) ?? Int.max
+                    if idx1 == idx2 {
+                        return u1.username.localizedCompare(u2.username) == .orderedAscending
+                    }
+                    return idx1 < idx2
+                }
+                
+                users = sortedUsers
                 loadError = nil
+                
+                // 异步且非阻塞地加载各数字分身的自定义头像
+                for user in sortedUsers {
+                    loadAvatar(for: user)
+                }
             } catch {
                 loadError = error.localizedDescription
             }
@@ -126,12 +148,81 @@ final class ShrimpPool {
     func removeUser(username: String) {
         users.removeAll { $0.username == username }
         freezeStateStore.setFrozenState(nil, for: username)
+        freezeWarningCache.removeValue(forKey: username.lowercased())
+        // 从排序持久化列表中移除该用户名，保持数据整洁
+        var order = orderStore.loadOrder()
+        order.removeAll { $0 == username }
+        orderStore.saveOrder(order)
+    }
+
+    /// 异步非阻塞加载数字分身的自定义头像，若文件不存在则静默忽略
+    func loadAvatar(for user: ManagedUser) {
+        Task {
+            do {
+                let data = try await helperClient.readFile(username: user.username, relativePath: ".clawdhome/browser/avatar.png")
+                user.customAvatarData = data
+            } catch {
+                user.customAvatarData = nil
+            }
+        }
+    }
+
+    /// 保存数字分身的自定义头像，并纠正所有权
+    func saveAvatar(username: String, avatarData: Data) async throws {
+        try await helperClient.writeFile(
+            username: username,
+            relativePath: ".clawdhome/browser/avatar.png",
+            data: avatarData
+        )
+        if let user = users.first(where: { $0.username == username }) {
+            user.customAvatarData = avatarData
+        }
+    }
+
+    /// 清除数字分身的自定义头像
+    func deleteAvatar(username: String) async throws {
+        try await helperClient.deleteItem(
+            username: username,
+            relativePath: ".clawdhome/browser/avatar.png"
+        )
+        if let user = users.first(where: { $0.username == username }) {
+            user.customAvatarData = nil
+        }
     }
 
     func setDescription(_ text: String, for username: String) {
         descriptionStore.setDescription(text, for: username)
         guard let user = users.first(where: { $0.username == username }) else { return }
         user.profileDescription = descriptionStore.description(for: username)
+    }
+
+    nonisolated static func movedUsernames(_ usernames: [String], moving sourceUsername: String, to destinationUsername: String) -> [String] {
+        guard sourceUsername != destinationUsername,
+              let fromIndex = usernames.firstIndex(of: sourceUsername),
+              let toIndex = usernames.firstIndex(of: destinationUsername) else {
+            return usernames
+        }
+
+        var reordered = usernames
+        let moving = reordered.remove(at: fromIndex)
+        reordered.insert(moving, at: toIndex)
+        return reordered
+    }
+
+    @discardableResult
+    func moveUser(fromUsername sourceUsername: String, toUsername destinationUsername: String) -> Bool {
+        let currentOrder = users.map(\.username)
+        let reorderedNames = Self.movedUsernames(currentOrder, moving: sourceUsername, to: destinationUsername)
+        guard reorderedNames != currentOrder else { return false }
+
+        let usersByName = Dictionary(uniqueKeysWithValues: users.map { ($0.username, $0) })
+        users = reorderedNames.compactMap { usersByName[$0] }
+        orderStore.saveOrder(reorderedNames)
+        return true
+    }
+
+    func moveUser(fromSourceUser sourceUser: ManagedUser, toDestinationUser destUser: ManagedUser) {
+        moveUser(fromUsername: sourceUser.username, toUsername: destUser.username)
     }
 
     func setFrozen(
@@ -141,6 +232,7 @@ final class ShrimpPool {
         previousAutostartEnabled: Bool? = nil,
         for username: String
     ) {
+        freezeWarningCache.removeValue(forKey: username.lowercased())
         if frozen {
             freezeStateStore.setFrozenState(
                 ClawFreezeStateRecord(
@@ -399,7 +491,7 @@ final class ShrimpPool {
 
     /// 根据向导 JSON 和运行时安装状态判断向导是否"已完成"（即点击进详情而非向导）。
     /// 与 UserEntryWindowResolver.shouldTreatAsUnfinishedWizardState 保持同等逻辑。
-    private nonisolated static func resolveWizardCompleted(stateJSON: String, hasRuntime: Bool) -> Bool {
+    internal nonisolated static func resolveWizardCompleted(stateJSON: String, hasRuntime: Bool) -> Bool {
         guard !stateJSON.isEmpty, let state = InitWizardState.from(json: stateJSON) else {
             // 无 state 文件：无运行时则仍需进向导
             return hasRuntime
@@ -414,26 +506,45 @@ final class ShrimpPool {
     }
 
     private func evaluateFreezeWarning(user: ManagedUser, gatewayRunning: Bool) async -> String? {
-        guard user.isFrozen, let mode = user.freezeMode else { return nil }
+        guard user.isFrozen, let mode = user.freezeMode else {
+            freezeWarningCache.removeValue(forKey: user.username.lowercased())
+            return nil
+        }
+
+        let cacheKey = user.username.lowercased()
+        if let cached = freezeWarningCache[cacheKey],
+           cached.gatewayRunning == gatewayRunning,
+           Date().timeIntervalSince(cached.checkedAt) <= Self.freezeWarningCacheTTL {
+            return cached.warning
+        }
 
         let runtime: ProcessEmergencyFreezeResolver.Runtime = (user.hermesVersion != nil) ? .hermes : .openclaw
         let processes = await helperClient.getProcessList(username: user.username)
         let runtimeProcesses = processes.filter { ProcessEmergencyFreezeResolver.isRuntimeRelated($0, runtime: runtime) }
 
+        let warning: String?
         switch mode {
         case .pause:
             if let resumed = runtimeProcesses.first(where: { !$0.state.uppercased().hasPrefix("T") }) {
-                return String(format: L10n.k("services.shrimp_pool.paused_process_resumed_pid", fallback: "检测到暂停进程恢复运行（PID %d）"), resumed.pid)
+                warning = String(format: L10n.k("services.shrimp_pool.paused_process_resumed_pid", fallback: "检测到暂停进程恢复运行（PID %d）"), resumed.pid)
+            } else {
+                warning = nil
             }
-            return nil
         case .normal, .flash:
             if gatewayRunning {
-                return L10n.k("services.shrimp_pool.gateway_start", fallback: "检测到 Gateway 异常启动")
+                warning = L10n.k("services.shrimp_pool.gateway_start", fallback: "检测到 Gateway 异常启动")
+            } else if let restarted = runtimeProcesses.first {
+                warning = String(format: L10n.k("services.shrimp_pool.openclaw_abnormal_start_pid", fallback: "检测到 openclaw 相关进程异常启动（PID %d）"), restarted.pid)
+            } else {
+                warning = nil
             }
-            if let restarted = runtimeProcesses.first {
-                return String(format: L10n.k("services.shrimp_pool.openclaw_abnormal_start_pid", fallback: "检测到 openclaw 相关进程异常启动（PID %d）"), restarted.pid)
-            }
-            return nil
         }
+
+        freezeWarningCache[cacheKey] = (
+            checkedAt: Date(),
+            gatewayRunning: gatewayRunning,
+            warning: warning
+        )
+        return warning
     }
 }

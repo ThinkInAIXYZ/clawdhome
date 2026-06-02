@@ -61,6 +61,7 @@ extension ClawdHomeHelperImpl {
             // 统一在 Hermes 网关成功启动后写入运行时锚点，
             // 覆盖“终端脚本安装（未走 installHermes）”等路径，避免识别回退到 openclaw。
             HermesInstaller.writeRuntimeConfig(runtime: "hermes", username: username)
+
             reply(true, nil)
         } catch {
             helperLog("Hermes 启动失败 profile=\(profileID) @\(username): \(error.localizedDescription)", level: .error)
@@ -79,6 +80,8 @@ extension ClawdHomeHelperImpl {
         do {
             let uid = try UserManager.uid(for: username)
             try HermesGatewayManager.stopGateway(username: username, profileID: profileID, uid: uid)
+            // WebUI 联动：同步关闭伴生 WebUI 服务（单实例唯一）
+            try? HermesWebUIManager.stopWebUI(username: username, uid: uid)
             reply(true, nil)
         } catch {
             helperLog("Hermes 停止失败 profile=\(profileID) @\(username): \(error.localizedDescription)", level: .error)
@@ -110,6 +113,20 @@ extension ClawdHomeHelperImpl {
             reply(true, nil)
         } catch {
             helperLog("Hermes 卸载 gateway 失败 profile=\(profileID) @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func restoreHermesGatewayRegistration(username: String, profileID: String,
+                                          withReply reply: @escaping (Bool, String?) -> Void) {
+        helperLog("Hermes 恢复 system 注册 profile=\(profileID) @\(username)")
+        do {
+            let uid = try UserManager.uid(for: username)
+            try HermesGatewayManager.startGateway(username: username, profileID: profileID, uid: uid)
+            try HermesGatewayManager.stopGateway(username: username, profileID: profileID, uid: uid)
+            reply(true, nil)
+        } catch {
+            helperLog("Hermes 恢复 system 注册失败 profile=\(profileID) @\(username): \(error.localizedDescription)", level: .error)
             reply(false, error.localizedDescription)
         }
     }
@@ -611,5 +628,69 @@ extension ClawdHomeHelperImpl {
             )
         }
         return URL(fileURLWithPath: path)
+    }
+
+    // MARK: - Hermes WebUI 伴生服务管理 (PR-WebUI)
+
+    func installHermesWebUI(
+        username: String,
+        version: String?,
+        logPath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        helperLog("XPC: installHermesWebUI @\(username) logPath=\(logPath)")
+        let logURL = URL(fileURLWithPath: logPath)
+        DispatchQueue.global().async {
+            do {
+                let output = try HermesWebUIManager.installWebUI(username: username, version: version, logURL: logURL)
+                reply(true, output)
+            } catch {
+                helperLog("installHermesWebUI 失败 @\(username): \(error.localizedDescription)", level: .error)
+                reply(false, error.localizedDescription)
+            }
+        }
+    }
+
+    func getHermesWebUIVersion(username: String, withReply reply: @escaping (String) -> Void) {
+        reply(HermesWebUIManager.installedVersion(username: username))
+    }
+
+    func startHermesWebUI(
+        username: String,
+        uid: Int,
+        withReply reply: @escaping (Bool, String?, Int) -> Void
+    ) {
+        helperLog("XPC: startHermesWebUI @\(username)")
+        do {
+            try HermesWebUIManager.startWebUI(username: username, uid: uid)
+            let port = HermesWebUIManager.getOrAllocatePort(username: username, uid: uid)
+            reply(true, nil, port)
+        } catch {
+            helperLog("startHermesWebUI 失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription, 0)
+        }
+    }
+
+    func stopHermesWebUI(
+        username: String,
+        uid: Int,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        helperLog("XPC: stopHermesWebUI @\(username)")
+        do {
+            try HermesWebUIManager.stopWebUI(username: username, uid: uid)
+            reply(true, nil)
+        } catch {
+            helperLog("stopHermesWebUI 失败 @\(username): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription)
+        }
+    }
+
+    func getHermesWebUIStatus(
+        username: String,
+        withReply reply: @escaping (Bool, Int32, Int) -> Void
+    ) {
+        let (running, pid, port) = HermesWebUIManager.status(username: username)
+        reply(running, pid, port)
     }
 }

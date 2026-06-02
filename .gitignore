@@ -59,6 +59,7 @@ scripts/test_cli_init.local.env
 .worktrees/
 .build-version
 .build-version.lock
+ClawdHomeSpeech/.build/
 
 # Apple 签名 / 公证密钥材料（不提交）
 *.p12
@@ -78,3 +79,4 @@ scripts/test_cli_init.local.env
 # 本地文档 / 观测笔记
 docs/obs_docs
 docs/testing/
+/scratch

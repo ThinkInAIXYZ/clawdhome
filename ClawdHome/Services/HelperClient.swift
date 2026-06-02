@@ -10,6 +10,56 @@ enum GatewayStartDiagnosis {
     case needsNodeRepair(reason: String)
 }
 
+private actor ProcessSnapshotCache {
+    private struct Entry {
+        let snapshot: ProcessListSnapshot
+        let storedAt: Date
+    }
+
+    private var entries: [String: Entry] = [:]
+
+    func snapshot(for username: String, maxAge: TimeInterval) -> ProcessListSnapshot? {
+        guard let entry = entries[username] else { return nil }
+        guard Date().timeIntervalSince(entry.storedAt) <= maxAge else {
+            entries.removeValue(forKey: username)
+            return nil
+        }
+        return entry.snapshot
+    }
+
+    func store(_ snapshot: ProcessListSnapshot, for username: String) {
+        entries[username] = Entry(snapshot: snapshot, storedAt: Date())
+    }
+
+    func clear() {
+        entries.removeAll()
+    }
+}
+
+private actor ProcessSnapshotGate {
+    private var locked = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func acquire() async {
+        guard locked else {
+            locked = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func release() {
+        guard !waiters.isEmpty else {
+            locked = false
+            return
+        }
+        let continuation = waiters.removeFirst()
+        continuation.resume()
+    }
+}
+
 @Observable
 final class HelperClient {
     private var controlConnection: NSXPCConnection?
@@ -29,6 +79,7 @@ final class HelperClient {
     /// 角色定义只读操作专用连接（git log/diff 可能耗时，独立连接避免阻塞文件写入队列）
     private var personaReadConnection: NSXPCConnection?
     private(set) var isConnected: Bool = false
+    private var activeMachServiceName: String = kHelperMachServiceName
 
     /// 连接世代计数器：每次 connect()/disconnect() 递增。
     /// invalidationHandler 捕获创建时的世代值，仅当世代匹配时才修改 isConnected，
@@ -36,6 +87,10 @@ final class HelperClient {
     private var connectionGeneration: UInt64 = 0
     /// 当前是否有连接探针在进行；用于避免重复 connect() 互相 invalidate 造成重连风暴。
     private var verifyInFlightGeneration: UInt64?
+    /// 进程快照是整机共享热点查询：串行化 + 短缓存，避免多个页面同时把 process XPC 通道打满。
+    private let processSnapshotCache = ProcessSnapshotCache()
+    private let processSnapshotGate = ProcessSnapshotGate()
+    private let processSnapshotMaxAge: TimeInterval = 1.5
 
     // MARK: - XPC 超时常量
 
@@ -48,12 +103,25 @@ final class HelperClient {
 
     // MARK: - 私有：创建 XPC 连接
 
-    private func makeConnection(label: String, generation: UInt64, affectsConnectivity: Bool = false) -> NSXPCConnection {
-        let conn = NSXPCConnection(machServiceName: kHelperMachServiceName, options: .privileged)
+    private func makeConnection(
+        label: String,
+        generation: UInt64,
+        affectsConnectivity: Bool = false
+    ) -> NSXPCConnection {
+        let conn = NSXPCConnection(machServiceName: activeMachServiceName, options: .privileged)
         conn.remoteObjectInterface = NSXPCInterface(with: ClawdHomeHelperProtocol.self)
         conn.invalidationHandler = { [weak self] in
-            os_log(.error, "[HelperClient] %{public}@ invalidated (gen=%llu)", label, generation)
-            appLog("[HelperClient] \(label) invalidated (gen=\(generation))", level: .warn)
+            os_log(
+                .error,
+                "[HelperClient] %{public}@ invalidated (gen=%llu, service=%{public}@)",
+                label,
+                generation,
+                self?.activeMachServiceName ?? "unknown"
+            )
+            appLog(
+                "[HelperClient] \(label) invalidated (gen=\(generation), service=\(self?.activeMachServiceName ?? "unknown"))",
+                level: .warn
+            )
             DispatchQueue.main.async {
                 guard let self, self.connectionGeneration == generation else { return }
                 self.clearConnection(label: label, generation: generation)
@@ -138,8 +206,9 @@ final class HelperClient {
         connectionGeneration &+= 1
         let gen = connectionGeneration
         verifyInFlightGeneration = gen
+        activeMachServiceName = HelperServiceLocator.preferredMachServiceName(default: activeMachServiceName)
         os_log(.info, "[HelperClient] connect() gen=%llu source=%{public}@", gen, source)
-        appLog("[HelperClient] connect() gen=\(gen) source=\(source)")
+        appLog("[HelperClient] connect() gen=\(gen) source=\(source) service=\(activeMachServiceName)")
 
         // 先清理旧连接
         controlConnection?.invalidate()
@@ -161,6 +230,7 @@ final class HelperClient {
         fileConnection = makeConnection(label: "file", generation: gen)
         processConnection = makeConnection(label: "process", generation: gen)
         personaReadConnection = makeConnection(label: "personaRead", generation: gen)
+        Task { await processSnapshotCache.clear() }
         verifyConnection(generation: gen, source: source)
     }
 
@@ -176,6 +246,7 @@ final class HelperClient {
         fileConnection?.invalidate(); fileConnection = nil
         processConnection?.invalidate(); processConnection = nil
         personaReadConnection?.invalidate(); personaReadConnection = nil
+        Task { await processSnapshotCache.clear() }
         isConnected = false
     }
 
@@ -359,6 +430,24 @@ final class HelperClient {
 
     private var processProxy: (any ClawdHomeHelperProtocol)? {
         if processConnection == nil, isConnected {
+            processConnection = makeConnection(label: "process", generation: connectionGeneration)
+        }
+        return proxyWithLogging(processConnection)
+    }
+
+    private var eagerControlProxy: (any ClawdHomeHelperProtocol)? {
+        if controlConnection == nil {
+            controlConnection = makeConnection(
+                label: "control",
+                generation: connectionGeneration,
+                affectsConnectivity: true
+            )
+        }
+        return proxyWithLogging(controlConnection)
+    }
+
+    private var eagerProcessProxy: (any ClawdHomeHelperProtocol)? {
+        if processConnection == nil {
             processConnection = makeConnection(label: "process", generation: connectionGeneration)
         }
         return proxyWithLogging(processConnection)
@@ -625,6 +714,22 @@ final class HelperClient {
         guard let proxy = gatewayProxy else { throw HelperError.notConnected }
         let (ok, msg): (Bool, String?) = try await xpcCall { done in
             proxy.restartGateway(username: username) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
+    func uninstallGateway(username: String) async throws {
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall { done in
+            proxy.uninstallGateway(username: username) { ok, msg in done((ok, msg)) }
+        }
+        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+    }
+
+    func restoreGatewayRegistration(username: String) async throws {
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: .seconds(35)) { done in
+            proxy.restoreGatewayRegistration(username: username) { ok, msg in done((ok, msg)) }
         }
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
     }
@@ -938,6 +1043,25 @@ final class HelperClient {
         } catch { return (false, error.localizedDescription) }
     }
 
+    func uninstallHermesGatewayOrThrow(username: String, profileID: String) async throws {
+        let (ok, err) = await uninstallHermesGateway(username: username, profileID: profileID)
+        if !ok {
+            throw HelperError.operationFailed(err ?? L10n.k("services.helper_client.unknown", fallback: "未知错误"))
+        }
+    }
+
+    func restoreHermesGatewayRegistration(username: String, profileID: String) async throws {
+        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: .seconds(35)) { done in
+            proxy.restoreHermesGatewayRegistration(username: username, profileID: profileID) { ok, msg in
+                done((ok, msg))
+            }
+        }
+        if !ok {
+            throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误"))
+        }
+    }
+
     /// 应用 Hermes 初始化配置（profile-aware）
     func applyHermesInitConfig(username: String, profileID: String, payloadJSON: String) async -> (Bool, String?) {
         guard let proxy = controlProxy else {
@@ -1140,6 +1264,66 @@ final class HelperClient {
                 proxy.clearHermesWizardState(username: username, profileID: profileID) { ok in done(ok) }
             }
         } catch { return false }
+    }
+
+    // MARK: - Hermes WebUI 伴生服务管理 (PR-WebUI)
+
+    /// 以指定用户身份下载/安装 hermes-webui（克隆仓库，运行 bootstrap.py 配置 venv），長時間運行，支持進度日誌
+    func installHermesWebUI(username: String, version: String? = nil, logPath: String) async throws -> String {
+        guard let proxy = installProxy else { throw HelperError.notConnected }
+        let (ok, output): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.installHermesWebUI(username: username, version: version, logPath: logPath) { ok, out in
+                done((ok, out))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(output ?? "WebUI 安装失败") }
+        return output ?? ""
+    }
+
+    /// 查询指定用户已安装的 WebUI 版本，未安装返回 nil
+    func getHermesWebUIVersion(username: String) async -> String? {
+        guard let proxy = metadataProxy else { return nil }
+        do {
+            let v: String = try await xpcCall { done in
+                proxy.getHermesWebUIVersion(username: username) { done($0) }
+            }
+            return v.isEmpty ? nil : v
+        } catch { return nil }
+    }
+
+    /// 启动指定 Shrimp 实例的 WebUI 服务
+    func startHermesWebUI(username: String, uid: Int) async throws -> Int {
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
+        let (ok, err, port): (Bool, String?, Int) = try await xpcCall { done in
+            proxy.startHermesWebUI(username: username, uid: uid) { ok, err, port in
+                done((ok, err, port))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? "WebUI 启动失败") }
+        return port
+    }
+
+    /// 停止指定 Shrimp 实例的 WebUI 服务
+    func stopHermesWebUI(username: String, uid: Int) async throws {
+        guard let proxy = gatewayProxy else { throw HelperError.notConnected }
+        let (ok, err): (Bool, String?) = try await xpcCall { done in
+            proxy.stopHermesWebUI(username: username, uid: uid) { ok, err in
+                done((ok, err))
+            }
+        }
+        if !ok { throw HelperError.operationFailed(err ?? "WebUI 停止失败") }
+    }
+
+    /// 查询指定 Shrimp 实例的 WebUI 运行状态，返回 (running, pid, port)
+    func getHermesWebUIStatus(username: String) async -> (running: Bool, pid: Int32, port: Int) {
+        guard let proxy = controlProxy else { return (false, -1, 0) }
+        do {
+            return try await xpcCall { done in
+                proxy.getHermesWebUIStatus(username: username) { running, pid, port in
+                    done((running, pid, port))
+                }
+            }
+        } catch { return (false, -1, 0) }
     }
 
     // MARK: - 用户环境初始化
@@ -1748,7 +1932,7 @@ final class HelperClient {
     /// 直接写入 ~/.openclaw/openclaw.json 指定 dot-path（不启动 CLI）
     /// value 必须是 JSON-serializable（String / [String] / Bool / Number 等）
     func setConfigDirect(username: String, path: String, value: Any) async throws {
-        guard let proxy = controlProxy else { throw HelperError.notConnected }
+        guard controlProxy != nil else { throw HelperError.notConnected }
         let valueJSON = try serializeJSONValue(value)
         try await setConfigDirectJSON(username: username, path: path, valueJSON: valueJSON)
     }
@@ -2523,10 +2707,16 @@ final class HelperClient {
 
     func downloadLocalModel(_ modelId: String) async throws {
         guard let proxy = installProxy else { throw HelperError.notConnected }
-        let (ok, msg): (Bool, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
-            proxy.downloadLocalModel(modelId) { ok, msg in done((ok, msg)) }
+        let (ok, msg, planJSON): (Bool, String?, String?) = try await xpcCall(timeout: HelperClient.xpcInstallTimeout) { done in
+            proxy.prepareLocalModelDownload(modelId) { ok, msg, planJSON in done((ok, msg, planJSON)) }
         }
         if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+        guard let planJSON,
+              let data = planJSON.data(using: .utf8),
+              let plan = try? JSONDecoder().decode(LocalModelDownloadPlan.self, from: data) else {
+            throw HelperError.operationFailed("模型下载计划无效")
+        }
+        try await LocalModelDownloader.download(plan: plan)
     }
 
     func deleteLocalModel(_ modelId: String) async throws {
@@ -2539,23 +2729,72 @@ final class HelperClient {
 
     // MARK: - 进程管理
 
-    func getProcessListSnapshot(username: String) async -> ProcessListSnapshot {
-        guard let proxy = processProxy else {
-            return ProcessListSnapshot(entries: [], portsLoading: false, updatedAt: Date().timeIntervalSince1970)
+    private func requestProcessSnapshot(
+        using proxy: any ClawdHomeHelperProtocol,
+        username: String,
+        channel: String
+    ) async throws -> ProcessListSnapshot {
+        let json: String = try await xpcCall { done in
+            proxy.getProcessListSnapshot(username: username) { done($0) }
+        }
+        if let snapshot = try? JSONDecoder().decode(ProcessListSnapshot.self, from: Data(json.utf8)) {
+            appLog("[proc] snapshot ok @\(username) channel=\(channel) count=\(snapshot.entries.count) portsLoading=\(snapshot.portsLoading)")
+            return snapshot
+        }
+
+        let fallbackEntries = (try? JSONDecoder().decode([ProcessEntry].self, from: Data(json.utf8))) ?? []
+        appLog("[proc] snapshot fallback decode @\(username) channel=\(channel) count=\(fallbackEntries.count)", level: .warn)
+        return ProcessListSnapshot(entries: fallbackEntries, portsLoading: false, updatedAt: Date().timeIntervalSince1970)
+    }
+
+    private func fetchProcessListSnapshot(username: String) async -> ProcessListSnapshot {
+        let emptySnapshot = ProcessListSnapshot(entries: [], portsLoading: false, updatedAt: Date().timeIntervalSince1970)
+
+        if let proxy = eagerProcessProxy {
+            do {
+                let snapshot = try await requestProcessSnapshot(using: proxy, username: username, channel: "process")
+                if !snapshot.entries.isEmpty || eagerControlProxy == nil {
+                    return snapshot
+                }
+                appLog("[proc] snapshot empty on process channel, retry control @\(username)", level: .warn)
+            } catch {
+                appLog("[proc] snapshot failed on process channel @\(username): \(error.localizedDescription)", level: .warn)
+            }
+        }
+
+        guard let fallbackProxy = eagerControlProxy else {
+            appLog("[proc] snapshot proxy unavailable @\(username)", level: .warn)
+            return emptySnapshot
         }
         do {
-            let json: String = try await xpcCall { done in
-                proxy.getProcessListSnapshot(username: username) { done($0) }
-            }
-            if let snapshot = try? JSONDecoder().decode(ProcessListSnapshot.self, from: Data(json.utf8)) {
-                return snapshot
-            }
-            // 兼容旧 Helper：仍可能返回 [ProcessEntry]
-            let fallbackEntries = (try? JSONDecoder().decode([ProcessEntry].self, from: Data(json.utf8))) ?? []
-            return ProcessListSnapshot(entries: fallbackEntries, portsLoading: false, updatedAt: Date().timeIntervalSince1970)
+            return try await requestProcessSnapshot(using: fallbackProxy, username: username, channel: "control")
         } catch {
-            return ProcessListSnapshot(entries: [], portsLoading: false, updatedAt: Date().timeIntervalSince1970)
+            appLog("[proc] snapshot failed on control channel @\(username): \(error.localizedDescription)", level: .error)
+            return emptySnapshot
         }
+    }
+
+    func getProcessListSnapshot(username: String) async -> ProcessListSnapshot {
+        if let cached = await processSnapshotCache.snapshot(
+            for: username,
+            maxAge: processSnapshotMaxAge
+        ) {
+            return cached
+        }
+
+        await processSnapshotGate.acquire()
+        if let cached = await processSnapshotCache.snapshot(
+            for: username,
+            maxAge: processSnapshotMaxAge
+        ) {
+            await processSnapshotGate.release()
+            return cached
+        }
+
+        let snapshot = await fetchProcessListSnapshot(username: username)
+        await processSnapshotCache.store(snapshot, for: username)
+        await processSnapshotGate.release()
+        return snapshot
     }
 
     func getProcessList(username: String) async -> [ProcessEntry] {
@@ -2563,21 +2802,45 @@ final class HelperClient {
     }
 
     func getProcessDetail(pid: Int32) async -> ProcessDetail? {
-        guard let proxy = processProxy else { return nil }
-        do {
-            let json: String = try await xpcCall { done in
-                proxy.getProcessDetail(pid: pid) { done($0) }
+        let proxies = [eagerProcessProxy, eagerControlProxy].compactMap { $0 }
+        for (idx, proxy) in proxies.enumerated() {
+            do {
+                let json: String = try await xpcCall { done in
+                    proxy.getProcessDetail(pid: pid) { done($0) }
+                }
+                if let detail = try? JSONDecoder().decode(ProcessDetail.self, from: Data(json.utf8)) {
+                    return detail
+                }
+            } catch {
+                let channel = idx == 0 ? "process" : "control"
+                appLog("[proc] detail failed pid=\(pid) channel=\(channel): \(error.localizedDescription)", level: .warn)
             }
-            return try? JSONDecoder().decode(ProcessDetail.self, from: Data(json.utf8))
-        } catch { return nil }
+        }
+        return nil
     }
 
     func killProcess(pid: Int32, signal: Int32) async throws {
-        guard let proxy = processProxy else { throw HelperError.notConnected }
-        let (ok, msg): (Bool, String?) = try await xpcCall { done in
-            proxy.killProcess(pid: pid, signal: signal) { ok, msg in done((ok, msg)) }
+        let proxies = [eagerProcessProxy, eagerControlProxy].compactMap { $0 }
+        guard !proxies.isEmpty else { throw HelperError.notConnected }
+
+        var lastError: Error = HelperError.notConnected
+        for (idx, proxy) in proxies.enumerated() {
+            do {
+                let (ok, msg): (Bool, String?) = try await xpcCall { done in
+                    proxy.killProcess(pid: pid, signal: signal) { ok, msg in done((ok, msg)) }
+                }
+                if !ok {
+                    throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误"))
+                }
+                await processSnapshotCache.clear()
+                return
+            } catch {
+                lastError = error
+                let channel = idx == 0 ? "process" : "control"
+                appLog("[proc] kill failed pid=\(pid) channel=\(channel): \(error.localizedDescription)", level: .warn)
+            }
         }
-        if !ok { throw HelperError.operationFailed(msg ?? L10n.k("services.helper_client.unknown", fallback: "未知错误")) }
+        throw lastError
     }
 
     // MARK: - 角色定义 Git 管理

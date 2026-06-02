@@ -52,6 +52,7 @@ struct OpenClawDetailView: View {
     @Environment(ShrimpPool.self)   private var pool
     @Environment(UpdateChecker.self) private var updater
     @Environment(GatewayHub.self) private var gatewayHub
+    @Environment(HostPermissionCenter.self) private var hostPermissionCenter
     @Environment(MaintenanceWindowRegistry.self) private var maintenanceWindowRegistry
     @Environment(\.openWindow) private var openWindow
     @State private var isLoading = false
@@ -165,6 +166,7 @@ struct OpenClawDetailView: View {
     @State private var showAddManualLoginSite = false
     @State private var manualLoginSiteName = ""
     @State private var manualLoginSiteURL = ""
+    @State private var hostPermissionPromptRequest: HostPermissionPromptRequest?
     @AppStorage("browser.manualLogin.customSites") private var manualLoginCustomSitesRaw = "[]"
     // Tab
     @State private var selectedTab: ClawTab = .overview
@@ -397,11 +399,11 @@ struct OpenClawDetailView: View {
             .padding(.horizontal, detailSidebarShowsLabels ? 2 : 4)
             .frame(maxWidth: .infinity)
 
-            // OpenClaw logo
-            OpenClawLogoMark()
-                .frame(width: detailSidebarShowsLabels ? 48 : 32, height: detailSidebarShowsLabels ? 48 : 32)
+            // OpenClaw logo / Shrimp Avatar
+            ShrimpAvatarView(claw: user, size: detailSidebarShowsLabels ? 48 : 32, isEditable: true)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 4)
+
 
             // Agent 选择器
             if detailSidebarShowsLabels {
@@ -867,6 +869,7 @@ struct OpenClawDetailView: View {
         } message: {
             Text(quickTransferAlertMessage ?? "")
         }
+        .hostPermissionPrompt($hostPermissionPromptRequest)
         .sheet(isPresented: $showGatewayNodeRepairSheet) {
             VStack(alignment: .leading, spacing: 14) {
                 Text(L10n.k("user.detail.gateway.node_missing.title", fallback: "检测到 Node.js 环境缺失"))
@@ -2702,9 +2705,11 @@ struct OpenClawDetailView: View {
                     // 速冻为兜底路径：即使 stopGateway 失败也继续强制终止进程。
                     if mode != .flash { throw error }
                 }
+                try await helperClient.uninstallGateway(username: user.username)
             }
 
             if mode == .pause {
+                // 暂停冻结需要保留挂起中的进程内存态，不能卸载 launchd job，否则进程会被终止。
                 let processes = await helperClient.getProcessList(username: user.username)
                 let targets = ProcessEmergencyFreezeResolver.resolvePauseTargets(processes: processes)
                 var pausedPIDs: [Int32] = []
@@ -2747,8 +2752,6 @@ struct OpenClawDetailView: View {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
                     throw HelperError.operationFailed(L10n.f("views.user_detail_view.pid_0cbf36", fallback: "@%@ 速冻部分失败，未终止 PID: %@", String(describing: user.username), String(describing: pidList)))
                 }
-                // 二次 stop，防止状态滞后导致 launchd/job 被重新拉起。
-                try? await helperClient.stopGateway(username: user.username)
                 // 速冻后立即复核：若关键进程被外部拉起，给出明确提示。
                 try? await Task.sleep(for: .milliseconds(250))
                 let remaining = await helperClient.getProcessList(username: user.username)
@@ -2798,6 +2801,9 @@ struct OpenClawDetailView: View {
                     let pidList = failedPIDs.prefix(8).map(String.init).joined(separator: ",")
                     throw HelperError.operationFailed(L10n.f("views.user_detail_view.pid_e5e7a7", fallback: "@%@ 解除暂停部分失败，未恢复 PID: %@", String(describing: user.username), String(describing: pidList)))
                 }
+            }
+            if mode != .pause, user.freezePreviousAutostartEnabled == true {
+                try await helperClient.restoreGatewayRegistration(username: user.username)
             }
             if let restoreAutostart = user.freezePreviousAutostartEnabled {
                 try await helperClient.setUserAutostart(username: user.username, enabled: restoreAutostart)
@@ -3085,6 +3091,11 @@ struct OpenClawDetailView: View {
 
     @MainActor
     private func openBrowserAccount() async {
+        guard prepareBrowserAutomationAction(
+            L10n.k("content_view.browser.open_browser", fallback: "打开浏览器")
+        ) else {
+            return
+        }
         isOpeningBrowserAccount = true
         actionError = nil
         defer { isOpeningBrowserAccount = false }
@@ -3102,6 +3113,11 @@ struct OpenClawDetailView: View {
 
     @MainActor
     private func openManualLoginSite(_ site: BrowserManualLoginSite) async {
+        guard prepareBrowserAutomationAction(
+            L10n.k("content_view.browser.open_browser", fallback: "打开浏览器")
+        ) else {
+            return
+        }
         isOpeningBrowserAccount = true
         actionError = nil
         defer { isOpeningBrowserAccount = false }
@@ -3124,6 +3140,20 @@ struct OpenClawDetailView: View {
         sites.append(site)
         manualLoginCustomSitesRaw = BrowserManualLoginSite.encodeCustomSites(sites)
         Task { await openManualLoginSite(site) }
+    }
+
+    @MainActor
+    private func prepareBrowserAutomationAction(_ actionLabel: String) -> Bool {
+        hostPermissionCenter.refresh()
+        let missing = hostPermissionCenter.missingBrowserAutomationPermissions()
+        guard !missing.isEmpty else {
+            return true
+        }
+        hostPermissionPromptRequest = HostPermissionPromptRequest(
+            actionLabel: actionLabel,
+            missingPermissions: missing
+        )
+        return false
     }
 
     @MainActor

@@ -27,6 +27,7 @@ enum UserEnvContract {
         "npm_config_userconfig",
         "OPENCLAW_PATH_BOOTSTRAPPED",
         "OPENCLI_PROFILE",
+        "BROWSER_CDP_URL",
     ]
 
     static func home(username: String) -> String {
@@ -115,6 +116,9 @@ enum UserEnvContract {
         ]
         if let profile = BrowserAccountManager.readOpenCLIProfile(username: username) {
             env["OPENCLI_PROFILE"] = profile
+        }
+        if let cdpEndpoint = BrowserAccountManager.reachableCDPEndpoint(username: username) {
+            env["BROWSER_CDP_URL"] = cdpEndpoint
         }
 
         let proxy = normalizedProxyEnvironment(username: username)

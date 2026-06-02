@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-WEBSITE_DIR="${WEBSITE_DIR:-$REPO_ROOT/../clawdhome_website}"
+WEBSITE_DIR="${WEBSITE_DIR:-$HOME/Documents/GitHub/clawdhome_website}"
 WEBSITE_REPO="${WEBSITE_REPO:-deepjerry-ai/clawdhome_website}"
 API_VERSION_JSON="$WEBSITE_DIR/api/version.json"
 NOTES_DIR="${NOTES_DIR:-$REPO_ROOT/release-notes}"
@@ -38,6 +38,72 @@ log()  { echo "▶ $*"; }
 ok()   { echo "✅ $*"; }
 warn() { echo "⚠️  $*"; }
 fail() { echo "❌ $*" >&2; exit 1; }
+
+run_with_timeout_retry() {
+  local timeout_sec="$1"
+  local retries="$2"
+  shift 2
+  local attempt=1
+  local rc=0
+  while [ "$attempt" -le "$retries" ]; do
+    log "执行（第 ${attempt}/${retries} 次）：$*"
+    if perl -e 'alarm shift @ARGV; exec @ARGV' "$timeout_sec" "$@"; then
+      return 0
+    fi
+    rc=$?
+    warn "命令失败（exit=$rc）：$*"
+    if [ "$attempt" -lt "$retries" ]; then
+      warn "3 秒后重试..."
+      sleep 3
+    fi
+    attempt=$((attempt + 1))
+  done
+  return "$rc"
+}
+
+check_url_ok() {
+  local url="$1"
+  if curl -fsSIL --max-time 20 "$url" >/dev/null 2>&1; then
+    ok "URL 可访问：$url"
+    return 0
+  fi
+  warn "URL 不可访问：$url"
+  return 1
+}
+
+get_local_file_size() {
+  local path="$1"
+  stat -f%z "$path" 2>/dev/null || echo ""
+}
+
+get_remote_head_size() {
+  local url="$1"
+  curl -fsSI --max-time 20 "$url" | tr -d '\r' | awk 'BEGIN{IGNORECASE=1} /^Content-Length:/ {print $2; exit}'
+}
+
+verify_online_version_json() {
+  local version_json_url="$1"
+  local expected_version="$2"
+  local expected_arm64_url="$3"
+  local expected_x64_url="$4"
+  /usr/bin/python3 - "$version_json_url" "$expected_version" "$expected_arm64_url" "$expected_x64_url" <<'PY'
+import json, sys, urllib.request
+url, expected_version, expected_arm64, expected_x64 = sys.argv[1:]
+with urllib.request.urlopen(url, timeout=20) as resp:
+    data = json.loads(resp.read().decode("utf-8"))
+errors = []
+if data.get("version") != expected_version:
+    errors.append("version")
+if data.get("download_url") != expected_arm64:
+    errors.append("download_url")
+if data.get("download_url_x64") != expected_x64:
+    errors.append("download_url_x64")
+if errors:
+    print("MISMATCH:" + ",".join(errors))
+    sys.exit(2)
+print("OK")
+PY
+}
 
 # ── 确定版本号 ────────────────────────────────────────────────────────────────
 
@@ -104,13 +170,13 @@ fi
 
 if [ "$SKIP_PUSH" = false ]; then
   log "推送到远程仓库..."
-  git push
-  git push origin "v${NEXT_VERSION}"
+  run_with_timeout_retry 120 2 git push || fail "git push 失败"
+  run_with_timeout_retry 120 2 git push origin "v${NEXT_VERSION}" || fail "推送 tag v${NEXT_VERSION} 失败"
 
   log "创建 GitHub Release..."
   RELEASE_NOTES_FILE=$(mktemp)
   echo "$GITHUB_RELEASE_NOTES" > "$RELEASE_NOTES_FILE"
-  gh release create "v${NEXT_VERSION}" "$PKG_ARM64" "$PKG_X64" \
+  run_with_timeout_retry 180 2 gh release create "v${NEXT_VERSION}" "$PKG_ARM64" "$PKG_X64" \
     --title "ClawdHome ${NEXT_VERSION}" \
     --notes-file "$RELEASE_NOTES_FILE" || \
     warn "GitHub Release 创建失败（可能已存在），请手动检查"
@@ -175,14 +241,14 @@ fi
 if [ -d "$WEBSITE_DIR" ]; then
   log "创建 website changelog PR..."
   if [ "$SKIP_PUSH" = true ]; then
-    bash "$SCRIPT_DIR/release_website_pr.sh" \
+    run_with_timeout_retry 300 2 bash "$SCRIPT_DIR/release_website_pr.sh" \
       --version "$NEXT_VERSION" \
       --notes-dir "$NOTES_DIR" \
       --website-dir "$WEBSITE_DIR" \
       --website-repo "$WEBSITE_REPO" \
       --skip-push || warn "website PR 失败，请手动处理"
   else
-    bash "$SCRIPT_DIR/release_website_pr.sh" \
+    run_with_timeout_retry 300 2 bash "$SCRIPT_DIR/release_website_pr.sh" \
       --version "$NEXT_VERSION" \
       --notes-dir "$NOTES_DIR" \
       --website-dir "$WEBSITE_DIR" \
@@ -194,8 +260,52 @@ fi
 
 if [ -d "$WEBSITE_DIR" ] && [ "$SKIP_PUSH" = false ]; then
   log "同步版本数据到 platform..."
-  make -C "$WEBSITE_DIR" seed-platform-release 2>&1 || \
+  run_with_timeout_retry 180 2 make -C "$WEBSITE_DIR" seed-platform-release 2>&1 || \
     warn "seed-platform-release 失败，请手动运行：make -C $WEBSITE_DIR seed-platform-release"
+fi
+
+# ── 发布后可访问性检查 ───────────────────────────────────────────────────────
+
+if [ "$SKIP_PUSH" = false ]; then
+  log "发布后 URL 检查..."
+  VERSION_JSON_URL="https://clawdhome.app/api/version.json"
+  REMOTE_ARM64_URL="https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}-arm64.pkg"
+  REMOTE_X64_URL="https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}-x64.pkg"
+  VERIFY_FAILED=0
+
+  check_url_ok "$VERSION_JSON_URL" || VERIFY_FAILED=1
+  check_url_ok "$REMOTE_ARM64_URL" || VERIFY_FAILED=1
+  check_url_ok "$REMOTE_X64_URL" || VERIFY_FAILED=1
+
+  if verify_online_version_json "$VERSION_JSON_URL" "$NEXT_VERSION" "$REMOTE_ARM64_URL" "$REMOTE_X64_URL"; then
+    ok "version.json 字段校验通过（version/download_url/download_url_x64）"
+  else
+    warn "version.json 字段校验失败（版本号或下载链接不匹配）"
+    VERIFY_FAILED=1
+  fi
+
+  LOCAL_ARM64_SIZE="$(get_local_file_size "$PKG_ARM64")"
+  LOCAL_X64_SIZE="$(get_local_file_size "$PKG_X64")"
+  REMOTE_ARM64_SIZE="$(get_remote_head_size "$REMOTE_ARM64_URL")"
+  REMOTE_X64_SIZE="$(get_remote_head_size "$REMOTE_X64_URL")"
+
+  if [ -n "$LOCAL_ARM64_SIZE" ] && [ -n "$REMOTE_ARM64_SIZE" ] && [ "$LOCAL_ARM64_SIZE" = "$REMOTE_ARM64_SIZE" ]; then
+    ok "arm64 包大小校验通过（HEAD Content-Length=$REMOTE_ARM64_SIZE）"
+  else
+    warn "arm64 包大小校验失败（local=${LOCAL_ARM64_SIZE:-N/A}, remote=${REMOTE_ARM64_SIZE:-N/A}）"
+    VERIFY_FAILED=1
+  fi
+
+  if [ -n "$LOCAL_X64_SIZE" ] && [ -n "$REMOTE_X64_SIZE" ] && [ "$LOCAL_X64_SIZE" = "$REMOTE_X64_SIZE" ]; then
+    ok "x64 包大小校验通过（HEAD Content-Length=$REMOTE_X64_SIZE）"
+  else
+    warn "x64 包大小校验失败（local=${LOCAL_X64_SIZE:-N/A}, remote=${REMOTE_X64_SIZE:-N/A}）"
+    VERIFY_FAILED=1
+  fi
+
+  if [ "$VERIFY_FAILED" -ne 0 ]; then
+    fail "发布后校验失败：请检查 version.json / 下载链接 / 文件大小"
+  fi
 fi
 
 # ── 完成摘要 ──────────────────────────────────────────────────────────────────

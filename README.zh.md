@@ -50,6 +50,7 @@ ClawdHome 让你在一台 Mac 上同时运行多个独立的 AI Agent 实例（�
 市场上多 Agent 管理方案要么太轻（Chrome 多 Profile 共享同一个系统账号，密钥和 Cookie 互相能读），要么太重（虚拟机 / Docker 跑不动 macOS 桌面应用）。ClawdHome 占据的是一个当前明显缺位的象限：**强隔离 + 低运维**。
 
 - **真隔离，不是应用层假装**：每只 Shrimp 是独立 macOS 用户，进程、文件、Keychain、网络走系统内核强制边界。一个 Agent 被攻陷，其他 Agent 的密钥和 Cookie 物理读不到。
+- **浏览器账号也隔离，不共用宿主 Chrome**：每只 Shrimp 还有一层独立的托管浏览器账号边界，Browser Bridge / OpenCLI profile、CDP endpoint、Cookie 和会话元数据只在该 Shrimp 内共享，不会和你的主浏览器账号或其他 Shrimp 混用。
 - **更安全的特权模型**：UI 永远不直接执行特权操作；所有系统级动作经过显式 XPC helper（LaunchDaemon），调用链可审计、可限权。
 - **双引擎并存**：同一台 Mac 可以同时运行 OpenClaw 和 Hermes Agent，每套引擎独立配置，共享 API Key 管理和备份系统。
 - **运维入口统一**：初始化向导、网关生命周期、文件管理、诊断、配置热加载、备份恢复和 Cron 任务都在一个面板里处理，不用写脚本，不用配 launchd。
@@ -78,12 +79,23 @@ ClawdHome 让你在一台 Mac 上同时运行多个独立的 AI Agent 实例（�
 ```text
 ClawdHome.app（SwiftUI 管理界面）
   -> XPC -> ClawdHomeHelper（特权 LaunchDaemon）
+      -> 按用户隔离的浏览器账号层
       -> 按用户隔离的 OpenClaw / Hermes Agent 实例
 ```
 
 - `ClawdHome.app` 是面向操作者的控制平面，负责状态展示、初始化和日常运维。
 - `ClawdHomeHelper` 是特权边界，负责用户管理、进程控制、文件操作、安装和系统级自动化。
-- 每只 Shrimp 作为独立 macOS 用户运行，拥有独立的 Agent 运行时与数据目录。
+- 每只 Shrimp 作为独立 macOS 用户运行，拥有独立的 Agent 运行时、数据目录和托管浏览器账号命名空间。
+
+### 浏览器账号隔离
+
+ClawdHome 不把浏览器自动化视为“直接控制宿主桌面的浏览器”，而是给每只 Shrimp 建一层独立的托管浏览器账号空间，供两个引擎复用。
+
+- 同一只 Shrimp 下的 OpenClaw 和 Hermes 可以复用同一份登录态。
+- Browser Bridge / OpenCLI 选择器和 CDP 会话元数据只留在该 Shrimp 边界内。
+- Agent 接触到的不是操作者自己的默认浏览器 Profile。
+
+技术细节见：[docs/browser-account-technical-spec.md](docs/browser-account-technical-spec.md)
 
 ## 安全模型
 
@@ -91,6 +103,7 @@ ClawdHome.app（SwiftUI 管理界面）
 - 敏感动作通过显式 XPC 方法完成，而不是任意 shell 调用。
 - 关键生命周期流程内置归属和权限修复逻辑。
 - 运行时资源按 Shrimp 隔离，一个实例出问题不扩散到其他实例。
+- 浏览器自动化统一通过 Shrimp 级浏览器账号层暴露，因此支持“外部浏览器”并不等于打破用户隔离边界。
 
 ## 快速开始
 

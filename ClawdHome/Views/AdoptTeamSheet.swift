@@ -1,7 +1,5 @@
 // ClawdHome/Views/AdoptTeamSheet.swift
 // 领养团队弹窗：确认 Shrimp 名 → 创建 Shrimp → 暂存团队草稿 → 进初始化向导
-// ⚠️ DEPRECATED (v2): 团队初始化入口已集成到 InstanceInitWizardV2（模板选择步骤）。
-// 本文件保留在 git 历史中，不删除。
 
 import SwiftUI
 
@@ -19,6 +17,14 @@ struct AdoptTeamSheet: View {
     @State private var usernameInput: String = ""
     @State private var isCreating = false
     @State private var error: String?
+
+    // 交互状态控制
+    enum Field: Hashable {
+        case shrimpName
+        case usernameInput
+    }
+    @FocusState private var focusedField: Field?
+    @State private var hoveredMemberID: String? = nil
 
     // 实例 ID 优先使用可编辑输入；为空时回退到 shrimpName 自动派生
     private var derivedUsername: String {
@@ -41,13 +47,39 @@ struct AdoptTeamSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // 标题
-            HStack(spacing: 10) {
-                Text(teamDNA.teamEmoji)
-                    .font(.system(size: 32))
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 16) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.12), Color.white.opacity(0.04)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 56, height: 56)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [Color.white.opacity(0.2), Color.clear],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1
+                                )
+                        )
+                        .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 3)
+                    
+                    Text(teamDNA.teamEmoji)
+                        .font(.system(size: 30))
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
                     Text(teamDNA.teamName)
                         .font(.title2)
-                        .fontWeight(.semibold)
+                        .bold()
+                        .foregroundStyle(.primary)
                     Text(L10n.k("adopt_team.subtitle", fallback: "一键组建专属团队"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -59,24 +91,29 @@ struct AdoptTeamSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(L10n.k("adopt_team.members", fallback: "团队成员"))
                     .font(.caption)
-                    .fontWeight(.semibold)
+                    .fontWeight(.bold)
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
 
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(teamDNA.members) { member in
-                        HStack(spacing: 8) {
-                            Text(member.emoji)
-                                .font(.system(size: 20))
-                                .frame(width: 28, alignment: .center)
-                            VStack(alignment: .leading, spacing: 2) {
+                        let isHovered = hoveredMemberID == member.id
+                        HStack(spacing: 10) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.05))
+                                    .frame(width: 32, height: 32)
+                                Text(member.emoji)
+                                    .font(.system(size: 20))
+                            }
+                            VStack(alignment: .leading, spacing: 3) {
                                 Text(member.name)
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.primary)
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                                 Text(member.soul)
-                                    .font(.system(size: 9))
+                                    .font(.system(size: 11))
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
                                     .truncationMode(.tail)
@@ -84,9 +121,35 @@ struct AdoptTeamSheet: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .padding(8)
-                        .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading)
-                        .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, minHeight: 64, alignment: .center)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(
+                                    LinearGradient(
+                                        colors: isHovered 
+                                            ? [Color.white.opacity(0.08), Color.white.opacity(0.04)]
+                                            : [Color.white.opacity(0.04), Color.white.opacity(0.01)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(
+                                    isHovered ? Color.accentColor.opacity(0.4) : Color.white.opacity(0.08),
+                                    lineWidth: 1
+                                )
+                        )
+                        .shadow(color: isHovered ? Color.black.opacity(0.15) : Color.clear, radius: 4, x: 0, y: 2)
+                        .offset(y: isHovered ? -2 : 0)
+                        .onHover { isHovering in
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                hoveredMemberID = isHovering ? member.id : nil
+                            }
+                        }
                     }
                 }
             }
@@ -99,22 +162,68 @@ struct AdoptTeamSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(L10n.k("adopt_team.shrimp_name", fallback: "工作区名称"))
                     .font(.caption)
-                    .fontWeight(.semibold)
+                    .fontWeight(.bold)
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
 
-                TextField(L10n.k("adopt_team.shrimp_name.placeholder", fallback: "例如：我的创业班底"), text: $shrimpName)
-                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    TextField(L10n.k("adopt_team.shrimp_name.placeholder", fallback: "例如：我的创业班底"), text: $shrimpName)
+                        .textFieldStyle(.plain)
+                        .focused($focusedField, equals: .shrimpName)
+                        .font(.body)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(focusedField == .shrimpName ? Color.black.opacity(0.25) : Color.white.opacity(0.04))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(
+                            focusedField == .shrimpName
+                                ? Color.accentColor.opacity(0.8)
+                                : Color.white.opacity(0.1),
+                            lineWidth: 1.2
+                        )
+                        .shadow(
+                            color: focusedField == .shrimpName ? Color.accentColor.opacity(0.25) : Color.clear,
+                            radius: 4, x: 0, y: 0
+                        )
+                )
 
                 Text(L10n.k("adopt_team.instance_id", fallback: "实例 ID（@ID，可修改）"))
                     .font(.caption)
-                    .fontWeight(.semibold)
+                    .fontWeight(.bold)
                     .foregroundStyle(.secondary)
                     .padding(.top, 6)
 
-                TextField(L10n.k("adopt_team.instance_id.placeholder", fallback: "例如：startup_core_team"), text: $usernameInput)
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled()
+                HStack {
+                    TextField(L10n.k("adopt_team.instance_id.placeholder", fallback: "例如：startup_core_team"), text: $usernameInput)
+                        .textFieldStyle(.plain)
+                        .focused($focusedField, equals: .usernameInput)
+                        .font(.body)
+                        .autocorrectionDisabled()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(focusedField == .usernameInput ? Color.black.opacity(0.25) : Color.white.opacity(0.04))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(
+                            focusedField == .usernameInput
+                                ? Color.accentColor.opacity(0.8)
+                                : Color.white.opacity(0.1),
+                            lineWidth: 1.2
+                        )
+                        .shadow(
+                            color: focusedField == .usernameInput ? Color.accentColor.opacity(0.25) : Color.clear,
+                            radius: 4, x: 0, y: 0
+                        )
+                )
 
                 HStack(spacing: 4) {
                     Text("@\(derivedUsername)")
@@ -128,6 +237,7 @@ struct AdoptTeamSheet: View {
                 }
             }
             .padding(.bottom, 16)
+            .animation(.easeInOut(duration: 0.15), value: focusedField)
 
             // 错误提示
             if let error {
@@ -138,25 +248,71 @@ struct AdoptTeamSheet: View {
             }
 
             // 按钮行
-            HStack {
+            HStack(spacing: 12) {
                 Spacer()
-                Button(L10n.k("common.action.cancel", fallback: "取消")) {
+
+                Button {
                     onDismiss()
                     dismiss()
+                } label: {
+                    Text(L10n.k("common.action.cancel", fallback: "取消"))
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 8)
+                        .background(
+                            Color.white.opacity(0.05),
+                            in: RoundedRectangle(cornerRadius: 8)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        )
                 }
+                .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
 
                 Button {
                     Task { await buildTeam() }
                 } label: {
-                    if isCreating {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Text(L10n.k("adopt_team.confirm", fallback: "组建团队"))
+                    HStack(spacing: 6) {
+                        if isCreating {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text(L10n.k("adopt_team.confirm", fallback: "组建团队"))
+                                .fontWeight(.semibold)
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
                     }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(
+                        LinearGradient(
+                            colors: canCreate
+                                ? [Color.accentColor, Color.accentColor.opacity(0.8)]
+                                : [Color.gray.opacity(0.3), Color.gray.opacity(0.2)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(
+                                canCreate ? Color.white.opacity(0.12) : Color.clear,
+                                lineWidth: 1
+                            )
+                    )
+                    .shadow(
+                        color: canCreate ? Color.accentColor.opacity(0.35) : Color.clear,
+                        radius: 6, x: 0, y: 3
+                    )
                 }
-                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.plain)
                 .disabled(!canCreate)
+                .keyboardShortcut(.defaultAction)
             }
         }
         .padding(24)

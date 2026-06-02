@@ -431,19 +431,24 @@ extension ClawdHomeHelperImpl {
         }
     }
 
-    func downloadLocalModel(_ modelId: String, withReply reply: @escaping (Bool, String?) -> Void) {
-        helperLog("[omlx] XPC downloadLocalModel \(modelId)")
+    func prepareLocalModelDownload(_ modelId: String, withReply reply: @escaping (Bool, String?, String?) -> Void) {
+        helperLog("[omlx] XPC prepareLocalModelDownload \(modelId)")
         let admin = resolveConsoleUsername()
         guard !admin.isEmpty else {
-            reply(false, LocalAIError.adminNotAvailable.localizedDescription)
+            reply(false, LocalAIError.adminNotAvailable.localizedDescription, nil)
             return
         }
         do {
-            try LocalLLMManager.downloadModel(modelId: modelId, adminUsername: admin)
-            reply(true, nil)
+            let plan = try LocalLLMManager.prepareModelDownload(modelId: modelId, adminUsername: admin)
+            let data = try JSONEncoder().encode(plan)
+            guard let json = String(data: data, encoding: .utf8) else {
+                reply(false, "无法编码模型下载计划", nil)
+                return
+            }
+            reply(true, nil, json)
         } catch {
-            helperLog("[omlx] 下载失败 \(modelId): \(error.localizedDescription)", level: .error)
-            reply(false, error.localizedDescription)
+            helperLog("[omlx] 准备下载目录失败 \(modelId): \(error.localizedDescription)", level: .error)
+            reply(false, error.localizedDescription, nil)
         }
     }
 
@@ -468,10 +473,23 @@ extension ClawdHomeHelperImpl {
 
     func getProcessListSnapshot(username: String, withReply reply: @escaping (String) -> Void) {
         let snapshot = ProcessManager.listProcessSnapshot(username: username)
-        let json = (try? JSONEncoder().encode(snapshot))
-            .flatMap { String(data: $0, encoding: .utf8) }
-            ?? #"{"entries":[],"portsLoading":false,"updatedAt":0}"#
-        reply(json)
+        do {
+            let data = try JSONEncoder().encode(snapshot)
+            let json = String(data: data, encoding: .utf8)
+                ?? #"{"entries":[],"portsLoading":false,"updatedAt":0}"#
+            helperLog(
+                "[proc] snapshot reply user=\(username) count=\(snapshot.entries.count) portsLoading=\(snapshot.portsLoading)",
+                level: .debug,
+                channel: .diagnostics
+            )
+            reply(json)
+        } catch {
+            helperLog(
+                "[proc] snapshot encode failed user=\(username) count=\(snapshot.entries.count) error=\(error.localizedDescription)",
+                level: .error
+            )
+            reply(#"{"entries":[],"portsLoading":false,"updatedAt":0}"#)
+        }
     }
 
     func getProcessDetail(pid: Int32, withReply reply: @escaping (String) -> Void) {

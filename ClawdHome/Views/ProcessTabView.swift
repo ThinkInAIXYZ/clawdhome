@@ -24,6 +24,7 @@ struct ProcessTabView: View {
     @State private var lastUpdatedAt: Date? = nil
     @State private var detailTarget: ProcessEntry? = nil
     @State private var columnWidths = ProcessColumnWidths()
+    @State private var refreshTask: Task<Void, Never>? = nil
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case flat = "flat"
@@ -270,21 +271,13 @@ struct ProcessTabView: View {
             .padding(.vertical, 4)
             .background(.bar)
         }
-        .onAppear  { isActive = true }
-        .onDisappear { isActive = false }
-        .task(id: isActive) {
-            guard isActive else { return }
-            isLoading = true
-            while !Task.isCancelled && isActive {
-                let snapshot = await helperClient.getProcessListSnapshot(username: username)
-                processes = snapshot.entries
-                portsLoading = snapshot.portsLoading
-                lastUpdatedAt = Date(timeIntervalSince1970: snapshot.updatedAt)
-                let livePIDs = Set(snapshot.entries.map(\.pid))
-                selectedPIDs.formIntersection(livePIDs)
-                isLoading = false
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
+        .onAppear {
+            isActive = true
+            startPolling()
+        }
+        .onDisappear {
+            isActive = false
+            stopPolling()
         }
         .confirmationDialog(
             killDialogTitle,
@@ -379,6 +372,33 @@ struct ProcessTabView: View {
         killError = failures.count == 1
             ? failures[0]
             : L10n.k("views.user_detail_view.process", fallback: "以下进程操作失败：\n") + failures.joined(separator: "\n")
+    }
+
+    private func startPolling() {
+        guard refreshTask == nil else { return }
+        isLoading = true
+        appLog("[proc-ui] start polling @\(username)")
+        refreshTask = Task { @MainActor in
+            while !Task.isCancelled && isActive {
+                appLog("[proc-ui] requesting snapshot @\(username)")
+                let snapshot = await helperClient.getProcessListSnapshot(username: username)
+                processes = snapshot.entries
+                portsLoading = snapshot.portsLoading
+                lastUpdatedAt = Date(timeIntervalSince1970: snapshot.updatedAt)
+                let livePIDs = Set(snapshot.entries.map(\.pid))
+                selectedPIDs.formIntersection(livePIDs)
+                isLoading = false
+                appLog("[proc-ui] applied snapshot @\(username) count=\(snapshot.entries.count) portsLoading=\(snapshot.portsLoading)")
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            appLog("[proc-ui] polling finished @\(username)")
+        }
+    }
+
+    private func stopPolling() {
+        refreshTask?.cancel()
+        refreshTask = nil
+        appLog("[proc-ui] stop polling @\(username)")
     }
 
     private var statusText: String {

@@ -161,7 +161,8 @@ enum BrowserAccountManager {
         if let existingSession = readSession(username: username),
            !browserProcessIDs(profilePath: existingSession.profilePath).isEmpty {
             if !requireBridge {
-                return existingSession
+                let refreshedSession = refreshLiveSession(existingSession, username: username)
+                return refreshedSession
             }
             try closeWarmupBrowser(profilePath: existingSession.profilePath, logURL: nil)
         }
@@ -191,7 +192,7 @@ enum BrowserAccountManager {
             throw BrowserAccountError.commandFailed("Chrome 已尝试启动，但进程未就绪。请确认当前 macOS 图形会话可用。")
         }
 
-        let session = BrowserAccountSession(
+        var session = BrowserAccountSession(
             username: username,
             profilePath: context.paths.profileDirectory.path,
             devToolsActivePortPath: context.paths.devToolsActivePortFile.path,
@@ -201,6 +202,10 @@ enum BrowserAccountManager {
             launchedAt: Date().timeIntervalSince1970,
             consoleUsername: context.consoleUsername
         )
+        if enableCDPCapture,
+           let activePort = waitForActivePort(atPath: context.paths.devToolsActivePortFile.path, timeout: 5) {
+            session = session.resolving(activePort)
+        }
         try writeSession(session, username: username)
         return session
     }
@@ -260,7 +265,7 @@ enum BrowserAccountManager {
 
         let sessionPath = sessionPath(username: username)
         let toolPath = "/Users/\(username)/\(BrowserAccountPaths.toolExecutableRelativePath)"
-        let session = readSession(username: username)
+        let session = readSession(username: username).map { refreshLiveSession($0, username: username) }
         let reachable = session.map { !browserProcessIDs(profilePath: $0.profilePath).isEmpty } ?? false
         let bridgeMeta = openCLIBrowserBridgeMeta(context: context)
         let message: String
@@ -290,7 +295,12 @@ enum BrowserAccountManager {
     }
 
     static func reachableCDPEndpoint(username: String) -> String? {
-        nil
+        guard let session = readSession(username: username),
+              !browserProcessIDs(profilePath: session.profilePath).isEmpty else {
+            return nil
+        }
+        let refreshedSession = refreshLiveSession(session, username: username)
+        return refreshedSession.httpEndpoint.isEmpty ? nil : refreshedSession.httpEndpoint
     }
 
     static func reset(username: String) throws -> BrowserAccountStatus {
@@ -1340,7 +1350,7 @@ enum BrowserAccountManager {
 
     private static func removeBrowserShellEnvironment(username: String) throws {
         for path in ["/Users/\(username)/.zprofile", "/Users/\(username)/.zshrc"] {
-            guard var existing = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+            guard let existing = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
             guard let start = existing.range(of: "# ClawdHome browser account"),
                   let end = existing.range(of: "# End ClawdHome browser account", range: start.lowerBound..<existing.endIndex) else {
                 continue
@@ -1392,11 +1402,11 @@ enum BrowserAccountManager {
         try FilePermissionHelper.chmod(launcherDirectory, mode: "755")
         try browserPipeLauncherScript.write(toFile: pipeLauncherPath, atomically: true, encoding: .utf8)
         try FilePermissionHelper.chown(pipeLauncherPath, owner: "root", group: "wheel")
-        try? FilePermissionHelper.clearACL(pipeLauncherPath)
+        _ = try? FilePermissionHelper.clearACL(pipeLauncherPath)
         try FilePermissionHelper.chmod(pipeLauncherPath, mode: "755")
         try run("/usr/bin/clang", args: [sourcePath, "-o", launcherPath])
         try FilePermissionHelper.chown(launcherPath, owner: "root", group: "wheel")
-        try? FilePermissionHelper.clearACL(launcherPath)
+        _ = try? FilePermissionHelper.clearACL(launcherPath)
         try FilePermissionHelper.chmod(launcherPath, mode: "4755")
         try verifyPrivilegedBrowserLauncher(launcherPath)
     }
@@ -1705,7 +1715,7 @@ enum BrowserAccountManager {
         guard requiredMarkers.allSatisfy({ content.contains($0) }) else { return }
         try fm.removeItem(atPath: path)
         let parent = (path as NSString).deletingLastPathComponent
-        try? FilePermissionHelper.chown(parent, owner: owner)
+        _ = try? FilePermissionHelper.chown(parent, owner: owner)
     }
 
     private static func openCLIWrapperScript(username: String, toolPath: String, realPath: String, daemonPath: String) -> String {
@@ -1989,9 +1999,29 @@ enum BrowserAccountManager {
 
         appendInstallLog("→ 下载并安装 OpenCLI Browser Bridge（profile 内加载）\n", logURL: logURL)
         let releaseURL = URL(string: openCLIReleaseAPIURL)!
-        guard let releaseJSON = readJSONObject(url: releaseURL, timeout: 8) as? [String: Any],
+        let releaseResponse: OpenCLINetworkSupport.Response
+        do {
+            releaseResponse = try OpenCLINetworkSupport.fetch(
+                url: releaseURL,
+                timeout: 8,
+                username: context.username,
+                acceptJSON: true
+            )
+        } catch {
+            throw BrowserAccountError.commandFailed("无法获取 OpenCLI release 信息：\(error.localizedDescription)")
+        }
+        guard let releaseJSON = try? JSONSerialization.jsonObject(with: releaseResponse.data) as? [String: Any],
               let assets = releaseJSON["assets"] as? [[String: Any]] else {
-            throw BrowserAccountError.commandFailed("无法获取 OpenCLI release 信息")
+            throw BrowserAccountError.commandFailed(
+                OpenCLINetworkSupport.failureMessage(
+                    action: "无法解析 OpenCLI release 信息",
+                    url: releaseURL,
+                    statusCode: releaseResponse.statusCode,
+                    body: releaseResponse.data,
+                    underlying: nil,
+                    proxyEnv: ConfigWriter.proxyEnvironment(username: context.username)
+                )
+            )
         }
 
         let assetURL: String? = assets
@@ -2005,7 +2035,16 @@ enum BrowserAccountManager {
             throw BrowserAccountError.commandFailed("OpenCLI release 中未找到 Browser Bridge 扩展包")
         }
 
-        let zipData = try Data(contentsOf: downloadURL)
+        let zipData: Data
+        do {
+            zipData = try OpenCLINetworkSupport.fetch(
+                url: downloadURL,
+                timeout: 30,
+                username: context.username
+            ).data
+        } catch {
+            throw BrowserAccountError.commandFailed("下载 OpenCLI Browser Bridge 扩展包失败：\(error.localizedDescription)")
+        }
         let fm = FileManager.default
         let tempBase = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("clawdhome-opencli-bridge-\(UUID().uuidString)", isDirectory: true)
@@ -2274,7 +2313,8 @@ enum BrowserAccountManager {
         try data.write(to: URL(fileURLWithPath: path), options: .atomic)
         try FilePermissionHelper.chown(path, owner: username)
         try FilePermissionHelper.chmod(path, mode: "600")
-        HermesConfigWriter.syncBrowserCDPEndpoint(username: username, endpoint: nil)
+        let endpoint = session.httpEndpoint.isEmpty ? nil : session.httpEndpoint
+        HermesConfigWriter.syncBrowserCDPEndpoint(username: username, endpoint: endpoint)
     }
 
     private static func readSession(username: String) -> BrowserAccountSession? {
@@ -2313,6 +2353,32 @@ enum BrowserAccountManager {
 
     private static func installWarmupCompleted(username: String) -> Bool {
         FileManager.default.fileExists(atPath: installWarmupMarkerPath(username: username))
+    }
+
+    private static func readActivePort(atPath path: String) -> BrowserAccountActivePort? {
+        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return nil
+        }
+        return BrowserAccountActivePort.parse(raw)
+    }
+
+    private static func refreshLiveSession(_ session: BrowserAccountSession, username: String) -> BrowserAccountSession {
+        let resolved = session.resolving(readActivePort(atPath: session.devToolsActivePortPath))
+        if resolved != session {
+            try? writeSession(resolved, username: username)
+        }
+        return resolved
+    }
+
+    private static func waitForActivePort(atPath path: String, timeout: TimeInterval) -> BrowserAccountActivePort? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let activePort = readActivePort(atPath: path) {
+                return activePort
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return readActivePort(atPath: path)
     }
 
     private static func writeInstallWarmupMarker(username: String) throws {

@@ -54,3 +54,56 @@ struct BackupListEntry: Codable, Sendable, Identifiable {
     let backupType: String  // "global" | "shrimp"
     let username: String?   // shrimp 备份时的用户名
 }
+
+/// 单个 Shrimp 备份中应包含的用户目录载荷。
+struct BackupPayloadSpec: Equatable, Sendable {
+    let relativePath: String
+    let excludes: [String]
+}
+
+enum BackupPayloadPolicy {
+    static let managedRelativePaths = [".clawdhome", ".openclaw", ".hermes"]
+
+    static func payloads(existingRelativePaths: Set<String>) -> [BackupPayloadSpec] {
+        managedRelativePaths.compactMap { relativePath in
+            guard existingRelativePaths.contains(relativePath) else { return nil }
+            return BackupPayloadSpec(relativePath: relativePath, excludes: excludes(for: relativePath))
+        }
+    }
+
+    static func excludes(for relativePath: String) -> [String] {
+        switch relativePath {
+        case ".openclaw":
+            return [
+                "tools",
+                "sandboxes",
+                "logs",
+                "restart-sentinel.json"
+            ]
+        case ".clawdhome":
+            return [
+                "tools",
+                "browser/session.json"
+            ]
+        default:
+            return []
+        }
+    }
+}
+
+enum BackupFilenamePolicy {
+    static func username(fromShrimpFilename filename: String) -> String? {
+        guard filename.hasPrefix("shrimp-") else { return nil }
+        let basename = filename.replacingOccurrences(of: ".tar.gz", with: "")
+        guard let range = basename.range(
+            of: #"-\d{4}-\d{2}-\d{2}T\d{6}$"#,
+            options: .regularExpression
+        ) else {
+            let fallback = basename.dropFirst("shrimp-".count).split(separator: "-").first.map(String.init)
+            return fallback?.isEmpty == false ? fallback : nil
+        }
+        let start = basename.index(basename.startIndex, offsetBy: "shrimp-".count)
+        let username = String(basename[start..<range.lowerBound])
+        return username.isEmpty ? nil : username
+    }
+}

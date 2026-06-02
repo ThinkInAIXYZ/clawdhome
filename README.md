@@ -50,6 +50,7 @@ Changelog: [English](CHANGELOG.en.md) | [中文](CHANGELOG.zh.md)
 Most multi-Agent setups are either too weak (Chrome profiles share a single macOS user account — credentials and cookies are readable across profiles) or too heavy (VMs and Docker cannot run macOS-native desktop apps). ClawdHome fills the gap: **strong isolation with low operational overhead**.
 
 - **Real isolation, enforced by the OS kernel**: each Shrimp is a separate macOS user account. Processes, files, Keychain entries, and network policies are separated at the kernel level. If one Agent is compromised, its blast radius stops at its own UID boundary.
+- **Browser-account isolation, not shared desktop Chrome**: each Shrimp also gets its own managed browser-account layer, so Browser Bridge/OpenCLI profiles, CDP endpoints, cookies, and session metadata are shared only inside that Shrimp boundary, not with your main browser account or other Shrimps.
 - **Safer privilege model**: the UI never executes privileged operations directly. All system-level actions go through an explicit XPC helper (LaunchDaemon) with a typed, auditable call surface.
 - **Dual-engine coexistence**: run OpenClaw and Hermes Agent side-by-side on the same Mac, each independently configured, sharing a common API key store and backup system.
 - **Unified operations**: initialization wizard, gateway lifecycle, file management, diagnostics, config hot-reload, backup/restore, and Cron tasks all live in one panel — no custom scripts, no manual launchd wiring.
@@ -78,12 +79,23 @@ Most multi-Agent setups are either too weak (Chrome profiles share a single macO
 ```text
 ClawdHome.app (SwiftUI admin UI)
   -> XPC -> ClawdHomeHelper (privileged LaunchDaemon)
+      -> per-user browser-account isolation layer
       -> per-user OpenClaw / Hermes Agent instances
 ```
 
 - `ClawdHome.app` is the operator-facing control plane for status, setup, and day-to-day maintenance.
 - `ClawdHomeHelper` is the privileged boundary for user management, process control, file operations, installs, and system automation.
-- Each Shrimp runs as a separate macOS user with its own Agent runtime and data directory.
+- Each Shrimp runs as a separate macOS user with its own Agent runtime, data directory, and managed browser-account namespace.
+
+### Browser-account isolation
+
+ClawdHome does not treat browser automation as "just another app on the host desktop". Instead, each Shrimp gets a managed browser-account namespace used by both supported runtimes.
+
+- OpenClaw and Hermes can reuse the same login state for the same Shrimp.
+- Browser Bridge/OpenCLI selectors and CDP session metadata stay inside that Shrimp's boundary.
+- Your real macOS browser profile is not the control surface exposed to Agents.
+
+Technical reference: [docs/browser-account-technical-spec.md](docs/browser-account-technical-spec.md)
 
 ## Security Model
 
@@ -91,6 +103,7 @@ ClawdHome.app (SwiftUI admin UI)
 - Sensitive actions use explicit XPC methods rather than arbitrary shell paths.
 - Ownership and permission repair are built into important lifecycle workflows.
 - Runtime resources are separated per Shrimp to contain the blast radius of any single instance.
+- Browser automation is routed through a Shrimp-scoped browser-account layer, so "external browser" support does not weaken user isolation.
 
 ## Quick Start
 

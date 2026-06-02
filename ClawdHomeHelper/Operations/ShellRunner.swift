@@ -161,6 +161,13 @@ func run(_ executable: String, args: [String] = []) throws -> String {
 /// logURL 必须已存在（调用方负责创建）
 @discardableResult
 func runLogging(_ executable: String, args: [String] = [], logURL: URL) throws -> String {
+    if !FileManager.default.fileExists(atPath: logURL.path) {
+        FileManager.default.createFile(atPath: logURL.path, contents: Data(), attributes: nil)
+        var attrs = [FileAttributeKey: Any]()
+        attrs[.posixPermissions] = 0o666
+        try? FileManager.default.setAttributes(attrs, ofItemAtPath: logURL.path)
+    }
+
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: executable)
     proc.arguments = args

@@ -31,6 +31,7 @@ struct ContentView: View {
     @State private var browserSessionPromptUsername: String?
     @State private var browserSessionPromptSuppressed = false
     @State private var browserSessionPromptCheckInFlight = false
+    @State private var hostPermissionPromptRequest: HostPermissionPromptRequest?
     // 0 = 跟随系统, 1 = 浅色, 2 = 深色
     @AppStorage("colorSchemePreference") private var colorSchemePreference: Int = 0
 
@@ -51,12 +52,6 @@ struct ContentView: View {
         && (navSelection == .dashboard || navSelection == .clawPool || navSelection == nil)
     }
 
-    private var sidebarPermissionCardBottomPadding: CGFloat {
-        let baseFooterHeight: CGFloat = 44
-        let updateBannerHeight: CGFloat = (updater.appNeedsUpdate || updater.isAwaitingAppRelaunch) ? 42 : 0
-        return baseFooterHeight + updateBannerHeight
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             if let err = pool.loadError {
@@ -68,27 +63,27 @@ struct ContentView: View {
 
             NavigationSplitView {
                 List(selection: $navSelection) {
-                    Section(L10n.k("auto.content_view.daily", fallback: "日常")) {
+                    Section(L10n.k("auto.content_view.daily", fallback: "工作区")) {
                         Label(L10n.k("auto.content_view.dashboard", fallback: "仪表盘"), systemImage: "gauge.with.dots.needle.33percent")
                             .tag(NavDestination.dashboard)
                         Label { Text(L10n.k("auto.content_view.claw_pool", fallback: "虾塘")) } icon: { OpenClawLogoMark().frame(width: 16, height: 16) }
                             .tag(NavDestination.clawPool)
                         Label(L10n.k("auto.content_view.vault_files", fallback: "文件共享"), systemImage: "folder.badge.person.crop")
                             .tag(NavDestination.vaultFiles)
-                        Label(L10n.k("content_view.nav.prompts", fallback: "Prompt"), systemImage: "text.bubble")
-                            .tag(NavDestination.prompts)
                     }
-                    Section(L10n.k("auto.content_view.services", fallback: "服务")) {
+                    Section(L10n.k("auto.content_view.services", fallback: "AI 服务")) {
                         Label { Text(L10n.k("auto.content_view.role_market", fallback: "角色中心")) } icon: { Text("🎭") }
                             .tag(NavDestination.roleMarket)
+                        Label(L10n.k("content_view.nav.prompts", fallback: "提示词"), systemImage: "text.bubble")
+                            .tag(NavDestination.prompts)
                         Label { Text(L10n.k("auto.content_view.models", fallback: "模型")) } icon: { Text("🧠") }
                             .tag(NavDestination.models)
-                        Label(L10n.k("auto.content_view.network", fallback: "网络"), systemImage: "network")
-                            .tag(NavDestination.network)
                         Label(L10n.k("auto.content_view.ai_lab", fallback: "AI 实验室"), systemImage: "flask.fill")
                             .tag(NavDestination.aiLab)
                     }
                     Section(L10n.k("auto.content_view.system", fallback: "系统")) {
+                        Label(L10n.k("auto.content_view.network", fallback: "网络"), systemImage: "network")
+                            .tag(NavDestination.network)
                         Label(L10n.k("auto.content_view.security_audit", fallback: "安全审计"), systemImage: "shield.lefthalf.filled")
                             .tag(NavDestination.audit)
                         Label(L10n.k("auto.content_view.backups", fallback: "备份"), systemImage: "externaldrive.badge.timemachine")
@@ -104,26 +99,19 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
                 .safeAreaInset(edge: .bottom) {
                     VStack(spacing: 0) {
+                        if (SpeechTranscriptionService.shared.isTranscribing || SpeechTranscriptionService.shared.isPreparingModel) && navSelection != .aiLab {
+                            MiniASRActivityCard {
+                                withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                                    navSelection = .aiLab
+                                }
+                            }
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+
                         // App 自身更新提示横幅
                         AppUpdateBanner()
                             .environment(updater)
                         HStack(spacing: 6) {
-                            Text(L10n.k("auto.content_view.beta", fallback: "内测版"))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            Text("BETA")
-                                .font(.system(size: 9, weight: .heavy, design: .rounded))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(
-                                    LinearGradient(
-                                        colors: [.orange, Color(red: 0.95, green: 0.2, blue: 0.35)],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .clipShape(Capsule())
                             Spacer()
                             Button {
                                 colorSchemePreference = (colorSchemePreference + 1) % 3
@@ -144,15 +132,6 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
-                    }
-                }
-                .overlay(alignment: .bottomLeading) {
-                    if hostPermissionCenter.hasIssues {
-                        HostPermissionBanner()
-                            .frame(maxWidth: 272, alignment: .leading)
-                            .padding(.horizontal, 8)
-                            .padding(.bottom, sidebarPermissionCardBottomPadding)
-                            .transition(.move(edge: .leading).combined(with: .opacity))
                     }
                 }
             } detail: {
@@ -233,7 +212,6 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: helperClient.isConnected)
-        .animation(.easeInOut(duration: 0.18), value: hostPermissionCenter.hasIssues)
         .animation(.easeInOut(duration: 0.18), value: shouldShowChromeInstallHint)
         .alert(
             L10n.k("content_view.browser.init_session_title", fallback: "初始化浏览器 Session？"),
@@ -250,13 +228,19 @@ struct ContentView: View {
             Button(L10n.k("content_view.browser.open_browser", fallback: "打开浏览器")) {
                 browserSessionPromptSuppressed = true
                 browserSessionPromptUsername = nil
-                Task {
-                    try? await helperClient.openBrowserAccount(username: username)
+                Task { @MainActor in
+                    guard prepareBrowserAutomationAction(
+                        L10n.k("content_view.browser.open_browser", fallback: "打开浏览器")
+                    ) else {
+                        return
+                    }
+                    _ = try? await helperClient.openBrowserAccount(username: username)
                 }
             }
         } message: { username in
             Text(L10n.f("content_view.browser.init_session_message", fallback: "检测到 %@ 的浏览器工具已安装，但还没有初始化 session。是否现在打开 Chrome 完成初始化？", username))
         }
+        .hostPermissionPrompt($hostPermissionPromptRequest)
         .overlay {
             if lockStore.isLocked {
                 AppLockScreen()
@@ -292,6 +276,20 @@ struct ContentView: View {
             let visible = (newValue == .dashboard || newValue == nil)
             pool.setDashboardVisible(visible)
         }
+    }
+
+    @MainActor
+    private func prepareBrowserAutomationAction(_ actionLabel: String) -> Bool {
+        hostPermissionCenter.refresh()
+        let missing = hostPermissionCenter.missingBrowserAutomationPermissions()
+        guard !missing.isEmpty else {
+            return true
+        }
+        hostPermissionPromptRequest = HostPermissionPromptRequest(
+            actionLabel: actionLabel,
+            missingPermissions: missing
+        )
+        return false
     }
 
     private func refreshChromeInstallStatus() {
@@ -413,5 +411,180 @@ struct ComingSoonView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle(title)
+    }
+}
+
+// MARK: - ASR 后台实时活动指示卡片 (方案 1)
+
+private struct MiniASRActivityCard: View {
+    @Bindable var asr = SpeechTranscriptionService.shared
+    var onRestore: () -> Void
+    
+    @State private var isHovering = false
+    @State private var isHoveringCancel = false
+    
+    // 动态计算 ASR 队列的总进度信息
+    private var transcribingState: (subtitle: String, progress: Double, progressText: String) {
+        let total = asr.queue.count
+        if total == 0 {
+            let progressVal = asr.transcriptionProgressFraction
+            return (
+                L10n.k("asr.mini_card.single_task", fallback: "1 个任务进行中"),
+                progressVal,
+                String(format: "%.0f%%", progressVal * 100)
+            )
+        }
+        
+        let completed = asr.queue.filter { $0.status == .completed || $0.status == .failed || $0.status == .cancelled }.count
+        let activeIndex = min(completed + 1, total)
+        
+        // 取得当前正在进行的音频项进度，如果没有则用全局进度兜底
+        let activeItem = asr.queue.first(where: { $0.status == .transcribing }) ?? asr.selectedQueueItem
+        let progressVal = activeItem?.progressFraction ?? asr.transcriptionProgressFraction
+        
+        let subtitle = L10n.f(
+            "asr.mini_card.queue_progress",
+            fallback: "正在处理第 %d/%d 个音频",
+            activeIndex,
+            total
+        )
+        
+        return (
+            subtitle,
+            progressVal,
+            String(format: "%.0f%%", progressVal * 100)
+        )
+    }
+    
+    var body: some View {
+        Group {
+            if asr.isTranscribing {
+                let state = transcribingState
+                contentView(
+                    title: L10n.k("asr.mini_card.title", fallback: "语音转译中"),
+                    subtitle: state.subtitle,
+                    progress: state.progress,
+                    progressText: state.progressText,
+                    icon: "waveform",
+                    iconColor: .purple,
+                    onCancel: {
+                        asr.cancelCurrentTranscription()
+                    }
+                )
+            } else if asr.isPreparingModel {
+                let progressVal = asr.preparationProgressFraction
+                let speedText = formatSpeed(asr.downloadSpeedBytesPerSecond)
+                let subtitle = speedText != nil ? "\(speedText!)" : L10n.k("asr.mini_card.downloading", fallback: "模型下载中...")
+                
+                contentView(
+                    title: L10n.k("asr.mini_card.preparing_title", fallback: "模型下载中"),
+                    subtitle: subtitle,
+                    progress: progressVal,
+                    progressText: String(format: "%.0f%%", progressVal * 100),
+                    icon: "brain.headset",
+                    iconColor: .blue,
+                    onCancel: {
+                        asr.cancelModelPreparation()
+                    }
+                )
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: asr.isTranscribing)
+        .animation(.easeInOut(duration: 0.22), value: asr.isPreparingModel)
+    }
+    
+    private func formatSpeed(_ bytesPerSecond: Double) -> String? {
+        guard bytesPerSecond > 0 else { return nil }
+        let mb = bytesPerSecond / (1024 * 1024)
+        return String(format: "%.1f MB/s", mb)
+    }
+    
+    private func contentView(
+        title: String,
+        subtitle: String,
+        progress: Double,
+        progressText: String,
+        icon: String,
+        iconColor: Color,
+        onCancel: @escaping () -> Void
+    ) -> some View {
+        VStack(spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                // 精简小图标
+                ZStack {
+                    Circle()
+                        .fill(iconColor.opacity(0.1))
+                        .frame(width: 22, height: 22)
+                    
+                    Image(systemName: icon)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(iconColor)
+                        .symbolEffect(.bounce, options: .repeating, value: asr.isTranscribing)
+                }
+                
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    
+                    Text(subtitle)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                Text(progressText)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(iconColor)
+                
+                // 极简微型取消按钮
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(isHoveringCancel ? .red : .secondary.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+                .help(L10n.k("common.action.cancel", fallback: "取消"))
+                .onHover { hover in
+                    isHoveringCancel = hover
+                }
+            }
+            
+            // 极细微型进度条
+            ProgressView(value: max(0.0, min(1.0, progress)))
+                .progressViewStyle(.linear)
+                .tint(iconColor.gradient)
+                .scaleEffect(x: 1, y: 0.4, anchor: .center)
+                .padding(.horizontal, 1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(isHovering ? iconColor.opacity(0.2) : Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(isHovering ? 0.06 : 0.03), radius: 4, x: 0, y: 2)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onRestore()
+        }
+        .onHover { hover in
+            isHovering = hover
+            if hover {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .help(L10n.k("asr.mini_card.restore_help", fallback: "点击返回语音转译页面"))
     }
 }
