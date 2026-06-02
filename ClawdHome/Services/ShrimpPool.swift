@@ -133,6 +133,11 @@ final class ShrimpPool {
                 
                 users = sortedUsers
                 loadError = nil
+                
+                // 异步且非阻塞地加载各数字分身的自定义头像
+                for user in sortedUsers {
+                    loadAvatar(for: user)
+                }
             } catch {
                 loadError = error.localizedDescription
             }
@@ -148,6 +153,41 @@ final class ShrimpPool {
         var order = orderStore.loadOrder()
         order.removeAll { $0 == username }
         orderStore.saveOrder(order)
+    }
+
+    /// 异步非阻塞加载数字分身的自定义头像，若文件不存在则静默忽略
+    func loadAvatar(for user: ManagedUser) {
+        Task {
+            do {
+                let data = try await helperClient.readFile(username: user.username, relativePath: ".clawdhome/browser/avatar.png")
+                user.customAvatarData = data
+            } catch {
+                user.customAvatarData = nil
+            }
+        }
+    }
+
+    /// 保存数字分身的自定义头像，并纠正所有权
+    func saveAvatar(username: String, avatarData: Data) async throws {
+        try await helperClient.writeFile(
+            username: username,
+            relativePath: ".clawdhome/browser/avatar.png",
+            data: avatarData
+        )
+        if let user = users.first(where: { $0.username == username }) {
+            user.customAvatarData = avatarData
+        }
+    }
+
+    /// 清除数字分身的自定义头像
+    func deleteAvatar(username: String) async throws {
+        try await helperClient.deleteItem(
+            username: username,
+            relativePath: ".clawdhome/browser/avatar.png"
+        )
+        if let user = users.first(where: { $0.username == username }) {
+            user.customAvatarData = nil
+        }
     }
 
     func setDescription(_ text: String, for username: String) {

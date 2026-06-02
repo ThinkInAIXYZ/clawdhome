@@ -100,6 +100,8 @@ extension ClawdHomeHelperImpl {
         helperLog("全局备份 → \(destinationDir)")
         do {
             try BackupManager.backupGlobal(destinationDir: destinationDir)
+            let config = BackupManager.loadConfig()
+            _ = BackupManager.pruneBackups(destinationDir: destinationDir, maxCount: config.retention.maxCount)
             reply(true, nil)
         } catch {
             helperLog("全局备份失败: \(error.localizedDescription)", level: .error)
@@ -112,6 +114,8 @@ extension ClawdHomeHelperImpl {
         helperLog("Shrimp 备份 @\(username) → \(destinationDir)")
         do {
             try BackupManager.backupShrimp(username: username, destinationDir: destinationDir)
+            let config = BackupManager.loadConfig()
+            _ = BackupManager.pruneBackups(destinationDir: destinationDir, maxCount: config.retention.maxCount)
             reply(true, nil)
         } catch {
             helperLog("Shrimp 备份失败 @\(username): \(error.localizedDescription)", level: .error)
@@ -183,6 +187,16 @@ extension ClawdHomeHelperImpl {
         } else {
             wasRunning = false
         }
+        let runningHermesProfiles = uid.map { _ in runningHermesProfileIDs(username: username) } ?? []
+
+        for profileID in runningHermesProfiles {
+            helperLog("恢复前停止 Hermes gateway @\(username) profile=\(profileID)")
+            do {
+                try HermesGatewayManager.stopGateway(username: username, profileID: profileID, uid: uid ?? -1)
+            } catch {
+                helperLog("停止 Hermes gateway 失败 @\(username) profile=\(profileID): \(error.localizedDescription)", level: .warn)
+            }
+        }
 
         if wasRunning {
             helperLog("恢复前停止网关 @\(username)")
@@ -210,6 +224,11 @@ extension ClawdHomeHelperImpl {
             if wasRunning, let uid = uid {
                 try? GatewayManager.startGateway(username: username, uid: uid)
             }
+            if let uid = uid {
+                for profileID in runningHermesProfiles {
+                    try? HermesGatewayManager.startGateway(username: username, profileID: profileID, uid: uid)
+                }
+            }
             reply(false, error.localizedDescription)
             return
         }
@@ -218,6 +237,12 @@ extension ClawdHomeHelperImpl {
         if wasRunning, let uid = uid {
             helperLog("恢复后重启网关 @\(username)")
             try? GatewayManager.startGateway(username: username, uid: uid)
+        }
+        if let uid = uid {
+            for profileID in runningHermesProfiles {
+                helperLog("恢复后重启 Hermes gateway @\(username) profile=\(profileID)")
+                try? HermesGatewayManager.startGateway(username: username, profileID: profileID, uid: uid)
+            }
         }
 
         reply(true, nil)
@@ -288,5 +313,26 @@ extension ClawdHomeHelperImpl {
             return
         }
         reply(json)
+    }
+
+    private func runningHermesProfileIDs(username: String) -> [String] {
+        hermesProfileIDs(username: username).filter {
+            HermesGatewayManager.status(username: username, profileID: $0).running
+        }
+    }
+
+    private func hermesProfileIDs(username: String) -> [String] {
+        let hermesHome = HermesInstaller.hermesHome(for: username)
+        var ids = ["main"]
+        let profilesDir = "\(hermesHome)/profiles"
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: profilesDir) {
+            ids.append(contentsOf: entries.filter { isValidHermesProfileID($0) }.sorted())
+        }
+        return ids
+    }
+
+    private func isValidHermesProfileID(_ value: String) -> Bool {
+        guard !value.isEmpty, value != "main" else { return false }
+        return value.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
     }
 }

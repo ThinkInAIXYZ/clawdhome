@@ -2,6 +2,7 @@
 // 核心主流程测试 — 单元测试：ManagedUser 状态与本地存储逻辑
 
 import XCTest
+import AppKit
 @testable import ClawdHome
 
 final class ManagedUserStateTests: XCTestCase {
@@ -19,11 +20,34 @@ final class ManagedUserStateTests: XCTestCase {
 
         // 2. Docker 用户默认标识填充
         let dockerUser = ManagedUser(username: "bob", fullName: "Bob Docker", clawType: .docker)
-        XCTAssertEqual(dockerUser.identifier, ":未配置")
+        XCTAssertEqual(dockerUser.identifier, L10n.k("models.managed_user.configuration", fallback: ":未配置"))
 
         // 3. 自定义标识
         let customSSH = ManagedUser(username: "pi", fullName: "Pi SSH", clawType: .ssh, identifier: "pi@192.168.1.100")
         XCTAssertEqual(customSSH.identifier, "pi@192.168.1.100")
+    }
+
+    /// 头像裁剪应使用底层位图坐标，避免 NSImage size 与 CGImage 像素尺寸不一致时保存失败
+    func testAvatarCropUsesBitmapPixelBoundsWhenImageSizeDiffers() {
+        let source = NSImage(size: NSSize(width: 100, height: 200))
+        source.lockFocus()
+        NSColor.red.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 100, height: 200)).fill()
+        source.unlockFocus()
+
+        source.size = NSSize(width: 200, height: 100)
+
+        let croppedData = cropAndScaleNSImage(
+            image: source,
+            offsetX: 0,
+            offsetY: 0,
+            scale: 1,
+            viewportSize: CGSize(width: 100, height: 100),
+            targetSize: CGSize(width: 64, height: 64)
+        )
+
+        XCTAssertNotNil(croppedData)
+        XCTAssertNotNil(croppedData.flatMap(NSImage.init(data:)))
     }
 
     /// 测试冻结 (setFrozen) 与解冻时状态机流转及清理
@@ -61,22 +85,22 @@ final class ManagedUserStateTests: XCTestCase {
         let user = ManagedUser(username: "david", fullName: "David")
 
         // 正常空状态
-        XCTAssertEqual(user.statusLabel, "未运行")
+        XCTAssertEqual(user.statusLabel, L10n.k("models.managed_user.not_running", fallback: "未运行"))
 
         // 1. 运行中
         user.isRunning = true
-        XCTAssertEqual(user.statusLabel, "运行中")
+        XCTAssertEqual(user.statusLabel, L10n.k("models.managed_user.running", fallback: "运行中"))
 
         // 2. 冻结（优先级高于运行中）
         user.setFrozen(true, mode: .normal)
-        XCTAssertEqual(user.statusLabel, "已冻结")
+        XCTAssertEqual(user.statusLabel, FreezeMode.normal.statusLabel)
 
         user.setFrozen(true, mode: .pause)
-        XCTAssertEqual(user.statusLabel, "已暂停")
+        XCTAssertEqual(user.statusLabel, FreezeMode.pause.statusLabel)
 
         // 3. 错误异常（优先级最高）
         user.errorMessage = "端口冲突"
-        XCTAssertEqual(user.statusLabel, "异常: 端口冲突")
+        XCTAssertEqual(user.statusLabel, "\(L10n.k("models.managed_user.error_prefix", fallback: "异常:")) 端口冲突")
     }
 
     /// 测试运行时名称 runtimeDisplayName 根据版本信息选择（Hermes 优先）

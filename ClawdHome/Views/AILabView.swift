@@ -8,6 +8,7 @@ import SwiftUI
 private struct AITool: Identifiable {
     enum Route {
         case speech
+        case chat
         case unavailable
     }
 
@@ -23,7 +24,7 @@ private struct AITool: Identifiable {
 private let aiTools: [AITool] = [
     AITool(
         name: L10n.k("auto.ailab_view.speech_to_text", fallback: "语音转文字"),
-        description: L10n.k("auto.ailab_view.file_language", fallback: "将音频文件或实时录音转译为文字，支持多语言识别"),
+        description: L10n.k("auto.ailab_view.file_language", fallback: "将音频或录音转为文字，支持多语言识别与 AI 智能润色，一键生成会议纪要"),
         icon: "waveform.and.mic",
         theme: .blue,
         status: .ready,
@@ -38,12 +39,12 @@ private let aiTools: [AITool] = [
         route: .unavailable
     ),
     AITool(
-        name: L10n.k("auto.ailab_view.text_translation", fallback: "文本翻译"),
-        description: L10n.k("auto.ailab_view.localmodels_language", fallback: "基于本地大模型的离线翻译，支持主流语言互译"),
-        icon: "globe",
+        name: L10n.k("auto.ailab_view.chat_box", fallback: "智能对话"),
+        description: L10n.k("auto.ailab_view.chat_box_desc", fallback: "与本地内置的精选大模型进行多轮对话，支持图片多模态分析"),
+        icon: "bubble.left.and.bubble.right.fill",
         theme: .emerald,
-        status: .planned,
-        route: .unavailable
+        status: .demo,
+        route: .chat
     ),
     AITool(
         name: L10n.k("auto.ailab_view.description", fallback: "图像描述"),
@@ -66,6 +67,7 @@ private let aiTools: [AITool] = [
 // MARK: - AI 实验室主视图
 
 struct AILabView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var activeRoute: AITool.Route? = nil
 
     // 采用自适应紧凑网格规划，使卡片比例更加均衡，充分适配不同视窗宽度
@@ -75,6 +77,13 @@ struct AILabView: View {
         Group {
             if activeRoute == .speech {
                 SpeechTranscriptionView {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        activeRoute = nil
+                    }
+                }
+                .transition(.opacity)
+            } else if activeRoute == .chat {
+                AIChatView {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         activeRoute = nil
                     }
@@ -123,6 +132,15 @@ struct AILabView: View {
                                         AIToolCard(tool: tool)
                                     }
                                     .buttonStyle(.plain)
+                                case .chat:
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.18)) {
+                                            activeRoute = .chat
+                                        }
+                                    } label: {
+                                        AIToolCard(tool: tool)
+                                    }
+                                    .buttonStyle(.plain)
                                 case .unavailable:
                                     AIToolCard(tool: tool)
                                 }
@@ -132,8 +150,10 @@ struct AILabView: View {
                     .padding(24)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .background(colorScheme == .dark ? Color.clear : Color(nsColor: .windowBackgroundColor))
             }
         }
+        .background(colorScheme == .dark ? Color(nsColor: .underPageBackgroundColor) : Color(nsColor: .windowBackgroundColor))
         .navigationTitle(L10n.k("auto.content_view.ai_lab", fallback: "AI 实验室"))
     }
 }
@@ -144,12 +164,14 @@ private struct AIToolCard: View {
     let tool: AITool
 
     var body: some View {
+        let isAvailable = tool.status == .ready || tool.status == .demo
+        
         ZStack(alignment: .bottomTrailing) {
             // 仿照仪表盘聚合卡片的极高品位设计：右下角倾斜 80pt 的主题渐变水印大图标
             Image(systemName: tool.icon)
                 .font(.system(size: 80, weight: .bold))
                 .foregroundStyle(
-                    tool.theme.gradient.opacity(tool.status == .ready ? 0.05 : 0.025)
+                    tool.theme.gradient.opacity(isAvailable ? 0.05 : 0.025)
                 )
                 .rotationEffect(.degrees(-12))
                 .offset(x: 16, y: 16)
@@ -161,28 +183,28 @@ private struct AIToolCard: View {
                     ZStack {
                         Circle()
                             .fill(
-                                tool.theme.mainColor.opacity(tool.status == .ready ? 0.12 : 0.06)
+                                tool.theme.mainColor.opacity(isAvailable ? 0.12 : 0.06)
                             )
                             .frame(width: 40, height: 40)
                         
                         Image(systemName: tool.icon)
                             .font(.system(size: 18, weight: .medium))
                             .foregroundStyle(tool.theme.gradient)
-                            .opacity(tool.status == .ready ? 1.0 : 0.5)
+                            .opacity(isAvailable ? 1.0 : 0.5)
                     }
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text(tool.name)
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(.primary)
-                            .opacity(tool.status == .ready ? 1.0 : 0.8)
+                            .opacity(isAvailable ? 1.0 : 0.8)
                         
                         PremiumStatusBadge(style: tool.status)
                     }
                     Spacer()
                 }
 
-                // 功能介绍：带特定行高和截断限制，视觉规整统一
+                // 功能介绍：带特定行高 and 截断限制，视觉规整统一
                 Text(tool.description)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
@@ -190,10 +212,10 @@ private struct AIToolCard: View {
                     .lineLimit(3)
                     .frame(minHeight: 52, alignment: .topLeading)
                     .fixedSize(horizontal: false, vertical: true)
-                    .opacity(tool.status == .ready ? 1.0 : 0.65)
+                    .opacity(isAvailable ? 1.0 : 0.65)
 
                 // 底部操作或规划引导区
-                if tool.status == .ready {
+                if isAvailable {
                     HStack(spacing: 4) {
                         Spacer()
                         Text(L10n.k("auto.ailab_view.open", fallback: "立即体验"))

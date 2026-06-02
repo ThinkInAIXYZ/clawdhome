@@ -27,10 +27,8 @@ struct SpeechModelAdvisor {
     }
 
     private static let minimumSupportedOSMajorVersion = 15
-    private static let preferredModelMinimumPhysicalMemoryBytes: UInt64 = 24 * 1024 * 1024 * 1024
     private static let preferredModelMinimumAvailableMemoryBytes: UInt64 = 12 * 1024 * 1024 * 1024
     private static let lowMemoryWarningThresholdBytes: UInt64 = 16 * 1024 * 1024 * 1024
-    private static let preferredModelMinimumDiskBytes: UInt64 = 12 * 1024 * 1024 * 1024
     private static let lowDiskSpaceThresholdBytes: UInt64 = 8 * 1024 * 1024 * 1024
 
     static func recommend(for input: Input) -> SpeechModelRecommendation {
@@ -96,14 +94,9 @@ struct SpeechModelAdvisor {
             )
         }
 
-        let prefersLargerModel = input.physicalMemoryBytes >= preferredModelMinimumPhysicalMemoryBytes
-            && input.availableMemoryBytes >= preferredModelMinimumAvailableMemoryBytes
-            && input.availableDiskBytes >= preferredModelMinimumDiskBytes
-        let recommendedModel: SpeechModelID = prefersLargerModel ? .qwen3ASR17B8Bit : .qwen3ASR06B
-
         return SpeechModelRecommendation(
-            recommendedModel: recommendedModel,
-            fallbackModel: recommendedModel == .qwen3ASR17B8Bit ? .qwen3ASR06B : nil,
+            recommendedModel: .qwen3ASR17B8Bit,
+            fallbackModel: .qwen3ASR06B,
             warnings: warnings,
             availability: .supported
         )

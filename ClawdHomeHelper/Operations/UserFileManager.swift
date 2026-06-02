@@ -141,7 +141,35 @@ struct UserFileManager {
 
     static func writeFile(username: String, relativePath: String, data: Data) throws {
         let url = try resolvedPath(username: username, relativePath: relativePath)
-        try data.write(to: url, options: .atomic)
+        
+        let parentUrl = url.deletingLastPathComponent()
+        let fm = FileManager.default
+        
+        // 写文件不能隐式删除用户已有路径；路径冲突交给调用方显式处理。
+        var isDir: ObjCBool = false
+        if fm.fileExists(atPath: parentUrl.path, isDirectory: &isDir) {
+            if !isDir.boolValue {
+                throw UserFileError.notADirectory
+            }
+        }
+        
+        // 自动确保父目录存在
+        if !fm.fileExists(atPath: parentUrl.path) {
+            try fm.createDirectory(at: parentUrl, withIntermediateDirectories: true, attributes: nil)
+        }
+        
+        // 无论父目录是刚创建还是已存在，均强制纠正父目录所有权归属虾用户，解决潜在的权限缺失问题
+        try? FilePermissionHelper.chownRecursive(parentUrl.path, owner: username)
+        
+        // 目标若已是目录，写入文件会覆盖语义不清，直接失败避免误删目录内容。
+        var targetIsDir: ObjCBool = false
+        if fm.fileExists(atPath: url.path, isDirectory: &targetIsDir) && targetIsDir.boolValue {
+            throw UserFileError.notAFile
+        }
+        
+        // 去除 .atomic 原子写入选项，改用直接写入，彻底防止 macOS 在特殊沙箱权限下因原子临时交换文件受限而拦截写入
+        try data.write(to: url)
+        
         // 纠正所有权：root 写入的文件归还给虾用户
         do {
             try FilePermissionHelper.chown(url.path, owner: username)

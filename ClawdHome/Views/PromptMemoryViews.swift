@@ -229,48 +229,53 @@ struct PromptMemoryOverlay: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Text(L10n.k("prompt.memory.title", fallback: "Prompt 记忆"))
-                    .font(.headline)
+                    .font(.system(size: 14, weight: .bold))
                 Spacer()
-                Button {
+                IconButton(systemImage: "square.grid.2x2", tooltip: L10n.k("prompt.memory.quick_menu", fallback: "快捷菜单")) {
                     withAnimation(panelAnimation) {
                         activeSurface = .menu
                     }
-                } label: {
-                    Image(systemName: "square.grid.2x2")
                 }
-                .buttonStyle(.plain)
-                .help(L10n.k("prompt.memory.quick_menu", fallback: "快捷菜单"))
-                Button {
+                IconButton(systemImage: "plus", tooltip: L10n.k("prompt.memory.create_prompt", fallback: "新增 Prompt")) {
                     openQuickCreate()
-                } label: {
-                    Image(systemName: "plus")
                 }
-                .buttonStyle(.plain)
-                .help(L10n.k("prompt.memory.create_prompt", fallback: "新增 Prompt"))
-                Button {
+                PinnedIconButton(isPinned: panelPinned, tooltip: panelPinned ? L10n.k("prompt.memory.unpin_panel", fallback: "取消固定") : L10n.k("prompt.memory.pin_panel", fallback: "固定面板")) {
                     setPanelPinned(!panelPinned)
-                } label: {
-                    Image(systemName: panelPinned ? "pin.fill" : "pin")
-                        .foregroundStyle(panelPinned ? Color.accentColor : Color.secondary)
-                        .rotationEffect(.degrees(panelPinned ? 0 : -12))
-                        .scaleEffect(panelPinned ? 1.08 : 1)
                 }
-                .buttonStyle(.plain)
-                .help(panelPinned ? L10n.k("prompt.memory.unpin_panel", fallback: "取消固定") : L10n.k("prompt.memory.pin_panel", fallback: "固定面板"))
-                .animation(.spring(response: 0.24, dampingFraction: 0.76), value: panelPinned)
-                Button {
+                IconButton(systemImage: "xmark", tooltip: L10n.k("common.close", fallback: "关闭")) {
                     withAnimation(panelAnimation) {
                         activeSurface = nil
                     }
-                } label: {
-                    Image(systemName: "xmark")
                 }
-                .buttonStyle(.plain)
-                .help(L10n.k("common.close", fallback: "关闭"))
             }
 
-            TextField(L10n.k("prompt.memory.search.placeholder", fallback: "搜索标题、标签、关键词或正文"), text: $query)
-                .textFieldStyle(.roundedBorder)
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                
+                TextField(L10n.k("prompt.memory.search.placeholder", fallback: "搜索标题、标签、关键词或正文"), text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 0.8)
+            )
 
             if showQuickCreate || !currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 saveCurrentInputSection
@@ -296,7 +301,11 @@ struct PromptMemoryOverlay: View {
             settingsStrip
         }
         .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.8)
+        )
         .shadow(color: .black.opacity(0.18), radius: 20, y: 10)
     }
 
@@ -304,16 +313,13 @@ struct PromptMemoryOverlay: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(L10n.k("prompt.memory.quick_entry", fallback: "快捷入口"))
-                    .font(.headline)
+                    .font(.system(size: 14, weight: .bold))
                 Spacer()
-                Button {
+                IconButton(systemImage: "xmark", tooltip: L10n.k("common.close", fallback: "关闭")) {
                     withAnimation(panelAnimation) {
                         activeSurface = nil
                     }
-                } label: {
-                    Image(systemName: "xmark")
                 }
-                .buttonStyle(.plain)
             }
 
             Text(L10n.k("prompt.memory.quick_entry.hint", fallback: "一个入口，切换 Prompt 和随手记。"))
@@ -321,7 +327,7 @@ struct PromptMemoryOverlay: View {
                 .foregroundStyle(.secondary)
 
             VStack(spacing: 8) {
-                launcherItem(
+                LauncherItemView(
                     title: "Prompt",
                     subtitle: L10n.k("prompt.memory.prompt.subtitle", fallback: "搜索、收藏、插入模板"),
                     systemImage: "text.bubble",
@@ -333,7 +339,7 @@ struct PromptMemoryOverlay: View {
                     }
                 }
 
-                launcherItem(
+                LauncherItemView(
                     title: L10n.k("prompt.memory.note.title", fallback: "随手记"),
                     subtitle: noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? L10n.k("prompt.memory.note.subtitle", fallback: "随手记录，关闭不丢") : notePreviewText,
                     systemImage: "note.text",
@@ -346,22 +352,12 @@ struct PromptMemoryOverlay: View {
             }
         }
         .padding(14)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.96),
-                    Color(nsColor: .windowBackgroundColor).opacity(0.96)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-        )
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.55), lineWidth: 0.8)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.8)
         )
-        .shadow(color: .black.opacity(0.14), radius: 18, y: 8)
+        .shadow(color: .black.opacity(0.18), radius: 20, y: 10)
     }
 
     private func launcherItem(
@@ -420,30 +416,22 @@ struct PromptMemoryOverlay: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L10n.k("prompt.memory.note.title", fallback: "随手记"))
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .bold))
                     Text(L10n.k("prompt.memory.note.autosave", fallback: "Markdown 自动保存"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button {
+                IconButton(systemImage: "square.grid.2x2", tooltip: L10n.k("prompt.memory.quick_menu", fallback: "快捷菜单")) {
                     withAnimation(panelAnimation) {
                         activeSurface = .menu
                     }
-                } label: {
-                    Image(systemName: "square.grid.2x2")
                 }
-                .buttonStyle(.plain)
-                .help(L10n.k("prompt.memory.quick_menu", fallback: "快捷菜单"))
-                Button {
+                IconButton(systemImage: "xmark", tooltip: L10n.k("common.close", fallback: "关闭")) {
                     withAnimation(panelAnimation) {
                         activeSurface = nil
                     }
-                } label: {
-                    Image(systemName: "xmark")
                 }
-                .buttonStyle(.plain)
-                .help(L10n.k("common.close", fallback: "关闭"))
             }
 
             LiveMarkdownEditor(text: $noteDraft, placeholder: L10n.k("prompt.memory.note.placeholder", fallback: "支持 Markdown，输入时直接渲染。"))
@@ -465,19 +453,42 @@ struct PromptMemoryOverlay: View {
             }
         }
         .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.8)
+        )
         .shadow(color: .black.opacity(0.18), radius: 20, y: 10)
     }
 
     private var saveCurrentInputSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(showQuickCreate ? L10n.k("prompt.memory.create_prompt", fallback: "新增 Prompt") : L10n.k("prompt.memory.favorite_current", fallback: "收藏当前输入"))
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 12, weight: .semibold))
+            
             TextField(L10n.k("common.title", fallback: "标题"), text: $titleDraft)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 0.8)
+                )
+                
             HStack(spacing: 8) {
                 TextField(L10n.k("prompt.memory.tags.placeholder", fallback: "标签/关键词，用逗号分隔"), text: $tagsDraft)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(Color.primary.opacity(0.08), lineWidth: 0.8)
+                    )
+                
                 Button(showQuickCreate ? L10n.k("common.create", fallback: "新增") : L10n.k("prompt.memory.favorite", fallback: "收藏")) {
                     let bodySource = currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? query : currentInput
                     store.createPromptFromInput(title: titleDraft, body: bodySource, tagsText: tagsDraft)
@@ -486,6 +497,8 @@ struct PromptMemoryOverlay: View {
                     showQuickCreate = false
                     query = bodySource
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
                 .disabled(
                     titleDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                     (currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
@@ -496,8 +509,17 @@ struct PromptMemoryOverlay: View {
     }
 
     private var settingsStrip: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Picker(L10n.k("prompt.memory.default_insert", fallback: "默认插入"), selection: Binding(
+        HStack(spacing: 12) {
+            Toggle(L10n.k("prompt.memory.similar_hint", fallback: "相似提醒"), isOn: Binding(
+                get: { store.settings.proactiveSuggestionsEnabled },
+                set: { enabled in store.updateSettings { $0.proactiveSuggestionsEnabled = enabled } }
+            ))
+            .toggleStyle(.checkbox)
+            .font(.system(size: 11))
+            
+            Spacer()
+            
+            Picker("", selection: Binding(
                 get: { store.settings.defaultInsertionMode },
                 set: { mode in store.updateSettings { $0.defaultInsertionMode = mode } }
             )) {
@@ -505,70 +527,25 @@ struct PromptMemoryOverlay: View {
                 Text(L10n.k("prompt.memory.replace", fallback: "替换")).tag(PromptInsertionMode.replace)
             }
             .pickerStyle(.segmented)
-
-            HStack {
-                Toggle(L10n.k("prompt.memory.similar_hint", fallback: "相似提醒"), isOn: Binding(
-                    get: { store.settings.proactiveSuggestionsEnabled },
-                    set: { enabled in store.updateSettings { $0.proactiveSuggestionsEnabled = enabled } }
-                ))
-            }
-            .toggleStyle(.checkbox)
-            .font(.caption)
+            .frame(width: 100)
+            .controlSize(.small)
         }
+        .padding(.top, 4)
     }
 
     private func resultRow(_ result: PromptSearchResult) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(result.item.title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                if result.item.pinned {
-                    Image(systemName: "pin.fill").foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text("\(Int(result.score * 100))")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+        PromptSearchResultRow(
+            result: result,
+            query: query,
+            username: username,
+            store: store,
+            onAppend: { item in beginUse(item, mode: .append) },
+            onReplace: { item in
+                replaceConfirmPrompt = item
+                pendingMode = .replace
+                showReplaceConfirm = true
             }
-
-            if !result.item.summary.isEmpty {
-                Text(result.item.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            } else {
-                Text(result.item.body)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-
-            HStack(spacing: 6) {
-                ForEach(result.item.tags.prefix(4), id: \.self) { tag in
-                    Text(tag)
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.primary.opacity(0.06), in: Capsule())
-                }
-                Spacer()
-                Button(L10n.k("common.copy", fallback: "复制")) {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(result.item.body, forType: .string)
-                    store.recordUse(prompt: result.item, action: .copy, query: query, shrimpUsername: username)
-                }
-                Button(L10n.k("prompt.memory.append", fallback: "追加")) { beginUse(result.item, mode: .append) }
-                Button(L10n.k("prompt.memory.replace", fallback: "替换")) {
-                    replaceConfirmPrompt = result.item
-                    pendingMode = .replace
-                    showReplaceConfirm = true
-                }
-            }
-            .font(.caption)
-        }
-        .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.82), in: RoundedRectangle(cornerRadius: 8))
+        )
     }
 
     private var suggestionList: some View {
@@ -1101,6 +1078,129 @@ private final class PlaceholderTextView: NSTextView {
     }
 }
 
+struct ThemeTagView: View {
+    let text: String
+    var body: some View {
+        let hash = abs(text.hashValue)
+        let colors: [(Color, Color)] = [
+            (.blue, Color.blue.opacity(0.8)),
+            (.purple, Color.purple.opacity(0.8)),
+            (.teal, Color.teal.opacity(0.8)),
+            (.orange, Color.orange.opacity(0.8)),
+            (.indigo, Color.indigo.opacity(0.8))
+        ]
+        let select = colors[hash % colors.count]
+        Text(text)
+            .font(.system(size: 10, weight: .medium))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .foregroundStyle(select.0)
+            .background(select.0.opacity(0.09), in: Capsule())
+            .overlay(Capsule().stroke(select.0.opacity(0.2), lineWidth: 0.5))
+    }
+}
+
+struct GradientIcon: View {
+    let title: String
+    let bodyText: String
+    
+    private var firstCharacter: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.first else {
+            return "P"
+        }
+        return String(first).uppercased()
+    }
+    
+    private var iconGradient: LinearGradient {
+        let hash = abs(firstCharacter.hashValue)
+        let gradients: [LinearGradient] = [
+            // 1. 蓝-青 (数智科技)
+            LinearGradient(colors: [Color.blue, Color.cyan], startPoint: .topLeading, endPoint: .bottomTrailing),
+            // 2. 紫-粉 (梦幻星空)
+            LinearGradient(colors: [Color.purple, Color.pink], startPoint: .topLeading, endPoint: .bottomTrailing),
+            // 3. 绿-翠 (极光自然)
+            LinearGradient(colors: [Color(nsColor: NSColor(red: 0.12, green: 0.74, blue: 0.35, alpha: 1.0)), Color(nsColor: NSColor(red: 0.05, green: 0.55, blue: 0.70, alpha: 1.0))], startPoint: .topLeading, endPoint: .bottomTrailing),
+            // 4. 橙-黄 (灵感晨曦)
+            LinearGradient(colors: [Color.orange, Color.yellow], startPoint: .topLeading, endPoint: .bottomTrailing),
+            // 5. 靛蓝-紫 (深邃智慧)
+            LinearGradient(colors: [Color.indigo, Color.purple], startPoint: .topLeading, endPoint: .bottomTrailing),
+            // 6. 珊瑚红-暖黄 (活力晚霞)
+            LinearGradient(colors: [Color(nsColor: NSColor(red: 0.95, green: 0.30, blue: 0.30, alpha: 1.0)), Color.orange], startPoint: .topLeading, endPoint: .bottomTrailing),
+            // 7. 玫瑰金-亮粉 (优雅珊瑚)
+            LinearGradient(colors: [Color(nsColor: NSColor(red: 0.85, green: 0.25, blue: 0.45, alpha: 1.0)), Color(nsColor: NSColor(red: 0.98, green: 0.50, blue: 0.65, alpha: 1.0))], startPoint: .topLeading, endPoint: .bottomTrailing),
+            // 8. 蓝-深蓝 (深邃海洋)
+            LinearGradient(colors: [Color.blue, Color.indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
+        ]
+        return gradients[hash % gradients.count]
+    }
+    
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(iconGradient)
+                .frame(width: 36, height: 36)
+                .shadow(color: Color.black.opacity(0.12), radius: 2.5, y: 1.5)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.8)
+                )
+            
+            Text(firstCharacter)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .shadow(color: Color.black.opacity(0.18), radius: 1, y: 1)
+        }
+    }
+}
+
+extension Color {
+    static var emeraldStyle: Color {
+        Color(nsColor: NSColor(red: 0.05, green: 0.70, blue: 0.40, alpha: 1.0))
+    }
+}
+
+private enum PromptLibraryLayout {
+    static let cardHeight: CGFloat = 100
+    static let cardContentHeight: CGFloat = 76
+    static let tagRowHeight: CGFloat = 22
+}
+
+struct PromptCardContainer<Content: View>: View {
+    let isSelected: Bool
+    let content: () -> Content
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(height: PromptLibraryLayout.cardContentHeight, alignment: .topLeading)
+            .padding(12)
+            .frame(height: PromptLibraryLayout.cardHeight)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.08) : Color(nsColor: .controlBackgroundColor).opacity(isHovered ? 0.45 : 0.28))
+            )
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? Color.accentColor.opacity(0.72) : (isHovered ? Color.accentColor.opacity(0.28) : Color(nsColor: .separatorColor).opacity(0.35)),
+                        lineWidth: isSelected ? 1.5 : 0.8
+                    )
+            )
+            .shadow(color: isSelected ? Color.accentColor.opacity(0.08) : Color.black.opacity(isHovered ? 0.08 : 0.02), radius: isHovered ? 6 : 2, y: isHovered ? 3 : 1)
+            .scaleEffect(isHovered ? 1.012 : 1.0)
+            .onHover { hovering in
+                withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
+                    isHovered = hovering
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
 struct PromptLibraryView: View {
     @Environment(PromptLibraryStore.self) private var store
     @State private var title = ""
@@ -1113,98 +1213,184 @@ struct PromptLibraryView: View {
     @State private var isEnabled = true
     @State private var isSensitive = false
     @State private var insertionMode: PromptInsertionMode = .append
+    @State private var showEditorSheet = false
+    @State private var showDeleteConfirmation = false
+    
+    @FocusState private var focusedField: EditorField?
+    private enum EditorField {
+        case title
+        case tags
+        case body
+    }
 
     var body: some View {
-        HSplitView {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(L10n.k("prompt.library.title", fallback: "Prompt 管理"))
-                        .font(.title3.weight(.semibold))
-                    Spacer()
-                    Button {
-                        clearEditor()
-                    } label: {
-                        Label(L10n.k("common.create", fallback: "新建"), systemImage: "plus")
-                    }
-                }
-
-                TextField(L10n.k("prompt.memory.search.placeholder", fallback: "搜索标题、标签、关键词或正文"), text: Binding(
-                    get: { store.searchText },
-                    set: { store.searchText = $0 }
-                ))
-                .textFieldStyle(.roundedBorder)
-
+        VStack(alignment: .leading, spacing: 0) {
+            // 1. “AI 实验室” 高级质感描述条
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    filterMenu
-                    Spacer(minLength: 8)
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(L10n.k("common.sort", fallback: "排序"))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Picker("", selection: $sortMode) {
-                            ForEach(PromptLibrarySort.allCases) { mode in
-                                Text(mode.title).tag(mode)
-                            }
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(5)
+                        .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                    
+                    Text(L10n.k("prompt.library.nav_subtitle", fallback: "AI 辅助提示词集合，运行在本地，数据不离机"))
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.bottom, 8)
+                
+                LinearGradient(
+                    colors: [Color.accentColor.opacity(0.3), Color.clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(height: 1)
+                .padding(.bottom, 12)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+
+            // 2. 控制行（搜索、筛选、排序、新建）
+            HStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    
+                    TextField(L10n.k("prompt.memory.search.placeholder", fallback: "搜索标题、标签、关键词或正文"), text: Binding(
+                        get: { store.searchText },
+                        set: { store.searchText = $0 }
+                    ))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    
+                    if !store.searchText.isEmpty {
+                        Button {
+                            store.searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.tertiary)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(width: 240)
+                        .buttonStyle(.plain)
                     }
                 }
-
-                HStack(spacing: 12) {
-                    statBadge(L10n.k("prompt.library.stats.total", fallback: "总数"), value: store.prompts.count)
-                    statBadge(L10n.k("prompt.library.stats.pinned", fallback: "置顶"), value: store.prompts.filter(\.pinned).count)
-                    statBadge(L10n.k("prompt.library.stats.recent", fallback: "最近使用"), value: store.prompts.filter { $0.lastUsedAt != nil }.count)
-                    Spacer()
-                    Text(resultSummary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 0.8)
+                )
+                .frame(maxWidth: 320)
+                
+                filterMenu
+                
+                Text(resultSummary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                
+                Spacer()
+                
+                Picker("", selection: $sortMode) {
+                    ForEach(PromptLibrarySort.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
                 }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 180)
+                
+                Button {
+                    clearEditor()
+                    showEditorSheet = true
+                } label: {
+                    Label(L10n.k("common.create", fallback: "新建"), systemImage: "plus")
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 16)
 
-                if displayedPrompts.isEmpty {
-                    ContentUnavailableView(
-                        L10n.k("prompt.library.no_match", fallback: "没有匹配的 Prompt"),
-                        systemImage: "magnifyingglass",
-                        description: Text(L10n.k("prompt.library.no_match.hint", fallback: "换一个关键词，或者在右侧新建一条 Prompt。"))
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List(selection: $selectedPromptId) {
+            // 3. 卡片网格画廊
+            if displayedPrompts.isEmpty {
+                ContentUnavailableView(
+                    L10n.k("prompt.library.no_match", fallback: "没有匹配的 Prompt"),
+                    systemImage: "magnifyingglass",
+                    description: Text(L10n.k("prompt.library.no_match.hint", fallback: "换一个关键词搜索，或点击右上角新建一条 Prompt。"))
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        let columns = [
+                            GridItem(.adaptive(minimum: 280, maximum: 400), spacing: 16)
+                        ]
+                        
                         if sortMode == .smart && normalizedSearchText.isEmpty {
                             let pinnedItems = displayedPrompts.filter(\.pinned)
                             let regularItems = displayedPrompts.filter { !$0.pinned }
+                            
                             if !pinnedItems.isEmpty {
-                                Section(L10n.k("prompt.library.pinned", fallback: "置顶")) {
-                                    ForEach(pinnedItems) { prompt in
-                                        promptRow(prompt)
-                                            .tag(prompt.id)
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text(L10n.k("prompt.library.pinned", fallback: "置顶"))
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.leading, 4)
+                                    
+                                    LazyVGrid(columns: columns, spacing: 16) {
+                                        ForEach(pinnedItems) { prompt in
+                                            promptRow(prompt)
+                                                .onTapGesture {
+                                                    selectedPromptId = prompt.id
+                                                    loadEditor(prompt)
+                                                    showEditorSheet = true
+                                                }
+                                        }
                                     }
                                 }
                             }
+                            
                             if !regularItems.isEmpty {
-                                Section(pinnedItems.isEmpty ? filterTitle : L10n.k("prompt.library.all_results", fallback: "全部结果")) {
-                                    ForEach(regularItems) { prompt in
-                                        promptRow(prompt)
-                                            .tag(prompt.id)
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text(pinnedItems.isEmpty ? filterTitle : L10n.k("prompt.library.all_results", fallback: "全部结果"))
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.leading, 4)
+                                    
+                                    LazyVGrid(columns: columns, spacing: 16) {
+                                        ForEach(regularItems) { prompt in
+                                            promptRow(prompt)
+                                                .onTapGesture {
+                                                    selectedPromptId = prompt.id
+                                                    loadEditor(prompt)
+                                                    showEditorSheet = true
+                                                }
+                                        }
                                     }
                                 }
                             }
                         } else {
-                            ForEach(displayedPrompts) { prompt in
-                                promptRow(prompt)
-                                    .tag(prompt.id)
+                            LazyVGrid(columns: columns, spacing: 16) {
+                                ForEach(displayedPrompts) { prompt in
+                                    promptRow(prompt)
+                                        .onTapGesture {
+                                            selectedPromptId = prompt.id
+                                            loadEditor(prompt)
+                                            showEditorSheet = true
+                                        }
+                                }
                             }
                         }
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
                 }
+                .scrollIndicators(.automatic)
             }
-            .padding(16)
-            .frame(minWidth: 320)
-
-            promptEditorPanel
-                .frame(minWidth: 280, idealWidth: 380)
+        }
+        .sheet(isPresented: $showEditorSheet) {
+            editorSheetView
         }
         .navigationTitle(L10n.k("prompt.library.nav_title", fallback: "Prompt"))
         .onAppear {
@@ -1229,71 +1415,249 @@ struct PromptLibraryView: View {
         }
     }
 
+    private var detectedVariables: [String] {
+        var vars: [String] = []
+        var temp = ""
+        var inside = false
+        for char in bodyText {
+            if char == "{" {
+                inside = true
+                temp = ""
+            } else if char == "}" {
+                if inside {
+                    let trimmed = temp.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty && !vars.contains(trimmed) {
+                        vars.append(trimmed)
+                    }
+                    inside = false
+                }
+            } else if inside {
+                temp.append(char)
+            }
+        }
+        return vars
+    }
+
     @ViewBuilder
-    private var promptEditorPanel: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
+    private var editorSheetView: some View {
+        VStack(spacing: 0) {
+            // 抽屉头部栏
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(selectedPromptId == nil ? L10n.k("prompt.library.new_prompt", fallback: "新建 Prompt") : L10n.k("prompt.library.edit_prompt", fallback: "编辑 Prompt"))
-                        .font(.headline)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.primary)
                     Text(detailSubtitle)
-                        .font(.caption)
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
+                
                 Spacer()
+                
                 if selectedPromptId != nil {
-                    Button(L10n.k("common.delete", fallback: "删除"), role: .destructive) {
-                        if let selectedPromptId {
-                            store.deletePrompt(id: selectedPromptId)
-                            clearEditor()
+                    Button(action: {
+                        showDeleteConfirmation = true
+                    }) {
+                        Text(L10n.k("common.delete", fallback: "删除"))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 4)
+                }
+                
+                Button(action: {
+                    showEditorSheet = false
+                }) {
+                    Text(L10n.k("common.cancel", fallback: "取消"))
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
+                
+                Button(action: {
+                    saveEditor()
+                    showEditorSheet = false
+                }) {
+                    Text(L10n.k("common.save", fallback: "保存"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 5)
+                        .background(
+                            (title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            ? Color.accentColor.opacity(0.4)
+                            : Color.accentColor,
+                            in: RoundedRectangle(cornerRadius: 6)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(.ultraThinMaterial)
+            
+            Divider()
+            
+            // 表单滚动区
+            ScrollView {
+                VStack(spacing: 20) {
+                    // 1. 基本信息卡片
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(L10n.k("prompt.library.basic_info", fallback: "基本信息"))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                        
+                        VStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(L10n.k("common.title", fallback: "标题"))
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                TextField(L10n.k("common.title", fallback: "标题"), text: $title)
+                                    .focused($focusedField, equals: .title)
+                                    .textFieldStyle(.plain)
+                                    .padding(8)
+                                    .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .stroke(focusedField == .title ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: 1)
+                                            .shadow(color: focusedField == .title ? Color.accentColor.opacity(0.2) : Color.clear, radius: 2)
+                                    )
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(L10n.k("prompt.memory.tags.placeholder", fallback: "标签 / 关键词"))
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                TextField(L10n.k("prompt.memory.tags.placeholder", fallback: "用逗号分隔"), text: $tags)
+                                    .focused($focusedField, equals: .tags)
+                                    .textFieldStyle(.plain)
+                                    .padding(8)
+                                    .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .stroke(focusedField == .tags ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: 1)
+                                            .shadow(color: focusedField == .tags ? Color.accentColor.opacity(0.2) : Color.clear, radius: 2)
+                                    )
+                            }
+                            
+                            HStack(spacing: 20) {
+                                Toggle(isOn: $isPinned) {
+                                    Text(L10n.k("prompt.library.pinned", fallback: "置顶显示"))
+                                        .font(.system(size: 11, weight: .medium))
+                                }
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
+                                
+                                Toggle(isOn: $isEnabled) {
+                                    Text(L10n.k("prompt.library.enable_prompt", fallback: "启用此 Prompt"))
+                                        .font(.system(size: 11, weight: .medium))
+                                }
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
+                                
+                                Spacer()
+                            }
+                            .padding(.top, 4)
+                            .padding(.leading, 2)
+                        }
+                        .padding(14)
+                        .background(Color(nsColor: .controlBackgroundColor).opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.06), lineWidth: 0.8))
+                    }
+                    
+                    // 2. 正文卡片
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .center) {
+                            Text(L10n.k("common.body", fallback: "正文内容"))
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            
+                            // 字符数微光统计气泡
+                            Text(L10n.f("prompt.library.character_count", fallback: "字符: %@", "\(bodyText.count)"))
+                                .font(.system(size: 9, design: .monospaced).weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.accentColor.opacity(0.08), in: Capsule())
+                        }
+                        .padding(.horizontal, 4)
+                        
+                        VStack(spacing: 0) {
+                            TextEditor(text: $bodyText)
+                                .focused($focusedField, equals: .body)
+                                .font(.system(size: 12, design: .monospaced))
+                                .scrollContentBackground(.hidden)
+                                .background(Color.clear)
+                                .padding(8)
+                                .frame(minHeight: 240)
+                        }
+                        .background(Color(nsColor: .controlBackgroundColor).opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(focusedField == .body ? Color.accentColor : Color.primary.opacity(0.06), lineWidth: 1)
+                                .shadow(color: focusedField == .body ? Color.accentColor.opacity(0.2) : Color.clear, radius: 2)
+                        )
+                        
+                        if !detectedVariables.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "sparkles")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(Color.accentColor)
+                                    Text(L10n.k("prompt.library.detected_variables", fallback: "已识别出的变量："))
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 6) {
+                                        ForEach(detectedVariables, id: \.self) { variable in
+                                            Text(variable)
+                                                .font(.system(size: 9, design: .monospaced))
+                                                .fontWeight(.bold)
+                                                .padding(.horizontal, 7)
+                                                .padding(.vertical, 3)
+                                                .foregroundStyle(Color.accentColor)
+                                                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.accentColor.opacity(0.18), lineWidth: 0.5))
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 4)
+                            .padding(.top, 4)
                         }
                     }
                 }
-            }
-
-            Form {
-                Section(L10n.k("prompt.library.basic_info", fallback: "基本信息")) {
-                    TextField(L10n.k("common.title", fallback: "标题"), text: $title)
-                    TextField(L10n.k("prompt.memory.tags.placeholder", fallback: "标签/关键词，用逗号分隔"), text: $tags)
-                    Picker(L10n.k("prompt.memory.default_insert", fallback: "默认插入"), selection: $insertionMode) {
-                        Text(L10n.k("prompt.memory.append", fallback: "追加")).tag(PromptInsertionMode.append)
-                        Text(L10n.k("prompt.memory.replace", fallback: "替换")).tag(PromptInsertionMode.replace)
-                    }
-                }
-
-                Section(L10n.k("common.status", fallback: "状态")) {
-                    Toggle(L10n.k("prompt.library.enable_prompt", fallback: "启用此 Prompt"), isOn: $isEnabled)
-                    Toggle(L10n.k("prompt.library.pinned", fallback: "置顶"), isOn: $isPinned)
-                }
-
-                Section(L10n.k("common.body", fallback: "正文")) {
-                    TextEditor(text: $bodyText)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 260)
-                }
-
-                Section(L10n.k("prompt.library.settings", fallback: "库设置")) {
-                    Toggle(L10n.k("prompt.memory.similar_hint", fallback: "相似提醒"), isOn: Binding(
-                        get: { store.settings.proactiveSuggestionsEnabled },
-                        set: { value in store.updateSettings { $0.proactiveSuggestionsEnabled = value } }
-                    ))
-                }
-            }
-            .formStyle(.grouped)
-
-            HStack {
-                if let error = store.error {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-                Spacer()
-                Button(L10n.k("common.save", fallback: "保存")) { saveEditor() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .padding(20)
             }
         }
-        .padding(16)
+        .frame(minWidth: 460, idealWidth: 500, minHeight: 520, idealHeight: 600)
+        .background(.ultraThinMaterial)
+        .alert(
+            L10n.k("prompt.library.delete_confirm.title", fallback: "删除提示词"),
+            isPresented: $showDeleteConfirmation
+        ) {
+            Button(L10n.k("common.delete", fallback: "删除"), role: .destructive) {
+                if let selectedPromptId {
+                    store.deletePrompt(id: selectedPromptId)
+                    clearEditor()
+                    showEditorSheet = false
+                }
+            }
+            Button(L10n.k("common.cancel", fallback: "取消"), role: .cancel) {}
+        } message: {
+            Text(L10n.k("prompt.library.delete_confirm.message", fallback: "确定要删除此提示词吗？此操作不可撤销。"))
+        }
     }
 
     private func saveEditor() {
@@ -1493,54 +1857,65 @@ struct PromptLibraryView: View {
 
     @ViewBuilder
     private func promptRow(_ prompt: PromptItem) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text(prompt.title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                if prompt.pinned {
-                    Image(systemName: "pin.fill")
+        PromptCardContainer(isSelected: selectedPromptId == prompt.id) {
+            HStack(alignment: .top, spacing: 12) {
+                GradientIcon(title: prompt.title, bodyText: prompt.body)
+                    .padding(.top, 2)
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(prompt.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        
+                        if prompt.pinned {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.accentColor.opacity(0.8))
+                        }
+                        if !prompt.enabled {
+                            Image(systemName: "pause.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.orange)
+                        }
+                        if prompt.sensitive {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        HStack(spacing: 3) {
+                            Image(systemName: "hand.tap")
+                                .font(.system(size: 10))
+                            Text("\(prompt.useCount)")
+                                .font(.system(size: 11, design: .monospaced))
+                        }
                         .foregroundStyle(.secondary)
-                }
-                if !prompt.enabled {
-                    Image(systemName: "pause.circle.fill")
-                        .foregroundStyle(.orange)
-                }
-                if prompt.sensitive {
-                    Image(systemName: "lock.fill")
+                    }
+                    
+                    Text(prompt.summary.isEmpty ? prompt.body : prompt.summary)
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text("\(prompt.useCount)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-
-            Text(prompt.summary.isEmpty ? prompt.body : prompt.summary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-
-            HStack(spacing: 6) {
-                ForEach(prompt.tags.prefix(3), id: \.self) { tag in
-                    Text(tag)
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.primary.opacity(0.06), in: Capsule())
-                }
-                Spacer()
-                Text(sourceLabel(prompt.source))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                if let lastUsedAt = prompt.lastUsedAt {
-                    Text(relativeDateString(lastUsedAt))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    
+                    HStack(spacing: 6) {
+                        if !prompt.tags.isEmpty {
+                            ForEach(prompt.tags.prefix(3), id: \.self) { tag in
+                                ThemeTagView(text: tag)
+                            }
+                        }
+                        
+                        Spacer()
+                    }
+                    .frame(height: PromptLibraryLayout.tagRowHeight, alignment: .leading)
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 
     private func matchesSearch(_ prompt: PromptItem) -> Bool {
@@ -1677,6 +2052,267 @@ private enum PromptLibrarySort: String, CaseIterable, Identifiable {
             return L10n.k("prompt.sort.title", fallback: "标题")
         case .mostUsed:
             return L10n.k("prompt.sort.most_used", fallback: "常用")
+        }
+    }
+}
+
+// MARK: - 精致重构 UI 组件
+
+struct IconButton: View {
+    let systemImage: String
+    let tooltip: String
+    let action: () -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(isHovered ? Color.primary : Color.secondary)
+                .frame(width: 24, height: 24)
+                .background(
+                    Circle()
+                        .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+struct PinnedIconButton: View {
+    let isPinned: Bool
+    let tooltip: String
+    let action: () -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: isPinned ? "pin.fill" : "pin")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(isPinned ? Color.accentColor : (isHovered ? Color.primary : Color.secondary))
+                .rotationEffect(.degrees(isPinned ? 0 : -12))
+                .scaleEffect(isPinned ? 1.08 : 1)
+                .frame(width: 24, height: 24)
+                .background(
+                    Circle()
+                        .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+        .animation(.spring(response: 0.24, dampingFraction: 0.76), value: isPinned)
+    }
+}
+
+struct LauncherItemView: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let badge: String?
+    let action: () -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(isHovered ? Color.accentColor : Color.accentColor.opacity(0.12))
+                    Image(systemName: systemImage)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(isHovered ? .white : Color.accentColor)
+                }
+                .frame(width: 34, height: 34)
+                .scaleEffect(isHovered ? 1.05 : 1.0)
+                
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        if let badge {
+                            Text(badge)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(isHovered ? Color.accentColor : Color.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    isHovered 
+                                    ? Color.accentColor.opacity(0.12)
+                                    : Color.primary.opacity(0.06),
+                                    in: Capsule()
+                                )
+                        }
+                    }
+                    
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                
+                Spacer(minLength: 8)
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isHovered ? Color.secondary : Color.primary.opacity(0.3))
+                    .offset(x: isHovered ? 2 : 0)
+            }
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isHovered ? Color.accentColor.opacity(0.15) : Color.clear, lineWidth: 0.8)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+struct RowActionButton: View {
+    let title: String
+    let systemImage: String?
+    let action: () -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 10, weight: .medium))
+                }
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .foregroundStyle(isHovered ? Color.accentColor : .primary)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovered ? Color.accentColor.opacity(0.08) : Color.primary.opacity(0.04))
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+struct PromptSearchResultRow: View {
+    let result: PromptSearchResult
+    let query: String
+    let username: String?
+    let store: PromptLibraryStore
+    let onAppend: (PromptItem) -> Void
+    let onReplace: (PromptItem) -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(result.item.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                if result.item.pinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.accentColor.opacity(0.8))
+                }
+                Spacer()
+                
+                // 科技感 sparkles 胶囊徽章
+                HStack(spacing: 3) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 8))
+                    Text("\(Int(result.score * 100))")
+                        .font(.system(size: 9, design: .monospaced).weight(.bold))
+                }
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.accentColor.opacity(0.08), in: Capsule())
+            }
+
+            if !result.item.summary.isEmpty {
+                Text(result.item.summary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            } else {
+                Text(result.item.body)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            HStack(spacing: 6) {
+                ForEach(result.item.tags.prefix(4), id: \.self) { tag in
+                    Text(tag)
+                        .font(.system(size: 9, weight: .medium))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .foregroundStyle(Color.accentColor)
+                        .background(Color.accentColor.opacity(0.06), in: Capsule())
+                }
+                Spacer()
+                
+                RowActionButton(title: L10n.k("common.copy", fallback: "复制"), systemImage: "doc.on.doc") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(result.item.body, forType: .string)
+                    store.recordUse(prompt: result.item, action: .copy, query: query, shrimpUsername: username)
+                }
+                RowActionButton(title: L10n.k("prompt.memory.append", fallback: "追加"), systemImage: "plus.bubble") {
+                    onAppend(result.item)
+                }
+                RowActionButton(title: L10n.k("prompt.memory.replace", fallback: "替换"), systemImage: "arrow.triangle.2.circlepath") {
+                    onReplace(result.item)
+                }
+            }
+            .font(.caption)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(isHovered ? 0.92 : 0.82))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(isHovered ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.06), lineWidth: 0.8)
+        )
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHovered = hovering
+            }
         }
     }
 }

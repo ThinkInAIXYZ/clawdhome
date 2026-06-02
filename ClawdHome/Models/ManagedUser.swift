@@ -2,6 +2,9 @@
 
 import Foundation
 import Observation
+#if os(macOS)
+import AppKit
+#endif
 
 struct ClawDescriptionStore {
     private let defaults: UserDefaults
@@ -172,6 +175,17 @@ final class ManagedUser: Identifiable, Hashable {
     var identifier: String
     /// 备注描述：用于区分用途/设备位置等
     var profileDescription: String = ""
+
+    /// 自定义头像二进制数据
+    var customAvatarData: Data? = nil
+
+    #if os(macOS)
+    /// 计算属性：转换为 NSImage 供 UI 渲染
+    var customAvatar: AppKit.NSImage? {
+        guard let data = customAvatarData else { return nil }
+        return AppKit.NSImage(data: data)
+    }
+    #endif
 
     // Gateway 运行状态
     var isRunning: Bool = false

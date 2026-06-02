@@ -59,7 +59,8 @@ final class SpeechFeatureTests: XCTestCase {
                 localAIServiceRunning: false
             )
         )
-        XCTAssertEqual(lowMemory.recommendedModel, .qwen3ASR06B)
+        XCTAssertEqual(lowMemory.recommendedModel, .qwen3ASR17B8Bit)
+        XCTAssertEqual(lowMemory.fallbackModel, .qwen3ASR06B)
         XCTAssertTrue(lowMemory.warnings.contains { $0.kind == .lowMemory })
     }
 
@@ -126,6 +127,7 @@ final class SpeechFeatureTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         let service = SpeechTranscriptionService(historyStore: SpeechHistoryStore(fileURL: tempURL))
+        defer { service.stopObsidianWatcher() }
         let record = SpeechHistoryRecord(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000333")!,
             createdAt: Date(timeIntervalSince1970: 1234),
@@ -154,12 +156,83 @@ final class SpeechFeatureTests: XCTestCase {
     }
 
     @MainActor
+    func testObsidianSyncNamesAutoCapturedAudioNotesLikeFlashNotes() throws {
+        let fm = FileManager.default
+        let tempRoot = fm.temporaryDirectory.appendingPathComponent(
+            "SpeechObsidianNamingTests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let vaultURL = tempRoot.appendingPathComponent("Vault", isDirectory: true)
+        let attachmentsURL = vaultURL.appendingPathComponent("Inbox/attachments", isDirectory: true)
+        let sourceAudioURL = attachmentsURL.appendingPathComponent("2026-06-01 00-34-03 Audio.m4a")
+        let storeURL = tempRoot.appendingPathComponent("speech-history.json")
+        defer { try? fm.removeItem(at: tempRoot) }
+
+        try fm.createDirectory(at: attachmentsURL, withIntermediateDirectories: true)
+        try Data("audio".utf8).write(to: sourceAudioURL, options: .atomic)
+
+        let defaults = UserDefaults.standard
+        let oldEnabled = defaults.object(forKey: "obsidian_enabled")
+        let oldVault = defaults.string(forKey: "obsidian_vault_path")
+        let oldInbox = defaults.string(forKey: "obsidian_inbox")
+        let oldAttachments = defaults.string(forKey: "obsidian_attachments")
+        defer {
+            if let oldEnabled {
+                defaults.set(oldEnabled, forKey: "obsidian_enabled")
+            } else {
+                defaults.removeObject(forKey: "obsidian_enabled")
+            }
+            defaults.set(oldVault, forKey: "obsidian_vault_path")
+            defaults.set(oldInbox, forKey: "obsidian_inbox")
+            defaults.set(oldAttachments, forKey: "obsidian_attachments")
+        }
+        defaults.set(false, forKey: "obsidian_enabled")
+        defaults.set(vaultURL.path, forKey: "obsidian_vault_path")
+        defaults.set("Inbox", forKey: "obsidian_inbox")
+        defaults.set("Inbox/attachments", forKey: "obsidian_attachments")
+
+        let service = SpeechTranscriptionService(historyStore: SpeechHistoryStore(fileURL: storeURL))
+        defer { service.stopObsidianWatcher() }
+        let record = SpeechHistoryRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000555")!,
+            createdAt: Date(timeIntervalSince1970: 1_801_388_052),
+            sourceFilePath: sourceAudioURL.path,
+            sourceFileName: sourceAudioURL.lastPathComponent,
+            sourceFileSizeBytes: 5,
+            durationSeconds: nil,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "闪念内容",
+            elapsedSeconds: 1,
+            status: .completed,
+            errorSummary: nil
+        )
+
+        XCTAssertTrue(try service.manualSyncToObsidian(record: record))
+
+        let expectedNote = vaultURL
+            .appendingPathComponent("Inbox", isDirectory: true)
+            .appendingPathComponent("2026-06-01 00-34-03 Flash clawdhome_asr.md")
+        XCTAssertTrue(fm.fileExists(atPath: expectedNote.path))
+
+        let attachmentNames = try fm.contentsOfDirectory(atPath: attachmentsURL.path)
+        XCTAssertFalse(
+            attachmentNames.contains { name in
+                name != sourceAudioURL.lastPathComponent && name.hasSuffix(sourceAudioURL.lastPathComponent)
+            }
+        )
+    }
+
+    @MainActor
     func testCancelAllQueueTranscriptionsCancelsWaitingItems() {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("SpeechCancelQueueTests-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         let service = SpeechTranscriptionService(historyStore: SpeechHistoryStore(fileURL: tempURL))
+        defer { service.stopObsidianWatcher() }
         service.enqueueFiles([
             URL(fileURLWithPath: "/tmp/first.wav"),
             URL(fileURLWithPath: "/tmp/second.wav")
@@ -179,6 +252,40 @@ final class SpeechFeatureTests: XCTestCase {
         XCTAssertEqual(progress?.transcript, "这是实时识别文本")
     }
 
+    func testGeneratedSRTMergesShortCommaFragments() {
+        let srt = SpeechHistoryStore.generateSRT(
+            from: "上次那个，上次配合，上次配合南剑波，让王果在群里给他支持一点，这样的怎么样，反正不太行吧，嗯，他是跟每单绑定的。",
+            duration: 20
+        )
+
+        XCTAssertFalse(srt.contains("\n嗯\n"))
+        XCTAssertFalse(srt.contains("\n上次那个\n"))
+    }
+
+    func testSaveButtonIsHiddenWhileTranscribing() {
+        XCTAssertFalse(
+            SpeechTranscriptionSaveButtonPolicy.shouldShow(
+                isTranscribing: true,
+                isContentModified: true,
+                didSaved: false
+            )
+        )
+        XCTAssertFalse(
+            SpeechTranscriptionSaveButtonPolicy.shouldShow(
+                isTranscribing: true,
+                isContentModified: false,
+                didSaved: true
+            )
+        )
+        XCTAssertTrue(
+            SpeechTranscriptionSaveButtonPolicy.shouldShow(
+                isTranscribing: false,
+                isContentModified: true,
+                didSaved: false
+            )
+        )
+    }
+
     @MainActor
     func testTranscriptionProgressDoesNotUseStatusMessageAsTranscript() {
         let tempURL = FileManager.default.temporaryDirectory
@@ -186,6 +293,7 @@ final class SpeechFeatureTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         let service = SpeechTranscriptionService(historyStore: SpeechHistoryStore(fileURL: tempURL))
+        defer { service.stopObsidianWatcher() }
         service.enqueueFiles([URL(fileURLWithPath: "/tmp/live.m4a")])
         let item = service.queue[0]
         item.status = .transcribing
@@ -218,5 +326,137 @@ final class SpeechFeatureTests: XCTestCase {
         XCTAssertEqual(service.currentTranscript, "真正的 ASR 文本")
         XCTAssertEqual(item.transcriptText, "真正的 ASR 文本")
         XCTAssertEqual(item.statusMessage, "已转写 12%")
+    }
+
+    @MainActor
+    func testRunningTranscriptionProgressDoesNotRenderAsCompletedAtOneHundredPercent() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpeechRunningProgressTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let service = SpeechTranscriptionService(historyStore: SpeechHistoryStore(fileURL: tempURL))
+        defer { service.stopObsidianWatcher() }
+        service.enqueueFiles([URL(fileURLWithPath: "/tmp/live.m4a")])
+        let item = service.queue[0]
+        item.status = .transcribing
+        service.selectedQueueItem = item
+
+        service.applyTranscriptionProgress(
+            SpeechToolProgressEvent(
+                kind: "progress",
+                command: "transcribe",
+                fractionCompleted: 1.0,
+                message: "已转写 100%",
+                transcript: "最终分块文本"
+            )
+        )
+
+        XCTAssertEqual(item.status, .transcribing)
+        XCTAssertLessThan(item.stageProgress, 1.0)
+        XCTAssertLessThan(item.progressFraction, 1.0)
+        XCTAssertEqual(item.transcriptText, "最终分块文本")
+    }
+
+    @MainActor
+    func testApplyingRefinedTextKeepsOriginalTranscriptSeparate() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpeechApplyRefinedTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let store = SpeechHistoryStore(fileURL: tempURL)
+        let record = SpeechHistoryRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000444")!,
+            createdAt: Date(timeIntervalSince1970: 5678),
+            sourceFilePath: "/tmp/refine.wav",
+            sourceFileName: "refine.wav",
+            sourceFileSizeBytes: 88,
+            durationSeconds: nil,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "原稿内容",
+            elapsedSeconds: 2,
+            status: .completed,
+            errorSummary: nil
+        )
+        store.save(record)
+
+        let service = SpeechTranscriptionService(historyStore: store)
+        defer { service.stopObsidianWatcher() }
+        service.currentTranscript = "原稿内容"
+
+        XCTAssertTrue(service.applyRefinedTextToCurrentRecord("AI 精装内容"))
+
+        XCTAssertEqual(service.currentTranscript, "原稿内容")
+        XCTAssertEqual(service.currentHistoryRecord?.transcriptText, "原稿内容")
+        XCTAssertEqual(service.currentHistoryRecord?.refinedText, "AI 精装内容")
+    }
+
+    @MainActor
+    func testApplyingRefinedTextExtractsFirstLineTitle() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpeechApplyRefinedTitleTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let store = SpeechHistoryStore(fileURL: tempURL)
+        let record = SpeechHistoryRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000445")!,
+            createdAt: Date(timeIntervalSince1970: 5678),
+            sourceFilePath: "/tmp/refine-title.wav",
+            sourceFileName: "refine-title.wav",
+            sourceFileSizeBytes: 88,
+            durationSeconds: nil,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "原稿内容",
+            elapsedSeconds: 2,
+            status: .completed,
+            errorSummary: nil
+        )
+        store.save(record)
+
+        let service = SpeechTranscriptionService(historyStore: store)
+        defer { service.stopObsidianWatcher() }
+        service.currentTranscript = "原稿内容"
+
+        let refined = """
+        # 产品路线复盘
+
+        AI 精装正文内容。
+        """
+        XCTAssertTrue(service.applyRefinedTextToCurrentRecord(refined))
+
+        XCTAssertEqual(service.currentHistoryRecord?.refinedTitle, "产品路线复盘")
+        XCTAssertEqual(service.currentHistoryRecord?.refinedText, refined)
+        XCTAssertEqual(service.currentHistoryRecord?.transcriptText, "原稿内容")
+    }
+
+    func testObsidianNoteFileNameUsesRefinedTitleWhenAvailable() {
+        let record = SpeechHistoryRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000446")!,
+            createdAt: Date(timeIntervalSince1970: 1_801_388_052),
+            sourceFilePath: "/tmp/raw-audio.wav",
+            sourceFileName: "raw-audio.wav",
+            sourceFileSizeBytes: 88,
+            durationSeconds: nil,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "原稿内容",
+            refinedText: "# 产品路线复盘\n\nAI 精装正文内容。",
+            refinedTitle: "产品路线复盘",
+            elapsedSeconds: 2,
+            status: .completed,
+            errorSummary: nil
+        )
+
+        XCTAssertEqual(
+            SpeechTranscriptionService.obsidianASRNoteFileName(for: record),
+            "2027-01-31 17-34-12 产品路线复盘 clawdhome_asr.md"
+        )
     }
 }

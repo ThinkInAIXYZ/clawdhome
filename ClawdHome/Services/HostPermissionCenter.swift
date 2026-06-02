@@ -21,9 +21,7 @@ enum HostPermissionPromptPolicy {
     ) -> [HostPermissionRequirement] {
         var missing: [HostPermissionRequirement] = []
 
-        if accessibilityStatus != .granted {
-            missing.append(.accessibility)
-        }
+        // 打开托管浏览器账号不依赖宿主 App 的辅助功能权限；只有确实需要 UI 自动化的流程才应单独请求。
         if chromeInstalled, chromeAutomationStatus != .granted {
             missing.append(.chromeAutomation)
         }
@@ -41,6 +39,23 @@ enum HostPermissionPromptPolicy {
             return .automation
         }
         return nil
+    }
+
+    static func isSatisfied(
+        missingPermissions: [HostPermissionRequirement],
+        accessibilityStatus: HostPermissionCenter.PermissionStatus,
+        chromeInstalled: Bool,
+        chromeAutomationStatus: HostPermissionCenter.PermissionStatus
+    ) -> Bool {
+        for permission in missingPermissions {
+            switch permission {
+            case .accessibility:
+                if accessibilityStatus != .granted { return false }
+            case .chromeAutomation:
+                if !chromeInstalled || chromeAutomationStatus != .granted { return false }
+            }
+        }
+        return true
     }
 }
 
@@ -80,6 +95,15 @@ final class HostPermissionCenter {
 
     func missingBrowserAutomationPermissions() -> [HostPermissionRequirement] {
         HostPermissionPromptPolicy.missingBrowserAutomationPermissions(
+            accessibilityStatus: accessibilityStatus,
+            chromeInstalled: chromeInstalled,
+            chromeAutomationStatus: chromeAutomationStatus
+        )
+    }
+
+    func isSatisfied(_ permissions: [HostPermissionRequirement]) -> Bool {
+        HostPermissionPromptPolicy.isSatisfied(
+            missingPermissions: permissions,
             accessibilityStatus: accessibilityStatus,
             chromeInstalled: chromeInstalled,
             chromeAutomationStatus: chromeAutomationStatus

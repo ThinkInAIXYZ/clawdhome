@@ -24,14 +24,6 @@ enum BackupManager {
         return f
     }()
 
-    /// .openclaw 内排除列表（可自动再生的目录/文件）
-    private static let openclawExcludes = [
-        ".openclaw/tools",
-        ".openclaw/sandboxes",
-        ".openclaw/logs",
-        ".openclaw/restart-sentinel.json"
-    ]
-
     // MARK: - 配置读写
 
     static func loadConfig() -> BackupConfig {
@@ -128,9 +120,9 @@ enum BackupManager {
     /// 备份单个 Shrimp 到 destinationDir/shrimps/<username>/shrimp-<username>-<timestamp>.tar.gz
     static func backupShrimp(username: String, destinationDir: String) throws {
         let homeDir = "/Users/\(username)"
-        let openclawDir = "\(homeDir)/.openclaw"
-        guard FileManager.default.fileExists(atPath: openclawDir) else {
-            throw BackupError.openclawNotFound(username)
+        let payloads = backupPayloads(inHome: homeDir)
+        guard !payloads.isEmpty else {
+            throw BackupError.managedDataNotFound(username)
         }
 
         let shrimpDir = "\(destinationDir)/shrimps/\(username)"
@@ -142,21 +134,23 @@ enum BackupManager {
         let timestamp = fileDateFormatter.string(from: Date())
         let archivePath = "\(shrimpDir)/shrimp-\(username)-\(timestamp).tar.gz"
 
-        // 使用临时暂存目录，将 .openclaw + helper 状态文件合并打包
+        // 使用临时暂存目录，将运行时数据 + helper 状态文件合并打包
         let tmpStaging = "/tmp/clawdhome-backup-\(username)-\(timestamp)"
         let fm = FileManager.default
         try fm.createDirectory(atPath: tmpStaging, withIntermediateDirectories: true)
         defer { try? fm.removeItem(atPath: tmpStaging) }
 
-        // 1. 用 rsync 复制 .openclaw（带排除项），避免双重 tar
-        var rsyncArgs = ["-a"]
-        for excl in openclawExcludes {
-            // 排除项格式：.openclaw/xxx → 取 xxx 部分
-            let relative = excl.replacingOccurrences(of: ".openclaw/", with: "")
-            rsyncArgs += ["--exclude=\(relative)"]
+        // 1. 用 rsync 复制受管运行时目录，避免双重 tar
+        for payload in payloads {
+            var rsyncArgs = ["-a"]
+            for excl in payload.excludes {
+                rsyncArgs += ["--exclude=\(excl)"]
+            }
+            let source = "\(homeDir)/\(payload.relativePath)/"
+            let destination = "\(tmpStaging)/\(payload.relativePath)/"
+            rsyncArgs += [source, destination]
+            try run("/usr/bin/rsync", args: rsyncArgs)
         }
-        rsyncArgs += ["\(openclawDir)/", "\(tmpStaging)/.openclaw/"]
-        try run("/usr/bin/rsync", args: rsyncArgs)
 
         // 2. 复制 helper 状态文件
         let helperStateStaging = "\(tmpStaging)/helper-state"
@@ -257,12 +251,13 @@ enum BackupManager {
     static func restoreShrimp(username: String, sourcePath: String) throws {
         let fm = FileManager.default
         let homeDir = "/Users/\(username)"
-        let openclawDir = "\(homeDir)/.openclaw"
-        let tmpDir = "\(homeDir)/.openclaw.restore-tmp"
-        let prevDir = "\(homeDir)/.openclaw.prev"
+        let tmpDir = "\(homeDir)/.clawdhome.restore-tmp"
+        var previousDirs: [String] = []
 
         try? fm.removeItem(atPath: tmpDir)
-        try? fm.removeItem(atPath: prevDir)
+        for relativePath in BackupPayloadPolicy.managedRelativePaths {
+            try? fm.removeItem(atPath: "\(homeDir)/\(relativePath).prev")
+        }
 
         try fm.createDirectory(atPath: tmpDir, withIntermediateDirectories: true)
 
@@ -271,27 +266,40 @@ enum BackupManager {
             try run("/usr/bin/tar", args: ["-xzf", sourcePath, "-C", tmpDir])
 
             // 2. 验证
-            let extracted = "\(tmpDir)/.openclaw"
-            guard fm.fileExists(atPath: extracted) else {
-                throw BackupError.invalidArchive("未找到 .openclaw 目录")
+            let restoredPayloads = BackupPayloadPolicy.managedRelativePaths.filter {
+                fm.fileExists(atPath: "\(tmpDir)/\($0)")
+            }
+            guard !restoredPayloads.isEmpty else {
+                throw BackupError.invalidArchive("未找到受管运行时目录")
             }
 
-            // 3. 原子替换 .openclaw
-            if fm.fileExists(atPath: openclawDir) {
-                try fm.moveItem(atPath: openclawDir, toPath: prevDir)
-            }
-
-            do {
-                try fm.moveItem(atPath: extracted, toPath: openclawDir)
-            } catch {
-                if fm.fileExists(atPath: prevDir) {
-                    try? fm.moveItem(atPath: prevDir, toPath: openclawDir)
+            // 3. 原子替换归档中存在的受管目录；旧归档只含 .openclaw 时不会删除 Hermes 数据
+            for relativePath in restoredPayloads {
+                let extracted = "\(tmpDir)/\(relativePath)"
+                let destination = "\(homeDir)/\(relativePath)"
+                if relativePath == ".clawdhome" {
+                    try fm.createDirectory(atPath: destination, withIntermediateDirectories: true)
+                    try run("/usr/bin/rsync", args: ["-a", "\(extracted)/", "\(destination)/"])
+                    try run("/usr/sbin/chown", args: ["-R", username, destination])
+                    continue
                 }
-                throw error
-            }
 
-            // 4. 修正所有权
-            try run("/usr/sbin/chown", args: ["-R", username, openclawDir])
+                let previous = "\(destination).prev"
+                if fm.fileExists(atPath: destination) {
+                    try fm.moveItem(atPath: destination, toPath: previous)
+                    previousDirs.append(previous)
+                }
+                do {
+                    try fm.moveItem(atPath: extracted, toPath: destination)
+                } catch {
+                    if fm.fileExists(atPath: previous) {
+                        try? fm.moveItem(atPath: previous, toPath: destination)
+                        previousDirs.removeAll { $0 == previous }
+                    }
+                    throw error
+                }
+                try run("/usr/sbin/chown", args: ["-R", username, destination])
+            }
 
             // 5. 恢复 helper 状态文件
             let helperSrc = "\(tmpDir)/helper-state"
@@ -313,10 +321,19 @@ enum BackupManager {
 
             // 6. 清理
             try? fm.removeItem(atPath: tmpDir)
-            try? fm.removeItem(atPath: prevDir)
+            for previous in previousDirs {
+                try? fm.removeItem(atPath: previous)
+            }
 
         } catch {
             try? fm.removeItem(atPath: tmpDir)
+            for previous in previousDirs {
+                let destination = String(previous.dropLast(".prev".count))
+                if fm.fileExists(atPath: previous) {
+                    try? fm.removeItem(atPath: destination)
+                    try? fm.moveItem(atPath: previous, toPath: destination)
+                }
+            }
             throw error
         }
     }
@@ -455,19 +472,29 @@ enum BackupManager {
         )
     }
 
+    private static func backupPayloads(inHome homeDir: String) -> [BackupPayloadSpec] {
+        let fm = FileManager.default
+        let existing = Set(BackupPayloadPolicy.managedRelativePaths.filter { relativePath in
+            var isDir: ObjCBool = false
+            let path = "\(homeDir)/\(relativePath)"
+            return fm.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
+        })
+        return BackupPayloadPolicy.payloads(existingRelativePaths: existing)
+    }
+
     /// 找到运行 App 的管理员用户的 Application Support 目录
     static func resolveAdminAppSupportDir() -> String {
         "\(resolveAdminHome())/Library/Application Support/ClawdHome"
     }
 
     enum BackupError: LocalizedError {
-        case openclawNotFound(String)
+        case managedDataNotFound(String)
         case invalidArchive(String)
         case invalidPath(String)
 
         var errorDescription: String? {
             switch self {
-            case .openclawNotFound(let user): return "@\(user) 的 ~/.openclaw 目录不存在"
+            case .managedDataNotFound(let user): return "@\(user) 没有可备份的 ClawdHome 运行时数据"
             case .invalidArchive(let msg): return "备份文件格式错误: \(msg)"
             case .invalidPath(let path): return "非法备份路径: \(path)"
             }

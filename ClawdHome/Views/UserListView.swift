@@ -4,6 +4,7 @@
 import Darwin
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 extension Notification.Name {
     static let openUpgradeSheet = Notification.Name("ClawdHome.openUpgradeSheet")
@@ -775,26 +776,7 @@ struct ClawPoolView: View {
         Table(displayedUsers, selection: $selectedClaw) {
             TableColumn("") { claw in
                 HStack(spacing: 6) {
-                    if claw.clawType == .macosUser {
-                        if !claw.versionChecked {
-                            Text("🦞")
-                                .font(.system(size: 14))
-                                .frame(width: 16, height: 16)
-                        } else if claw.prefersHermesRuntime {
-                            HermesLogoMark()
-                                .frame(width: 16, height: 16)
-                        } else if claw.openclawVersion != nil {
-                            OpenClawLogoMark()
-                                .frame(width: 16, height: 16)
-                        } else {
-                            Text("🦞")
-                                .font(.system(size: 14))
-                                .frame(width: 16, height: 16)
-                        }
-                    } else {
-                        Image(systemName: claw.clawType.icon)
-                            .foregroundStyle(.secondary)
-                    }
+                    ShrimpAvatarView(claw: claw, size: 16)
                 }
                 .contentShape(Rectangle())
                 .clawReorderDropTarget(item: claw, pool: pool)
@@ -985,12 +967,11 @@ struct ClawPoolView: View {
         .task(id: agentReloadKey) { await loadAllAgents() }
     }
 
-    // MARK: - 卡片（使用 ClawCard，多 agent 时右侧展开角色面板）
+    // MARK: - 卡片（使用 ClawCard）
 
     @ViewBuilder
     private func expandableClawCard(for claw: ManagedUser) -> some View {
         let userAgents = agentsByUser[claw.username] ?? []
-        let isExpanded = expandedUsername == claw.username
         let isOpeningWebUI = webUIOpenInFlightUsernames.contains(claw.username.lowercased())
 
         ClawCard(
@@ -999,7 +980,6 @@ struct ClawPoolView: View {
             isEntryEnabled: canOpenPoolEntry(for: claw),
             isOpeningWebUI: isOpeningWebUI,
             agents: userAgents,
-            isAgentExpanded: isExpanded,
             onTap: { openPreferredWindow(for: claw) },
             onDoubleClick: { openPreferredWindow(for: claw) },
             onUpgrade: {
@@ -1016,25 +996,9 @@ struct ClawPoolView: View {
                 pool.pendingAgentSelection[claw.username] = agent.id
                 openPreferredWindow(for: claw)
             },
-            onAgentExpand: userAgents.count > 1 ? {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    expandedUsername = isExpanded ? nil : claw.username
-                }
-            } : nil,
             onOpenWebUI: { Task { await openWebUI(for: claw) } },
-            onTerminal: { openTerminal(for: claw) },
-            onOpenVault: { openVault(for: claw) },
             onDropFiles: { urls in handleQuickTransferDrop(for: claw, droppedURLs: urls) }
         )
-        .overlay(alignment: .topTrailing) {
-            if isExpanded && userAgents.count > 1 {
-                agentExpandPanel(user: claw, agents: userAgents)
-                    .offset(x: 165)
-                    .zIndex(100)
-                    .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .topLeading)))
-            }
-        }
-        .zIndex(isExpanded ? 10 : 0)
     }
 
     // MARK: - 角色展开面板（浮动在卡片右侧）
@@ -1568,15 +1532,11 @@ private struct ClawCard: View {
     var isEntryEnabled: Bool = true
     var isOpeningWebUI: Bool = false
     var agents: [AgentProfile] = []
-    var isAgentExpanded: Bool = false
     let onTap: () -> Void
     var onDoubleClick: (() -> Void)? = nil
     var onUpgrade: (() -> Void)? = nil
     var onAgentTap: ((AgentProfile) -> Void)? = nil
-    var onAgentExpand: (() -> Void)? = nil
     let onOpenWebUI: () -> Void
-    let onTerminal: () -> Void
-    let onOpenVault: () -> Void
     let onDropFiles: ([URL]) -> Void
 
     @Environment(UpdateChecker.self) private var updater
@@ -1692,30 +1652,7 @@ private struct ClawCard: View {
             Spacer(minLength: 0)
             // 图标 + 状态角标
             ZStack(alignment: .bottomTrailing) {
-                if claw.clawType == .macosUser {
-                    if !claw.versionChecked {
-                        Text("🦞")
-                            .font(.system(size: 30))
-                            .frame(width: 44, height: 44)
-                    } else if claw.prefersHermesRuntime {
-                        HermesLogoMark()
-                            .frame(width: 32, height: 32)
-                            .frame(width: 44, height: 44)
-                    } else if claw.openclawVersion != nil {
-                        OpenClawLogoMark()
-                            .frame(width: 32, height: 32)
-                            .frame(width: 44, height: 44)
-                    } else {
-                        Text("🦞")
-                            .font(.system(size: 30))
-                            .frame(width: 44, height: 44)
-                    }
-                } else {
-                    Image(systemName: claw.clawType.icon)
-                        .font(.system(size: 32))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 44, height: 44)
-                }
+                ShrimpAvatarView(claw: claw, size: 44, isEditable: claw.clawType == .macosUser)
                 statusDot
             }
 
@@ -1776,39 +1713,6 @@ private struct ClawCard: View {
                 agentSummarySection
             }
 
-            // 操作按钮行
-            HStack(spacing: 8) {
-                if claw.openclawVersion != nil, !claw.prefersHermesRuntime {
-                    Button { onOpenWebUI() } label: {
-                        if isOpeningWebUI {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "globe")
-                                .font(.caption)
-                                .foregroundStyle(Color.accentColor)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.k("views.user_list_view.open_web_ui", fallback: "打开 Web UI"))
-                    .disabled(claw.isFrozen || isOpeningWebUI)
-                }
-                Button { onTerminal() } label: {
-                    Image(systemName: "terminal")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help(L10n.k("views.user_list_view.open_terminal_action", fallback: "打开终端"))
-
-                Button { onOpenVault() } label: {
-                    Image(systemName: "folder.badge.person.crop")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help(L10n.k("views.user_list_view.open_vault", fallback: "打开共享文件夹"))
-            }
             Spacer(minLength: 0)
         }
     }
@@ -1839,47 +1743,14 @@ private struct ClawCard: View {
         }
     }
 
-    // MARK: 角色摘要（单 agent 显示名称，多 agent 显示数量 + 展开入口）
+    // MARK: 角色摘要（仅显示角色数量）
 
     @ViewBuilder
     private var agentSummarySection: some View {
-        // 始终显示角色数量（含展开按钮）
         let count = max(agents.count, 1)
-        let hasMultiple = agents.count > 1
-        let roleName: String = {
-            if agents.count == 1, let first = agents.first {
-                return first.emoji.isEmpty ? first.name : "\(first.emoji) \(first.name)"
-            }
-            if agents.isEmpty {
-                return claw.fullName.isEmpty ? claw.username : claw.fullName
-            }
-            return ""
-        }()
-
-        HStack(spacing: 4) {
-            Text("\(count)\(L10n.k("views.user_list_view.agent_count_suffix", fallback: "个角色"))")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            if !roleName.isEmpty {
-                Text("·")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary.opacity(0.5))
-                Text(roleName)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            if hasMultiple {
-                Button {
-                    onAgentExpand?()
-                } label: {
-                    Image(systemName: isAgentExpanded ? "chevron.left" : "chevron.right")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
+        Text("\(count)\(L10n.k("views.user_list_view.agent_count_suffix", fallback: "个角色"))")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
     }
 
     private func freezeSymbol(_ mode: FreezeMode) -> String {
@@ -1942,28 +1813,56 @@ private struct AddClawCard: View {
         Button(action: onTap) {
             VStack(spacing: 8) {
                 Spacer(minLength: 0)
-                Text("\u{1F99E}")
-                    .font(.system(size: 28))
-                Text(L10n.k("views.user_list_view.adopt_shrimp", fallback: "领养虾苗"))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isHovered ? Color.accentColor : Color.secondary.opacity(0.6))
+                
+                ZStack {
+                    // 底层极光霓虹底座 (Aura Base)
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color.accentColor.opacity(isHovered ? 0.28 : 0.08),
+                                    Color.accentColor.opacity(0.0)
+                                ],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 52
+                            )
+                        )
+                        .frame(width: 104, height: 104)
+                        .blur(radius: 4)
+                        .scaleEffect(isHovered ? 1.15 : 1.0)
+                    
+                    // Mascot 3D 浮雕免抠悬浮主体
+                    Image("adopt_shrimp_mascot")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 82, height: 82)
+                        .shadow(color: Color.black.opacity(isHovered ? 0.18 : 0.08), radius: isHovered ? 8 : 4, x: 0, y: isHovered ? 5 : 2)
+                        .scaleEffect(isHovered ? 1.10 : 1.0)
+                }
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
+                
+                Text(L10n.k("views.user_list_view.adopt_shrimp", fallback: "领养 虾/马"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isHovered ? Color.accentColor : Color.primary.opacity(0.72))
+                
                 Spacer(minLength: 0)
             }
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160)
             .background(
                 isHovered
-                    ? Color.accentColor.opacity(0.06)
+                    ? Color.accentColor.opacity(0.04)
                     : Color.clear
             )
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(
-                        style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
+                        style: StrokeStyle(lineWidth: 1, dash: isHovered ? [] : [6, 4])
                     )
                     .foregroundStyle(
-                        isHovered ? Color.accentColor.opacity(0.6) : Color.secondary.opacity(0.25)
+                        isHovered ? Color.accentColor.opacity(0.4) : Color.secondary.opacity(0.2)
                     )
             )
         }
@@ -2005,7 +1904,7 @@ private struct ClawPoolEmptyStateCard: View {
                     .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(.primary)
 
-                Text(L10n.k("views.user_list_view.empty.subtitle", fallback: "在这里，你可以养育并管理拥有不同技能的数字生命。\n立刻领养你的第一只虾，开启自动化之旅。"))
+                Text(L10n.k("views.user_list_view.empty.subtitle", fallback: "在这里，你可以运行并管理承载不同技能角色的独立 Shrimp 空间。\n立刻创建你的第一个空间，开启自动化之旅。"))
                     .font(.system(size: 15))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -2014,7 +1913,7 @@ private struct ClawPoolEmptyStateCard: View {
 
             Button(action: onGoToRoleMarket) {
                 HStack(spacing: 10) {
-                    Text(L10n.k("views.user_list_view.empty.cta", fallback: "前往角色中心领养"))
+                    Text(L10n.k("views.user_list_view.empty.cta", fallback: "前往角色中心创建"))
                         .font(.system(size: 18, weight: .semibold))
                     Image(systemName: "chevron.right")
                         .font(.system(size: 16, weight: .bold))
@@ -2059,12 +1958,15 @@ private struct AddClawSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             // 标题区
-            VStack(spacing: 6) {
-                OpenClawLogoMark()
-                    .frame(width: 40, height: 40)
-                Text(L10n.k("views.user_list_view.adopt_shrimp", fallback: "领养虾苗"))
+            VStack(spacing: 12) {
+                Image("adopt_shrimp_mascot")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 80, height: 80)
+                    .shadow(color: Color.black.opacity(0.14), radius: 8, x: 0, y: 4)
+                Text(L10n.k("views.user_list_view.adopt_shrimp", fallback: "领养 虾/马"))
                     .font(.system(size: 20, weight: .bold))
-                Text(L10n.k("views.user_list_view.adopt_sheet_subtitle", fallback: "从角色中心挑选一个数字生命，或直接创建空白账号"))
+                Text(L10n.k("views.user_list_view.adopt_sheet_subtitle", fallback: "从角色中心挑选预设角色，或直接创建空白隔离空间"))
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -2078,12 +1980,13 @@ private struct AddClawSheet: View {
                 // 主按钮：去角色中心
                 Button(action: onGoToRoleMarket) {
                     HStack(spacing: 14) {
-                        Text("🎭")
-                            .font(.system(size: 28))
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 24))
+                            .frame(width: 32)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(L10n.k("views.user_list_view.go_to_role_market", fallback: "去角色中心领养"))
+                            Text(L10n.k("views.user_list_view.go_to_role_market", fallback: "从角色中心创建"))
                                 .font(.system(size: 15, weight: .semibold))
-                            Text(L10n.k("views.user_list_view.go_to_role_market_desc", fallback: "浏览并挑选预设角色，个性化定制后唤醒"))
+                            Text(L10n.k("views.user_list_view.go_to_role_market_desc", fallback: "从角色中心挑选预设角色，一键唤醒并自动配置"))
                                 .font(.system(size: 12))
                                 .foregroundStyle(.white.opacity(0.8))
                         }
@@ -2104,15 +2007,15 @@ private struct AddClawSheet: View {
                 // 次级按钮：直接创建
                 Button(action: { showDirectCreate = true }) {
                     HStack(spacing: 14) {
-                        Image(systemName: "person.badge.plus")
-                            .font(.system(size: 24))
+                        Image(systemName: "square.dashed.badge.plus")
+                            .font(.system(size: 22))
                             .foregroundStyle(.primary)
                             .frame(width: 32)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(L10n.k("views.user_list_view.create_directly", fallback: "直接创建"))
+                            Text(L10n.k("views.user_list_view.create_directly", fallback: "创建空白空间"))
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(.primary)
-                            Text(L10n.k("views.user_list_view.create_blank_macos_account", fallback: "创建一个空白 macOS 账号，自行配置"))
+                            Text(L10n.k("views.user_list_view.create_blank_macos_account", fallback: "创建一个全新的空白空间，适合完全自定义配置"))
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         }
@@ -2181,29 +2084,29 @@ private struct AddMacosUserForm: View {
     var body: some View {
         Form {
             Section {
-                TextField(L10n.k("user.add.form.username", fallback: "用户名"), text: $username)
+                TextField(L10n.k("user.add.form.shrimp_username", fallback: "空间标识 (ID)"), text: $username)
                     .textContentType(.username)
                     .disabled(isSubmitting)
                 if !username.isEmpty && !usernameValid {
-                    Text(L10n.k("user.add.form.username.validation", fallback: "用户名只能包含小写字母、数字和下划线，且须以字母开头"))
+                    Text(L10n.k("user.add.form.shrimp_username_validation", fallback: "只能包含小写字母、数字和下划线，且须以字母开头"))
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
-                TextField(L10n.k("user.add.form.full_name", fallback: "全名（显示用）"), text: $fullName)
+                TextField(L10n.k("user.add.form.shrimp_full_name", fallback: "空间显示名称"), text: $fullName)
                     .disabled(isSubmitting)
-                TextField(L10n.k("user.add.form.description", fallback: "描述（可选，用于备注用途）"), text: $descriptionText)
+                TextField(L10n.k("user.add.form.shrimp_description", fallback: "空间描述 (可选)"), text: $descriptionText)
                     .disabled(isSubmitting)
-            } header: { Text(L10n.k("user.add.form.account_info", fallback: "账户信息")) }
+            } header: { Text(L10n.k("user.add.form.shrimp_account_info", fallback: "空间配置")) }
 
             Section {
                 HStack(spacing: 6) {
-                    Image(systemName: "lock.rotation")
+                    Image(systemName: "key.horizontal.fill")
                         .foregroundStyle(.secondary)
-                    Text(L10n.k("user.add.form.password_hint", fallback: "密码将自动随机生成并安全存储，可在用户详情中查看"))
+                    Text(L10n.k("user.add.form.shrimp_password_hint", fallback: "安全密钥将自动随机生成并妥善加密，可在空间详情中查看"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            } header: { Text(L10n.k("user.add.form.password", fallback: "密码")) }
+            } header: { Text(L10n.k("user.add.form.shrimp_password", fallback: "空间安全密钥")) }
 
             if let submitError {
                 Section {
@@ -2214,7 +2117,7 @@ private struct AddMacosUserForm: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(L10n.k("user.add.form.title", fallback: "添加 macOS 用户"))
+        .navigationTitle(L10n.k("user.add.form.shrimp_title", fallback: "新建空白 Shrimp 空间"))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(L10n.k("common.action.cancel", fallback: "取消")) {
@@ -2335,4 +2238,764 @@ private struct AddSSHSampleForm: View {
             }
         }
     }
+}
+
+// MARK: - 虾塘发光环形圆角头像组件
+
+struct ShrimpAvatarView: View {
+    let claw: ManagedUser
+    let size: CGFloat
+    var isEditable: Bool = false
+
+    @Environment(GatewayHub.self) private var gatewayHub
+    @Environment(ShrimpPool.self) private var pool
+
+    @State private var isHovered = false
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
+    @State private var imageToCrop: NSImage? = nil
+    @State private var showingAvatarSelector = false
+
+    private var readiness: GatewayReadiness {
+        if let state = gatewayHub.readinessMap[claw.username] { return state }
+        return claw.isRunning ? .ready : .stopped
+    }
+
+    private var glowColor: Color {
+        if claw.isFrozen {
+            return .secondary.opacity(0.3)
+        }
+        switch readiness {
+        case .stopped:  return .secondary.opacity(0.35)
+        case .starting: return .yellow
+        case .ready:    return Color(nsColor: .systemGreen)
+        case .zombie:   return .red
+        }
+    }
+
+    private var glowRadius: CGFloat {
+        if claw.isFrozen || readiness == .stopped { return 0 }
+        return size >= 32 ? 4 : 1.5
+    }
+
+    var body: some View {
+        Group {
+            #if os(macOS)
+            if let customImage = claw.customAvatar {
+                Image(nsImage: customImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                fallbackAvatar
+            }
+            #else
+            fallbackAvatar
+            #endif
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
+        .overlay {
+            if isEditable {
+                ZStack {
+                    if isHovered {
+                        Color.black.opacity(0.35)
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: size * 0.35))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .allowsHitTesting(false)
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
+                .stroke(glowColor.opacity(0.85), lineWidth: size >= 32 ? 1.5 : 0.8)
+                .shadow(color: glowColor.opacity(0.45), radius: glowRadius, x: 0, y: 0)
+        )
+        .contentShape(Rectangle())
+        .onHover { hover in
+            if isEditable {
+                isHovered = hover
+            }
+        }
+        .onTapGesture {
+            if isEditable {
+                showingAvatarSelector = true
+            }
+        }
+        .alert(
+            L10n.k("common.error.action_failed", fallback: "操作失败"),
+            isPresented: $showingErrorAlert
+        ) {
+            Button(L10n.k("common.action.confirm", fallback: "确定"), role: .cancel) { }
+        } message: {
+            Text(errorMessage)
+        }
+        .sheet(isPresented: $showingAvatarSelector) {
+            AvatarSelectorSheet(
+                targetUsername: claw.username,
+                onLocalUpload: { img in
+                    self.imageToCrop = img
+                },
+                onDismiss: {
+                    showingAvatarSelector = false
+                }
+            )
+        }
+        .sheet(isPresented: Binding(
+            get: { imageToCrop != nil },
+            set: { if !$0 { imageToCrop = nil } }
+        )) {
+            if let img = imageToCrop {
+                AvatarCropSheet(image: img, targetUsername: claw.username) {
+                    imageToCrop = nil
+                }
+            }
+        }
+    }
+
+    private func generativeGradient(for username: String) -> LinearGradient {
+        let hash = abs(username.hashValue)
+        let mainHue = Double(hash % 360) / 360.0
+        let secondHue = Double((hash + 80) % 360) / 360.0
+        
+        let color1 = Color(hue: mainHue, saturation: 0.68, brightness: 0.52)
+        let color2 = Color(hue: secondHue, saturation: 0.62, brightness: 0.42)
+        
+        return LinearGradient(
+            colors: [color1, color2],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    @ViewBuilder
+    private var fallbackAvatar: some View {
+        if claw.clawType == .macosUser {
+            ZStack {
+                // 1. 基于用户名哈希生成的极光渐变背景
+                generativeGradient(for: claw.username)
+                
+                // 2. 微微压暗的黑色遮罩，提升层次感
+                Color.black.opacity(0.12)
+                
+                // 3. 叠加原有的标志 / 🦞
+                if !claw.versionChecked {
+                    Text("🦞")
+                        .font(.system(size: size * 0.55))
+                        .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
+                } else if claw.prefersHermesRuntime {
+                    HermesLogoMark()
+                        .frame(width: size * 0.58, height: size * 0.58)
+                        .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
+                } else if claw.openclawVersion != nil {
+                    OpenClawLogoMark()
+                        .frame(width: size * 0.58, height: size * 0.58)
+                        .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
+                } else {
+                    Text("🦞")
+                        .font(.system(size: size * 0.55))
+                        .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
+                }
+            }
+        } else {
+            ZStack {
+                Color.primary.opacity(0.04)
+                Image(systemName: claw.clawType.icon)
+                    .font(.system(size: size * 0.55))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+}
+
+// MARK: - 精致内置头像与本地上传选择 Sheet
+struct AvatarSelectorSheet: View {
+    let targetUsername: String
+    let onLocalUpload: (NSImage) -> Void
+    let onDismiss: () -> Void
+    
+    @Environment(ShrimpPool.self) private var pool
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var isSaving = false
+    @State private var saveError: String? = nil
+    
+    private let clayAvatars = [
+        ("avatar_clay_coder", "极客程序员"),
+        ("avatar_clay_wizard", "红火小巫师"),
+        ("avatar_clay_scholar", "博学小学者"),
+        ("avatar_clay_scientist", "微量科学家"),
+        ("avatar_clay_translator", "智能翻译官"),
+        ("avatar_clay_artist", "全能艺术家")
+    ]
+    
+    private let roleAvatars = [
+        ("avatar_role_notetaker", "会议纪要专家"),
+        ("avatar_role_coder", "代码魔法师"),
+        ("avatar_role_writer", "文案创意大师"),
+        ("avatar_role_researcher", "全球情报分析"),
+        ("avatar_role_marketer", "首席增长客"),
+        ("avatar_role_producer", "多媒体制片人")
+    ]
+    
+    private let corpAvatars = [
+        ("avatar_corp_ceo", "首席执行官"),
+        ("avatar_corp_coo", "首席运营官"),
+        ("avatar_corp_cto", "首席技术官"),
+        ("avatar_corp_prompt", "指令架构师"),
+        ("avatar_corp_cfo", "数字化 CFO"),
+        ("avatar_corp_hr", "金牌面试官")
+    ]
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // 标题区
+            HStack {
+                Text(L10n.k("avatar.selector.title", fallback: "选择内置或本地头像"))
+                    .font(.system(size: 15, weight: .bold))
+                Spacer()
+                Button(action: { onDismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
+            
+            Divider()
+            
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    // 本地上传卡片
+                    Button(action: selectLocalFile) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "photo.on.rectangle.angled")
+                                .font(.system(size: 18))
+                                .foregroundStyle(Color.accentColor)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(L10n.k("avatar.selector.upload_local", fallback: "上传本地图片"))
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                Text(L10n.k("avatar.selector.upload_local_desc", fallback: "支持 PNG, JPEG, WebP 格式，可进行自定义裁切"))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Color(.controlBackgroundColor).opacity(0.4))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // 方案一：微立体数字助手
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L10n.k("avatar.selector.series_clay", fallback: "系列一：微立体数字助手"))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.secondary)
+                        
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                            ForEach(clayAvatars, id: \.0) { avatar in
+                                builtInAvatarCard(name: avatar.0, label: avatar.1)
+                            }
+                        }
+                    }
+                    
+                    // 方案二：高级职能数字生命
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L10n.k("avatar.selector.series_role", fallback: "系列二：高级职能数字生命"))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.secondary)
+                        
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                            ForEach(roleAvatars, id: \.0) { avatar in
+                                builtInAvatarCard(name: avatar.0, label: avatar.1)
+                            }
+                        }
+                    }
+                    
+                    // 方案三：企业高管与专家团队
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L10n.k("avatar.selector.series_corp", fallback: "系列三：企业高管与专家团队"))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.secondary)
+                        
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                            ForEach(corpAvatars, id: \.0) { avatar in
+                                builtInAvatarCard(name: avatar.0, label: avatar.1)
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+            
+            if isSaving {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(.bottom, 6)
+            }
+            
+            if let saveError {
+                Text(saveError)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
+                    .padding(.bottom, 6)
+            }
+            
+            Divider()
+            
+            // 底部操作区
+            HStack {
+                Spacer()
+                Button(L10n.k("common.action.cancel", fallback: "取消")) { onDismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color(nsColor: .windowBackgroundColor))
+        }
+        .frame(width: 420, height: 480)
+    }
+    
+    @ViewBuilder
+    private func builtInAvatarCard(name: String, label: String) -> some View {
+        Button(action: { selectBuiltIn(name: name) }) {
+            VStack(spacing: 6) {
+                Image(name)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 76, height: 76)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 1.5)
+                
+                Text(label)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(Color(.controlBackgroundColor).opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isSaving)
+    }
+    
+    private func selectLocalFile() {
+        let openPanel = NSOpenPanel()
+        openPanel.title = L10n.k("avatar.select.title", fallback: "选择自定义头像")
+        openPanel.allowedContentTypes = [.png, .jpeg, .webP]
+        openPanel.allowsMultipleSelection = false
+        openPanel.canChooseDirectories = false
+        openPanel.canChooseFiles = true
+        
+        openPanel.begin { response in
+            guard response == .OK, let fileURL = openPanel.url else { return }
+            guard let image = NSImage(contentsOf: fileURL) else { return }
+            
+            if let rep = image.representations.first {
+                let pixelSize = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+                if pixelSize.width > 0 && pixelSize.height > 0 {
+                    image.size = pixelSize
+                }
+            }
+            
+            DispatchQueue.main.async {
+                onLocalUpload(image)
+                onDismiss()
+            }
+        }
+    }
+    
+    private func selectBuiltIn(name: String) {
+        isSaving = true
+        saveError = nil
+        
+        Task {
+            do {
+                guard let nsImage = NSImage(named: name) else {
+                    throw NSError(domain: "AvatarSelector", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法加载内置头像图片"])
+                }
+                
+                guard let tiffData = nsImage.tiffRepresentation,
+                      let bitmap = NSBitmapImageRep(data: tiffData),
+                      let pngData = bitmap.representation(using: .png, properties: [:]) else {
+                    throw NSError(domain: "AvatarSelector", code: -2, userInfo: [NSLocalizedDescriptionKey: "内置图像数据转换失败"])
+                }
+                
+                try await pool.saveAvatar(username: targetUsername, avatarData: pngData)
+                
+                await MainActor.run {
+                    isSaving = false
+                    onDismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isSaving = false
+                    saveError = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 头像裁剪 Sheet 视图
+
+struct AvatarCropSheet: View {
+    let image: NSImage
+    let targetUsername: String
+    let onDismiss: () -> Void
+
+    @Environment(ShrimpPool.self) private var pool
+
+    @State private var scale: CGFloat = 1.0
+    @State private var minScale: CGFloat = 1.0
+    @State private var maxScale: CGFloat = 4.0
+
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+    @State private var lastMagnification: CGFloat = 1.0
+
+    @State private var isSaving = false
+    @State private var saveError: String? = nil
+
+    // 裁切视口固定为 240x240，大小匹配卡片视觉
+    private let viewportSize = CGSize(width: 240, height: 240)
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // 标题
+            Text(L10n.k("avatar.crop.title", fallback: "裁切头像"))
+                .font(.system(size: 16, weight: .semibold))
+                .padding(.vertical, 16)
+
+            Divider()
+
+            // 裁切工作区
+            ZStack {
+                // 底层图片，以真实的图片宽高显示，并通过 scaleEffect 缩放，offset 拖拽
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: image.size.width, height: image.size.height)
+                    .scaleEffect(scale)
+                    .offset(offset)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { gesture in
+                                let maxW = max(0, (image.size.width * scale - viewportSize.width) / 2)
+                                let maxH = max(0, (image.size.height * scale - viewportSize.height) / 2)
+                                let newX = min(maxW, max(-maxW, lastOffset.width + gesture.translation.width))
+                                let newY = min(maxH, max(-maxH, lastOffset.height + gesture.translation.height))
+                                self.offset = CGSize(width: newX, height: newY)
+                            }
+                            .onEnded { _ in
+                                self.lastOffset = self.offset
+                            }
+                    )
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { value in
+                                let delta = value / lastMagnification
+                                lastMagnification = value
+                                let newScale = scale * delta
+                                scale = min(maxScale, max(minScale, newScale))
+                                clampOffset(forCurrentScale: scale)
+                            }
+                            .onEnded { _ in
+                                lastMagnification = 1.0
+                            }
+                    )
+
+                // 蒙版遮罩层：四周半透明，中间 240x240 圆角矩形镂空，描白色高亮线
+                CropOverlayView(viewportSize: viewportSize)
+                    .allowsHitTesting(false)
+
+                if isSaving {
+                    ZStack {
+                        Color.black.opacity(0.4)
+                        ProgressView()
+                            .controlSize(.large)
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .frame(width: 400, height: 350)
+            .background(Color.black.opacity(0.95))
+            .clipShape(Rectangle())
+
+            Divider()
+
+            // 控制工具栏及动作按钮
+            VStack(spacing: 16) {
+                // 拖动指引
+                Text(L10n.k("avatar.crop.drag_hint", fallback: "拖动图片调整位置，使用手势或滑块进行缩放"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+                // 缩放滑块及居中按钮
+                HStack(spacing: 12) {
+                    Image(systemName: "minus.magnifyingglass")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+
+                    Slider(value: $scale, in: minScale...maxScale)
+                        .onChange(of: scale) { _, newValue in
+                            clampOffset(forCurrentScale: newValue)
+                        }
+
+                    Image(systemName: "plus.magnifyingglass")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+
+                    Button(action: resetToFit) {
+                        Text(L10n.k("avatar.crop.reset", fallback: "自适应"))
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, 24)
+
+                if let saveError {
+                    Text(saveError)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                }
+
+                // 动作按钮
+                HStack(spacing: 16) {
+                    Button(L10n.k("avatar.crop.cancel", fallback: "取消")) {
+                        onDismiss()
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(isSaving)
+
+                    Spacer()
+
+                    Button(L10n.k("avatar.crop.save", fallback: "保存")) {
+                        saveCroppedAvatar()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isSaving)
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
+            }
+            .padding(.top, 12)
+            .background(Color(nsColor: .windowBackgroundColor))
+        }
+        .frame(width: 400)
+        .onAppear {
+            setupInitialScale()
+        }
+    }
+
+    private func setupInitialScale() {
+        let wScale = viewportSize.width / image.size.width
+        let hScale = viewportSize.height / image.size.height
+        let initialScale = max(wScale, hScale)
+
+        self.minScale = initialScale
+        self.maxScale = max(initialScale * 4.0, 5.0)
+        self.scale = initialScale
+
+        self.offset = .zero
+        self.lastOffset = .zero
+    }
+
+    private func resetToFit() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            self.scale = self.minScale
+            self.offset = .zero
+            self.lastOffset = .zero
+        }
+    }
+
+    private func clampOffset(forCurrentScale currentScale: CGFloat) {
+        let maxW = max(0, (image.size.width * currentScale - viewportSize.width) / 2)
+        let maxH = max(0, (image.size.height * currentScale - viewportSize.height) / 2)
+
+        let clampedX = min(maxW, max(-maxW, offset.width))
+        let clampedY = min(maxH, max(-maxH, offset.height))
+
+        self.offset = CGSize(width: clampedX, height: clampedY)
+        self.lastOffset = self.offset
+    }
+
+    private func saveCroppedAvatar() {
+        isSaving = true
+        saveError = nil
+
+        Task {
+            do {
+                guard let croppedData = cropAndScaleNSImage(
+                    image: image,
+                    offsetX: offset.width,
+                    offsetY: offset.height,
+                    scale: scale,
+                    viewportSize: viewportSize,
+                    targetSize: CGSize(width: 256, height: 256)
+                ) else {
+                    throw NSError(domain: "AvatarCrop", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法裁剪和处理图片"])
+                }
+
+                try await pool.saveAvatar(username: targetUsername, avatarData: croppedData)
+
+                await MainActor.run {
+                    isSaving = false
+                    onDismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isSaving = false
+                    saveError = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 挖空遮罩 Canvas 视图
+
+struct CropOverlayView: View {
+    let viewportSize: CGSize
+
+    var body: some View {
+        Canvas { context, size in
+            // 填充四周背景为半透明黑色
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black.opacity(0.6)))
+
+            let cropRect = CGRect(
+                x: (size.width - viewportSize.width) / 2,
+                y: (size.height - viewportSize.height) / 2,
+                width: viewportSize.width,
+                height: viewportSize.height
+            )
+
+            // 绘制 25% 圆角的裁切矩形框路径
+            let cropPath = Path(roundedRect: cropRect, cornerRadius: viewportSize.width * 0.25, style: .continuous)
+
+            // 挖空裁切框内的颜色
+            context.blendMode = .destinationOut
+            context.fill(cropPath, with: .color(.black))
+
+            // 恢复 normal 模式，在边缘绘制白色微光外框
+            context.blendMode = .normal
+            context.stroke(
+                cropPath,
+                with: .color(.white.opacity(0.85)),
+                lineWidth: 1.5
+            )
+        }
+    }
+}
+
+// MARK: - 高保真图像裁剪与缩放算法
+
+func cropAndScaleNSImage(
+    image: NSImage,
+    offsetX: CGFloat,
+    offsetY: CGFloat,
+    scale: CGFloat,
+    viewportSize: CGSize,
+    targetSize: CGSize
+) -> Data? {
+    let displaySize = image.size
+    guard displaySize.width > 0, displaySize.height > 0 else {
+        return nil
+    }
+
+    var imageRect = CGRect(origin: .zero, size: displaySize)
+    guard let cgImage = image.cgImage(forProposedRect: &imageRect, context: nil, hints: nil) else {
+        return nil
+    }
+
+    let pixelSize = CGSize(width: cgImage.width, height: cgImage.height)
+
+    // 预览坐标系下的裁剪框大小
+    let cropWidth = viewportSize.width / scale
+    let cropHeight = viewportSize.height / scale
+
+    // 裁剪框左上角在预览坐标系（y轴向下，左上角0,0）下的起始坐标
+    let cropX = (displaySize.width - cropWidth) / 2 - offsetX / scale
+    let cropY = (displaySize.height - cropHeight) / 2 - offsetY / scale
+
+    let pixelScaleX = pixelSize.width / displaySize.width
+    let pixelScaleY = pixelSize.height / displaySize.height
+    let pixelCropRect = CGRect(
+        x: cropX * pixelScaleX,
+        y: cropY * pixelScaleY,
+        width: cropWidth * pixelScaleX,
+        height: cropHeight * pixelScaleY
+    )
+    .integral
+    .intersection(CGRect(origin: .zero, size: pixelSize))
+
+    guard !pixelCropRect.isNull,
+          pixelCropRect.width > 0,
+          pixelCropRect.height > 0,
+          let croppedCGImage = cgImage.cropping(to: pixelCropRect) else {
+        return nil
+    }
+
+    let outputWidth = Int(targetSize.width.rounded())
+    let outputHeight = Int(targetSize.height.rounded())
+    guard outputWidth > 0,
+          outputHeight > 0,
+          let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+          let context = CGContext(
+              data: nil,
+              width: outputWidth,
+              height: outputHeight,
+              bitsPerComponent: 8,
+              bytesPerRow: 0,
+              space: colorSpace,
+              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+          ) else {
+        return nil
+    }
+
+    context.interpolationQuality = .high
+    context.draw(croppedCGImage, in: CGRect(origin: .zero, size: targetSize))
+
+    guard let scaledCGImage = context.makeImage() else {
+        return nil
+    }
+
+    let pngData = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(pngData, UTType.png.identifier as CFString, 1, nil) else {
+        return nil
+    }
+
+    CGImageDestinationAddImage(destination, scaledCGImage, nil)
+    guard CGImageDestinationFinalize(destination) else {
+        return nil
+    }
+
+    return pngData as Data
 }

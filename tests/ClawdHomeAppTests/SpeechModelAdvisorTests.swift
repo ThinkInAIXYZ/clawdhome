@@ -66,7 +66,8 @@ struct SpeechModelAdvisorTests {
                 localAIServiceRunning: false
             )
         )
-        expect(lowMemory.recommendedModel == .qwen3ASR06B, "low memory should downgrade to 0.6B")
+        expect(lowMemory.recommendedModel == .qwen3ASR17B8Bit, "low memory should keep 1.7B as the default")
+        expect(lowMemory.fallbackModel == .qwen3ASR06B, "low memory should expose 0.6B fallback")
         expect(lowMemory.warnings.contains { $0.kind == .lowMemory }, "low memory warning should be present")
 
         let lowDisk = SpeechModelAdvisor.recommend(
@@ -79,7 +80,8 @@ struct SpeechModelAdvisorTests {
                 localAIServiceRunning: false
             )
         )
-        expect(lowDisk.recommendedModel == .qwen3ASR06B, "low disk should downgrade to 0.6B")
+        expect(lowDisk.recommendedModel == .qwen3ASR17B8Bit, "low disk should keep 1.7B as the default")
+        expect(lowDisk.fallbackModel == .qwen3ASR06B, "low disk should expose 0.6B fallback")
         expect(lowDisk.warnings.contains { $0.kind == .lowDiskSpace }, "low disk warning should be present")
 
         let localAIRunning = SpeechModelAdvisor.recommend(

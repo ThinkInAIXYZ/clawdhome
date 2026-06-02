@@ -1,6 +1,924 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "asr.mini_card.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribing Audio"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音转译中"
+          }
+        }
+      }
+    },
+    "asr.mini_card.preparing_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading Model"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型下载中"
+          }
+        }
+      }
+    },
+    "asr.mini_card.single_task": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 task in progress"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 个任务进行中"
+          }
+        }
+      }
+    },
+    "asr.mini_card.queue_progress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Processing audio %d of %d"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在处理第 %d/%d 个音频"
+          }
+        }
+      }
+    },
+    "asr.mini_card.audio_transcribing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribing audio..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音音频转译中..."
+          }
+        }
+      }
+    },
+    "asr.mini_card.processing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Processing..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "后台处理中"
+          }
+        }
+      }
+    },
+    "asr.mini_card.preparing_model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading local ASR model..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地 ASR 模型下载中"
+          }
+        }
+      }
+    },
+    "asr.mini_card.downloading": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型下载中..."
+          }
+        }
+      }
+    },
+    "asr.mini_card.restore_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click to return to Speech Transcription"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点击返回语音转译页面"
+          }
+        }
+      }
+    },
+    "asr.stage.waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待中..."
+          }
+        }
+      }
+    },
+    "asr.stage.enhancing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enhancing vocals & reducing noise..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "人声分离与降噪中..."
+          }
+        }
+      }
+    },
+    "asr.stage.loading_model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting local ASR..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在启动本地 ASR..."
+          }
+        }
+      }
+    },
+    "asr.stage.transcribing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribing audio..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在智能识别转写..."
+          }
+        }
+      }
+    },
+    "asr.stage.completed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Completed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转译完成"
+          }
+        }
+      }
+    },
+    "asr.stage.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转译失败"
+          }
+        }
+      }
+    },
+    "asr.stage.cancelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelled"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已取消"
+          }
+        }
+      }
+    },
+    "avatar.selector.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select Avatar"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择内置或本地头像"
+          }
+        }
+      }
+    },
+    "avatar.selector.upload_local": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upload Local Image"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上传本地图片"
+          }
+        }
+      }
+    },
+    "avatar.selector.upload_local_desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supports PNG, JPEG, WebP. Custom cropping available."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支持 PNG, JPEG, WebP 格式，可进行自定义裁切"
+          }
+        }
+      }
+    },
+    "avatar.selector.series_cyber": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Series 1: Cyber Bioluminescent Ocean"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系列一：深海赛博发光生命"
+          }
+        }
+      }
+    },
+    "avatar.selector.series_clay": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Series 1: Claymorphic Digital Assistants"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系列一：微立体数字助手"
+          }
+        }
+      }
+    },
+    "avatar.selector.series_role": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Series 2: Professional Agent Personas"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系列二：高级职能数字生命"
+          }
+        }
+      }
+    },
+    "avatar.selector.series_corp": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Series 3: Corporate Roles & Executives"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系列三：企业高管与专家团队"
+          }
+        }
+      }
+    },
+    "avatar.crop.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crop Avatar"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "裁切头像"
+          }
+        }
+      }
+    },
+    "avatar.crop.drag_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag to move, gesture or slider to zoom"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖动图片调整位置，使用手势或滑块进行缩放"
+          }
+        }
+      }
+    },
+    "avatar.crop.reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自适应"
+          }
+        }
+      }
+    },
+    "avatar.crop.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        }
+      }
+    },
+    "avatar.crop.save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        }
+      }
+    },
+    "avatar.crop.load_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to load image"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加载图片失败"
+          }
+        }
+      }
+    },
+    "settings.obsidian.attachments": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attachments Directory"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "附件目录"
+          }
+        }
+      }
+    },
+    "settings.obsidian.enabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-sync to Obsidian Vault"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动同步到 Obsidian Vault"
+          }
+        }
+      }
+    },
+    "settings.obsidian.error.audio_missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source audio file not found."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找不到源音频文件"
+          }
+        }
+      }
+    },
+    "settings.obsidian.error.vault_not_set": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian Vault path is not configured. Please set it in Settings."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未配置 Obsidian Vault 路径，请前往设置配置"
+          }
+        }
+      }
+    },
+    "settings.obsidian.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When enabled, the transcript, AI-refined text, and audio files will be automatically saved to your Obsidian Vault."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启后，录音的转写原稿、AI 智能精装版（若有）及音频文件将自动保存至 Obsidian Vault。音频文件默认存放于附件目录下。"
+          }
+        }
+      }
+    },
+    "settings.obsidian.inbox": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inbox Directory"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inbox 目录"
+          }
+        }
+      }
+    },
+    "settings.obsidian.section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian Integration"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian 联动"
+          }
+        }
+      }
+    },
+    "settings.obsidian.vault_path": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian Vault Path"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian Vault 路径"
+          }
+        }
+      }
+    },
+    "settings.obsidian.vault_path.choose": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择…"
+          }
+        }
+      }
+    },
+    "settings.obsidian.vault_path.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Selected"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未选择"
+          }
+        }
+      }
+    },
+    "speech.obsidian.sync": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync to Obsidian"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步至 Obsidian"
+          }
+        }
+      }
+    },
+    "speech.obsidian.synced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synced"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已同步"
+          }
+        }
+      }
+    },
+    "views.model_manager.llmmanager_tab.system_default": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统默认"
+          }
+        }
+      }
+    },
+    "views.model_manager.llmmanager_tab.set_as_default": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Default"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设为默认"
+          }
+        }
+      }
+    },
+    "views.model_manager.llmmanager_tab.view_accounts": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accounts"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账户管理"
+          }
+        }
+      }
+    },
+    "views.model_manager.llmmanager_tab.view_sorting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sorting & Defaults"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型排序与默认"
+          }
+        }
+      }
+    },
+    "views.model_manager.llmmanager_tab.sorting_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag up or down to prioritize active models. Tap Star to set a global default model."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上下拖拽调整已启用模型的展示优先级；点击“星标”将其设为全局默认模型。"
+          }
+        }
+      }
+    },
+    "add_provider_model.custom_model_input_placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter model ID, press Enter or click + to add"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入模型 ID，回车或点击 + 添加"
+          }
+        }
+      }
+    },
+    "add_provider_model.added_models": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Added Models (%d)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已添加的模型 (%d)"
+          }
+        }
+      }
+    },
+    "add_provider_model.remove_model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove this model"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除此模型"
+          }
+        }
+      }
+    },
+    "add_provider_model.custom_model_id_list": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model List"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型列表"
+          }
+        }
+      }
+    },
+    "add_provider_model.provider_id_optional_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model name prefix for API calls. If set to custom, the client uses custom/model_id. Keep default if not needed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 调用时的模型名前缀。如前缀为 custom，则客户端调用模型名为 custom/模型ID。如无特殊要求请保持默认。"
+          }
+        }
+      }
+    },
+    "add_provider_model.custom_gateway": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom Gateway"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义接口网关"
+          }
+        }
+      }
+    },
+    "add_provider_model.official_service_provider": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Official Provider"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "官方原生服务商"
+          }
+        }
+      }
+    },
+    "add_provider_model.channel_locked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider Locked"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务商已锁定"
+          }
+        }
+      }
+    },
     "speech.model_manager.title": {
       "extractionState": "manual",
       "localizations": {
@@ -116,6 +1034,930 @@
           "stringUnit": {
             "state": "translated",
             "value": "已下载"
+          }
+        }
+      }
+    },
+    "speech.refine.stop_generation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止生成"
+          }
+        }
+      }
+    },
+    "speech.refine.save_to_refined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save AI Draft"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存到 AI 精装版"
+          }
+        }
+      }
+    },
+    "common.reveal_in_finder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reveal in Finder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Finder 中显示"
+          }
+        }
+      }
+    },
+    "common.status.copied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已复制"
+          }
+        }
+      }
+    },
+    "speech.compare.raw_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raw Transcript"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转写粗稿原文"
+          }
+        }
+      }
+    },
+    "speech.compare.refined_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Draft"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 智能精装版"
+          }
+        }
+      }
+    },
+    "speech.content.tab.raw": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📝 Draft"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📝 粗稿原文"
+          }
+        }
+      }
+    },
+    "speech.content.tab.raw.short": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📝 Raw"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📝 原稿"
+          }
+        }
+      }
+    },
+    "speech.content.tab.refined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✨ AI Draft"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✨ AI 精装稿"
+          }
+        }
+      }
+    },
+    "speech.content.tab.refined.short": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✨ Fine"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✨ 精装"
+          }
+        }
+      }
+    },
+    "speech.content.tab.srt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🎬 Captions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🎬 实时字幕"
+          }
+        }
+      }
+    },
+    "speech.content.tab.srt.short": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🎬 Subs"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🎬 字幕"
+          }
+        }
+      }
+    },
+    "speech.content.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Content"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容整理"
+          }
+        }
+      }
+    },
+    "speech.history.copy_raw": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Raw"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制转写粗稿原文"
+          }
+        }
+      }
+    },
+    "speech.history.copy_refined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy AI Draft"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制 AI 智能精装版"
+          }
+        }
+      }
+    },
+    "speech.history.delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete History"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除历史记录"
+          }
+        }
+      }
+    },
+    "speech.history.delete_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this history record"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除该历史记录"
+          }
+        }
+      }
+    },
+    "speech.history.retranscribe": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe Again"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新转译音频"
+          }
+        }
+      }
+    },
+    "speech.history.reveal_source_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reveal source file in Finder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Finder 中显示原始文件"
+          }
+        }
+      }
+    },
+    "speech.models.open_cache_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open model cache in Finder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Finder 中打开模型缓存目录"
+          }
+        }
+      }
+    },
+    "speech.preview.rendered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "👁️ Preview"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "👁️ 预览"
+          }
+        }
+      }
+    },
+    "speech.preview.source": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📄 Source"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📄 源码"
+          }
+        }
+      }
+    },
+    "speech.preview.switch_rendered_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to preview mode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换到预览模式"
+          }
+        }
+      }
+    },
+    "speech.preview.switch_source_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to edit mode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换到编辑模式"
+          }
+        }
+      }
+    },
+    "speech.queue.cancel_all": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop All"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中止全部转写"
+          }
+        }
+      }
+    },
+    "speech.queue.cancelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelled"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已取消"
+          }
+        }
+      }
+    },
+    "speech.queue.clean_completed_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear completed tasks"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清理已完成的任务"
+          }
+        }
+      }
+    },
+    "speech.queue.clear_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear queue"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清空队列"
+          }
+        }
+      }
+    },
+    "speech.queue.completed_meta": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✓ Done · %.1fs · %d chars"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✓ 完成 · %.1fs · %d 字"
+          }
+        }
+      }
+    },
+    "speech.queue.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcription failed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转写失败"
+          }
+        }
+      }
+    },
+    "speech.queue.start_batch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe %d"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "批量转写（%d 个）"
+          }
+        }
+      }
+    },
+    "speech.queue.start_one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开始转写"
+          }
+        }
+      }
+    },
+    "speech.refine.back_to_config": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "返回配置"
+          }
+        }
+      }
+    },
+    "speech.refine.copy_refined_only": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy AI Draft"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅复制精装版"
+          }
+        }
+      }
+    },
+    "speech.refine.count_duration": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d chars · ⚡️ %.1fs"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d 字 · ⚡️ %.1fs"
+          }
+        }
+      }
+    },
+    "speech.refine.empty_action": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Polish now"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即开启智能精整魔法"
+          }
+        }
+      }
+    },
+    "speech.refine.empty_desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove filler words, clean up punctuation, extract notes or meeting minutes, and keep the original alongside the AI-polished version."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一键消除口癖语气词，智能理顺断句，提取会议纪要、随记便签，保留原笔记的同时保留精装润色版。"
+          }
+        }
+      }
+    },
+    "speech.refine.empty_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✨ AI polish not started"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✨ 尚未进行 AI 智能精整与专名润色"
+          }
+        }
+      }
+    },
+    "speech.refine.engine_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Engine"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择 AI 精整引擎"
+          }
+        }
+      }
+    },
+    "speech.refine.glossary_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter correct names, product terms, or context from this recording so AI can fix homophone errors."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入此录音里提到的正确人名、产品名或背景，AI 会根据它们来智能纠正所有同音错别字。"
+          }
+        }
+      }
+    },
+    "speech.refine.glossary_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Context & Terms"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本段音频的背景与正确热词"
+          }
+        }
+      }
+    },
+    "speech.refine.glossary_placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "e.g. ClawdHome, OpenClaw, isolated sandbox"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例如：ClawdHome, OpenClaw, 隔离沙箱"
+          }
+        }
+      }
+    },
+    "speech.refine.mode.clean": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✨ Clean"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✨ 智能净化"
+          }
+        }
+      }
+    },
+    "speech.refine.mode.meeting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📋 Minutes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📋 会议纪要"
+          }
+        }
+      }
+    },
+    "speech.refine.mode.note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📓 Notes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📓 灵感随记"
+          }
+        }
+      }
+    },
+    "speech.refine.mode.rewrite": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✍️ Rewrite"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✍️ 专业重塑"
+          }
+        }
+      }
+    },
+    "speech.refine.mode_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "润色重塑模式"
+          }
+        }
+      }
+    },
+    "speech.refine.no_models": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️ No model configured in Global Model Pool. Add one first."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️ 还没有在「全局模型池」中配置模型，请先去配置账户。"
+          }
+        }
+      }
+    },
+    "speech.refine.start": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Polish"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开始智能精整与专名润色"
+          }
+        }
+      }
+    },
+    "speech.refine.streaming": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Streaming..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在流式生成中..."
+          }
+        }
+      }
+    },
+    "speech.vocal_enhance.desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uses native macOS noise reduction and dynamic range leveling to reduce low-frequency noise and improve recognition in noisy audio."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用 macOS 原生的核心音频降噪与动态范围均化，消除低频噪音，极大提升嘈杂音频的识别精度。"
+          }
+        }
+      }
+    },
+    "speech.vocal_enhance.enabled_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vocal enhancement and noise reduction enabled"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已启用智能人声增强与去噪"
+          }
+        }
+      }
+    },
+    "speech.vocal_enhance.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Vocal Boost"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 智能人声增强"
+          }
+        }
+      }
+    },
+    "speech.word_count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d chars"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d 字"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d 字"
           }
         }
       }
@@ -2514,19 +4356,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Transcribe audio files or live recordings to text, with multilingual recognition."
+            "value": "Transcribe audio or recordings to text, with multilingual recognition and AI-powered meeting summaries."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "将音频文件或实时录音转录为文字，支持多语言识别"
+            "value": "将音频或录音转为文字，支持多语言识别与 AI 智能润色，一键生成会议纪要"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "文件摘要"
+            "value": "將音訊或錄音轉為文字，支援多語言識別與 AI 智能潤色，一鍵生成會議紀要"
           }
         }
       }
@@ -3832,19 +5674,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Daily"
+            "value": "Workspace"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "日常"
+            "value": "工作区"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "敬請期待"
+            "value": "工作區"
           }
         }
       }
@@ -4000,19 +5842,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Services"
+            "value": "AI Services"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "服务"
+            "value": "AI 服务"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "安全審計"
+            "value": "AI 服務"
           }
         }
       }
@@ -37531,13 +39373,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pick a digital companion from the Role Center, or create a blank account directly."
+            "value": "Pick a preset role from the Role Center, or create a blank sandbox space directly."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "从角色中心挑选一个数字生命，或直接创建空白账号"
+            "value": "从角色中心挑选预设角色，或直接创建空白隔离空间"
           }
         },
         "zh-Hant": {
@@ -37549,24 +39391,24 @@
       }
     },
     "views.user_list_view.adopt_shrimp": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Adopt shrimp"
+            "value": "Adopt Lobster/Pegasus"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "领养虾苗"
+            "value": "领养 虾/马"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "設定 npm 安裝源"
+            "value": "領養 蝦/馬"
           }
         }
       }
@@ -37831,13 +39673,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Create a blank macOS account and configure it manually"
+            "value": "Create a clean macOS sandbox, suitable for complete custom configuration."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "创建一个空白 macOS 账号，自行配置"
+            "value": "创建一个全新的空白空间，适合完全自定义配置"
           }
         },
         "zh-Hant": {
@@ -37855,13 +39697,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Create Directly"
+            "value": "Create Blank Space"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "直接创建"
+            "value": "创建空白空间"
           }
         },
         "zh-Hant": {
@@ -37970,13 +39812,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Go to Role Market to adopt"
+            "value": "Go to Role Center to Create"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "前往角色中心领养"
+            "value": "前往角色中心创建"
           }
         },
         "zh-Hant": {
@@ -37993,13 +39835,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Here you can raise and manage digital beings with different skills.\nAdopt your first shrimp and start your automation journey."
+            "value": "Here, you can run and manage independent Shrimp spaces carrying roles with different skills.\\nCreate your first space now to start the automation journey."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在这里，你可以养育并管理拥有不同技能的数字生命。\n立刻领养你的第一只虾，开启自动化之旅。"
+            "value": "在这里，你可以运行并管理承载不同技能角色的独立 Shrimp 空间。\\n立刻创建你的第一个空间，开启自动化之旅。"
           }
         },
         "zh-Hant": {
@@ -38201,13 +40043,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Adopt from Role Center"
+            "value": "Create from Role Center"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "去角色中心领养"
+            "value": "从角色中心创建"
           }
         },
         "zh-Hant": {
@@ -38225,13 +40067,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Browse preset roles, customize them, and awaken one."
+            "value": "Browse and pick a preset role, wake up and auto-configure with one click"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "浏览并挑选预设角色，个性化定制后唤醒"
+            "value": "从角色中心挑选预设角色，一键唤醒并自动配置"
           }
         },
         "zh-Hant": {
@@ -55625,13 +57467,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Used to distinguish multiple accounts on the same provider"
+            "value": "Custom channel display name, e.g., Company DeepSeek Relay, TrustAsia Model Group"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "用来区分同一服务商的多个账号"
+            "value": "自定义渠道的显示名称，例如：公司 DeepSeek 转发、TrustAsia 模型组"
           }
         },
         "zh-Hant": {
@@ -55776,6 +57618,121 @@
           "stringUnit": {
             "state": "translated",
             "value": "一键备份全部"
+          }
+        }
+      }
+    },
+    "backup.action.backup_selected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back Up Selected"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "备份选中实例"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "備份選中實例"
+          }
+        }
+      }
+    },
+    "backup.action.select_instance": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select Shrimp"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择实例"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇實例"
+          }
+        }
+      }
+    },
+    "backup.action.backup_global": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back Up Global"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "备份全局配置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "備份全局配置"
+          }
+        }
+      }
+    },
+    "backup.action.backing_up_shrimp": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backing up @%@..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在备份 @%@..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在備份 @%@..."
+          }
+        }
+      }
+    },
+    "backup.action.backing_up_global": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backing up global config..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在备份全局配置..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在備份全局配置..."
           }
         }
       }
@@ -59023,6 +60980,52 @@
         }
       }
     },
+    "prompt.library.character_count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Characters: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字符: %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字元: %@"
+          }
+        }
+      }
+    },
+    "prompt.library.detected_variables": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detected Variables:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已识别出的变量："
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已識別出的變數："
+          }
+        }
+      }
+    },
     "prompt.memory.match_field": {
       "extractionState": "manual",
       "localizations": {
@@ -61479,7 +63482,283 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "缺失權限：%@。授權後可自動執行瀏覽器相關操作。"
+            "value": "缺失權限：%@。授權後可自動执行瀏覽器相關操作。"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permission Guide"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统权限授权引导"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系統權限授權引導"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.accessibility.step2": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag and drop the ClawdHome icon directly into the 'Accessibility' list on the right"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将下方 ClawdHome 图标直接拖拽到系统偏好设置右侧「辅助功能」列表中"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將下方 ClawdHome 圖標直接拖拽到系統偏好設置右側「輔助功能」列表中"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.automation.step2": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In the 'Automation' list on the right, expand ClawdHome and check 'Google Chrome'"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在系统偏好设置右侧「自动化」列表中展开 ClawdHome 并勾选「Google Chrome」"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在系統偏好設置右側「自動化」列表中展開 ClawdHome 並勾選「Google Chrome」"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.step1.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1. Open Privacy Settings Panel"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1. 点击下方按钮打开系统偏好设置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1. 點擊下方按鈕打開系統偏好設置"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.step1.desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open System Settings to view privacy & security preference"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点击按钮将自动为您直达对应的系统隐私设置页面"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點擊按鈕將自動為您直達對應的系統隱私設置頁面"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.step1.button": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开系统偏好设置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打開系統偏好設置"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.step2.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2. Enable App Permissions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2. 开启对应的应用权限"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2. 開啟對應的應用權限"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.step2.drag_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag the icon below directly to System Settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按住下方图标拖拽至系统设置窗口中"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按住下方圖標拖拽至系統設置窗口中"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.help.solutions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repeated prompts? View solutions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "反复提示需要权限？查看解决方案"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "反覆提示需要權限？查看解決方案"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.help.contact": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issues not resolved? Contact us"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "问题没有解决？联系我们"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "問題沒有解決？聯絡我們"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.action.authorized": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I Have Authorized"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我已完成授权"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我已完成授權"
+          }
+        }
+      }
+    },
+    "host_permission.prompt.custom.success_toast": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authorized! Continuing..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "授权成功！正在继续..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "授權成功！正在繼續..."
           }
         }
       }
@@ -62174,29 +64453,6 @@
         }
       }
     },
-    "speech.word_count": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d chars"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d 字"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d 字"
-          }
-        }
-      }
-    },
     "speech.export_txt": {
       "extractionState": "manual",
       "localizations": {
@@ -62756,6 +65012,1485 @@
           "stringUnit": {
             "state": "translated",
             "value": "等待開啟智能識別任務，提取的離線文本會即時在此處流式展現，並支持高自由度二次編輯。"
+          }
+        }
+      }
+    },
+    "user.add.form.shrimp_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Blank Shrimp Space"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建空白 Shrimp 空间"
+          }
+        }
+      }
+    },
+    "user.add.form.shrimp_account_info": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Space Configuration"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空间配置"
+          }
+        }
+      }
+    },
+    "user.add.form.shrimp_username": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Space ID"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空间标识 (ID)"
+          }
+        }
+      }
+    },
+    "user.add.form.shrimp_username_validation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can only contain lowercase letters, numbers, and underscores, and must start with a letter"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只能包含小写字母、数字和下划线，且须以字母开头"
+          }
+        }
+      }
+    },
+    "user.add.form.shrimp_full_name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Space Name"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空间显示名称"
+          }
+        }
+      }
+    },
+    "user.add.form.shrimp_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Description (Optional)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空间描述 (可选)"
+          }
+        }
+      }
+    },
+    "user.add.form.shrimp_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Security Key"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空间安全密钥"
+          }
+        }
+      }
+    },
+    "user.add.form.shrimp_password_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A secure key will be randomly generated and stored securely. You can view it in the space details."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安全密钥将自动随机生成并妥善加密，可在空间详情中查看"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.add_photo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Photo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加本地图片进行分析"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.back": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to Lab"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "返回实验室"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.chat_box": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smart Chat"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "智能对话"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.chat_box_desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat with curated local LLMs and analyze images."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "与本地内置的精选大模型进行多轮对话，支持图片多模态分析"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.chat_placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message AI... (Enter to send)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "给 AI 助手发送消息... (回车发送)"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.choose_image": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an image to analyze"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择本地图片进行分析"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.choose_model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Model"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择模型"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.cloud_chat_error": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️ Cloud model call failed.\n\n**Diagnostics:**\n*   **Model**: `%@`\n*   **Account**: `%@`\n*   **Error**: %@\n\nCheck the account API key in Global Model Pool."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️ 呼叫云端大模型失败。\n\n**详细诊断：**\n*   **模型**：`%@`\n*   **账户**：`%@`\n*   **异常详情**：%@\n\n请前往「全局模型池」检查该账户配置的 API Key 凭证是否过期或有效。"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.demo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未就绪 (Demo)"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.local_chat_error": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️ Local model call failed.\n\n**Diagnostics:**\n*   **Model**: `%@`\n*   **Error**: %@\n\nConversation data stays in the Shrimp directory. Check that the local model service is running and loaded."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️ 呼叫本地离线大模型失败。\n\n**详细诊断：**\n*   **模型**：`%@`\n*   **异常详情**：%@\n\n所有对话数据已严格保存在 Shrimp 目录，安全不离机。请前往「全局模型池」确认本地内置大模型服务是否已一键启动并完成模型装载。"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.new_chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Chat"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建会话"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.prompt_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help me write code for this feature:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请帮我编写以下功能的代码："
+          }
+        }
+      }
+    },
+    "auto.ailab_view.prompt_explain": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Explain this clearly and concisely:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请帮我用简洁易懂的方式解释一下："
+          }
+        }
+      }
+    },
+    "auto.ailab_view.prompt_summarize": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summarize the key points of this text:\n\n"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请帮我总结以下文本的核心要点：\n\n"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.prompt_write": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help me write a paragraph about "
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请帮我撰写一段关于"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.pure_chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smart Chat Assistant"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "智能对话助手"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.quick_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write Code"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编写代码"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.quick_explain": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Explain Concept"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解释一个概念"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.quick_summarize": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summarize"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "总结文本"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.quick_write": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write for Me"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "帮我写"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.qwen25_3b": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qwen2.5 3B (Light)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qwen2.5 3B (轻量)"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.qwen25_7b": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qwen2.5 7B (Recommended)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qwen2.5 7B (推荐)"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.thinking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在思考..."
+          }
+        }
+      }
+    },
+    "auto.ailab_view.voice_demo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check this code screenshot for performance risks."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "帮我看看这张代码截图有什么性能隐患？"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.voice_input": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice input transcription"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音输入转译"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.welcome_subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How can I help today?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今天我能为您提供什么帮助？"
+          }
+        }
+      }
+    },
+    "auto.ailab_view.welcome_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hello"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你好"
+          }
+        }
+      }
+    },
+    "auto.model_config_wizard.ok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确定"
+          }
+        }
+      }
+    },
+    "avatar.select.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Custom Avatar"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择自定义头像"
+          }
+        }
+      }
+    },
+    "browser.account.uninstalling": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uninstalling..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载中…"
+          }
+        }
+      }
+    },
+    "common.action.copy_path": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Path"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制路径"
+          }
+        }
+      }
+    },
+    "common.action.uninstall": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uninstall"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载"
+          }
+        }
+      }
+    },
+    "common.label.log": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install Log"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装日志"
+          }
+        }
+      }
+    },
+    "hermes.browser.uninstall_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This deletes the user ClawdHome browser profile, OpenCLI Browser Bridge extension, and tool entry. The system default Chrome is not affected."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将删除该用户的 ClawdHome 浏览器 profile、OpenCLI Browser Bridge 扩展和工具入口。不会影响系统默认 Chrome。"
+          }
+        }
+      }
+    },
+    "hermes.browser.uninstall_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uninstall Hermes Browser Tool?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载 Hermes 浏览器工具？"
+          }
+        }
+      }
+    },
+    "hermes.webui.gateway_offline_desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start the Gateway process from the sidebar or Profile card first."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先在右侧栏或 Profile 卡片中启动该实例的 Gateway 网关进程。"
+          }
+        }
+      }
+    },
+    "hermes.webui.gateway_offline_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hermes Gateway Offline"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hermes 引擎未在线"
+          }
+        }
+      }
+    },
+    "hermes.webui.install_now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configure"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一键配置"
+          }
+        }
+      }
+    },
+    "hermes.webui.installing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloning and configuring WebUI..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在克隆并配置 WebUI 管理中心..."
+          }
+        }
+      }
+    },
+    "hermes.webui.onboard_desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Integrates nesquena/hermes-webui with a polished, profile-isolated conversation and resource panel."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "集成 nesquena/hermes-webui 网页前端，提供精美、多 Profile 隔离的会话和资源管理面板。"
+          }
+        }
+      }
+    },
+    "hermes.webui.onboard_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configure Modern Web Chat"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一键配置现代 Web 对话大厅"
+          }
+        }
+      }
+    },
+    "hermes.webui.preparing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing base environment...\n"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "准备配置基础环境...\n"
+          }
+        }
+      }
+    },
+    "hermes.webui.switch_onboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web Setup"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页配置"
+          }
+        }
+      }
+    },
+    "hermes.webui.switch_terminal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debug Terminal"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "调试终端"
+          }
+        }
+      }
+    },
+    "hermes.webui.switch_web": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web UI"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页端"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.api_endpoint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local API: http://127.0.0.1:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地接口：http://127.0.0.1:"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.btn_github": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open omlx GitHub"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问 omlx GitHub 主页"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.btn_start": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Service"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动服务"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.btn_starting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动中..."
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.btn_stop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop Service"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止服务"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.control_tip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start it manually in Terminal, or use the button on the right to let the system start it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "您可以手动在终端启动，或点击右侧按钮尝试由系统托管拉起。"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.guide_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quick Start"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速启动指南"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.not_installed_tip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "💡 omlx is not installed yet. ClawdHome will connect automatically after it is installed and running."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "💡 检测到系统尚未安装 omlx。手动安装并运行后，系统将自动连接。"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.status_connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务已连接"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.status_disconnected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务未运行"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.step1_desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open GitHub to download and install omlx, or run `brew install jundot/tap/omlx` in Terminal."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点击上方链接前往 GitHub 下载并安装 omlx（或在终端运行 `brew install jundot/tap/omlx`）。"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.step1_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install Engine"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装引擎"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.step2_desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After installation, run `omlx` in Terminal. The service starts at `127.0.0.1:18800` and exposes an OpenAI-compatible API."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装完成后在终端运行 `omlx` 命令，服务默认会在 `127.0.0.1:18800` 启动并提供 OpenAI 兼容的 API 接口。"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.step2_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Service"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动服务"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.step3_desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download or place models in the local model library below, then configure them in LLM Models."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在下方“本地模型库”中下载或放入模型；然后直接在“LLM 模型”设置中登录配置本地模型即可。"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.step3_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download & Configure"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载与配置"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Energy-efficient local LLM inference engine for Apple Silicon"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Silicon 平台极佳能效与性能的本地 LLM 推理引擎"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local Inference Engine omlx"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地推理引擎 omlx"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.why_desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "omlx is a lightweight, low-power local LLM inference engine optimized for macOS. It runs smoothly in the background with minimal memory and battery use."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "omlx 是专为 macOS 深度优化的超轻量、低功耗本地大模型推理引擎。相较于传统工具，它能以极低的内存与电量消耗在后台流畅运行，是笔记本日常使用的不二之选。"
+          }
+        }
+      }
+    },
+    "local_aitab.omlx.why_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Why omlx?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为什么推荐 omlx？"
+          }
+        }
+      }
+    },
+    "prompt.library.delete_confirm.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Are you sure you want to delete this prompt? This action cannot be undone."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确定要删除此提示词吗？此操作不可撤销。"
+          }
+        }
+      }
+    },
+    "prompt.library.delete_confirm.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Prompt"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除提示词"
+          }
+        }
+      }
+    },
+    "prompt.library.nav_subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local AI-assisted prompt collection. Data stays on this device."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 辅助提示词集合，运行在本地，数据不离机"
+          }
+        }
+      }
+    },
+    "settings.cache.footer_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tip: clearing shared caches safely frees storage. Dependencies will be downloaded again when environments are rebuilt."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提示：清理共享缓存可安全释放系统存储空间。当重新构建环境时，相应的依赖将从网络自动拉取并再次生成缓存。"
+          }
+        }
+      }
+    },
+    "settings.cache.global_cleanup": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Global Cleanup"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全局清理"
+          }
+        }
+      }
+    },
+    "settings.cache.total_files": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total Files"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "总文件数量"
+          }
+        }
+      }
+    },
+    "settings.cache.total_size": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total Cache Size"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "总缓存容量"
+          }
+        }
+      }
+    },
+    "speech.obsidian.sync_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian sync failed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian 同步失败"
+          }
+        }
+      }
+    },
+    "speech.open_directory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Folder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开目录"
+          }
+        }
+      }
+    },
+    "user.browser.reset_data_only": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset Data"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置数据"
+          }
+        }
+      }
+    },
+    "user.browser.uninstall_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This deletes the user ClawdHome browser profile, OpenCLI Browser Bridge extension, and tool entry. The system default Chrome is not affected."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将删除该用户的 ClawdHome 浏览器 profile、OpenCLI Browser Bridge 扩展和工具入口。不会影响系统默认 Chrome。"
+          }
+        }
+      }
+    },
+    "user.browser.uninstall_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uninstall Browser Tool?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载浏览器工具？"
+          }
+        }
+      }
+    },
+    "views.model_manager.llmmanager_tab.no_active_models": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Active Models"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无启用的模型"
+          }
+        }
+      }
+    },
+    "views.model_manager.llmmanager_tab.no_active_models_desc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add an account in Account Management and enable the models you need."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先在「账户管理」中添加账户并勾选需要启用的模型。"
           }
         }
       }

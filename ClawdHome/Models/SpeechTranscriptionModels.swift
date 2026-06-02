@@ -99,9 +99,14 @@ struct SpeechHistoryRecord: Codable, Identifiable, Equatable {
     var modelDisplayName: String
     var languageHintOrDetectedLanguage: String?
     var transcriptText: String
+    var refinedText: String? // 【新增】AI 智能精装润色内容
+    var refinedTitle: String? // 【新增】AI 提炼的 Topic 标题
+    var refinedSummary: String? // 【新增】AI 提炼的一句话摘要
+    var refinedTags: [String]? // 【新增】AI 提炼的分类标签
     var elapsedSeconds: Double
     var status: SpeechHistoryStatus
     var errorSummary: String?
+    var vocalEnhanceEnabled: Bool?
 
     init(
         id: UUID = UUID(),
@@ -115,9 +120,14 @@ struct SpeechHistoryRecord: Codable, Identifiable, Equatable {
         modelDisplayName: String,
         languageHintOrDetectedLanguage: String? = nil,
         transcriptText: String,
+        refinedText: String? = nil,
+        refinedTitle: String? = nil,
+        refinedSummary: String? = nil,
+        refinedTags: [String]? = nil,
         elapsedSeconds: Double,
         status: SpeechHistoryStatus,
-        errorSummary: String? = nil
+        errorSummary: String? = nil,
+        vocalEnhanceEnabled: Bool? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -130,9 +140,14 @@ struct SpeechHistoryRecord: Codable, Identifiable, Equatable {
         self.modelDisplayName = modelDisplayName
         self.languageHintOrDetectedLanguage = languageHintOrDetectedLanguage
         self.transcriptText = transcriptText
+        self.refinedText = refinedText
+        self.refinedTitle = refinedTitle
+        self.refinedSummary = refinedSummary
+        self.refinedTags = refinedTags
         self.elapsedSeconds = elapsedSeconds
         self.status = status
         self.errorSummary = errorSummary
+        self.vocalEnhanceEnabled = vocalEnhanceEnabled
     }
 }
 
@@ -194,8 +209,9 @@ final class SpeechQueueItem: Identifiable, Hashable {
     var errorSummary: String?
     var asrSpeed: String?     // ASR 转换速率，如 "3.4x (28字/秒)"
     var durationSeconds: Double
+    var isVocalEnhanced: Bool
     
-    init(fileURL: URL) {
+    init(fileURL: URL, isVocalEnhanced: Bool = false) {
         self.id = UUID()
         self.fileURL = fileURL
         self.status = .waiting
@@ -208,6 +224,7 @@ final class SpeechQueueItem: Identifiable, Hashable {
         self.errorSummary = nil
         self.asrSpeed = nil
         self.durationSeconds = 0
+        self.isVocalEnhanced = isVocalEnhanced
     }
 
     

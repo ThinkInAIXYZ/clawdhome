@@ -2,14 +2,14 @@ import XCTest
 @testable import ClawdHome
 
 final class HostPermissionPromptPolicyTests: XCTestCase {
-    func testMissingBrowserAutomationPermissionsIncludesBothRequiredPermissions() {
+    func testMissingBrowserAutomationPermissionsDoesNotRequireAccessibilityForBrowserLaunch() {
         let missing = HostPermissionPromptPolicy.missingBrowserAutomationPermissions(
             accessibilityStatus: .denied,
             chromeInstalled: true,
             chromeAutomationStatus: .requiresConsent
         )
 
-        XCTAssertEqual(missing, [.accessibility, .chromeAutomation])
+        XCTAssertEqual(missing, [.chromeAutomation])
     }
 
     func testMissingBrowserAutomationPermissionsIgnoresChromeWhenNotInstalled() {
@@ -22,7 +22,7 @@ final class HostPermissionPromptPolicyTests: XCTestCase {
         XCTAssertTrue(missing.isEmpty)
     }
 
-    func testPreferredSettingsDestinationPrefersAccessibilityWhenBothMissing() {
+    func testPreferredSettingsDestinationPrefersAccessibilityWhenExplicitlyRequested() {
         let destination = HostPermissionPromptPolicy.preferredSettingsDestination(
             for: [.accessibility, .chromeAutomation]
         )
@@ -36,5 +36,16 @@ final class HostPermissionPromptPolicyTests: XCTestCase {
         )
 
         XCTAssertEqual(destination, .automation)
+    }
+
+    func testRequestSatisfactionIgnoresPermissionsThatWereNotRequested() {
+        let isSatisfied = HostPermissionPromptPolicy.isSatisfied(
+            missingPermissions: [.chromeAutomation],
+            accessibilityStatus: .denied,
+            chromeInstalled: true,
+            chromeAutomationStatus: .granted
+        )
+
+        XCTAssertTrue(isSatisfied)
     }
 }

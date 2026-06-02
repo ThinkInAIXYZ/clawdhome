@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "adopt_shrimp_mascot.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

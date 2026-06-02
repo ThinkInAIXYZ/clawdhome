@@ -105,16 +105,76 @@ final class SpeechTranscriptionService {
     var selectedFileURL: URL?
     var currentTranscript = ""
 
+    // 【新增】当前选中的历史记录 ID
+    var selectedRecordID: UUID? {
+        didSet {
+            if let record = selectedHistoryRecord {
+                self.selectedQueueItem = nil
+                self.selectedFileURL = URL(fileURLWithPath: record.sourceFilePath)
+                self.currentTranscript = record.transcriptText
+            }
+        }
+    }
+
+    var selectedHistoryRecord: SpeechHistoryRecord? {
+        history.first(where: { $0.id == selectedRecordID })
+    }
+
+    // 更新选中历史记录的原笔记内容并持久化
+    func updateSelectedRecordTranscript(_ text: String) {
+        guard let record = selectedHistoryRecord else { return }
+        var updated = record
+        updated.transcriptText = text
+        historyStore.save(updated)
+        self.syncToObsidian(record: updated)
+        // 重新从磁盘加载，同步内存列表状态，但保留选中状态
+        let prevSelected = selectedRecordID
+        history = historyStore.load()
+        selectedRecordID = prevSelected
+    }
+
+    // 更新选中历史记录的 AI 润色精装内容并持久化
+    func updateSelectedRecordRefinedText(_ text: String) {
+        guard let record = selectedHistoryRecord else { return }
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var updated = record
+        updated.refinedText = trimmedText
+        updated.refinedTitle = Self.refinedTitleFromFirstLine(trimmedText)
+        updated.refinedSummary = nil
+        updated.refinedTags = nil
+        historyStore.save(updated)
+        self.syncToObsidian(record: updated)
+        let prevSelected = selectedRecordID
+        history = historyStore.load()
+        selectedRecordID = prevSelected
+    }
+
+    @discardableResult
+    func applyRefinedTextToCurrentRecord(_ text: String) -> Bool {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty, var updated = currentHistoryRecord else { return false }
+        updated.refinedText = trimmedText
+        updated.refinedTitle = Self.refinedTitleFromFirstLine(trimmedText)
+        updated.refinedSummary = nil
+        updated.refinedTags = nil
+        historyStore.save(updated)
+        self.syncToObsidian(record: updated)
+        history = historyStore.load()
+        selectedRecordID = updated.id
+        return true
+    }
+
     // 是否启用 macOS 原生 AI 人声降噪与增强预处理，默认开启 (方案 A)
     var vocalEnhanceEnabled: Bool = true
 
     // 【新增】待转译的任务队列
     private(set) var queue: [SpeechQueueItem] = []
-    
+
     // 【新增】当前选中的队列任务项（右侧展示其对应的转译结果）
     var selectedQueueItem: SpeechQueueItem? {
         didSet {
             if let item = selectedQueueItem {
+                self.selectedRecordID = nil // 清空历史记录选中
                 self.selectedFileURL = item.fileURL
                 self.currentTranscript = item.transcriptText
             }
@@ -125,6 +185,8 @@ final class SpeechTranscriptionService {
     private var cancellationRequested = false
     private var downloadMonitorTask: Task<Void, Never>?
     private var asrStartTime: Date? = nil
+
+    private var obsidianWatcherTimer: Timer?
 
     init(
         historyStore: SpeechHistoryStore = SpeechHistoryStore(),
@@ -147,7 +209,86 @@ final class SpeechTranscriptionService {
         )
         self.selectedModelID = .qwen3ASR17B8Bit
         refreshRecommendation(localAIServiceRunning: false)
+
+        // 启动后台 Obsidian 共享音频捕获监控
+        self.startObsidianWatcher()
     }
+
+    /// 开启监控 Obsidian Vault 文件夹，自动捕获手机 DeepJerry 录入的新音频并接力 ASR
+    func startObsidianWatcher() {
+        obsidianWatcherTimer?.invalidate()
+
+        // 启动每 8 秒一次的静默轮询监控
+        obsidianWatcherTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            Task { @MainActor in
+                await self.scanAndProcessObsidianAudios()
+            }
+        }
+    }
+
+    /// 停止监控
+    func stopObsidianWatcher() {
+        obsidianWatcherTimer?.invalidate()
+        obsidianWatcherTimer = nil
+    }
+
+    /// 扫描 Obsidian attachments 目录并自动处理新捕获的音频
+    private func scanAndProcessObsidianAudios() async {
+        let defaults = UserDefaults.standard
+        // 必须开启了 Obsidian 同步，且设置了有效的 Vault 路径
+        guard defaults.bool(forKey: "obsidian_enabled") else { return }
+        guard let vaultPath = defaults.string(forKey: "obsidian_vault_path"), !vaultPath.isEmpty else { return }
+
+        let attachmentsSubdir = defaults.string(forKey: "obsidian_attachments") ?? "Inbox/attachments"
+        let attachmentsURL = URL(fileURLWithPath: vaultPath).appendingPathComponent(attachmentsSubdir)
+
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: attachmentsURL.path) else { return }
+
+        do {
+            let files = try fm.contentsOfDirectory(at: attachmentsURL, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles)
+
+            // 筛选出音频文件 (.m4a, .wav, .mp3, .caf, .aac)
+            let audioExtensions = ["m4a", "wav", "mp3", "caf", "aac"]
+            let audioFiles = files.filter { audioExtensions.contains($0.pathExtension.lowercased()) }
+
+            var newAudiosToEnqueue: [URL] = []
+            for fileURL in audioFiles {
+                let fileName = fileURL.lastPathComponent
+
+                // 检查是否已经存在于 ClawdHome 的 ASR 历史记录中（或者正在队列中处理）
+                let alreadyProcessed = history.contains { record in
+                    record.sourceFileName == fileName ||
+                    fileName.hasSuffix(record.sourceFileName) ||
+                    record.sourceFileName.hasSuffix(fileName)
+                }
+
+                let alreadyInQueue = queue.contains { $0.fileURL.lastPathComponent == fileName }
+
+                if !alreadyProcessed && !alreadyInQueue {
+                    newAudiosToEnqueue.append(fileURL)
+                }
+            }
+
+            guard !newAudiosToEnqueue.isEmpty else { return }
+
+            print("[ObsidianWatcher] Detected \(newAudiosToEnqueue.count) new raw audios from DeepJerryApp!")
+
+            // 自动批量入队并设置降噪等偏好
+            self.enqueueFiles(newAudiosToEnqueue)
+
+            // 如果当前不在转译中，立即启动接力转译
+            if !isTranscribing {
+                Task {
+                    await self.transcribeSelectedFile()
+                }
+            }
+        } catch {
+            print("[ObsidianWatcher] Error scanning Obsidian vault: \(error.localizedDescription)")
+        }
+    }
+
 
     func refresh(localAIServiceRunning: Bool = false) async {
         refreshRecommendation(localAIServiceRunning: localAIServiceRunning)
@@ -178,7 +319,7 @@ final class SpeechTranscriptionService {
     func selectFile(_ url: URL) {
         // 清理原有的队列，将新选择的文件作为唯一的队列项
         queue.removeAll()
-        let item = SpeechQueueItem(fileURL: url)
+        let item = SpeechQueueItem(fileURL: url, isVocalEnhanced: vocalEnhanceEnabled)
         queue.append(item)
         selectedQueueItem = item
         lastErrorMessage = nil
@@ -186,9 +327,9 @@ final class SpeechTranscriptionService {
 
     // 【新增】多音频文件批量追加至队列
     func enqueueFiles(_ urls: [URL]) {
-        let newItems = urls.map { SpeechQueueItem(fileURL: $0) }
+        let newItems = urls.map { SpeechQueueItem(fileURL: $0, isVocalEnhanced: vocalEnhanceEnabled) }
         self.queue.append(contentsOf: newItems)
-        
+
         if selectedQueueItem == nil {
             selectedQueueItem = newItems.first
         }
@@ -217,23 +358,7 @@ final class SpeechTranscriptionService {
         }
     }
 
-    // 【新增】基于专名词典对 ASR 识别出的文本进行后处理一键纠错
-    func applyHotwordsFilter(to text: String) -> String {
-        let rawHotwords = UserDefaults.standard.string(forKey: "asr_hotwords_setting") ?? ""
-        var filteredText = text
-        
-        let lines = rawHotwords.components(separatedBy: .newlines)
-        for line in lines {
-            let parts = line.components(separatedBy: "->")
-            guard parts.count == 2 else { continue }
-            let wrong = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
-            let right = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-            if !wrong.isEmpty {
-                filteredText = filteredText.replacingOccurrences(of: wrong, with: right)
-            }
-        }
-        return filteredText
-    }
+
 
     func clearSelection() {
         selectedFileURL = nil
@@ -246,14 +371,14 @@ final class SpeechTranscriptionService {
     // 重构的串行排队智能转写调度主流程
     func transcribeSelectedFile() async {
         guard !isTranscribing else { return }
-        
+
         // 如果队列为空，但是先前通过某种方式选中了单文件，则自动将其入队
         if queue.isEmpty, let fileURL = selectedFileURL {
             let item = SpeechQueueItem(fileURL: fileURL)
             queue.append(item)
             selectedQueueItem = item
         }
-        
+
         guard !queue.isEmpty else {
             lastErrorMessage = "No audio files in queue."
             return
@@ -274,7 +399,7 @@ final class SpeechTranscriptionService {
             nextItem.progressFraction = 0
             nextItem.stageProgress = 0
             nextItem.asrSpeed = nil
-            
+
             // 异步提取音频文件时长以作速率计算的基准
             let asset = AVURLAsset(url: nextItem.fileURL)
             if let duration = try? await asset.load(.duration) {
@@ -285,13 +410,13 @@ final class SpeechTranscriptionService {
                     nextItem.durationSeconds = Double(audioFile.length) / audioFile.processingFormat.sampleRate
                 }
             }
-            
+
             transcriptionProgressFraction = 0
             transcriptionStatusMessage = nil
 
             var audioToTranscribe = nextItem.fileURL
             var tempEnhancedURL: URL? = nil
-            
+
             if vocalEnhanceEnabled {
                 nextItem.stage = .enhancing
                 do {
@@ -323,17 +448,16 @@ final class SpeechTranscriptionService {
 
             do {
                 let response = try await runTranscription(for: audioToTranscribe, modelID: selectedModelID)
-                
-                // 应用热词翻译词典过滤
-                let finalTranscript = applyHotwordsFilter(to: response.transcript ?? "")
-                
+
+                let finalTranscript = response.transcript ?? ""
+
                 nextItem.status = .completed
                 nextItem.stage = .completed
                 nextItem.stageProgress = 1.0
                 nextItem.progressFraction = 1.0
                 nextItem.transcriptText = finalTranscript
                 nextItem.elapsedSeconds = response.elapsedSeconds ?? 0
-                
+
                 // 完成时计算最终平均速率
                 if let startTime = self.asrStartTime {
                     let elapsed = nextItem.elapsedSeconds > 0 ? nextItem.elapsedSeconds : Date().timeIntervalSince(startTime)
@@ -355,7 +479,7 @@ final class SpeechTranscriptionService {
                         nextItem.asrSpeed = speedText
                     }
                 }
-                
+
                 if selectedQueueItem?.id == nextItem.id {
                     currentTranscript = finalTranscript
                 }
@@ -371,9 +495,11 @@ final class SpeechTranscriptionService {
                     transcript: finalTranscript,
                     elapsedSeconds: nextItem.elapsedSeconds,
                     status: .completed,
-                    errorSummary: nil
+                    errorSummary: nil,
+                    vocalEnhanceEnabled: nextItem.isVocalEnhanced
                 ) {
                     historyStore.save(record)
+                    self.syncToObsidian(record: record)
                 }
             } catch {
                 if let tempEnhancedURL {
@@ -391,7 +517,8 @@ final class SpeechTranscriptionService {
                         transcript: "",
                         elapsedSeconds: 0,
                         status: .cancelled,
-                        errorSummary: nil
+                        errorSummary: nil,
+                        vocalEnhanceEnabled: nextItem.isVocalEnhanced
                     ) {
                         historyStore.save(record)
                     }
@@ -401,7 +528,7 @@ final class SpeechTranscriptionService {
                     nextItem.stageProgress = 0.0
                     nextItem.errorSummary = error.localizedDescription
                     lastErrorMessage = error.localizedDescription
-                    
+
                     if let record = makeHistoryRecord(
                         for: nextItem.fileURL,
                         durationSeconds: nextItem.durationSeconds,
@@ -409,7 +536,8 @@ final class SpeechTranscriptionService {
                         transcript: "",
                         elapsedSeconds: 0,
                         status: .failed,
-                        errorSummary: error.localizedDescription
+                        errorSummary: error.localizedDescription,
+                        vocalEnhanceEnabled: nextItem.isVocalEnhanced
                     ) {
                         historyStore.save(record)
                     }
@@ -503,6 +631,19 @@ final class SpeechTranscriptionService {
         history = historyStore.load()
     }
 
+    func openHistoryDirectory() {
+        let baseDir = SpeechHistoryStore.defaultFileURL().deletingLastPathComponent().appendingPathComponent("speech_transcription")
+        try? fileManager.createDirectory(at: baseDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        NSWorkspace.shared.open(baseDir)
+    }
+
+    /// 在 Finder 中打开 ASR 模型缓存目录（~/Library/Caches/ClawdHome/SpeechModels/）
+    func openModelsDirectory() {
+        let dir = speechCacheBaseDirectory()
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(dir)
+    }
+
     func copyTranscript(_ transcript: String? = nil) {
         let value = transcript ?? currentTranscript
         guard !value.isEmpty else { return }
@@ -532,8 +673,308 @@ final class SpeechTranscriptionService {
         try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
+    nonisolated static func obsidianASRNoteFileName(for record: SpeechHistoryRecord) -> String {
+        "\(obsidianASRNoteTitle(for: record)) clawdhome_asr.md"
+    }
+
+    private nonisolated static func obsidianASRNoteTitle(for record: SpeechHistoryRecord) -> String {
+        let rawBaseName = (record.sourceFileName as NSString).deletingPathExtension
+        let refinedTitle = normalizedRefinedTitleForFileName(record.refinedTitle)
+        if let timestamp = leadingObsidianTimestamp(in: rawBaseName) {
+            let remainder = String(rawBaseName.dropFirst(timestamp.count))
+            let title = refinedTitle ?? normalizedObsidianSourceTitle(remainder)
+            return "\(timestamp) \(title)"
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
+        let timestamp = formatter.string(from: record.createdAt)
+        let title = refinedTitle ?? normalizedObsidianSourceTitle(rawBaseName)
+        return "\(timestamp) \(title)"
+    }
+
+    private nonisolated static func leadingObsidianTimestamp(in value: String) -> String? {
+        let timestampLength = 19
+        guard value.count >= timestampLength else { return nil }
+
+        let candidate = String(value.prefix(timestampLength))
+        let scalars = Array(candidate.unicodeScalars)
+        guard scalars.count == timestampLength else { return nil }
+
+        let separators: [Int: UnicodeScalar] = [
+            4: "-",
+            7: "-",
+            10: " ",
+            13: "-",
+            16: "-"
+        ]
+
+        for index in 0..<timestampLength {
+            if let separator = separators[index] {
+                guard scalars[index] == separator else { return nil }
+            } else {
+                guard CharacterSet.decimalDigits.contains(scalars[index]) else { return nil }
+            }
+        }
+        return candidate
+    }
+
+    private nonisolated static func normalizedObsidianSourceTitle(_ value: String) -> String {
+        let title = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if title.isEmpty || title.caseInsensitiveCompare("Audio") == .orderedSame {
+            return "Flash"
+        }
+        return title
+    }
+
+    nonisolated static func refinedTitleFromFirstLine(_ text: String) -> String? {
+        guard let firstLine = text.components(separatedBy: .newlines)
+            .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .first(where: { !$0.isEmpty }) else {
+            return nil
+        }
+
+        var title = firstLine
+        while title.hasPrefix("#") {
+            title.removeFirst()
+        }
+        title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        title = title.trimmingCharacters(in: CharacterSet(charactersIn: "\"'“”‘’「」『』《》[]()（）【】"))
+        title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !title.isEmpty else { return nil }
+        return String(title.prefix(24))
+    }
+
+    private nonisolated static func normalizedRefinedTitleForFileName(_ value: String?) -> String? {
+        guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        let illegalScalars = CharacterSet(charactersIn: "/\\:?%*|\"<>")
+            .union(.newlines)
+            .union(.controlCharacters)
+        let cleanedScalars = value.unicodeScalars.map { scalar -> Character in
+            illegalScalars.contains(scalar) ? "-" : Character(scalar)
+        }
+        let cleaned = String(cleanedScalars)
+            .replacingOccurrences(of: "--", with: "-")
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ".-")))
+
+        guard !cleaned.isEmpty else { return nil }
+        return String(cleaned.prefix(48))
+    }
+
+    private nonisolated static func sourceAudioIsAlreadyInAttachments(_ sourceAudioURL: URL, attachmentsURL: URL) -> Bool {
+        let sourcePath = sourceAudioURL.standardizedFileURL.path
+        let attachmentsPath = attachmentsURL.standardizedFileURL.path
+        let directoryPrefix = attachmentsPath.hasSuffix("/") ? attachmentsPath : "\(attachmentsPath)/"
+        return sourcePath.hasPrefix(directoryPrefix)
+    }
+
+    /// 【新增】将特定语音记录及其音频同步到 Obsidian Vault（自动同步，不报错不阻塞）
+    func syncToObsidian(record: SpeechHistoryRecord) {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: "obsidian_enabled") else { return }
+        guard let vaultPath = defaults.string(forKey: "obsidian_vault_path"), !vaultPath.isEmpty else { return }
+
+        let inbox = defaults.string(forKey: "obsidian_inbox") ?? "Inbox"
+        let attachments = defaults.string(forKey: "obsidian_attachments") ?? "Inbox/attachments"
+
+        let fileManager = FileManager.default
+        let vaultURL = URL(fileURLWithPath: vaultPath)
+        let inboxURL = vaultURL.appendingPathComponent(inbox)
+        let attachmentsURL = vaultURL.appendingPathComponent(attachments)
+
+        do {
+            try fileManager.createDirectory(at: inboxURL, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: attachmentsURL, withIntermediateDirectories: true)
+        } catch {
+            print("Failed to create Obsidian vault subdirectories: \(error.localizedDescription)")
+            return
+        }
+
+        let sourceAudioURL = URL(fileURLWithPath: record.sourceFilePath)
+        guard fileManager.fileExists(atPath: sourceAudioURL.path) else {
+            print("Source audio file does not exist: \(record.sourceFilePath)")
+            return
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let datePrefix = formatter.string(from: record.createdAt)
+        let (targetAudioFileName, targetAudioURL, shouldCopyAudio): (String, URL, Bool)
+        if Self.sourceAudioIsAlreadyInAttachments(sourceAudioURL, attachmentsURL: attachmentsURL) {
+            targetAudioFileName = sourceAudioURL.lastPathComponent
+            targetAudioURL = sourceAudioURL
+            shouldCopyAudio = false
+        } else {
+            targetAudioFileName = "\(datePrefix)_\(record.sourceFileName)"
+            targetAudioURL = attachmentsURL.appendingPathComponent(targetAudioFileName)
+            shouldCopyAudio = true
+        }
+
+        if shouldCopyAudio {
+            do {
+                if fileManager.fileExists(atPath: targetAudioURL.path) {
+                    try fileManager.removeItem(at: targetAudioURL)
+                }
+                try fileManager.copyItem(at: sourceAudioURL, to: targetAudioURL)
+            } catch {
+                print("Failed to copy audio to Obsidian attachments: \(error.localizedDescription)")
+                return
+            }
+        }
+
+        let noteTitle = Self.obsidianASRNoteTitle(for: record)
+        let noteFileName = Self.obsidianASRNoteFileName(for: record)
+        let noteURL = inboxURL.appendingPathComponent(noteFileName)
+
+        let dateStringFormatter = DateFormatter()
+        dateStringFormatter.dateStyle = .medium
+        dateStringFormatter.timeStyle = .medium
+        let dateString = dateStringFormatter.string(from: record.createdAt)
+
+        let obsidianAudioLink = "![[\(attachments)/\(targetAudioFileName)]]"
+
+        var mdContent = """
+        # 语音记录: \(noteTitle)
+
+        - **录音时间**: \(dateString)
+        - **识别模型**: \(record.modelDisplayName)
+        - **音频长度**: \(record.durationSeconds != nil ? String(format: "%.1fs", record.durationSeconds!) : "未知")
+
+        ## 🎧 音频回放
+        \(obsidianAudioLink)
+
+        """
+
+        if let refined = record.refinedText, !refined.isEmpty {
+            mdContent += """
+
+            ## ✨ AI 智能精装版
+            \(refined)
+
+            """
+        }
+
+        mdContent += """
+
+        ## 📝 转写原稿
+        \(record.transcriptText)
+
+        """
+
+        do {
+            try mdContent.write(to: noteURL, atomically: true, encoding: .utf8)
+            print("Successfully synced recording and note to Obsidian Vault!")
+        } catch {
+            print("Failed to write Obsidian markdown note: \(error.localizedDescription)")
+        }
+    }
+
+    /// 【新增】手动强制将语音记录同步到 Obsidian Vault（若报错则向外抛出）
+    @discardableResult
+    func manualSyncToObsidian(record: SpeechHistoryRecord) throws -> Bool {
+        let defaults = UserDefaults.standard
+        guard let vaultPath = defaults.string(forKey: "obsidian_vault_path"), !vaultPath.isEmpty else {
+            throw NSError(
+                domain: "ai.clawdhome.obsidian",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: L10n.k("settings.obsidian.error.vault_not_set", fallback: "未配置 Obsidian Vault 路径，请前往设置配置")]
+            )
+        }
+
+        let inbox = defaults.string(forKey: "obsidian_inbox") ?? "Inbox"
+        let attachments = defaults.string(forKey: "obsidian_attachments") ?? "Inbox/attachments"
+
+        let fileManager = FileManager.default
+        let vaultURL = URL(fileURLWithPath: vaultPath)
+        let inboxURL = vaultURL.appendingPathComponent(inbox)
+        let attachmentsURL = vaultURL.appendingPathComponent(attachments)
+
+        try fileManager.createDirectory(at: inboxURL, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: attachmentsURL, withIntermediateDirectories: true)
+
+        let sourceAudioURL = URL(fileURLWithPath: record.sourceFilePath)
+        guard fileManager.fileExists(atPath: sourceAudioURL.path) else {
+            throw NSError(
+                domain: "ai.clawdhome.obsidian",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: L10n.k("settings.obsidian.error.audio_missing", fallback: "找不到源音频文件")]
+            )
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let datePrefix = formatter.string(from: record.createdAt)
+        let (targetAudioFileName, targetAudioURL, shouldCopyAudio): (String, URL, Bool)
+        if Self.sourceAudioIsAlreadyInAttachments(sourceAudioURL, attachmentsURL: attachmentsURL) {
+            targetAudioFileName = sourceAudioURL.lastPathComponent
+            targetAudioURL = sourceAudioURL
+            shouldCopyAudio = false
+        } else {
+            targetAudioFileName = "\(datePrefix)_\(record.sourceFileName)"
+            targetAudioURL = attachmentsURL.appendingPathComponent(targetAudioFileName)
+            shouldCopyAudio = true
+        }
+
+        if shouldCopyAudio {
+            if fileManager.fileExists(atPath: targetAudioURL.path) {
+                try fileManager.removeItem(at: targetAudioURL)
+            }
+            try fileManager.copyItem(at: sourceAudioURL, to: targetAudioURL)
+        }
+
+        let noteTitle = Self.obsidianASRNoteTitle(for: record)
+        let noteFileName = Self.obsidianASRNoteFileName(for: record)
+        let noteURL = inboxURL.appendingPathComponent(noteFileName)
+
+        let dateStringFormatter = DateFormatter()
+        dateStringFormatter.dateStyle = .medium
+        dateStringFormatter.timeStyle = .medium
+        let dateString = dateStringFormatter.string(from: record.createdAt)
+
+        let obsidianAudioLink = "![[\(attachments)/\(targetAudioFileName)]]"
+
+        var mdContent = """
+        # 语音记录: \(noteTitle)
+
+        - **录音时间**: \(dateString)
+        - **识别模型**: \(record.modelDisplayName)
+        - **音频长度**: \(record.durationSeconds != nil ? String(format: "%.1fs", record.durationSeconds!) : "未知")
+
+        ## 🎧 音频回放
+        \(obsidianAudioLink)
+
+        """
+
+        if let refined = record.refinedText, !refined.isEmpty {
+            mdContent += """
+
+            ## ✨ AI 智能精装版
+            \(refined)
+
+            """
+        }
+
+        mdContent += """
+
+        ## 📝 转写原稿
+        \(record.transcriptText)
+
+        """
+
+        try mdContent.write(to: noteURL, atomically: true, encoding: .utf8)
+        return true
+    }
+
     var currentHistoryRecord: SpeechHistoryRecord? {
-        history.first(where: { $0.transcriptText == currentTranscript && !$0.transcriptText.isEmpty })
+        if let selectedRecordID {
+            return history.first(where: { $0.id == selectedRecordID })
+        }
+        return history.first(where: { $0.transcriptText == currentTranscript && !$0.transcriptText.isEmpty })
     }
 
     var isSelectedModelDownloaded: Bool {
@@ -759,15 +1200,35 @@ final class SpeechTranscriptionService {
         return try await withCheckedThrowingContinuation { continuation in
             let stderrMonitor = ToolStderrMonitor()
 
+            var stdoutAccumulated = Data()
+            let stdoutLock = NSLock()
+
+            output.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                stdoutLock.lock()
+                stdoutAccumulated.append(data)
+                stdoutLock.unlock()
+            }
+
             error.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 stderrMonitor.append(data, onProgress: onProgress)
             }
 
             process.terminationHandler = { [weak self] process in
-                let stdoutData = output.fileHandleForReading.readDataToEndOfFile()
+                // 首先关闭 readabilityHandler 以免再次派发或读写冲突
+                output.fileHandleForReading.readabilityHandler = nil
                 error.fileHandleForReading.readabilityHandler = nil
+
+                // 收尾读取管道中残留的所有剩余数据
+                let stdoutTail = output.fileHandleForReading.readDataToEndOfFile()
                 let stderrTail = error.fileHandleForReading.readDataToEndOfFile()
+
+                stdoutLock.lock()
+                stdoutAccumulated.append(stdoutTail)
+                let finalStdout = stdoutAccumulated
+                stdoutLock.unlock()
+
                 let stderrData = stderrMonitor.finish(with: stderrTail, onProgress: onProgress)
 
                 Task { @MainActor in
@@ -775,12 +1236,12 @@ final class SpeechTranscriptionService {
                 }
 
                 if process.terminationStatus == 0 {
-                    let cleanedData = SpeechTranscriptionService.extractJSONData(from: stdoutData)
+                    let cleanedData = SpeechTranscriptionService.extractJSONData(from: finalStdout)
                     continuation.resume(returning: cleanedData)
                     return
                 }
 
-                let message = SpeechToolOutputParser.errorMessage(stdout: stdoutData, stderr: stderrData)
+                let message = SpeechToolOutputParser.errorMessage(stdout: finalStdout, stderr: stderrData)
                 continuation.resume(
                     throwing: NSError(
                         domain: "ai.clawdhome.speech",
@@ -814,7 +1275,8 @@ final class SpeechTranscriptionService {
         transcript: String,
         elapsedSeconds: Double,
         status: SpeechHistoryStatus,
-        errorSummary: String?
+        errorSummary: String?,
+        vocalEnhanceEnabled: Bool? = nil
     ) -> SpeechHistoryRecord? {
         let attributes = try? fileManager.attributesOfItem(atPath: fileURL.path)
         let size = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
@@ -830,7 +1292,8 @@ final class SpeechTranscriptionService {
             transcriptText: transcript,
             elapsedSeconds: elapsedSeconds,
             status: status,
-            errorSummary: errorSummary
+            errorSummary: errorSummary,
+            vocalEnhanceEnabled: vocalEnhanceEnabled
         )
     }
 
@@ -859,7 +1322,7 @@ final class SpeechTranscriptionService {
 
             while !Task.isCancelled && self.isPreparingModel {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
-                
+
                 if self.isPreparationPaused {
                     self.downloadSpeedBytesPerSecond = 0
                     previousDate = Date()
@@ -983,7 +1446,7 @@ final class SpeechTranscriptionService {
         }
         return 0
     }
-    
+
     func applyTranscriptionProgress(_ event: SpeechToolProgressEvent) {
         if event.command == "load-model" {
             transcriptionStatusMessage = event.message
@@ -995,26 +1458,32 @@ final class SpeechTranscriptionService {
             }
             return
         }
-        
+
         guard event.command == "transcribe" else { return }
         transcriptionProgressFraction = min(max(event.fractionCompleted, 0), 1)
         transcriptionStatusMessage = event.message
-        
+
         if let activeItem = queue.first(where: { $0.status == .transcribing }) {
+            let displayProgress = min(transcriptionProgressFraction, 0.995)
             activeItem.stage = .transcribing
-            activeItem.stageProgress = transcriptionProgressFraction
-            
+            activeItem.stageProgress = displayProgress
+
             // ASR 阶段，进度条从 10% (或 0%) 线性顺滑走到 100%
-            let asrProgress = transcriptionProgressFraction
+            let asrProgress = displayProgress
             let base = vocalEnhanceEnabled ? 0.1 : 0.0
             let overallProgress = base + (asrProgress * (1.0 - base))
-            
+
             activeItem.progressFraction = overallProgress
-            activeItem.statusMessage = String(format: "ASR 智能转译中... %.0f%%", asrProgress * 100)
+            let progressMessage = event.message.trimmingCharacters(in: .whitespacesAndNewlines)
+            activeItem.statusMessage = transcriptionProgressFraction >= 1.0
+                ? "正在整理最终文本..."
+                : progressMessage.isEmpty
+                ? String(format: "ASR 智能转译中... %.0f%%", asrProgress * 100)
+                : progressMessage
 
             if let transcript = event.transcript?.trimmingCharacters(in: .whitespacesAndNewlines),
                !transcript.isEmpty {
-                let filteredTranscript = applyHotwordsFilter(to: transcript)
+                let filteredTranscript = transcript
                 activeItem.transcriptText = filteredTranscript
 
                 // 只有当用户当前选中的是正在转写中的任务时，才实时显示在右侧文本框
@@ -1023,7 +1492,7 @@ final class SpeechTranscriptionService {
                     currentTranscript = filteredTranscript
                 }
             }
-            
+
             // 计算实时 ASR 转译速率 (仅在 asrStartTime 已记录时)
             if let startTime = self.asrStartTime {
                 let elapsed = Date().timeIntervalSince(startTime)
@@ -1035,7 +1504,7 @@ final class SpeechTranscriptionService {
                         let speedX = processedAudio / elapsed
                         speedText = String(format: "%.1fx", speedX)
                     }
-                    
+
                     // 计算字数转换速率
                     let charCount = activeItem.transcriptText.count
                     if charCount > 0 {
@@ -1046,7 +1515,7 @@ final class SpeechTranscriptionService {
                             speedText = String(format: "%.0f字/秒", charSpeed)
                         }
                     }
-                    
+
                     if !speedText.isEmpty {
                         activeItem.asrSpeed = speedText
                     }
@@ -1061,60 +1530,60 @@ final class SpeechTranscriptionService {
     private func enhanceVocal(inputURL: URL, onProgress: @escaping (Double) -> Void) async throws -> URL {
         let tempDir = FileManager.default.temporaryDirectory
         let outputURL = tempDir.appendingPathComponent("clawdhome_vocal_enhanced_\(UUID().uuidString).wav")
-        
+
         let audioFile = try AVAudioFile(forReading: inputURL)
         let format = audioFile.processingFormat
-        
+
         let engine = AVAudioEngine()
         let player = AVAudioPlayerNode()
-        
+
         // 实例化原生的音频滤波器（仅保留高保真 EQ 滤镜）
         let eq = AVAudioUnitEQ(numberOfBands: 2)
-        
+
         engine.attach(player)
         engine.attach(eq)
-        
+
         // 拼接节点：Player -> EQ(高通降噪人声增强) -> Output
         engine.connect(player, to: eq, format: format)
         engine.connect(eq, to: engine.outputNode, format: format)
-        
+
         // 配置 EQ 滤镜：100Hz 高通降噪 + 2.5kHz 人声增益
         let bypassBand = eq.bands[0]
         bypassBand.filterType = .highPass
         bypassBand.frequency = 100.0 // 截断 100Hz 以下低频背景杂噪
         bypassBand.bypass = false
-        
+
         let vocalBand = eq.bands[1]
         vocalBand.filterType = .parametric
         vocalBand.frequency = 2500.0 // 增益 2.5kHz 人声主频齿音
         vocalBand.bandwidth = 1.0
         vocalBand.gain = 4.0 // 增强 4dB 提取更加清脆的人声细节
         vocalBand.bypass = false
-        
+
         // 启用 AVAudioEngine 手动离线极速渲染模式
         let maxFrames: AVAudioFrameCount = 4096
         try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: maxFrames)
-        
+
         // 启动节点与装载音频
         try engine.start()
         player.scheduleFile(audioFile, at: nil, completionHandler: nil)
         player.play()
-        
+
         // 使用与渲染缓冲区完全一致的 processingFormat 格式进行高保真自适应写出
         let outputFile = try AVAudioFile(forWriting: outputURL, settings: format.settings)
-        
+
         // 极速渲染循环
         let renderBuffer = AVAudioPCMBuffer(pcmFormat: engine.manualRenderingFormat, frameCapacity: maxFrames)!
         let totalFrames = audioFile.length
         var lastReportedProgress: Double = 0.0
-        
+
         while engine.manualRenderingSampleTime < totalFrames {
             let framesToRender = min(maxFrames, AVAudioFrameCount(totalFrames - engine.manualRenderingSampleTime))
             let status = try engine.renderOffline(framesToRender, to: renderBuffer)
-            
+
             if status == .success {
                 try outputFile.write(from: renderBuffer)
-                
+
                 // 实时计算渲染帧数进度
                 let progress = Double(engine.manualRenderingSampleTime) / Double(totalFrames)
                 // 每增长 2% 进行一次通知，防高频线程通知导致 UI 渲染锁死
@@ -1126,10 +1595,10 @@ final class SpeechTranscriptionService {
                 throw NSError(domain: "ai.clawdhome.speech.render", code: 4, userInfo: [NSLocalizedDescriptionKey: "WAV manual rendering failed."])
             }
         }
-        
+
         player.stop()
         engine.stop()
-        
+
         return outputURL
     }
 
@@ -1140,5 +1609,297 @@ final class SpeechTranscriptionService {
             return data.subdata(in: firstBraceIndex..<(lastBraceIndex + 1))
         }
         return data
+    }
+
+    // 【新增】ASR 系统 Prompt 生成器
+    private static func buildSystemPrompt(glossary: String, mode: String) -> String {
+        return """
+        你是一个极其专业的语音转写文本（ASR）智能精整与专名纠错专家。
+
+        # 上下文提示（专有名词字典）
+        以下是用户提供的正确背景主题与专名热词列表：
+        <glossary>
+        \(glossary)
+        </glossary>
+
+        # 任务目标
+        请根据所选模式 [\(mode)]，在不捏造事实的前提下完成处理：
+        1. 【专名纠错】：根据 <glossary> 中提供的正确热词列表，在上下文中寻找发音相近的误识别词，并智能纠正（例如如果 glossary 有 ClawdHome，遇到 ClowdHome / CloudHome / Clawd Home 须全部自动纠正为 ClawdHome）。
+        2. 【口语消解】：彻底剔除“嗯”、“啊”、“那啥”、“就是说”、“然后”等无意义的语气词 and 口癖，恢复文稿的清爽度。
+        3. 【标点与断句】：智能修正断句，增添合适的标点符号。
+        4. 【标题协议】：输出第一行必须是一个 Markdown 一级标题，格式为 `# 主题标题`；标题需直接概括音频核心主题，严格控制在 12 个汉字以内，不要使用“语音记录”“灵感随记”“会议纪要”等泛泛标题。第一行之后空一行，再输出正文。
+        5. 【格式转换】：
+           - 若模式为“原稿智能净化”：必须保留原始的口吻与第一人称，不要重写句式，仅纠正错别字和净化口癖。
+           - 若模式为“提炼会议纪要”：提取主要议题、核心结论和后续待办行动项（Markdown 列表形式）。
+           - 若模式为“专业文稿重塑”：将其重塑改写为排版优雅、逻辑顺畅、专业流畅的书面语报告或博客。
+           - 若模式为“灵感随记整理”：将零散碎碎念、心境日记或突发灵感音频文本整理为排版精美、层次清晰的 Markdown 便签。其输出必须严格遵循以下结构：
+             1. 首行输出 `# 主题标题`，标题必须来自内容本身，严格控制在 12 个汉字以内。
+             2. 增加引言块输出 `> **📌 快速摘要**：[一句话提炼音频核心主题，精炼在 30 字内]`。
+             3. 增加引言块输出 `> **🏷️ 关键词**：[根据内容提炼出 3-5 个核心标签，以 # 形式列出，例如 #灵感 #规划，标签之间空格隔开]`。
+             4. 增加分割线 `---`。
+             5. 增加 `### 📝 精整正文` 部分：将大段杂乱的口语消除口癖后理顺段落，排版得当、逻辑清晰，保留第一人称和原本的情感细节。
+             6. 增加 `### ✅ 待办行动` 部分：智能捕捉内容中提及的所有未来待办任务、计划或建议行动，以 Markdown 任务列表（如 `- [ ] 任务 1`）形式列出。如果音频内容中确实没有任何未来待办项，则输出「无待办事项」。
+
+        请直接输出处理后的纯文本，不要带有任何多余的开场白或解释。
+        """
+    }
+
+    // 【同步向下兼容接口】智能精整入口（同步一次性返回）
+    func refineTranscript(
+        text: String,
+        provider: ProviderTemplate,
+        modelId: String,
+        glossary: String,
+        mode: String
+    ) async throws -> String {
+        let stream = refineTranscriptStream(
+            text: text,
+            provider: provider,
+            modelId: modelId,
+            glossary: glossary,
+            mode: mode
+        )
+        var result = ""
+        for try await chunk in stream {
+            result += chunk
+        }
+        return result
+    }
+
+    // 【新增】智能精整流式入口（流式返回）
+    func refineTranscriptStream(
+        text: String,
+        provider: ProviderTemplate,
+        modelId: String,
+        glossary: String,
+        mode: String
+    ) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let secretKey = "\(provider.providerGroupId):\(provider.name)"
+                    guard let apiKey = GlobalSecretsStore.shared.value(for: secretKey) else {
+                        throw NSError(domain: "ai.clawdhome.speech", code: 10, userInfo: [NSLocalizedDescriptionKey: "无法加载选中模型的 API 凭证，请前往「全局模型池」配置。"])
+                    }
+
+                    let systemPrompt = SpeechTranscriptionService.buildSystemPrompt(glossary: glossary, mode: mode)
+
+                    try await callLLMForRefineStream(
+                        modelId: modelId,
+                        apiKey: apiKey,
+                        systemPrompt: systemPrompt,
+                        userMessage: text,
+                        baseURL: provider.customBaseURL,
+                        apiType: provider.customAPIType,
+                        providerPrefix: provider.providerGroupId,
+                        continuation: continuation
+                    )
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
+        }
+    }
+
+    // 【新增】核心流式 SSE 抓取与 SSE 行文本解析引擎
+    private func callLLMForRefineStream(
+        modelId: String,
+        apiKey: String,
+        systemPrompt: String,
+        userMessage: String,
+        baseURL: String?,
+        apiType: String?,
+        providerPrefix: String,
+        continuation: AsyncThrowingStream<String, Error>.Continuation
+    ) async throws {
+        let effectiveBaseURL: String
+        let apiMode: String
+        let normalizedModel: String
+
+        let prefix = providerPrefix
+
+        if let baseURL = baseURL, !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            effectiveBaseURL = baseURL
+            apiMode = apiType ?? "openai-completions"
+            normalizedModel = modelId.dropProviderPrefix()
+        } else {
+            switch prefix {
+            case "anthropic":
+                effectiveBaseURL = "https://api.anthropic.com"
+                apiMode = "anthropic-messages"
+                normalizedModel = modelId.dropPrefix("anthropic/")
+            case "openai":
+                effectiveBaseURL = "https://api.openai.com"
+                apiMode = "openai-completions"
+                normalizedModel = modelId.dropPrefix("openai/")
+            case "openrouter":
+                effectiveBaseURL = "https://openrouter.ai"
+                apiMode = "openai-completions"
+                normalizedModel = modelId.dropPrefix("openrouter/")
+            case "google":
+                effectiveBaseURL = "https://generativelanguage.googleapis.com"
+                apiMode = "google-gemini"
+                normalizedModel = modelId.dropPrefix("google/")
+            case "bailian":
+                effectiveBaseURL = "https://coding.dashscope.aliyuncs.com/v1"
+                apiMode = "openai-completions"
+                normalizedModel = modelId.dropPrefix("bailian/")
+            case "qiniu":
+                effectiveBaseURL = "https://api.qnaigc.com/v1"
+                apiMode = "openai-completions"
+                normalizedModel = modelId.dropPrefix("qiniu/")
+            case "zai":
+                effectiveBaseURL = "https://open.bigmodel.cn/api/paas/v4"
+                apiMode = "openai-completions"
+                normalizedModel = modelId.dropPrefix("zai/")
+            case "minimax":
+                effectiveBaseURL = "https://api.minimaxi.com/anthropic"
+                apiMode = "anthropic-messages"
+                normalizedModel = modelId.dropPrefix("minimax/")
+            case "kimi-coding":
+                effectiveBaseURL = "https://api.kimi.com/coding"
+                apiMode = "anthropic-messages"
+                normalizedModel = modelId.dropPrefix("kimi-coding/")
+            default:
+                effectiveBaseURL = "http://localhost:18800"
+                apiMode = "openai-completions"
+                normalizedModel = modelId
+            }
+        }
+
+        let trimmedBase = effectiveBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("/")
+            ? String(effectiveBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).dropLast())
+            : effectiveBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if apiMode.contains("anthropic") {
+            let endpoint = trimmedBase.hasSuffix("/v1/messages") ? trimmedBase : (trimmedBase.hasSuffix("/v1") ? "\(trimmedBase)/messages" : "\(trimmedBase)/v1/messages")
+            var req = URLRequest(url: URL(string: endpoint)!)
+            req.httpMethod = "POST"
+            if prefix == "minimax" {
+                req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            } else {
+                req.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+            }
+            req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+            let payload: [String: Any] = [
+                "model": normalizedModel,
+                "system": systemPrompt,
+                "messages": [["role": "user", "content": userMessage]],
+                "max_tokens": 4096,
+                "stream": true
+            ]
+            req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+            let (bytes, resp) = try await URLSession.shared.bytes(for: req)
+            guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+                throw NSError(domain: "ai.clawdhome.speech.refine", code: 1, userInfo: [NSLocalizedDescriptionKey: "Anthropic Stream API 响应非 200 错误。"])
+            }
+            for try await line in bytes.lines {
+                if line.hasPrefix("data: ") {
+                    let jsonString = String(line.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let jsonData = jsonString.data(using: .utf8),
+                       let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                       let delta = json["delta"] as? [String: Any],
+                       let text = delta["text"] as? String {
+                        continuation.yield(text)
+                    }
+                }
+            }
+
+        } else if apiMode == "google-gemini" {
+            let urlStr = "\(trimmedBase)/v1beta/models/\(normalizedModel):streamGenerateContent"
+            var req = URLRequest(url: URL(string: urlStr)!)
+            req.httpMethod = "POST"
+            req.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+            let payload: [String: Any] = [
+                "systemInstruction": ["parts": [["text": systemPrompt]]],
+                "contents": [["role": "user", "parts": [["text": userMessage]]]],
+                "generationConfig": ["maxOutputTokens": 4096]
+            ]
+            req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+            let (bytes, resp) = try await URLSession.shared.bytes(for: req)
+            guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+                throw NSError(domain: "ai.clawdhome.speech.refine", code: 2, userInfo: [NSLocalizedDescriptionKey: "Gemini Stream API 响应非 200 错误。"])
+            }
+            for try await line in bytes.lines {
+                var cleanLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if cleanLine.hasPrefix("data: ") {
+                    cleanLine = String(cleanLine.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                if cleanLine.hasPrefix(",") {
+                    cleanLine = String(cleanLine.dropFirst(1)).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                if cleanLine == "[" || cleanLine == "]" || cleanLine.isEmpty { continue }
+
+                if let jsonData = cleanLine.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                   let candidates = json["candidates"] as? [[String: Any]],
+                   let first = candidates.first,
+                   let content = first["content"] as? [String: Any],
+                   let parts = content["parts"] as? [[String: Any]],
+                   let text = parts.first?["text"] as? String {
+                    continuation.yield(text)
+                }
+            }
+
+        } else {
+            // OpenAI 兼容
+            let endpoint = trimmedBase.hasSuffix("/chat/completions") ? trimmedBase : (trimmedBase.hasSuffix("/v1") ? "\(trimmedBase)/chat/completions" : "\(trimmedBase)/v1/chat/completions")
+            var req = URLRequest(url: URL(string: endpoint)!)
+            req.httpMethod = "POST"
+            req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+            let payload: [String: Any] = [
+                "model": normalizedModel,
+                "messages": [
+                    ["role": "system", "content": systemPrompt],
+                    ["role": "user", "content": userMessage]
+                ],
+                "max_tokens": 4096,
+                "stream": true
+            ]
+            req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+            let (bytes, resp) = try await URLSession.shared.bytes(for: req)
+            guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+                throw NSError(domain: "ai.clawdhome.speech.refine", code: 3, userInfo: [NSLocalizedDescriptionKey: "OpenAI Stream API 响应非 200 错误。"])
+            }
+            for try await line in bytes.lines {
+                if line.hasPrefix("data: ") {
+                    let jsonString = String(line.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if jsonString == "[DONE]" { continue }
+                    if let jsonData = jsonString.data(using: .utf8),
+                       let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                       let choices = json["choices"] as? [[String: Any]],
+                       let delta = choices.first?["delta"] as? [String: Any],
+                       let content = delta["content"] as? String {
+                        continuation.yield(content)
+                    }
+                }
+            }
+        }
+    }
+
+}
+
+fileprivate extension String {
+    func dropPrefix(_ prefix: String) -> String {
+        hasPrefix(prefix) ? String(dropFirst(prefix.count)) : self
+    }
+
+    func dropProviderPrefix() -> String {
+        let parts = split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2 else { return self }
+        return parts[1]
     }
 }

@@ -61,6 +61,7 @@ public struct DesignSystem {
         case ready          // 已就绪 (绿色呼吸发光点)
         case inDevelopment  // 研发中 (紫色科技发光点)
         case planned        // 规划中 (灰色沉静发光点)
+        case demo           // 未就绪 (Demo) (橙色呼吸发光点)
         
         public var text: String {
             switch self {
@@ -70,6 +71,8 @@ public struct DesignSystem {
                 return L10n.k("auto.ailab_view.coming_soon", fallback: "研发中")
             case .planned:
                 return L10n.k("auto.ailab_view.planned", fallback: "规划中")
+            case .demo:
+                return L10n.k("auto.ailab_view.demo", fallback: "未就绪 (Demo)")
             }
         }
         
@@ -78,6 +81,7 @@ public struct DesignSystem {
             case .ready: return .green
             case .inDevelopment: return .purple
             case .planned: return .secondary
+            case .demo: return .orange
             }
         }
     }
@@ -100,7 +104,7 @@ public struct PremiumStatusBadge: View {
                     .fill(style.color)
                     .frame(width: 6, height: 6)
                 
-                if style == .ready || style == .inDevelopment {
+                if style == .ready || style == .inDevelopment || style == .demo {
                     Circle()
                         .stroke(style.color, lineWidth: 2)
                         .scaleEffect(isBreathing ? 2.2 : 1.0)
@@ -109,7 +113,7 @@ public struct PremiumStatusBadge: View {
                 }
             }
             .onAppear {
-                if style == .ready || style == .inDevelopment {
+                if style == .ready || style == .inDevelopment || style == .demo {
                     withAnimation(
                         .easeInOut(duration: 1.8)
                         .repeatForever(autoreverses: false)
@@ -171,14 +175,13 @@ private struct PremiumCardModifier: ViewModifier {
                 }
             )
             .overlay(
-                // 3. 极细微高反光立体描边，亮色下高透透亮且轮廓鲜明，暗色下微透轻奢
+                // 3. 自适应精致描边：亮色下用微黑半透明勾勒鲜明轮廓，暗色下采用微白高透轻奢
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(
                         LinearGradient(
-                            colors: [
-                                Color.white.opacity(colorScheme == .dark ? 0.12 : 0.80),
-                                Color.secondary.opacity(colorScheme == .dark ? 0.04 : 0.18)
-                            ],
+                            colors: colorScheme == .dark
+                                ? [Color.white.opacity(0.12), Color.secondary.opacity(0.04)]
+                                : [Color.black.opacity(0.08), Color.black.opacity(0.03)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
@@ -187,10 +190,10 @@ private struct PremiumCardModifier: ViewModifier {
             )
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .shadow(
-                // 4. 精心调校的自适应柔和散发阴影，避免脏色，hover 时映射出淡彩发光阴影，亮色模式下更加立体分明
+                // 4. 精心调校的自适应柔和散发阴影，亮色模式下底色对比鲜明，Hover 时映射轻微主题光晕
                 color: isHovered && isAvailable
-                    ? theme.mainColor.opacity(colorScheme == .dark ? 0.18 : 0.12)
-                    : Color.black.opacity(colorScheme == .dark ? 0.24 : 0.06),
+                    ? theme.mainColor.opacity(colorScheme == .dark ? 0.18 : 0.14)
+                    : Color.black.opacity(colorScheme == .dark ? 0.24 : 0.065),
                 radius: isHovered && isAvailable ? 12 : 6,
                 x: 0,
                 y: isHovered && isAvailable ? 6 : 3

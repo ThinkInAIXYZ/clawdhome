@@ -29,6 +29,8 @@ actor ModelPingService {
                 modelId: modelId,
                 apiKey: apiKey,
                 message: finalMessage,
+                imageData: nil,
+                maxTokens: 64,
                 baseURL: baseURL,
                 apiType: apiType,
                 authHeader: authHeader
@@ -62,6 +64,8 @@ actor ModelPingService {
         modelId: String,
         apiKey: String,
         message: String,
+        imageData: Data? = nil,
+        maxTokens: Int? = nil,
         baseURL: String? = nil,
         apiType: String? = nil,
         authHeader: Bool = false
@@ -70,6 +74,8 @@ actor ModelPingService {
             modelId: modelId,
             apiKey: apiKey,
             message: message,
+            imageData: imageData,
+            maxTokens: maxTokens,
             baseURL: baseURL,
             apiType: apiType,
             authHeader: authHeader
@@ -80,10 +86,14 @@ actor ModelPingService {
         modelId: String,
         apiKey: String,
         message: String,
+        imageData: Data? = nil,
+        maxTokens: Int? = nil,
         baseURL: String? = nil,
         apiType: String? = nil,
         authHeader: Bool = false
     ) async throws -> String {
+        let finalMaxTokens = maxTokens ?? 4096
+        
         if let baseURL,
            !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let mode = apiType ?? "openai-completions"
@@ -95,6 +105,8 @@ actor ModelPingService {
                     modelId: effectiveModel,
                     apiKey: apiKey,
                     message: message,
+                    imageData: imageData,
+                    maxTokens: finalMaxTokens,
                     authHeader: authHeader
                 )
             }
@@ -102,7 +114,9 @@ actor ModelPingService {
                 base: normalizedBase,
                 modelId: effectiveModel,
                 apiKey: apiKey,
-                message: message
+                message: message,
+                imageData: imageData,
+                maxTokens: finalMaxTokens
             )
         }
 
@@ -113,34 +127,62 @@ actor ModelPingService {
                 base: "https://api.anthropic.com",
                 modelId: modelId.dropPrefix("anthropic/"),
                 apiKey: apiKey,
-                message: message
+                message: message,
+                imageData: imageData,
+                maxTokens: finalMaxTokens
             )
         case "openai":
-            return try await callOpenAI(base: "https://api.openai.com", modelId: modelId.dropPrefix("openai/"), apiKey: apiKey, message: message)
+            return try await callOpenAI(
+                base: "https://api.openai.com",
+                modelId: modelId.dropPrefix("openai/"),
+                apiKey: apiKey,
+                message: message,
+                imageData: imageData,
+                maxTokens: finalMaxTokens
+            )
         case "openrouter":
-            return try await callOpenAI(base: "https://openrouter.ai", modelId: modelId.dropPrefix("openrouter/"), apiKey: apiKey, message: message)
+            return try await callOpenAI(
+                base: "https://openrouter.ai",
+                modelId: modelId.dropPrefix("openrouter/"),
+                apiKey: apiKey,
+                message: message,
+                imageData: imageData,
+                maxTokens: finalMaxTokens
+            )
         case "google":
-            return try await callGoogle(modelId: modelId, apiKey: apiKey, message: message)
+            return try await callGoogle(
+                modelId: modelId,
+                apiKey: apiKey,
+                message: message,
+                imageData: imageData,
+                maxTokens: finalMaxTokens
+            )
         case "bailian":
             return try await callOpenAI(
                 base: "https://coding.dashscope.aliyuncs.com/v1",
                 modelId: modelId.dropPrefix("bailian/"),
                 apiKey: apiKey,
-                message: message
+                message: message,
+                imageData: imageData,
+                maxTokens: finalMaxTokens
             )
         case "qiniu":
             return try await callOpenAI(
                 base: "https://api.qnaigc.com/v1",
                 modelId: modelId.dropPrefix("qiniu/"),
                 apiKey: apiKey,
-                message: message
+                message: message,
+                imageData: imageData,
+                maxTokens: finalMaxTokens
             )
         case "zai":
             return try await callOpenAI(
                 base: "https://open.bigmodel.cn/api/paas/v4",
                 modelId: modelId.dropPrefix("zai/"),
                 apiKey: apiKey,
-                message: message
+                message: message,
+                imageData: imageData,
+                maxTokens: finalMaxTokens
             )
         case "minimax":
             return try await callAnthropic(
@@ -148,6 +190,8 @@ actor ModelPingService {
                 modelId: modelId.dropPrefix("minimax/"),
                 apiKey: apiKey,
                 message: message,
+                imageData: imageData,
+                maxTokens: finalMaxTokens,
                 authHeader: true
             )
         case "kimi-coding":
@@ -155,11 +199,20 @@ actor ModelPingService {
                 base: "https://api.kimi.com/coding",
                 modelId: modelId.dropPrefix("kimi-coding/"),
                 apiKey: apiKey,
-                message: message
+                message: message,
+                imageData: imageData,
+                maxTokens: finalMaxTokens
             )
         default:
             // Local model (e.g. ollama) — use OpenAI-compatible endpoint on localhost
-            return try await callOpenAI(base: "http://localhost:18800", modelId: modelId, apiKey: "local", message: message)
+            return try await callOpenAI(
+                base: "http://localhost:18800",
+                modelId: modelId,
+                apiKey: "local",
+                message: message,
+                imageData: imageData,
+                maxTokens: finalMaxTokens
+            )
         }
     }
 
@@ -168,6 +221,8 @@ actor ModelPingService {
         modelId: String,
         apiKey: String,
         message: String,
+        imageData: Data? = nil,
+        maxTokens: Int = 64,
         authHeader: Bool = false
     ) async throws -> String {
         let endpoint = anthropicEndpoint(base: base)
@@ -180,10 +235,26 @@ actor ModelPingService {
         }
         req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        var contentArray: [[String: Any]] = [
+            ["type": "text", "text": message]
+        ]
+        if let imageData {
+            let base64 = imageData.base64EncodedString()
+            contentArray.append([
+                "type": "image",
+                "source": [
+                    "type": "base64",
+                    "media_type": "image/jpeg",
+                    "data": base64
+                ]
+            ])
+        }
+        
         req.httpBody = try JSONSerialization.data(withJSONObject: [
             "model": modelId,
-            "max_tokens": 64,
-            "messages": [["role": "user", "content": message]]
+            "max_tokens": maxTokens,
+            "messages": [["role": "user", "content": contentArray]]
         ])
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
@@ -195,16 +266,41 @@ actor ModelPingService {
         return (json?["content"] as? [[String: Any]])?.first?["text"] as? String ?? ""
     }
 
-    private func callOpenAI(base: String, modelId: String, apiKey: String, message: String) async throws -> String {
+    private func callOpenAI(
+        base: String,
+        modelId: String,
+        apiKey: String,
+        message: String,
+        imageData: Data? = nil,
+        maxTokens: Int = 64
+    ) async throws -> String {
         let endpoint = openAIEndpoint(base: base)
         var req = URLRequest(url: URL(string: endpoint)!)
         req.httpMethod = "POST"
         req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        var messageContent: Any = message
+        if let imageData {
+            let base64 = imageData.base64EncodedString()
+            messageContent = [
+                [
+                    "type": "text",
+                    "text": message
+                ],
+                [
+                    "type": "image_url",
+                    "image_url": [
+                        "url": "data:image/jpeg;base64,\(base64)"
+                    ]
+                ]
+            ]
+        }
+        
         req.httpBody = try JSONSerialization.data(withJSONObject: [
             "model": modelId,
-            "max_tokens": 64,
-            "messages": [["role": "user", "content": message]]
+            "max_tokens": maxTokens,
+            "messages": [["role": "user", "content": messageContent]]
         ])
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
@@ -216,17 +312,36 @@ actor ModelPingService {
         return ((json?["choices"] as? [[String: Any]])?.first?["message"] as? [String: Any])?["content"] as? String ?? ""
     }
 
-    private func callGoogle(modelId: String, apiKey: String, message: String) async throws -> String {
+    private func callGoogle(
+        modelId: String,
+        apiKey: String,
+        message: String,
+        imageData: Data? = nil,
+        maxTokens: Int = 64
+    ) async throws -> String {
         let rawModel = modelId.dropPrefix("google/")
-        // Use x-goog-api-key header instead of URL query param to prevent key exposure in error messages
         let urlStr = "https://generativelanguage.googleapis.com/v1beta/models/\(rawModel):generateContent"
         var req = URLRequest(url: URL(string: urlStr)!)
         req.httpMethod = "POST"
         req.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        var parts: [[String: Any]] = [
+            ["text": message]
+        ]
+        if let imageData {
+            let base64 = imageData.base64EncodedString()
+            parts.append([
+                "inlineData": [
+                    "mimeType": "image/jpeg",
+                    "data": base64
+                ]
+            ])
+        }
+        
         req.httpBody = try JSONSerialization.data(withJSONObject: [
-            "contents": [["role": "user", "parts": [["text": message]]]],
-            "generationConfig": ["maxOutputTokens": 64]
+            "contents": [["role": "user", "parts": parts]],
+            "generationConfig": ["maxOutputTokens": maxTokens]
         ])
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else {

@@ -938,23 +938,23 @@ struct ClawdHomeSpeechMain {
             var segments: [String] = []
             var offset = 0
             let audioDurationSec = Double(totalSamples) / Double(modelSampleRate)
+            func progressMessage(fraction: Double, currentEndSec: Double, elapsed: Double) -> String {
+                let speedRatio = elapsed > 0 ? (currentEndSec / elapsed) : 0.0
+                if speedRatio > 0 {
+                    let etaSec = max((audioDurationSec - currentEndSec) / speedRatio, 0)
+                    return String(format: "已转写 %.0f%% (速率 %.1fx, 剩余 %.0fs)", fraction * 100, speedRatio, etaSec)
+                }
+                return String(format: "已转写 %.0f%%", fraction * 100)
+            }
             
             while offset < totalSamples {
                 let end = min(offset + chunkSamples, totalSamples)
                 let chunk = Array(audio[offset..<end])
                 
-                let progressFraction = Double(end) / Double(totalSamples)
-                let currentEndSec = Double(end) / Double(modelSampleRate)
+                let progressFraction = Double(offset) / Double(totalSamples)
+                let currentEndSec = Double(offset) / Double(modelSampleRate)
                 let elapsed = CFAbsoluteTimeGetCurrent() - start
-                
-                let speedRatio = elapsed > 0 ? (currentEndSec / elapsed) : 0.0
-                let message: String
-                if speedRatio > 0 {
-                    let etaSec = max((audioDurationSec - currentEndSec) / speedRatio, 0)
-                    message = String(format: "已转写 %.0f%% (速率 %.1fx, 剩余 %.0fs)", progressFraction * 100, speedRatio, etaSec)
-                } else {
-                    message = String(format: "已转写 %.0f%%", progressFraction * 100)
-                }
+                let message = progressMessage(fraction: progressFraction, currentEndSec: currentEndSec, elapsed: elapsed)
                 
                 try? writeProgress(
                     ProgressResponse(
@@ -973,16 +973,24 @@ struct ClawdHomeSpeechMain {
                 )
                 if !chunkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     segments.append(chunkText)
-                    try? writeProgress(
-                        ProgressResponse(
-                            kind: "progress",
-                            command: "transcribe",
-                            fractionCompleted: progressFraction,
-                            message: message,
-                            transcript: segments.joined(separator: " ")
-                        )
-                    )
                 }
+                let completedFraction = Double(end) / Double(totalSamples)
+                let completedEndSec = Double(end) / Double(modelSampleRate)
+                let completedElapsed = CFAbsoluteTimeGetCurrent() - start
+                let completedMessage = progressMessage(
+                    fraction: completedFraction,
+                    currentEndSec: completedEndSec,
+                    elapsed: completedElapsed
+                )
+                try? writeProgress(
+                    ProgressResponse(
+                        kind: "progress",
+                        command: "transcribe",
+                        fractionCompleted: completedFraction,
+                        message: completedMessage,
+                        transcript: segments.isEmpty ? nil : segments.joined(separator: " ")
+                    )
+                )
                 if end >= totalSamples { break }
                 offset += stepSamples
             }

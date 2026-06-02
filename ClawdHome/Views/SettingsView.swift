@@ -53,6 +53,10 @@ private struct GeneralSettingsTab: View {
     @AppStorage("hf_endpoint_preference") private var hfEndpointPreference = ""
     @AppStorage("custom_hf_endpoint") private var customHFEndpoint = ""
     @AppStorage("hf_token_preference") private var hfTokenPreference = ""
+    @AppStorage("obsidian_enabled") private var obsidianEnabled = false
+    @AppStorage("obsidian_vault_path") private var obsidianVaultPath = ""
+    @AppStorage("obsidian_inbox") private var obsidianInbox = "Inbox"
+    @AppStorage("obsidian_attachments") private var obsidianAttachments = "Inbox/attachments"
     @State private var isApplyingProxy = false
     @State private var proxyMessage: String? = nil
     @State private var proxyError: String? = nil
@@ -81,33 +85,121 @@ private struct GeneralSettingsTab: View {
     var body: some View {
         Form {
             Section(L10n.k("settings.permissions.section", fallback: "系统权限")) {
+                // 辅助功能卡片
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(L10n.k("settings.permissions.accessibility", fallback: "辅助功能"))
+                            .font(.body)
+                        Spacer()
+                        permissionTag(for: hostPermissionCenter.accessibilityStatus)
+                    }
+                    
+                    if hostPermissionCenter.accessibilityStatus != .granted {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(L10n.k("host_permission.prompt.custom.accessibility.step2", fallback: "将下方 ClawdHome 图标直接拖拽到系统偏好设置右侧「辅助功能」列表中"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            
+                            HStack(spacing: 16) {
+                                Button(action: {
+                                    hostPermissionCenter.requestAccessibilityPermission()
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "arrow.up.forward.app")
+                                        Text(L10n.k("host_permission.prompt.custom.step1.button", fallback: "打开系统偏好设置"))
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                
+                                Spacer()
+                                
+                                DragAppIconView()
+                                
+                                Spacer()
+                            }
+                            .padding(.top, 4)
+                        }
+                        .padding(12)
+                        .background(Color.secondary.opacity(0.04))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.secondary.opacity(0.08), lineWidth: 1)
+                        )
+                    }
+                }
+                .padding(.vertical, 4)
+                
+                // Chrome 自动化卡片
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(L10n.k("settings.permissions.chrome_automation", fallback: "Chrome 自动化"))
+                            .font(.body)
+                        Spacer()
+                        if hostPermissionCenter.chromeInstalled {
+                            permissionTag(for: hostPermissionCenter.chromeAutomationStatus)
+                        } else {
+                            Text(L10n.k("settings.permissions.chrome_not_installed", fallback: "未安装 Chrome"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    
+                    if hostPermissionCenter.chromeInstalled && hostPermissionCenter.chromeAutomationStatus != .granted {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(L10n.k("host_permission.prompt.custom.automation.step2", fallback: "在系统偏好设置右侧「自动化」列表中展开 ClawdHome 并勾选「Google Chrome」"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            
+                            HStack(spacing: 16) {
+                                Button(action: {
+                                    hostPermissionCenter.requestChromeAutomationPermission()
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "arrow.up.forward.app")
+                                        Text(L10n.k("host_permission.prompt.custom.step1.button", fallback: "打开系统偏好设置"))
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                
+                                Spacer()
+                                
+                                AutomationGuideView()
+                                
+                                Spacer()
+                            }
+                            .padding(.top, 4)
+                        }
+                        .padding(12)
+                        .background(Color.secondary.opacity(0.04))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.secondary.opacity(0.08), lineWidth: 1)
+                        )
+                    }
+                }
+                .padding(.vertical, 4)
+                
                 HStack {
-                    Text(L10n.k("settings.permissions.accessibility", fallback: "辅助功能"))
+                    Text(L10n.k("settings.permissions.hint", fallback: "用于浏览器自动化与授权回调。若缺失权限，相关功能会失败。"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
                     Spacer()
-                    permissionTag(for: hostPermissionCenter.accessibilityStatus)
-                }
-                HStack {
-                    Text(L10n.k("settings.permissions.chrome_automation", fallback: "Chrome 自动化"))
-                    Spacer()
-                    if hostPermissionCenter.chromeInstalled {
-                        permissionTag(for: hostPermissionCenter.chromeAutomationStatus)
-                    } else {
-                        Text(L10n.k("settings.permissions.chrome_not_installed", fallback: "未安装 Chrome"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    
+                    Button(action: {
+                        hostPermissionCenter.refresh()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.clockwise")
+                            Text(L10n.k("settings.permissions.action.refresh", fallback: "刷新状态"))
+                        }
                     }
-                }
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 10) {
-                        permissionActionButtons
-                    }
-                    VStack(alignment: .leading, spacing: 10) {
-                        permissionActionButtons
-                    }
-                }
-                Text(L10n.k("settings.permissions.hint", fallback: "用于浏览器自动化与授权回调。若缺失权限，相关功能会失败。"))
+                    .buttonStyle(.plain)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.accentColor)
+                }
             }
 
             Section(L10n.k("views.settings_view.language", fallback: "语言")) {
@@ -143,6 +235,49 @@ private struct GeneralSettingsTab: View {
                 )
                 .textFieldStyle(.roundedBorder)
                 .disableAutocorrection(true)
+            }
+
+            Section(L10n.k("settings.obsidian.section", fallback: "Obsidian 联动")) {
+                Toggle(L10n.k("settings.obsidian.enabled", fallback: "自动同步到 Obsidian Vault"), isOn: $obsidianEnabled)
+                
+                if obsidianEnabled {
+                    HStack {
+                        Text(L10n.k("settings.obsidian.vault_path", fallback: "Obsidian Vault 路径"))
+                        Spacer()
+                        if obsidianVaultPath.isEmpty {
+                            Text(L10n.k("settings.obsidian.vault_path.empty", fallback: "未选择"))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(obsidianVaultPath)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help(obsidianVaultPath)
+                        }
+                        Button(L10n.k("settings.obsidian.vault_path.choose", fallback: "选择…")) {
+                            chooseObsidianVaultPath()
+                        }
+                    }
+                    
+                    TextField(
+                        L10n.k("settings.obsidian.inbox", fallback: "Inbox 目录"),
+                        text: $obsidianInbox
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .disableAutocorrection(true)
+                    
+                    TextField(
+                        L10n.k("settings.obsidian.attachments", fallback: "附件目录"),
+                        text: $obsidianAttachments
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .disableAutocorrection(true)
+                }
+                
+                Text(L10n.k("settings.obsidian.hint", fallback: "开启后，录音的转写原稿、AI 智能精装版（若有）及音频文件将自动保存至 Obsidian Vault。音频文件默认存放于附件目录下。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(L10n.k("views.settings_view.gateway", fallback: "Gateway")) {
@@ -316,24 +451,7 @@ private struct GeneralSettingsTab: View {
         }
     }
 
-    @ViewBuilder
-    private var permissionActionButtons: some View {
-        Button(L10n.k("settings.permissions.action.accessibility", fallback: "授权辅助功能")) {
-            hostPermissionCenter.requestAccessibilityPermission()
-        }
-        .buttonStyle(.bordered)
 
-        Button(L10n.k("settings.permissions.action.chrome_automation", fallback: "授权 Chrome 自动化")) {
-            hostPermissionCenter.requestChromeAutomationPermission()
-        }
-        .buttonStyle(.bordered)
-        .disabled(!hostPermissionCenter.chromeInstalled)
-
-        Button(L10n.k("settings.permissions.action.refresh", fallback: "刷新权限状态")) {
-            hostPermissionCenter.refresh()
-        }
-        .buttonStyle(.bordered)
-    }
 
     @ViewBuilder
     private func permissionTag(for status: HostPermissionCenter.PermissionStatus) -> some View {
@@ -450,6 +568,16 @@ private struct GeneralSettingsTab: View {
         } else {
             proxyError = L10n.f("views.settings_view.proxy_partial_fail", fallback: "部分用户应用失败：\n%@", failed.joined(separator: "\n"))
             proxyProgressText = L10n.f("views.settings_view.proxy_done_mixed", fallback: "应用完成：成功 %@，失败 %@", String(users.count - failed.count), String(failed.count))
+        }
+    }
+
+    private func chooseObsidianVaultPath() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url {
+            obsidianVaultPath = url.path
         }
     }
 }
@@ -1267,23 +1395,6 @@ struct HelperLogTab: View {
 
 // MARK: - 关于页
 
-private struct BetaBadge: View {
-    var body: some View {
-        Text("BETA")
-            .font(.system(size: 10, weight: .heavy, design: .rounded))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                LinearGradient(
-                    colors: [Color.orange, Color(red: 0.95, green: 0.2, blue: 0.35)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .clipShape(Capsule())
-    }
-}
 
 private struct AboutTab: View {
     @Environment(HelperClient.self) private var helperClient
@@ -1333,7 +1444,6 @@ private struct AboutTab: View {
                     Text("ClawdHome")
                         .font(.title2)
                         .fontWeight(.semibold)
-                    BetaBadge()
                 }
             }
             .padding(.bottom, 4)
@@ -1546,37 +1656,58 @@ struct CacheManagementWindow: View {
     @State private var globalMessage: String?
     @State private var globalError: String?
 
+    // 计算全局缓存总容量与总文件数
+    private var totalBytes: Int64 {
+        overview?.caches.reduce(0) { $0 + $1.totalBytes } ?? 0
+    }
+
+    private var totalFileCount: Int {
+        overview?.caches.reduce(0) { $0 + $1.fileCount } ?? 0
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             header
+            
+            if overview != nil {
+                metricsDashboard
+            }
+            
             Divider()
+            
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     ForEach(overview?.caches ?? []) { cache in
                         cacheRow(cache)
                     }
                 }
+                .padding(.vertical, 2)
             }
+            
             footer
         }
-        .padding(16)
-        .frame(minWidth: 760, minHeight: 560)
+        .padding(18)
+        .frame(minWidth: 800, minHeight: 600)
         .task { await reloadOverview() }
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.k("settings.cache.window.title", fallback: "缓存管理"))
                     .font(.title2.weight(.semibold))
                 if let generatedAt = overview?.generatedAt {
-                    Text(
-                        L10n.f(
-                            "settings.cache.window.updated_at",
-                            fallback: "最后刷新：%@",
-                            Date(timeIntervalSince1970: TimeInterval(generatedAt)).formatted(date: .omitted, time: .standard)
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.caption2)
+                        Text(
+                            L10n.f(
+                                "settings.cache.window.updated_at",
+                                fallback: "最后刷新：%@",
+                                Date(timeIntervalSince1970: TimeInterval(generatedAt)).formatted(date: .omitted, time: .standard)
+                            )
                         )
-                    )
+                    }
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
@@ -1588,113 +1719,355 @@ struct CacheManagementWindow: View {
                 if isLoading {
                     ProgressView().controlSize(.small)
                 } else {
-                    Label(L10n.k("common.action.refresh", fallback: "刷新"), systemImage: "arrow.clockwise")
+                    Label(L10n.k("common.action.refresh", fallback: "刷新状态"), systemImage: "arrow.clockwise")
                 }
             }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
             .disabled(isLoading || isBusy)
         }
     }
 
-    private func cacheRow(_ cache: SharedCacheItemStats) -> some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(localizedCacheName(cache)).font(.headline)
-                    Spacer()
-                    Text(formatBytes(cache.totalBytes))
-                        .monospacedDigit()
+    // 顶部全局指标数据看板 (Metrics Dashboard)
+    private var metricsDashboard: some View {
+        HStack(spacing: 12) {
+            // 总容量指标卡
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.k("settings.cache.total_size", fallback: "总缓存容量"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(formatBytes(totalBytes))
+                    .font(.system(.title2, design: .rounded).bold())
+                    .foregroundStyle(Color.accentColor)
+                    .monospacedDigit()
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+            )
+            
+            // 总文件数指标卡
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.k("settings.cache.total_files", fallback: "总文件数量"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(L10n.f("settings.cache.file_count", fallback: "%@ 个文件", String(totalFileCount)))
+                    .font(.system(.title2, design: .rounded).bold())
+                    .foregroundStyle(.primary)
+                    .monospacedDigit()
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+            )
+            
+            // 一键清理全局控制
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(L10n.k("settings.cache.global_cleanup", fallback: "全局清理"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                Button(role: .destructive) {
+                    Task { await clearCache("all") }
+                } label: {
+                    HStack(spacing: 6) {
+                        if clearingIDs.contains("all") {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "trash.slash")
+                                .font(.caption.bold())
+                        }
+                        Text(L10n.k("settings.cache.clear_all", fallback: "清空全部缓存"))
+                            .font(.caption.bold())
+                    }
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .background(Color.red.opacity(0.12))
+                    .foregroundStyle(.red)
+                    .clipShape(Capsule())
                 }
-                HStack {
-                    Text(cache.path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                    Spacer()
+                .buttonStyle(.plain)
+                .disabled(isBusy)
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+            )
+        }
+    }
+
+    // 定制包管理器的图标徽标及色彩主题
+    private func cacheTheme(for cacheID: String) -> (icon: String, colors: [Color]) {
+        switch cacheID {
+        case "homebrew":
+            return ("cup.and.saucer.fill", [Color.orange, Color.yellow])
+        case "npm":
+            return ("cube.fill", [Color.red, Color.pink])
+        case "uv":
+            return ("bolt.shield.fill", [Color.purple, Color.blue])
+        case "pip":
+            return ("terminal.fill", [Color.teal, Color.green])
+        default:
+            return ("folder.badge.gearshape.fill", [Color.gray, Color.secondary])
+        }
+    }
+
+    private func breakdownColor(index: Int, baseColors: [Color]) -> Color {
+        if index == 0 {
+            return baseColors.first ?? Color.accentColor
+        } else if index == 1 {
+            return baseColors.last ?? Color.orange
+        } else {
+            return Color.gray.opacity(0.7)
+        }
+    }
+
+    // 多分段彩色容量比例进度条
+    @ViewBuilder
+    private func segmentedProgressBar(for cache: SharedCacheItemStats, colors: [Color]) -> some View {
+        let total = Double(cache.totalBytes)
+        if total > 0 {
+            GeometryReader { geo in
+                HStack(spacing: 1.5) {
+                    ForEach(Array(cache.breakdown.enumerated()), id: \.element.label) { index, item in
+                        let ratio = Double(item.bytes) / total
+                        if ratio > 0 {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(breakdownColor(index: index, baseColors: colors))
+                                .frame(width: max(2, CGFloat(ratio) * (geo.size.width - CGFloat(cache.breakdown.count - 1) * 1.5)))
+                        }
+                    }
+                }
+            }
+            .frame(height: 6)
+        } else {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.primary.opacity(0.05))
+                .frame(height: 6)
+        }
+    }
+
+    // 包管理器缓存详细行卡片
+    @ViewBuilder
+    private func cacheRow(_ cache: SharedCacheItemStats) -> some View {
+        let theme = cacheTheme(for: cache.id)
+        
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                // 专属渐变发光徽标
+                LinearGradient(colors: theme.colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .mask(
+                        Image(systemName: theme.icon)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .padding(8)
+                    )
+                    .frame(width: 38, height: 38)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(LinearGradient(colors: theme.colors.map { $0.opacity(0.12) }, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(LinearGradient(colors: theme.colors.map { $0.opacity(0.3) }, startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+                    )
+                
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(localizedCacheName(cache))
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    
+                    HStack(spacing: 6) {
+                        Text(cache.path)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary.opacity(0.8))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                        
+                        Button {
+                            let pb = NSPasteboard.general
+                            pb.clearContents()
+                            pb.setString(cache.path, forType: .string)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help(L10n.k("common.action.copy_path", fallback: "复制路径"))
+                    }
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(formatBytes(cache.totalBytes))
+                        .font(.system(.title3, design: .rounded).bold())
+                        .foregroundStyle(.primary)
+                        .monospacedDigit()
                     Text(L10n.f("settings.cache.file_count", fallback: "%@ 个文件", String(cache.fileCount)))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
-                if !cache.breakdown.isEmpty {
-                    ForEach(cache.breakdown) { item in
-                        HStack {
-                            Text(localizedBreakdownLabel(item.label))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(formatBytes(item.bytes))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
+            }
+            
+            // 子分类数据分布
+            if !cache.breakdown.isEmpty {
+                VStack(spacing: 8) {
+                    segmentedProgressBar(for: cache, colors: theme.colors)
+                    
+                    // 横向流式 Breakdown 标记排版
+                    HStack(spacing: 12) {
+                        ForEach(Array(cache.breakdown.enumerated()), id: \.element.label) { index, item in
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(breakdownColor(index: index, baseColors: theme.colors))
+                                    .frame(width: 6, height: 6)
+                                Text(localizedBreakdownLabel(item.label))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(formatBytes(item.bytes))
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(.primary)
+                                    .monospacedDigit()
+                            }
                         }
+                        Spacer()
                     }
+                    .padding(.top, 2)
                 }
-                HStack(spacing: 10) {
+            }
+            
+            // 卡片层面的动作交互与局部状态气泡
+            HStack {
+                HStack(spacing: 8) {
                     if cache.supportsRefresh {
                         Button {
                             Task { await refreshCache(cache.id) }
                         } label: {
-                            if refreshingIDs.contains(cache.id) {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Label(L10n.k("settings.cache.update", fallback: "更新缓存"), systemImage: "square.and.arrow.down")
+                            HStack(spacing: 4) {
+                                if refreshingIDs.contains(cache.id) {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Image(systemName: "square.and.arrow.down")
+                                        .font(.caption.bold())
+                                }
+                                Text(L10n.k("settings.cache.update", fallback: "更新缓存"))
+                                    .font(.caption.bold())
                             }
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 10)
+                            .background(Color.accentColor.opacity(0.12))
+                            .foregroundStyle(Color.accentColor)
+                            .clipShape(Capsule())
                         }
+                        .buttonStyle(.plain)
                         .disabled(isBusy)
                     }
+                    
                     if cache.supportsClear {
-                        Button(role: .destructive) {
+                        Button {
                             Task { await clearCache(cache.id) }
                         } label: {
-                            if clearingIDs.contains(cache.id) {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Label(L10n.k("settings.cache.clear", fallback: "清空缓存"), systemImage: "trash")
+                            HStack(spacing: 4) {
+                                if clearingIDs.contains(cache.id) {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Image(systemName: "trash")
+                                        .font(.caption.bold())
+                                }
+                                Text(L10n.k("settings.cache.clear", fallback: "清空缓存"))
+                                    .font(.caption.bold())
                             }
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 10)
+                            .background(Color.red.opacity(0.12))
+                            .foregroundStyle(.red)
+                            .clipShape(Capsule())
                         }
+                        .buttonStyle(.plain)
                         .disabled(isBusy)
                     }
-                    Spacer()
                 }
+                
+                Spacer()
+                
+                // 成功/失败微型通知气泡
                 if let message = messageByID[cache.id], !message.isEmpty {
-                    Text(message)
+                    Label(message, systemImage: "checkmark.circle.fill")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.green)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 8)
+                        .background(Color.green.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
+                
                 if let error = errorByID[cache.id], !error.isEmpty {
-                    Text(error)
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(.red)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 8)
+                        .background(Color.red.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
             }
-            .padding(.vertical, 2)
         }
+        .padding(14)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        )
     }
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Divider()
             HStack {
-                Button(role: .destructive) {
-                    Task { await clearCache("all") }
-                } label: {
-                    if clearingIDs.contains("all") {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Label(L10n.k("settings.cache.clear_all", fallback: "清空全部缓存"), systemImage: "trash.slash")
-                    }
-                }
-                .disabled(isBusy)
+                Label(L10n.k("settings.cache.footer_hint", fallback: "提示：清理共享缓存可安全释放系统存储空间。当重新构建环境时，相应的依赖将从网络自动拉取并再次生成缓存。"), systemImage: "info.circle")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary.opacity(0.8))
                 Spacer()
             }
+            .padding(.top, 4)
+            
             if let globalMessage, !globalMessage.isEmpty {
-                Text(globalMessage)
+                Label(globalMessage, systemImage: "checkmark.circle.fill")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.green)
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8)
+                    .background(Color.green.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             if let globalError, !globalError.isEmpty {
-                Text(globalError)
+                Label(globalError, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8)
+                    .background(Color.red.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
             }
         }
     }

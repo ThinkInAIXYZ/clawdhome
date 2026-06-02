@@ -52,7 +52,8 @@ struct SpeechHistoryStoreTests {
             transcriptText: "older transcript",
             elapsedSeconds: 1,
             status: .completed,
-            errorSummary: nil
+            errorSummary: nil,
+            vocalEnhanceEnabled: true
         )
         let newer = SpeechHistoryRecord(
             id: newerID,
@@ -78,6 +79,7 @@ struct SpeechHistoryStoreTests {
         expect(loaded.count == 2, "save should persist items")
         expect(loaded.map(\.id) == [newerID, olderID], "items should be sorted newest-first")
         expect(loaded.first?.sourceFilePath == missingSource, "missing source path should not break load")
+        expect(loaded.last?.vocalEnhanceEnabled == true, "vocal enhance flag should survive save and load")
 
         let updatedOlder = SpeechHistoryRecord(
             id: olderID,

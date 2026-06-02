@@ -13,6 +13,9 @@ struct LLMManagerTab: View {
     @State private var searchText: String = ""
     @State private var collapsedGroups: Set<String> = []
     @State private var hoveredCardId: UUID? = nil
+    
+    // 双视图状态：0 账户管理，1 排序与默认
+    @State private var viewMode = 0
 
     private var deleteTarget: ProviderTemplate? {
         guard let id = deleteConfirmId else { return nil }
@@ -93,7 +96,7 @@ struct LLMManagerTab: View {
     @ViewBuilder
     private var header: some View {
         VStack(spacing: 12) {
-            HStack(alignment: .top) {
+            HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L10n.k("views.model_manager.llmmanager_tab.global_model_pool", fallback: "全局模型池"))
                         .font(.system(size: 18, weight: .bold))
@@ -103,11 +106,22 @@ struct LLMManagerTab: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
+                
                 Spacer()
+                
+                // 双分栏控制切换器
+                if !modelStore.providers.isEmpty {
+                    Picker("", selection: $viewMode) {
+                        Text(L10n.k("views.model_manager.llmmanager_tab.view_accounts", fallback: "账户管理")).tag(0)
+                        Text(L10n.k("views.model_manager.llmmanager_tab.view_sorting", fallback: "排序与默认")).tag(1)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 220)
+                }
             }
             
-            // 搜索框 - 拟物化亮边设计
-            if !modelStore.providers.isEmpty {
+            // 搜索框 - 仅在账户管理视图下显示
+            if !modelStore.providers.isEmpty && viewMode == 0 {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
@@ -161,6 +175,9 @@ struct LLMManagerTab: View {
                 .buttonStyle(.borderedProminent)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if viewMode == 1 {
+            // 平铺排序与默认模型列表视图
+            sortingAndDefaultView
         } else if !hasAnyResults {
             ContentUnavailableView {
                 Label(L10n.k("views.model_manager.llmmanager_tab.no_results", fallback: "无匹配结果"), systemImage: "magnifyingglass")
@@ -202,6 +219,161 @@ struct LLMManagerTab: View {
                 }
                 .buttonStyle(.plain)
                 .padding(24)
+            }
+        }
+    }
+
+    // MARK: - 模型排序与系统默认平铺控制视图
+
+    @ViewBuilder
+    private var sortingAndDefaultView: some View {
+        let activeModels = modelStore.sortedActiveModels
+        
+        VStack(alignment: .leading, spacing: 0) {
+            // 说明提示条 - 高质感小卡片
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle.fill")
+                    .foregroundStyle(Color.blue)
+                    .font(.system(size: 13))
+                
+                Text(L10n.k("views.model_manager.llmmanager_tab.sorting_hint", fallback: "上下拖拽调整已启用模型的展示优先级；点击“星标”将其设为全局默认模型。"))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.blue.opacity(colorScheme == .dark ? 0.08 : 0.05))
+            .cornerRadius(8)
+            .padding(.horizontal, 24)
+            .padding(.top, 4)
+            .padding(.bottom, 12)
+            
+            if activeModels.isEmpty {
+                ContentUnavailableView {
+                    Label(L10n.k("views.model_manager.llmmanager_tab.no_active_models", fallback: "无启用的模型"), systemImage: "star.slash")
+                } description: {
+                    Text(L10n.k("views.model_manager.llmmanager_tab.no_active_models_desc", fallback: "请先在「账户管理」中添加账户并勾选需要启用的模型。"))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(activeModels) { item in
+                        HStack(spacing: 12) {
+                            // A. 六点手柄提示拖拽
+                            Image(systemName: "line.3.horizontal")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                                .frame(width: 20)
+                            
+                            // B. 服务商渐变徽章
+                            let cardTheme: DesignSystem.GradientTheme = {
+                                switch item.provider.providerGroupId.lowercased() {
+                                case "kimi": return .emerald
+                                case "openai": return .teal
+                                case "anthropic": return .purple
+                                case "qiniu": return .orange
+                                case "custom": return .blue
+                                default: return .blue
+                                }
+                            }()
+                            
+                            let iconName: String = {
+                                switch item.provider.providerGroupId.lowercased() {
+                                case "kimi": return "bolt.shield.fill"
+                                case "openai": return "cpu.fill"
+                                case "anthropic": return "brain.head.profile"
+                                case "qiniu": return "cloud.fill"
+                                case "custom": return "gearshape.2.fill"
+                                default: return "cpu"
+                                }
+                            }()
+                            
+                            ZStack {
+                                Circle()
+                                    .fill(cardTheme.mainColor.opacity(0.1))
+                                    .frame(width: 28, height: 28)
+                                Image(systemName: iconName)
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(cardTheme.mainColor)
+                            }
+                            
+                            // C. 模型和别名
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(item.modelId)
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(.primary)
+                                
+                                Text(item.provider.displayNameWithAlias)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            // D. 默认星标徽章
+                            if item.isDefault {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "star.fill")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(Color.orange)
+                                    Text(L10n.k("views.model_manager.llmmanager_tab.system_default", fallback: "系统默认"))
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(Color.orange)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3.5)
+                                .background(Color.orange.opacity(0.12))
+                                .cornerRadius(6)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(Color.orange.opacity(0.24), lineWidth: 0.7)
+                                )
+                            } else {
+                                Button {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        modelStore.setDefaultModel(key: item.id)
+                                    }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "star")
+                                            .font(.system(size: 9))
+                                        Text(L10n.k("views.model_manager.llmmanager_tab.set_as_default", fallback: "设为默认"))
+                                            .font(.system(size: 10))
+                                    }
+                                    .foregroundColor(.secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3.5)
+                                    .background(Color.white.opacity(0.04))
+                                    .cornerRadius(6)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(Color.white.opacity(0.06), lineWidth: 0.7)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 12)
+                        .background(Color.secondary.opacity(colorScheme == .dark ? 0.03 : 0.02))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(item.isDefault ? Color.orange.opacity(0.2) : Color.primary.opacity(0.04), lineWidth: 1)
+                        )
+                        .listRowInsets(EdgeInsets(top: 4, leading: 24, bottom: 4, trailing: 24))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+                    .onMove { indices, newOffset in
+                        modelStore.moveActiveModel(from: indices, to: newOffset)
+                    }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
             }
         }
     }

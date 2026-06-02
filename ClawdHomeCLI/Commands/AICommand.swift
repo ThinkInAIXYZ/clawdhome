@@ -36,7 +36,7 @@ enum AICommand {
 
         示例:
           clawdhome ai asr transcribe meeting.m4a
-          clawdhome ai asr pull qwen3-asr-0.6b
+          clawdhome ai asr pull qwen3-asr-1.7b-8bit
         """)
     }
 }
@@ -69,7 +69,7 @@ private enum ASRCommand {
         let error: String?
     }
 
-    private static let defaultModelID = "qwen3-asr-0.6b"
+    private static let defaultModelID = "qwen3-asr-1.7b-8bit"
     private static let models = [
         Model(
             id: "qwen3-asr-0.6b",
@@ -127,12 +127,12 @@ private enum ASRCommand {
           transcribe <audio-file>     转写音频文件
 
         Options:
-          --model <id>                ASR 模型（默认 qwen3-asr-0.6b）
+          --model <id>                ASR 模型（默认 qwen3-asr-1.7b-8bit）
           --language <code>           语言提示，例如 zh 或 en
 
         示例:
-          clawdhome ai asr pull qwen3-asr-0.6b
-          clawdhome ai asr transcribe meeting.m4a --model qwen3-asr-0.6b
+          clawdhome ai asr pull qwen3-asr-1.7b-8bit
+          clawdhome ai asr transcribe meeting.m4a --model qwen3-asr-1.7b-8bit
         """)
     }
 

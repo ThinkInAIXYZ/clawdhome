@@ -2484,7 +2484,7 @@ struct HermesDetailContainer: View {
                         profiles: profiles,
                         selectedProfileID: selectedProfileID,
                         isConnected: helperClient.isConnected,
-                        isLoading: isLoading || isUpgradingHermes,
+                        isLoading: isLoading || isUpgradingHermes || !profilesLoaded,
                         runtimeVersion: user.hermesVersion,
                         latestRuntimeVersion: hermesLatestVersion,
                         isCheckingRuntimeUpdate: isCheckingHermesUpdate,
@@ -2645,13 +2645,11 @@ struct HermesDetailContainer: View {
                 hermesBatchBar
             }
 
-            // Hermes logo
-            Image("HermesLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: detailSidebarShowsLabels ? 48 : 32, height: detailSidebarShowsLabels ? 48 : 32)
+            // Hermes logo / Shrimp Avatar
+            ShrimpAvatarView(claw: user, size: detailSidebarShowsLabels ? 48 : 32, isEditable: true)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 4)
+
 
             // 默认角色
             if detailSidebarShowsLabels {

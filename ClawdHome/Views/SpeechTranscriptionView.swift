@@ -3,14 +3,36 @@ import SwiftUI
 import UniformTypeIdentifiers
 import MarkdownUI
 
+enum SpeechTranscriptionSaveButtonPolicy {
+    static func shouldShow(isTranscribing: Bool, isContentModified: Bool, didSaved: Bool) -> Bool {
+        guard !isTranscribing else { return false }
+        return isContentModified || didSaved
+    }
+}
+
 struct SpeechTranscriptionView: View {
     var onBack: (() -> Void)? = nil
     @Environment(HelperClient.self) private var helperClient
     @Environment(GlobalModelStore.self) private var modelStore
+    @Environment(\.colorScheme) private var colorScheme
     @State private var service = SpeechTranscriptionService.shared
 
+    private var markdownPreviewBackground: Color {
+        colorScheme == .dark
+            ? Color(red: 0.05, green: 0.07, blue: 0.10)
+            : Color(NSColor.textBackgroundColor)
+    }
 
-    
+    @State private var isImportHovered = false
+    @State private var importWaveScale = 1.0
+    @State private var importWaveOpacity = 0.15
+    @State private var importBorderOpacity = 0.08
+
+
+
+
+
+
     // 是否正在拖拽文件悬停于导入区
     @State private var isDragTargeted = false
     // ASR 配置弹出面板是否显示
@@ -19,30 +41,34 @@ struct SpeechTranscriptionView: View {
     @State private var showRefineSheet = false
     // 复制成功短暂提示状态
     @State private var didCopied = false
-    
+
     // 【新增】内容展现维度与预览格式切换定义
     enum ContentDimension: String, CaseIterable, Identifiable {
         case raw = "粗稿原文"
         case refined = "AI 智能精装稿"
         case srt = "实时字幕"
-        
+
         var id: String { rawValue }
     }
-    
+
     enum PreviewFormat: String, CaseIterable, Identifiable {
         case txt = "TXT"
         case md = "MD"
-        
+
         var id: String { rawValue }
     }
-    
+
     @State private var selectedContentTab: ContentDimension = .raw
     @State private var previewFormat: PreviewFormat = .txt
     @State private var editedRefinedText = ""
     @State private var editedRawText = ""
     @State private var isSaving = false
     @State private var didSaved = false
-    
+
+    @State private var didSyncObsidian = false
+    @State private var syncObsidianError: String? = nil
+    @State private var isSyncingObsidian = false
+
     @AppStorage("hf_endpoint_preference") private var hfEndpointPreference = ""
     @AppStorage("custom_hf_endpoint") private var customHFEndpoint = ""
     @AppStorage("hf_token_preference") private var hfTokenPreference = ""
@@ -55,7 +81,7 @@ struct SpeechTranscriptionView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
                 .background(Color(NSColor.windowBackgroundColor).opacity(0.4))
-                
+
             Divider()
 
             GeometryReader { proxy in
@@ -111,12 +137,12 @@ struct SpeechTranscriptionView: View {
                             Circle()
                                 .stroke(service.availability.isAvailable ? Color.green.opacity(0.18) : Color.orange.opacity(0.18), lineWidth: 0.5)
                         )
-                    
+
                     Image(systemName: "waveform.and.mic")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(service.availability.isAvailable ? Color.green : Color.orange)
                 }
-                
+
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Qwen3-ASR")
                         .font(.system(size: 13, weight: .bold))
@@ -131,15 +157,15 @@ struct SpeechTranscriptionView: View {
                     }
                 }
             }
-            
+
             Spacer()
-            
-            // 右侧：刷新与引擎配置
+
+            // 右侧：模型目录与引擎配置
             HStack(spacing: 10) {
                 Button {
-                    Task { await refreshService() }
+                    service.openModelsDirectory()
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    Image(systemName: "folder.badge.gearshape")
                         .font(.system(size: 12, weight: .medium))
                         .frame(width: 28, height: 28)
                         .background(
@@ -152,7 +178,8 @@ struct SpeechTranscriptionView: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .help(L10n.k("speech.refresh", fallback: "刷新"))
+                .help(L10n.k("speech.models.open_cache_help", fallback: "在 Finder 中打开模型缓存目录"))
+
 
                 Button {
                     showSettingsPopover.toggle()
@@ -185,7 +212,7 @@ struct SpeechTranscriptionView: View {
     // MARK: - =========================================================================
     // MARK: - [版本 1] 侧边工作流分栏版 (Workspace Split Layout)
     // MARK: - =========================================================================
-    
+
     private var v1WorkspaceLayout: some View {
         VStack(spacing: 0) {
             // 核心转写工作流（左：导入与队列控制，右：结果展示）
@@ -193,16 +220,16 @@ struct SpeechTranscriptionView: View {
                 // 左侧：导入区 + 队列控制 + 历史记录
                 VStack(spacing: 16) {
                     v1QueueDropZoneCard
-                    
+
                     if !service.queue.isEmpty {
                         v1QueueControlBar
                     }
-                    
+
                     v1HistoryCard
                         .frame(maxHeight: .infinity)
                 }
                 .frame(maxWidth: 360, maxHeight: .infinity)
-                
+
                 // 右侧：结果展示工作区
                 v1ResultWorkspaceCard
                     .frame(maxHeight: .infinity)
@@ -211,9 +238,9 @@ struct SpeechTranscriptionView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
-    
 
-    
+
+
     // V1 批量音频队列导入区 (整合模型选择与状态下载条的一体化设计)
     private var v1QueueDropZoneCard: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -224,9 +251,9 @@ struct SpeechTranscriptionView: View {
                         Label(L10n.k("speech.model", fallback: "模型选择"), systemImage: "cpu")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.secondary)
-                        
+
                         Spacer()
-                        
+
                         // 精美紧凑的就绪标志
                         if !service.isPreparingModel && service.isSelectedModelDownloaded {
                             HStack(spacing: 4) {
@@ -240,7 +267,7 @@ struct SpeechTranscriptionView: View {
                             }
                         }
                     }
-                    
+
                     HStack(spacing: 8) {
                         Picker("", selection: $service.selectedModelID) {
                             ForEach(curatedSpeechModels) { model in
@@ -249,7 +276,7 @@ struct SpeechTranscriptionView: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        
+
                         // 未下载状态迷你下载按钮
                         if !service.isPreparingModel && !service.isSelectedModelDownloaded {
                             Button {
@@ -270,17 +297,17 @@ struct SpeechTranscriptionView: View {
                             .disabled(service.isPreparingModel || service.isTranscribing)
                         }
                     }
-                    
+
                     // 正在准备模型时的微型进度条与百分比
                     if service.isPreparingModel {
                         HStack(spacing: 8) {
                             ProgressView(value: service.preparationProgressFraction)
                                 .progressViewStyle(.linear)
-                            
+
                             Text(service.preparationProgressPercentText)
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                                 .foregroundStyle(.blue)
-                            
+
                             Button {
                                 service.cancelModelPreparation()
                             } label: {
@@ -300,7 +327,7 @@ struct SpeechTranscriptionView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.primary.opacity(0.04), lineWidth: 1)
                 )
-                
+
                 Divider()
                     .opacity(0.4)
             }
@@ -310,9 +337,9 @@ struct SpeechTranscriptionView: View {
                 Label(L10n.k("speech.import", fallback: "音频导入队列"), systemImage: "list.number")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.secondary)
-                
+
                 Spacer()
-                
+
                 if !service.queue.isEmpty && !service.isTranscribing {
                     Button {
                         withAnimation { service.clearSelection() }
@@ -322,47 +349,109 @@ struct SpeechTranscriptionView: View {
                             .foregroundStyle(.red.opacity(0.7))
                     }
                     .buttonStyle(.plain)
-                    .help("清空队列")
+                    .help(L10n.k("speech.queue.clear_help", fallback: "清空队列"))
                 }
             }
             .frame(height: 28)
-            
+
             // 拖拽投放区（始终显示，可追加文件）
             let borderStroke = StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round, dash: [5, 4])
             ZStack {
+                // 1. 高级极光渐变背景
                 RoundedRectangle(cornerRadius: 12)
                     .fill(
                         isDragTargeted
                             ? LinearGradient(colors: [Color.blue.opacity(0.08), Color.purple.opacity(0.04)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                            : LinearGradient(colors: [Color.primary.opacity(0.01), Color.primary.opacity(0.005)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            : (isImportHovered
+                               ? LinearGradient(colors: [Color.blue.opacity(0.04), Color.purple.opacity(0.01)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                               : LinearGradient(colors: [Color.primary.opacity(0.015), Color.primary.opacity(0.005)], startPoint: .topLeading, endPoint: .bottomTrailing))
                     )
+                    .animation(.easeInOut(duration: 0.3), value: isDragTargeted || isImportHovered)
+
+                // 2. 悬浮微弱阴影（Hover/Drag 产生发光和立体悬浮感）
+                if isImportHovered || isDragTargeted {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.clear)
+                        .shadow(color: Color.blue.opacity(isDragTargeted ? 0.12 : 0.04), radius: 8, x: 0, y: 4)
+                }
+
+                // 3. 动态呼吸虚线边框
                 RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(isDragTargeted ? Color.blue.opacity(0.7) : Color.primary.opacity(0.07), style: borderStroke)
-                
-                HStack(spacing: 10) {
+                    .strokeBorder(
+                        isDragTargeted
+                            ? Color.blue.opacity(0.8)
+                            : (isImportHovered ? Color.blue.opacity(0.35) : Color.blue.opacity(importBorderOpacity)),
+                        style: borderStroke
+                    )
+                    .animation(.easeInOut(duration: 0.3), value: isDragTargeted || isImportHovered)
+
+                // 4. 左侧图标与文本内容排版
+                HStack(spacing: 12) {
                     ZStack {
+                        // 【新增】常态声纳雷达水波纹涟漪 (只有在常态且队列为空时，静谧扩散)
+                        if service.queue.isEmpty && !isImportHovered && !isDragTargeted {
+                            Circle()
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [Color.blue.opacity(0.35), Color.purple.opacity(0.1)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1
+                                )
+                                .frame(width: 36, height: 36)
+                                .scaleEffect(importWaveScale)
+                                .opacity(importWaveOpacity)
+                        }
+
+                        // 动态微光光晕圆形底色
                         Circle()
-                            .fill(isDragTargeted ? Color.blue.opacity(0.12) : Color.blue.opacity(0.06))
-                            .frame(width: 34, height: 34)
+                            .fill(
+                                isDragTargeted
+                                    ? Color.blue.opacity(0.16)
+                                    : (isImportHovered ? Color.blue.opacity(0.10) : Color.blue.opacity(0.05))
+                            )
+                            .frame(width: 36, height: 36)
+                            .scaleEffect(isImportHovered ? 1.08 : 1.0)
+                            .animation(.spring(response: 0.4, dampingFraction: 0.65), value: isImportHovered)
+
                         Image(systemName: isDragTargeted ? "arrow.down.circle.fill" : "plus.circle")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.blue)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: isImportHovered || isDragTargeted ? [.blue, .purple] : [.blue, .blue.opacity(0.8)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                             .offset(y: isDragTargeted ? 2 : 0)
-                            .animation(.easeInOut(duration: 0.4).repeatForever(autoreverses: true), value: isDragTargeted)
+                            .scaleEffect(isImportHovered ? 1.06 : 1.0)
+                            .animation(.spring(response: 0.35, dampingFraction: 0.6), value: isDragTargeted || isImportHovered)
+                            .animation(isDragTargeted ? .easeInOut(duration: 0.4).repeatForever(autoreverses: true) : .default, value: isDragTargeted)
                     }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(service.queue.isEmpty ? L10n.k("speech.drag_hint", fallback: "拖拽音频至此，或点击选择") : "继续添加更多文件…")
-                            .font(.system(size: 12, weight: .medium))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(service.queue.isEmpty ? L10n.k("speech.drag_hint", fallback: "将音频文件拖拽至此，或点击选择") : "继续添加更多文件…")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(isImportHovered ? Color.primary : Color.primary.opacity(0.85))
+
                         Text("MP3 · WAV · M4A · FLAC · AAC")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 9.5, design: .monospaced))
+                            .foregroundStyle(isImportHovered ? Color.secondary : Color.secondary.opacity(0.6))
                     }
+                    .animation(.easeInOut(duration: 0.25), value: isImportHovered)
+
                     Spacer()
                 }
                 .padding(.horizontal, 14)
             }
             .frame(height: 64)
             .contentShape(RoundedRectangle(cornerRadius: 12))
+            .onHover { hover in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isImportHovered = hover
+                }
+            }
             .onTapGesture { chooseAudioFile() }
             .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
                 let urls = providers.compactMap { provider -> URL? in
@@ -384,23 +473,40 @@ struct SpeechTranscriptionView: View {
                 }
                 return true
             }
-            
-            // 队列任务列表
-            if !service.queue.isEmpty {
-                VStack(spacing: 6) {
-                    ForEach(service.queue) { item in
-                        v1QueueItemRow(item: item)
+            .onAppear {
+                // 将无限循环动画的触发强行延迟到下一个 RunLoop 渲染周期，确保 100% 顺利激活
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 3.2).repeatForever(autoreverses: false)) {
+                        importWaveScale = 1.7
+                        importWaveOpacity = 0.0
+                    }
+                    withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
+                        importBorderOpacity = 0.22
                     }
                 }
             }
+
+            // 队列任务列表
+            if !service.queue.isEmpty {
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(service.queue) { item in
+                            v1QueueItemRow(item: item)
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 2)
+                }
+                .frame(maxHeight: min(CGFloat(service.queue.count) * 48, 240))
+            }
         }
     }
-    
+
     // V1 队列单行任务卡片
     @ViewBuilder
     private func v1QueueItemRow(item: SpeechQueueItem) -> some View {
         let isSelected = service.selectedQueueItem?.id == item.id
-        
+
         Button {
             withAnimation(.easeInOut(duration: 0.15)) {
                 service.selectedQueueItem = item
@@ -412,7 +518,7 @@ struct SpeechTranscriptionView: View {
                     Circle()
                         .fill(queueItemStatusColor(item.status).opacity(0.12))
                         .frame(width: 28, height: 28)
-                    
+
                     if item.status == .transcribing {
                         ProgressView()
                             .scaleEffect(0.55)
@@ -423,18 +529,18 @@ struct SpeechTranscriptionView: View {
                             .foregroundStyle(queueItemStatusColor(item.status))
                     }
                 }
-                
+
                 // 文件名与进度/状态
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.fileURL.lastPathComponent)
                         .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                         .foregroundColor(isSelected ? .blue : .primary)
-                    
+
                     if item.status == .transcribing {
                         HStack(spacing: 6) {
                             Text(item.statusMessage ?? queueItemStatusLabel(item.status))
-                            
+
                             // 真正开始 ASR 转换阶段时，才开始显示速率
                             if item.stage == .transcribing, let speed = item.asrSpeed {
                                 Text("⚡️ \(speed)")
@@ -447,7 +553,7 @@ struct SpeechTranscriptionView: View {
                         .lineLimit(1)
                     } else if item.status == .completed {
                         HStack(spacing: 6) {
-                            Text("✓ 完成 · \(String(format: "%.1fs", item.elapsedSeconds)) · \(item.transcriptText.count)字")
+                            Text(L10n.f("speech.queue.completed_meta", fallback: "✓ 完成 · %.1fs · %d 字", item.elapsedSeconds, item.transcriptText.count))
                             if let speed = item.asrSpeed {
                                 Text("⚡️ \(speed)")
                                     .foregroundStyle(.purple.opacity(0.8))
@@ -457,12 +563,12 @@ struct SpeechTranscriptionView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     } else if item.status == .failed {
-                        Text(item.errorSummary ?? "转写失败")
+                        Text(item.errorSummary ?? L10n.k("speech.queue.failed", fallback: "转写失败"))
                             .font(.system(size: 9))
                             .foregroundStyle(.red.opacity(0.8))
                             .lineLimit(1)
                     } else if item.status == .cancelled {
-                        Text("已取消")
+                        Text(L10n.k("speech.queue.cancelled", fallback: "已取消"))
                             .font(.system(size: 9))
                             .foregroundStyle(.secondary)
                     } else {
@@ -471,9 +577,9 @@ struct SpeechTranscriptionView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                
+
                 Spacer()
-                
+
                 // 真正开始 ASR 转换时，才在右侧显示 ASR 进度的百分比
                 if item.status == .transcribing && item.stage == .transcribing {
                     Text("\(Int((item.stageProgress * 100).rounded()))%")
@@ -532,7 +638,7 @@ struct SpeechTranscriptionView: View {
         }
         .buttonStyle(.plain)
     }
-    
+
     private func queueItemStatusIcon(_ status: SpeechQueueItemStatus) -> String {
         switch status {
         case .waiting:     return "clock"
@@ -542,7 +648,7 @@ struct SpeechTranscriptionView: View {
         case .cancelled:   return "xmark"
         }
     }
-    
+
     private func queueItemStatusColor(_ status: SpeechQueueItemStatus) -> Color {
         switch status {
         case .waiting:     return .secondary
@@ -552,7 +658,7 @@ struct SpeechTranscriptionView: View {
         case .cancelled:   return .secondary
         }
     }
-    
+
     private func queueItemStatusLabel(_ status: SpeechQueueItemStatus) -> String {
         switch status {
         case .waiting:     return "等待中"
@@ -562,7 +668,7 @@ struct SpeechTranscriptionView: View {
         case .cancelled:   return "已取消"
         }
     }
-    
+
     // V1 批量队列控制条（替代原单文件控制面板）
     private var v1QueueControlBar: some View {
         VStack(spacing: 10) {
@@ -576,7 +682,7 @@ struct SpeechTranscriptionView: View {
                         Spacer()
                         Image(systemName: "stop.circle.fill")
                             .font(.system(size: 12))
-                        Text("中止全部转写")
+                        Text(L10n.k("speech.queue.cancel_all", fallback: "中止全部转写"))
                             .font(.system(size: 12, weight: .bold))
                         Spacer()
                     }
@@ -597,7 +703,7 @@ struct SpeechTranscriptionView: View {
                 // 等待启动状态
                 let waitingCount = service.queue.filter { $0.status == .waiting }.count
                 let completedCount = service.queue.filter { $0.status == .completed }.count
-                
+
                 HStack(spacing: 8) {
                     // 开始批量转写
                     Button {
@@ -607,7 +713,7 @@ struct SpeechTranscriptionView: View {
                             Spacer()
                             Image(systemName: waitingCount > 1 ? "play.circle.fill" : "play.fill")
                                 .font(.system(size: 13))
-                            Text(waitingCount > 1 ? "批量转写 (\(waitingCount)个)" : "开始转写")
+                            Text(waitingCount > 1 ? L10n.f("speech.queue.start_batch", fallback: "批量转写（%d 个）", waitingCount) : L10n.k("speech.queue.start_one", fallback: "开始转写"))
                                 .font(.system(size: 12, weight: .bold))
                             Spacer()
                         }
@@ -625,7 +731,7 @@ struct SpeechTranscriptionView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!service.availability.isAvailable || waitingCount == 0 || service.isPreparingModel)
-                    
+
                     // 清理已完成/失败/取消的任务
                     if completedCount > 0 {
                         Button {
@@ -643,11 +749,11 @@ struct SpeechTranscriptionView: View {
                                 )
                         }
                         .buttonStyle(.plain)
-                        .help("清理已完成的任务")
+                        .help(L10n.k("speech.queue.clean_completed_help", fallback: "清理已完成的任务"))
                     }
                 }
             }
-            
+
             if let error = service.lastErrorMessage, !error.isEmpty {
                 Text(error)
                     .font(.caption)
@@ -656,7 +762,7 @@ struct SpeechTranscriptionView: View {
             }
         }
     }
-    
+
     // V1 结果展示工作区
     private var v1ResultWorkspaceCard: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -664,36 +770,38 @@ struct SpeechTranscriptionView: View {
                 // 1. 首选长布局（行内完整版，适合超大屏幕 >= 650pt）
                 HStack(spacing: 8) {
                     HStack(spacing: 6) {
-                        Label("内容整理", systemImage: "doc.text.magnifyingglass")
+                        Label(L10n.k("speech.content.title", fallback: "内容整理"), systemImage: "doc.text.magnifyingglass")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(.secondary)
                         wordCountBadge
                     }
-                    
+
                     Spacer(minLength: 16)
-                    
+
                     Picker("", selection: $selectedContentTab) {
-                        Text("📝 粗稿原文").tag(ContentDimension.raw)
-                        Text("✨ AI 精装稿").tag(ContentDimension.refined)
-                        Text("🎬 实时字幕").tag(ContentDimension.srt)
+                        Text(L10n.k("speech.content.tab.raw", fallback: "📝 粗稿原文")).tag(ContentDimension.raw)
+                        Text(L10n.k("speech.content.tab.refined", fallback: "✨ AI 精装稿")).tag(ContentDimension.refined)
+                        Text(L10n.k("speech.content.tab.srt", fallback: "🎬 实时字幕")).tag(ContentDimension.srt)
                     }
                     .pickerStyle(.segmented)
                     .frame(width: 320)
-                    
+
                     Spacer(minLength: 16)
-                    
+
                     HStack(spacing: 6) {
                         if selectedContentTab != .srt {
                             Picker("", selection: $previewFormat) {
-                                Text("📄 源码").tag(PreviewFormat.txt)
-                                Text("👁️ 预览").tag(PreviewFormat.md)
+                                Text(L10n.k("speech.preview.source", fallback: "📄 源码")).tag(PreviewFormat.txt)
+                                Text(L10n.k("speech.preview.rendered", fallback: "👁️ 预览")).tag(PreviewFormat.md)
                             }
                             .pickerStyle(.segmented)
                             .frame(width: 135) // 增大到 135 彻底修复“预览”与“AI润色”重叠问题
+                            .padding(.trailing, 4)
                         }
                         refineButton
                         copyButton
-                        if isContentModified || didSaved {
+                        obsidianSyncButton
+                        if shouldShowSaveButton {
                             saveButton
                                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
                         }
@@ -701,23 +809,23 @@ struct SpeechTranscriptionView: View {
                 }
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(height: 28)
-                
+
                 // 2. 宽屏行内精简版（省略“内容整理”文字标题以节省水平空间，适合 >= 520pt）
                 HStack(spacing: 8) {
                     wordCountBadge
-                    
+
                     Spacer(minLength: 12)
-                    
+
                     Picker("", selection: $selectedContentTab) {
-                        Text("📝 粗稿原文").tag(ContentDimension.raw)
-                        Text("✨ AI 精装稿").tag(ContentDimension.refined)
-                        Text("🎬 实时字幕").tag(ContentDimension.srt)
+                        Text(L10n.k("speech.content.tab.raw", fallback: "📝 粗稿原文")).tag(ContentDimension.raw)
+                        Text(L10n.k("speech.content.tab.refined", fallback: "✨ AI 精装稿")).tag(ContentDimension.refined)
+                        Text(L10n.k("speech.content.tab.srt", fallback: "🎬 实时字幕")).tag(ContentDimension.srt)
                     }
                     .pickerStyle(.segmented)
                     .frame(width: 320)
-                    
+
                     Spacer(minLength: 12)
-                    
+
                     HStack(spacing: 6) {
                         if selectedContentTab != .srt {
                             Button {
@@ -732,11 +840,12 @@ struct SpeechTranscriptionView: View {
                                     .cornerRadius(6)
                             }
                             .buttonStyle(.plain)
-                            .help(previewFormat == .txt ? "切换到预览模式" : "切换到编辑模式")
+                            .help(previewFormat == .txt ? L10n.k("speech.preview.switch_rendered_help", fallback: "切换到预览模式") : L10n.k("speech.preview.switch_source_help", fallback: "切换到编辑模式"))
                         }
                         refineButton
                         copyButton
-                        if isContentModified || didSaved {
+                        obsidianSyncButton
+                        if shouldShowSaveButton {
                             saveButton
                                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
                         }
@@ -744,23 +853,23 @@ struct SpeechTranscriptionView: View {
                 }
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(height: 28)
-                
+
                 // 3. 窄屏极致图标版（精简三态 Picker 宽度至 200pt，且操作按钮全图标化，适合 >= 340pt）
                 HStack(spacing: 4) {
                     wordCountBadge
-                    
+
                     Spacer(minLength: 6)
-                    
+
                     Picker("", selection: $selectedContentTab) {
-                        Text("📝 原稿").tag(ContentDimension.raw)
-                        Text("✨ 精装").tag(ContentDimension.refined)
-                        Text("🎬 字幕").tag(ContentDimension.srt)
+                        Text(L10n.k("speech.content.tab.raw.short", fallback: "📝 原稿")).tag(ContentDimension.raw)
+                        Text(L10n.k("speech.content.tab.refined.short", fallback: "✨ 精装")).tag(ContentDimension.refined)
+                        Text(L10n.k("speech.content.tab.srt.short", fallback: "🎬 字幕")).tag(ContentDimension.srt)
                     }
                     .pickerStyle(.segmented)
                     .frame(width: 200)
-                    
+
                     Spacer(minLength: 6)
-                    
+
                     HStack(spacing: 4) {
                         if selectedContentTab != .srt {
                             Button {
@@ -775,11 +884,12 @@ struct SpeechTranscriptionView: View {
                                     .cornerRadius(6)
                             }
                             .buttonStyle(.plain)
-                            .help(previewFormat == .txt ? "切换到预览模式" : "切换到编辑模式")
+                            .help(previewFormat == .txt ? L10n.k("speech.preview.switch_rendered_help", fallback: "切换到预览模式") : L10n.k("speech.preview.switch_source_help", fallback: "切换到编辑模式"))
                         }
                         refineIconButton
                         copyIconButton
-                        if isContentModified || didSaved {
+                        obsidianSyncIconButton
+                        if shouldShowSaveButton {
                             saveButton
                                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
                         }
@@ -787,17 +897,17 @@ struct SpeechTranscriptionView: View {
                 }
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(height: 28)
-                
+
                 // 4. 极窄双行自适应版（双行物理排列，100% 确保窄窗口下所有控制元素完美外露不被切断遮挡，适合 < 340pt）
                 VStack(spacing: 6) {
                     HStack(spacing: 4) {
                         Picker("", selection: $selectedContentTab) {
-                            Text("📝 原稿").tag(ContentDimension.raw)
-                            Text("✨ 精装").tag(ContentDimension.refined)
-                            Text("🎬 字幕").tag(ContentDimension.srt)
+                            Text(L10n.k("speech.content.tab.raw.short", fallback: "📝 原稿")).tag(ContentDimension.raw)
+                            Text(L10n.k("speech.content.tab.refined.short", fallback: "✨ 精装")).tag(ContentDimension.refined)
+                            Text(L10n.k("speech.content.tab.srt.short", fallback: "🎬 字幕")).tag(ContentDimension.srt)
                         }
                         .pickerStyle(.segmented)
-                        
+
                         if selectedContentTab != .srt {
                             Button {
                                 withAnimation {
@@ -811,37 +921,38 @@ struct SpeechTranscriptionView: View {
                                     .cornerRadius(6)
                             }
                             .buttonStyle(.plain)
-                            .help(previewFormat == .txt ? "切换到预览模式" : "切换到编辑模式")
+                            .help(previewFormat == .txt ? L10n.k("speech.preview.switch_rendered_help", fallback: "切换到预览模式") : L10n.k("speech.preview.switch_source_help", fallback: "切换到编辑模式"))
                         }
                     }
-                    
+
                     HStack(spacing: 6) {
                         wordCountBadge
-                        
+
                         Spacer()
-                        
+
                         refineIconButton
                         copyIconButton
-                        if isContentModified || didSaved {
+                        obsidianSyncIconButton
+                        if shouldShowSaveButton {
                             saveButton
                                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
                         }
                     }
                 }
             }
-            .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isContentModified || didSaved)
-            
+            .animation(.spring(response: 0.3, dampingFraction: 0.75), value: shouldShowSaveButton)
+
             // 3. 底层编辑与预览核心视窗
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(NSColor.textBackgroundColor).opacity(0.22))
+                    .fill(markdownPreviewBackground)
                     .cornerRadius(16)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
                             .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
                     )
                     .shadow(color: Color.black.opacity(0.01), radius: 8, x: 0, y: 4)
-                
+
                 switch selectedContentTab {
                 case .raw:
                     rawContentEditor
@@ -851,17 +962,14 @@ struct SpeechTranscriptionView: View {
                     srtContentEditor
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onChange(of: service.selectedRecordID) { _, newID in
             if let record = service.selectedHistoryRecord {
                 editedRefinedText = record.refinedText ?? ""
                 editedRawText = record.transcriptText
-                if record.refinedText != nil {
-                    // 若有润色好的笔记，自动高亮切换为精装版，提升尊贵感！
-                    selectedContentTab = .refined
-                } else {
-                    selectedContentTab = .raw
-                }
+                // 始终默认显示原稿，不自动跳转到精装稿
+                selectedContentTab = .raw
             } else {
                 editedRefinedText = ""
                 editedRawText = service.currentTranscript
@@ -880,7 +988,7 @@ struct SpeechTranscriptionView: View {
             }
         }
     }
-    
+
     // A. 粗稿原文内容渲染区
     @ViewBuilder
     private var rawContentEditor: some View {
@@ -898,9 +1006,10 @@ struct SpeechTranscriptionView: View {
             ScrollView {
                 Markdown(service.currentTranscript)
                     .markdownTheme(.gitHub)
-                    .padding(16)
+                    .padding(24)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -920,23 +1029,23 @@ struct SpeechTranscriptionView: View {
                         )
                     )
                     .scaleEffect(1.1)
-                
-                Text("✨ 尚未进行 AI 智能精整与专名润色")
+
+                Text(L10n.k("speech.refine.empty_title", fallback: "✨ 尚未进行 AI 智能精整与专名润色"))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
-                
-                Text("一键消除口癖语气词，智能理顺断句，提取会议纪要、随记便签，保留原笔记的同时保留精装润色版。")
+
+                Text(L10n.k("speech.refine.empty_desc", fallback: "一键消除口癖语气词，智能理顺断句，提取会议纪要、随记便签，保留原笔记的同时保留精装润色版。"))
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 48)
-                
+
                 Button {
                     showRefineSheet = true
                 } label: {
                     HStack {
                         Image(systemName: "wand.and.stars")
-                        Text("立即开启智能精整魔法")
+                        Text(L10n.k("speech.refine.empty_action", fallback: "立即开启智能精整魔法"))
                             .fontWeight(.bold)
                     }
                     .foregroundColor(.white)
@@ -956,7 +1065,7 @@ struct SpeechTranscriptionView: View {
                 .disabled(service.currentTranscript.isEmpty)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
+
         } else if previewFormat == .txt {
             // 源码可编辑模式
             TextEditor(text: $editedRefinedText)
@@ -965,13 +1074,67 @@ struct SpeechTranscriptionView: View {
                 .padding(12)
                 .scrollContentBackground(.hidden)
         } else {
-            // Markdown 渲染预览模式（升级为 MarkdownUI 经典 GFM GitHub 主题渲染）
+            // Markdown 渲染预览模式（升级为 MarkdownUI 经典 GFM GitHub 主题渲染，追加 AI 精修元数据 Header 卡片）
             ScrollView {
-                Markdown(editedRefinedText)
-                    .markdownTheme(.gitHub)
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 20) {
+                    if let record = service.selectedHistoryRecord,
+                       ((record.refinedTitle?.isEmpty == false) || (record.refinedSummary?.isEmpty == false) || (record.refinedTags?.isEmpty == false)) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if let title = record.refinedTitle, !title.isEmpty {
+                                Text(title)
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(.primary)
+                            }
+
+                            if let summary = record.refinedSummary, !summary.isEmpty {
+                                HStack(alignment: .top, spacing: 6) {
+                                    Image(systemName: "quote.opening")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.purple)
+                                        .padding(.top, 2)
+                                    Text(summary)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                        .lineSpacing(3)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.purple.opacity(0.04))
+                                .cornerRadius(6)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(Color.purple.opacity(0.12), lineWidth: 0.5)
+                                )
+                            }
+
+                            if let tags = record.refinedTags, !tags.isEmpty {
+                                HStack(spacing: 6) {
+                                    ForEach(tags, id: \.self) { tag in
+                                        Text("#\(tag)")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 3)
+                                            .background(Color.blue.opacity(0.08))
+                                            .foregroundColor(.blue)
+                                            .cornerRadius(6)
+                                    }
+                                }
+                                .padding(.top, 2)
+                            }
+
+                            Divider()
+                                .padding(.vertical, 8)
+                        }
+                    }
+
+                    Markdown(editedRefinedText)
+                        .markdownTheme(.gitHub)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -989,8 +1152,8 @@ struct SpeechTranscriptionView: View {
                 .scrollContentBackground(.hidden)
         }
     }
-    
-    
+
+
     private var currentWordCount: Int {
         switch selectedContentTab {
         case .raw: return service.currentTranscript.count
@@ -1010,6 +1173,14 @@ struct SpeechTranscriptionView: View {
         case .srt:
             return false
         }
+    }
+
+    private var shouldShowSaveButton: Bool {
+        SpeechTranscriptionSaveButtonPolicy.shouldShow(
+            isTranscribing: service.isTranscribing,
+            isContentModified: isContentModified,
+            didSaved: didSaved
+        )
     }
 
     private var saveButton: some View {
@@ -1050,7 +1221,7 @@ struct SpeechTranscriptionView: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             isSaving = true
         }
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             if selectedContentTab == .raw {
                 if service.selectedRecordID != nil {
@@ -1061,12 +1232,12 @@ struct SpeechTranscriptionView: View {
             } else if selectedContentTab == .refined {
                 service.updateSelectedRecordRefinedText(editedRefinedText)
             }
-            
+
             withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                 isSaving = false
                 didSaved = true
             }
-            
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     didSaved = false
@@ -1075,22 +1246,50 @@ struct SpeechTranscriptionView: View {
         }
     }
 
-    // 智能字幕的物理文件路径读取
+    // 智能字幕的物理文件路径读取（支持转译过程中的实时生成与展示）
     private var currentSRTContent: String {
-        guard let record = service.selectedHistoryRecord else {
-            return SpeechHistoryStore.generateSRT(from: service.currentTranscript, duration: 0)
+        if let record = service.selectedHistoryRecord {
+            let baseDir = SpeechHistoryStore.defaultFileURL().deletingLastPathComponent().appendingPathComponent("speech_transcription").appendingPathComponent("records")
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyyMMdd_HHmmss"
+            let dateString = formatter.string(from: record.createdAt)
+            let srtURL = baseDir.appendingPathComponent("\(dateString)_\(record.id.uuidString).srt")
+            if let srt = try? String(contentsOf: srtURL, encoding: .utf8) {
+                return srt
+            }
+            return SpeechHistoryStore.generateSRT(from: record.transcriptText, duration: record.durationSeconds ?? 0)
+        } else {
+            // 没有选中的历史记录，说明可能是当前正在转译的队列项
+            let text = service.currentTranscript
+            guard !text.isEmpty else { return "" }
+
+            var duration: Double = 0
+            if let activeItem = service.selectedQueueItem {
+                if activeItem.durationSeconds > 0 {
+                    // 转译过程中，估计当前已转译文本对应的音频时长
+                    // 比如音频共100秒，转译进度为30%，则当前文本对应前30秒
+                    let progress = activeItem.stageProgress > 0 ? activeItem.stageProgress : 0.01
+                    duration = activeItem.durationSeconds * progress
+                } else {
+                    // 兜底：字数估算，中文字符 ≈ 0.25秒
+                    duration = Double(text.count) * 0.25
+                }
+            } else {
+                duration = Double(text.count) * 0.25
+            }
+
+            // 确保 duration 大于 0 才能正确生成字幕时间戳
+            if duration <= 0 {
+                duration = Double(text.count) * 0.25
+            }
+            if duration <= 0 {
+                duration = 1.0
+            }
+
+            return SpeechHistoryStore.generateSRT(from: text, duration: duration)
         }
-        let baseDir = SpeechHistoryStore.defaultFileURL().deletingLastPathComponent().appendingPathComponent("speech_transcription").appendingPathComponent("records")
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let dateString = formatter.string(from: record.createdAt)
-        let srtURL = baseDir.appendingPathComponent("\(dateString)_\(record.id.uuidString).srt")
-        if let srt = try? String(contentsOf: srtURL, encoding: .utf8) {
-            return srt
-        }
-        return SpeechHistoryStore.generateSRT(from: record.transcriptText, duration: record.durationSeconds ?? 0)
     }
-    
+
     private var waitingPlaceholderView: some View {
         VStack(spacing: 12) {
             Image(systemName: "bubble.left.and.bubble.right.fill")
@@ -1102,7 +1301,7 @@ struct SpeechTranscriptionView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-            
+
             Text(L10n.k("speech.ui.waiting_placeholder", fallback: "等待开启智能识别任务，提取的离线文本会即时在此处流式展现，并支持高自由度二次编辑。"))
                 .font(.system(size: 12))
                 .multilineTextAlignment(.center)
@@ -1112,7 +1311,7 @@ struct SpeechTranscriptionView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(false)
     }
-    
+
     private var wordCountBadge: some View {
         Group {
             let currentWordCount: Int = {
@@ -1123,7 +1322,7 @@ struct SpeechTranscriptionView: View {
                 }
             }()
             if currentWordCount > 0 {
-                Text("\(currentWordCount) 字")
+                Text(L10n.f("speech.word_count", fallback: "%d 字", currentWordCount))
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
@@ -1257,7 +1456,105 @@ struct SpeechTranscriptionView: View {
         .disabled(currentWordCount == 0)
         .help(didCopied ? "已复制" : "复制当前内容")
     }
-    
+
+    private var obsidianSyncButton: some View {
+        Button {
+            triggerObsidianSync()
+        } label: {
+            HStack(spacing: 4) {
+                if isSyncingObsidian {
+                    ProgressView()
+                        .scaleEffect(0.4)
+                        .frame(width: 12, height: 12)
+                } else {
+                    Image(systemName: didSyncObsidian ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath.doc.on.doc")
+                        .foregroundStyle(didSyncObsidian ? .green : .purple)
+                }
+                Text(didSyncObsidian ? L10n.k("speech.obsidian.synced", fallback: "已同步") : L10n.k("speech.obsidian.sync", fallback: "同步至 Obsidian"))
+                    .foregroundStyle(didSyncObsidian ? .green : .primary)
+            }
+            .font(.system(size: 11, weight: .medium))
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(didSyncObsidian ? Color.green.opacity(0.08) : Color.purple.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(didSyncObsidian ? Color.green.opacity(0.2) : Color.purple.opacity(0.12), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(currentWordCount == 0 || isSyncingObsidian)
+    }
+
+    private var obsidianSyncIconButton: some View {
+        Button {
+            triggerObsidianSync()
+        } label: {
+            if isSyncingObsidian {
+                ProgressView()
+                    .scaleEffect(0.4)
+                    .frame(width: 24, height: 24)
+            } else {
+                Image(systemName: didSyncObsidian ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath.doc.on.doc")
+                    .foregroundStyle(didSyncObsidian ? .green : .purple)
+                    .font(.system(size: 10))
+                    .frame(width: 24, height: 24)
+                    .background(didSyncObsidian ? Color.green.opacity(0.08) : Color.purple.opacity(0.05))
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(didSyncObsidian ? Color.green.opacity(0.2) : Color.purple.opacity(0.12), lineWidth: 0.5)
+                    )
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(currentWordCount == 0 || isSyncingObsidian)
+        .help(didSyncObsidian ? L10n.k("speech.obsidian.synced", fallback: "已同步") : L10n.k("speech.obsidian.sync", fallback: "同步至 Obsidian"))
+    }
+
+    private func triggerObsidianSync() {
+        guard !isSyncingObsidian else { return }
+        guard let record = service.currentHistoryRecord else { return }
+
+        withAnimation {
+            isSyncingObsidian = true
+            syncObsidianError = nil
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            do {
+                let success = try service.manualSyncToObsidian(record: record)
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    isSyncingObsidian = false
+                    if success {
+                        didSyncObsidian = true
+                    }
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    withAnimation {
+                        didSyncObsidian = false
+                    }
+                }
+            } catch {
+                withAnimation {
+                    isSyncingObsidian = false
+                    syncObsidianError = error.localizedDescription
+                }
+
+                let alert = NSAlert()
+                alert.messageText = L10n.k("speech.obsidian.sync_failed", fallback: "Obsidian 同步失败")
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: L10n.k("auto.model_config_wizard.ok", fallback: "确定"))
+                alert.runModal()
+            }
+        }
+    }
+
     // V1 历史记录区域
     private var v1HistoryCard: some View {
         SpeechHistoryCard(selectedContentTab: $selectedContentTab)
@@ -1277,7 +1574,7 @@ struct SpeechTranscriptionView: View {
     // MARK: - =========================================================================
     // MARK: - 通用辅助处理逻辑
     // MARK: - =========================================================================
-    
+
     private func chooseAudioFile() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
@@ -1325,8 +1622,8 @@ struct ASRWaveformVisualizer: View {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(
                         LinearGradient(
-                            colors: isAnimating 
-                                ? [Color.blue, Color.purple, Color.pink] 
+                            colors: isAnimating
+                                ? [Color.blue, Color.purple, Color.pink]
                                 : [Color.secondary.opacity(0.4), Color.secondary.opacity(0.2)],
                             startPoint: .bottom,
                             endPoint: .top
@@ -1361,13 +1658,13 @@ struct ASRWaveformVisualizer: View {
 struct ShimmeringProgressBar: View {
     var progress: Double
     @State private var phase: CGFloat = 0
-    
+
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 99)
                     .fill(Color.primary.opacity(0.05))
-                
+
                 RoundedRectangle(cornerRadius: 99)
                     .fill(
                         LinearGradient(
@@ -1408,49 +1705,49 @@ struct AISpeechRefineSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(GlobalModelStore.self) private var modelStore
     @Environment(HelperClient.self) private var helperClient
-    
+
     @State private var service = SpeechTranscriptionService.shared
-    
+
     struct SelectedModelConfig: Hashable, Equatable {
         let provider: ProviderTemplate
         let modelId: String
-        
+
         var displayName: String {
             "\(provider.providerDisplayName)-\(provider.name) (\(modelId.components(separatedBy: "/").last ?? modelId))"
         }
-        
+
         func hash(into hasher: inout Hasher) {
             hasher.combine(provider.id)
             hasher.combine(modelId)
         }
-        
+
         static func == (lhs: SelectedModelConfig, rhs: SelectedModelConfig) -> Bool {
             return lhs.provider.id == rhs.provider.id && lhs.modelId == rhs.modelId
         }
     }
-    
+
     @State private var selectedModel: SelectedModelConfig?
     @State private var glossary = ""
     @State private var refineMode = "原稿智能净化"
-    
+
     @State private var isRefining = false
     @State private var refinedText = ""
     @State private var refineDuration: Double = 0
     @State private var errorMessage: String? = nil
     @State private var showCompareView = false
-    
+
     @State private var copiedSuccess = false
-    
+
     // 用于控制流式生成和打断生命周期的异步任务变量
     @State private var refineTask: Task<Void, Never>? = nil
-    
+
     // 平铺可用模型，完全遵循全局配置的排序顺序
     private var availableModels: [SelectedModelConfig] {
         modelStore.sortedActiveModels.map { item in
             SelectedModelConfig(provider: item.provider, modelId: item.modelId)
         }
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // 头部标题栏
@@ -1464,9 +1761,9 @@ struct AISpeechRefineSheet: View {
                             endPoint: .trailing
                         )
                     )
-                
+
                 Spacer()
-                
+
                 // 只有在非流式精整阶段才允许通过 Esc 或点击叉号关闭，防止中途退出
                 if !isRefining {
                     Button {
@@ -1482,9 +1779,9 @@ struct AISpeechRefineSheet: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
-            
+
             Divider()
-            
+
             if showCompareView {
                 // A. 双栏流式对比视图 (直接平滑呈现，带打字机输出)
                 VStack(spacing: 0) {
@@ -1503,59 +1800,62 @@ struct AISpeechRefineSheet: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 12)
                     }
-                    
-                    HStack(spacing: 16) {
+
+                    HStack(alignment: .top, spacing: 16) {
                         // 左栏：原文粗稿
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Image(systemName: "waveform")
                                     .foregroundStyle(.secondary)
-                                Text("转写粗稿原文")
+                                Text(L10n.k("speech.compare.raw_title", fallback: "转写粗稿原文"))
                                     .font(.system(size: 12, weight: .bold))
                                     .foregroundStyle(.secondary)
                                 Spacer()
                             }
-                            .padding(.leading, 12)
-                            
-                            TextEditor(text: .constant(service.currentTranscript))
-                                .font(.system(size: 12, design: .monospaced))
-                                .lineSpacing(4)
-                                .padding(10)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .scrollContentBackground(.hidden)
-                                .background(Color.primary.opacity(0.02))
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.primary.opacity(0.04), lineWidth: 1)
-                                )
+                            .frame(height: 24)
+                            .padding(.leading, 4)
+
+                            ZStack(alignment: .topLeading) {
+                                TextEditor(text: .constant(service.currentTranscript))
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .lineSpacing(4)
+                                    .scrollContentBackground(.hidden)
+                                    .padding(8)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.primary.opacity(0.02))
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.primary.opacity(0.04), lineWidth: 1)
+                            )
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
                         // 右栏：精装流式润色稿
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Image(systemName: "sparkles")
                                     .foregroundStyle(.purple)
-                                Text("AI 智能精装版")
+                                Text(L10n.k("speech.compare.refined_title", fallback: "AI 智能精装版"))
                                     .font(.system(size: 12, weight: .bold))
                                     .foregroundStyle(.purple)
                                 Spacer()
-                                
+
                                 if isRefining {
                                     HStack(spacing: 6) {
                                         ProgressView()
                                             .scaleEffect(0.45)
-                                        Text("正在流式生成中...")
+                                        Text(L10n.k("speech.refine.streaming", fallback: "正在流式生成中..."))
                                             .font(.system(size: 10))
                                             .foregroundStyle(.purple)
                                     }
                                 } else if !refinedText.isEmpty {
                                     Group {
                                         if refineDuration > 0 {
-                                            Text("\(refinedText.count) 字 · ⚡️ \(String(format: "%.1f", refineDuration))s")
+                                            Text(L10n.f("speech.refine.count_duration", fallback: "%d 字 · ⚡️ %.1fs", refinedText.count, refineDuration))
                                         } else {
-                                            Text("\(refinedText.count) 字")
+                                            Text(L10n.f("speech.word_count", fallback: "%d 字", refinedText.count))
                                         }
                                     }
                                     .font(.system(size: 9, design: .monospaced))
@@ -1566,28 +1866,31 @@ struct AISpeechRefineSheet: View {
                                     .cornerRadius(4)
                                 }
                             }
-                            .padding(.leading, 12)
-                            
-                            TextEditor(text: $refinedText)
-                                .font(.system(size: 12, design: .monospaced))
-                                .lineSpacing(4)
-                                .padding(10)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .scrollContentBackground(.hidden)
-                                .background(Color(NSColor.textBackgroundColor).opacity(0.4))
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(isRefining ? Color.purple.opacity(0.45) : Color.purple.opacity(0.18), lineWidth: 1)
-                                        .animation(.easeInOut(duration: 0.5), value: isRefining)
-                                )
+                            .frame(height: 24)
+                            .padding(.leading, 4)
+
+                            ZStack(alignment: .topLeading) {
+                                TextEditor(text: $refinedText)
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .lineSpacing(4)
+                                    .scrollContentBackground(.hidden)
+                                    .padding(8)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color(NSColor.textBackgroundColor).opacity(0.4))
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(isRefining ? Color.purple.opacity(0.45) : Color.purple.opacity(0.18), lineWidth: 1)
+                                    .animation(.easeInOut(duration: 0.5), value: isRefining)
+                            )
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
                     .padding(20)
-                    
+
                     Divider()
-                    
+
                     // 底部控制
                     HStack(spacing: 12) {
                         Button {
@@ -1597,15 +1900,15 @@ struct AISpeechRefineSheet: View {
                         } label: {
                             HStack {
                                 Image(systemName: "arrow.left")
-                                Text("返回配置")
+                                Text(L10n.k("speech.refine.back_to_config", fallback: "返回配置"))
                             }
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.regular)
                         .disabled(isRefining) // 生成中禁用返回
-                        
+
                         Spacer()
-                        
+
                         Button {
                             service.copyTranscript(refinedText)
                             withAnimation { copiedSuccess = true }
@@ -1615,13 +1918,13 @@ struct AISpeechRefineSheet: View {
                         } label: {
                             HStack {
                                 Image(systemName: copiedSuccess ? "checkmark" : "doc.on.doc")
-                                Text(copiedSuccess ? "已复制" : "仅复制精装版")
+                                Text(copiedSuccess ? L10n.k("common.status.copied", fallback: "已复制") : L10n.k("speech.refine.copy_refined_only", fallback: "仅复制精装版"))
                             }
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.regular)
                         .disabled(refinedText.isEmpty || isRefining)
-                        
+
                         if isRefining {
                             // 正在流式生成时，提供红色的强力“停止生成”按钮
                             Button {
@@ -1630,31 +1933,28 @@ struct AISpeechRefineSheet: View {
                             } label: {
                                 HStack {
                                     Image(systemName: "stop.circle.fill")
-                                    Text("🛑 停止生成")
+                                    Text(L10n.k("speech.refine.stop_generation", fallback: "停止生成"))
                                 }
                             }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.regular)
                             .tint(.red)
                         } else {
-                            // 生成完毕或已打断时，恢复显示“保存并应用”按钮
+                            // 生成完毕或已打断时，只写入 AI 精装版，避免覆盖原稿。
                             Button {
-                                if service.selectedRecordID != nil {
-                                    service.updateSelectedRecordRefinedText(refinedText)
-                                } else {
-                                    service.currentTranscript = refinedText
+                                if service.applyRefinedTextToCurrentRecord(refinedText) {
+                                    dismiss()
                                 }
-                                dismiss()
                             } label: {
                                 HStack {
                                     Image(systemName: "checkmark.circle.fill")
-                                    Text(service.selectedRecordID != nil ? "保存并应用到精装版" : "覆盖并应用到主文本框")
+                                    Text(L10n.k("speech.refine.save_to_refined", fallback: "保存到 AI 精装版"))
                                 }
                             }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.regular)
                             .tint(.purple)
-                            .disabled(refinedText.isEmpty)
+                            .disabled(refinedText.isEmpty || service.currentHistoryRecord == nil)
                         }
                     }
                     .padding(.horizontal, 20)
@@ -1662,7 +1962,7 @@ struct AISpeechRefineSheet: View {
                     .background(Color(NSColor.windowBackgroundColor).opacity(0.4))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                
+
             } else {
                 // B. 精整配置表单
                 ScrollView {
@@ -1680,32 +1980,32 @@ struct AISpeechRefineSheet: View {
                             .background(Color.red.opacity(0.06))
                             .cornerRadius(6)
                         }
-                        
+
                         // 1. 润色模式
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("润色重塑模式")
+                            Text(L10n.k("speech.refine.mode_label", fallback: "润色重塑模式"))
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(.secondary)
-                            
+
                             Picker("", selection: $refineMode) {
-                                Text("✨ 智能净化").tag("原稿智能净化")
-                                Text("📓 灵感随记").tag("灵感随记整理")
-                                Text("📋 会议纪要").tag("提炼会议纪要")
-                                Text("✍️ 专业重塑").tag("专业文稿重塑")
+                                Text(L10n.k("speech.refine.mode.clean", fallback: "✨ 智能净化")).tag("原稿智能净化")
+                                Text(L10n.k("speech.refine.mode.note", fallback: "📓 灵感随记")).tag("灵感随记整理")
+                                Text(L10n.k("speech.refine.mode.meeting", fallback: "📋 会议纪要")).tag("提炼会议纪要")
+                                Text(L10n.k("speech.refine.mode.rewrite", fallback: "✍️ 专业重塑")).tag("专业文稿重塑")
                             }
                             .pickerStyle(.segmented)
                             .labelsHidden()
                         }
-                        
+
                         // 2. 选择 AI 智能引擎
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("选择 AI 精整引擎")
+                            Text(L10n.k("speech.refine.engine_label", fallback: "选择 AI 精整引擎"))
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(.secondary)
-                            
+
                             if availableModels.isEmpty {
                                 HStack {
-                                    Text("⚠️ 还没有在「全局模型池」中配置模型，请先去配置账户。")
+                                    Text(L10n.k("speech.refine.no_models", fallback: "⚠️ 还没有在「全局模型池」中配置模型，请先去配置账户。"))
                                         .font(.system(size: 11))
                                         .foregroundStyle(.orange)
                                 }
@@ -1723,28 +2023,28 @@ struct AISpeechRefineSheet: View {
                                 .frame(maxWidth: .infinity)
                             }
                         }
-                        
+
                         // 3. 上下文正确专名词表
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text("本段音频的背景与正确热词")
+                                Text(L10n.k("speech.refine.glossary_label", fallback: "本段音频的背景与正确热词"))
                                     .font(.system(size: 11, weight: .bold))
                                     .foregroundStyle(.secondary)
                                 Image(systemName: "info.circle")
                                     .font(.system(size: 10))
                                     .foregroundStyle(.tertiary)
-                                    .help("输入此录音里提到的正确人名、产品名或背景，AI 会根据它们来智能纠正所有同音错别字。")
+                                    .help(L10n.k("speech.refine.glossary_help", fallback: "输入此录音里提到的正确人名、产品名或背景，AI 会根据它们来智能纠正所有同音错别字。"))
                                 Spacer()
                             }
-                            
-                            TextField("例如：ClawdHome, OpenClaw, 隔离沙箱", text: $glossary)
+
+                            TextField(L10n.k("speech.refine.glossary_placeholder", fallback: "例如：ClawdHome, OpenClaw, 隔离沙箱"), text: $glossary)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(size: 12))
                         }
-                        
+
                         Spacer()
                             .frame(height: 10)
-                        
+
                         // 开始按钮
                         Button {
                             startRefinement()
@@ -1752,7 +2052,7 @@ struct AISpeechRefineSheet: View {
                             HStack {
                                 Spacer()
                                 Image(systemName: "sparkles")
-                                Text("开始智能精整与专名润色")
+                                Text(L10n.k("speech.refine.start", fallback: "开始智能精整与专名润色"))
                                     .fontWeight(.bold)
                                 Spacer()
                             }
@@ -1783,18 +2083,18 @@ struct AISpeechRefineSheet: View {
                             selectedModel = first
                         }
                     }
-                    
+
                     // 2. 加载个性化与全局的 Glossary 记忆
                     if let recordID = service.selectedRecordID {
                         let savedGlossary = UserDefaults.standard.string(forKey: "speech_refine_glossary_\(recordID.uuidString)")
                             ?? UserDefaults.standard.string(forKey: "speech_refine_glossary_global")
                             ?? ""
                         self.glossary = savedGlossary
-                        
+
                         // 3. 加载个性化与全局的 Mode 记忆，若不存在则使用已有文本特征启发式猜测
                         let savedMode = UserDefaults.standard.string(forKey: "speech_refine_mode_\(recordID.uuidString)")
                             ?? UserDefaults.standard.string(forKey: "speech_refine_mode_global")
-                        
+
                         if let savedMode, ["原稿智能净化", "灵感随记整理", "提炼会议纪要", "专业文稿重塑"].contains(savedMode) {
                             self.refineMode = savedMode
                         } else if let refined = service.selectedHistoryRecord?.refinedText {
@@ -1814,21 +2114,21 @@ struct AISpeechRefineSheet: View {
         .frame(width: showCompareView ? 820 : 460, height: showCompareView ? 580 : 380)
         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: showCompareView)
     }
-    
+
     private func findDefaultModel(defaultKey: String) -> SelectedModelConfig? {
         availableModels.first { model in
             let key = "\(model.modelId)_\(model.provider.id.uuidString)"
             return key == defaultKey
         }
     }
-    
+
     // 执行流式 AI 专名精整与即时吐字渲染
     private func startRefinement() {
         guard let config = selectedModel else {
             errorMessage = "请先选择一个可用的 AI 引擎。"
             return
         }
-        
+
         // 写入配置与词汇表持久化记忆
         if let recordID = service.selectedRecordID {
             UserDefaults.standard.set(glossary, forKey: "speech_refine_glossary_\(recordID.uuidString)")
@@ -1836,13 +2136,13 @@ struct AISpeechRefineSheet: View {
         }
         UserDefaults.standard.set(glossary, forKey: "speech_refine_glossary_global")
         UserDefaults.standard.set(refineMode, forKey: "speech_refine_mode_global")
-        
+
         isRefining = true
         refineDuration = 0
         errorMessage = nil
         refinedText = ""
         showCompareView = true // 直接、优雅地平滑展开为双栏预览状态！
-        
+
         refineTask = Task {
             let startTime = Date()
             do {
@@ -1853,18 +2153,27 @@ struct AISpeechRefineSheet: View {
                     glossary: glossary,
                     mode: refineMode
                 )
-                
+
                 for try await chunk in stream {
                     // 随时检测任务取消，支持秒级强力打断
                     try Task.checkCancellation()
-                    
+
                     await MainActor.run {
-                        self.refinedText += chunk
+                        if self.refinedText.isEmpty {
+                            // 移除首个 chunk 开头的所有换行和空白字符
+                            let cleaned = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !cleaned.isEmpty {
+                                self.refinedText += cleaned
+                            }
+                        } else {
+                            self.refinedText += chunk
+                        }
                     }
                 }
-                
+
                 await MainActor.run {
                     self.refineDuration = Date().timeIntervalSince(startTime)
+                    self.refinedText = self.refinedText.trimmingCharacters(in: .whitespacesAndNewlines)
                     self.isRefining = false
                 }
             } catch is CancellationError {
@@ -1888,10 +2197,10 @@ struct SpeechHistoryRecordRow: View {
     @Binding var selectedContentTab: SpeechTranscriptionView.ContentDimension
     let subtitle: String
     let onReveal: () -> Void
-    
+
     @State private var isHovered = false
     fileprivate var service = SpeechTranscriptionService.shared
-    
+
     private var cardBackground: Color {
         if isSelected {
             return Color(NSColor.controlBackgroundColor).opacity(0.8)
@@ -1901,7 +2210,7 @@ struct SpeechHistoryRecordRow: View {
             return Color(NSColor.controlBackgroundColor).opacity(0.2)
         }
     }
-    
+
     private var cardStrokeColor: Color {
         if isSelected {
             return Color.blue.opacity(0.2)
@@ -1911,31 +2220,49 @@ struct SpeechHistoryRecordRow: View {
             return Color.primary.opacity(0.04)
         }
     }
-    
+
     var body: some View {
         HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
-                    Text(record.sourceFileName)
+                    // 优先展示 Topic 标题，无则 fallback 到原始文件名
+                    let displayTitle = (record.refinedTitle?.isEmpty == false) ? record.refinedTitle! : record.sourceFileName
+                    Text(displayTitle)
                         .font(.system(size: 11, weight: .semibold))
                         .lineLimit(1)
                         .foregroundColor(isSelected ? .blue : .primary)
-                    
+
                     if record.vocalEnhanceEnabled == true {
                         Image(systemName: "sparkles")
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(.purple)
-                            .help("已启用智能人声增强与去噪")
+                            .help(L10n.k("speech.vocal_enhance.enabled_help", fallback: "已启用智能人声增强与去噪"))
                     }
                 }
-                
+
                 Text(subtitle)
                     .font(.system(size: 9))
                     .foregroundStyle(.secondary)
+
+                // 【新增】微型彩色胶囊标签气泡
+                if let tags = record.refinedTags, !tags.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(tags, id: \.self) { tag in
+                            Text("#\(tag)")
+                                .font(.system(size: 8, weight: .semibold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(isSelected ? Color.blue.opacity(0.15) : Color.primary.opacity(0.05))
+                                .foregroundColor(isSelected ? .blue : .secondary)
+                                .cornerRadius(4)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
             }
-            
+
             Spacer()
-            
+
             Button {
                 onReveal()
             } label: {
@@ -1944,8 +2271,8 @@ struct SpeechHistoryRecordRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("在 Finder 中显示原始文件")
-            
+            .help(L10n.k("speech.history.reveal_source_help", fallback: "在 Finder 中显示原始文件"))
+
             Button {
                 service.deleteHistoryRecord(id: record.id)
             } label: {
@@ -1954,7 +2281,7 @@ struct SpeechHistoryRecordRow: View {
                     .foregroundStyle(.red.opacity(0.7))
             }
             .buttonStyle(.plain)
-            .help("删除该历史记录")
+            .help(L10n.k("speech.history.delete_help", fallback: "删除该历史记录"))
         }
         .padding(10)
         .background(
@@ -1977,6 +2304,66 @@ struct SpeechHistoryRecordRow: View {
                 }
             }
         }
+        .contextMenu {
+            Button {
+                retranscribe()
+            } label: {
+                Label(L10n.k("speech.history.retranscribe", fallback: "重新转译音频"), systemImage: "arrow.counterclockwise")
+            }
+            .disabled(!FileManager.default.fileExists(atPath: record.sourceFilePath))
+
+            Button {
+                onReveal()
+            } label: {
+                Label(L10n.k("common.reveal_in_finder", fallback: "在 Finder 中显示"), systemImage: "folder")
+            }
+
+            Divider()
+
+            Button {
+                service.copyTranscript(record.transcriptText)
+            } label: {
+                Label(L10n.k("speech.history.copy_raw", fallback: "复制转写粗稿原文"), systemImage: "doc.on.doc")
+            }
+
+            if let refined = record.refinedText, !refined.isEmpty {
+                Button {
+                    service.copyTranscript(refined)
+                } label: {
+                    Label(L10n.k("speech.history.copy_refined", fallback: "复制 AI 智能精装版"), systemImage: "sparkles")
+                }
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                service.deleteHistoryRecord(id: record.id)
+            } label: {
+                Label(L10n.k("speech.history.delete", fallback: "删除历史记录"), systemImage: "trash")
+            }
+        }
+    }
+
+    private func retranscribe() {
+        let fileURL = URL(fileURLWithPath: record.sourceFilePath)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+
+        // 1. 如果队列中没有，则入队
+        if !service.queue.contains(where: { $0.fileURL.path == fileURL.path }) {
+            service.enqueueFiles([fileURL])
+        }
+
+        // 2. 选中并重置状态，将主面板切回 ASR 队列渲染
+        service.selectedFileURL = fileURL
+        if let matched = service.queue.first(where: { $0.fileURL.path == fileURL.path }) {
+            service.selectedQueueItem = matched
+        }
+
+        // 3. 将选中历史记录清空，退回队列转写视图
+        withAnimation {
+            service.selectedRecordID = nil
+            selectedContentTab = .raw
+        }
     }
 }
 
@@ -1984,14 +2371,14 @@ struct SpeechHistoryRecordRow: View {
 struct SpeechHistoryCard: View {
     @State private var service = SpeechTranscriptionService.shared
     @Binding var selectedContentTab: SpeechTranscriptionView.ContentDimension
-    
+
     private var headerSection: some View {
         HStack {
             Label(L10n.k("speech.history_records", fallback: "历史转写"), systemImage: "clock.arrow.circlepath")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.secondary)
             Spacer()
-            
+
             Button {
                 service.openHistoryDirectory()
             } label: {
@@ -2012,7 +2399,7 @@ struct SpeechHistoryCard: View {
         }
         .frame(height: 28)
     }
-    
+
     private var emptyStateView: some View {
         VStack(spacing: 6) {
             Image(systemName: "tray.fill")
@@ -2025,7 +2412,7 @@ struct SpeechHistoryCard: View {
         .padding(.vertical, 32)
         .frame(maxWidth: .infinity)
     }
-    
+
     private var historyListView: some View {
         ScrollView {
             VStack(spacing: 8) {
@@ -2047,15 +2434,15 @@ struct SpeechHistoryCard: View {
             .padding(8)
         }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             headerSection
-            
+
             ZStack {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color.primary.opacity(0.01))
-                
+
                 historyListView
             }
             .frame(minHeight: 120, maxHeight: .infinity)
@@ -2068,15 +2455,15 @@ struct SpeechHistoryCard: View {
         .background(Color.primary.opacity(0.01))
         .cornerRadius(12)
     }
-    
+
     private func historySubtitle(for record: SpeechHistoryRecord) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
-        
+
         let dateStr = formatter.string(from: record.createdAt)
         let elapsedStr = String(format: "%.1fs", record.elapsedSeconds)
-        
+
         // 音频文件大小智能格式化
         let bytes = record.sourceFileSizeBytes
         let sizeStr: String
@@ -2087,7 +2474,7 @@ struct SpeechHistoryCard: View {
         } else {
             sizeStr = "\(bytes) B"
         }
-        
+
         // 音频物理时长格式化
         var durationStr = ""
         if let duration = record.durationSeconds, duration > 0 {
@@ -2100,14 +2487,14 @@ struct SpeechHistoryCard: View {
                 durationStr = "\(totalSeconds)秒"
             }
         }
-        
+
         var parts: [String] = [dateStr]
         if !durationStr.isEmpty {
             parts.append(durationStr)
         }
         parts.append(sizeStr)
         parts.append("耗时 \(elapsedStr)")
-        
+
         return parts.joined(separator: " · ")
     }
 
@@ -2124,7 +2511,7 @@ struct ASRSettingsSheet: View {
     @Binding var hfTokenPreference: String
     var service: SpeechTranscriptionService
     @Binding var isPresented: Bool
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // 顶层标题栏
@@ -2141,9 +2528,9 @@ struct ASRSettingsSheet: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
-            
+
             Divider()
-            
+
             // 主体可滚动区域
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -2151,7 +2538,7 @@ struct ASRSettingsSheet: View {
                         Text(L10n.k("settings.speech_transcription.hf_endpoint", fallback: "模型下载源"))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.secondary)
-                        
+
                         Picker("", selection: $hfEndpointPreference) {
                             Text(L10n.k("settings.speech_transcription.hf_endpoint.default", fallback: "默认 (Hugging Face)")).tag("")
                             Text(L10n.k("settings.speech_transcription.hf_endpoint.mirror", fallback: "HF 镜像站 (hf-mirror.com)")).tag("https://hf-mirror.com")
@@ -2161,21 +2548,21 @@ struct ASRSettingsSheet: View {
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
                     }
-                    
+
                     if hfEndpointPreference == "custom" {
                         TextField(L10n.k("settings.speech_transcription.hf_endpoint.custom_url", fallback: "自定义端点 URL"), text: $customHFEndpoint)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11))
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text("Hugging Face Token")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.secondary)
-                            
+
                             Spacer()
-                            
+
                             if let tokenURL = URL(string: "https://huggingface.co/settings/tokens") {
                                 Link(destination: tokenURL) {
                                     Image(systemName: "questionmark.circle")
@@ -2183,29 +2570,29 @@ struct ASRSettingsSheet: View {
                                 }
                             }
                         }
-                        
+
                         SecureField(L10n.k("settings.speech_transcription.hf_token.placeholder", fallback: "可选，用于提速或下载受限模型"), text: $hfTokenPreference)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11))
                     }
-                    
+
                     Text(L10n.k("settings.speech_transcription.hf_endpoint.hint", fallback: "提示：若镜像站因元数据校验失败报错，请尝试切回默认源。"))
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
-                    
+
                     if let recommended = service.recommendation.recommendedModel {
                         Text(L10n.f("speech.recommended", fallback: "当前设备推荐配置：%@ ASR", curatedSpeechModels.first(where: { $0.id == recommended })?.displayName ?? recommended.rawValue))
                             .font(.system(size: 10))
                             .foregroundStyle(.blue)
                     }
-                    
+
                     Divider()
-        
+
                     VStack(alignment: .leading, spacing: 6) {
                         Toggle(isOn: Bindable(service).vocalEnhanceEnabled) {
                             HStack(spacing: 4) {
-                                Text("AI 智能人声增强")
+                                Text(L10n.k("speech.vocal_enhance.title", fallback: "AI 智能人声增强"))
                                     .font(.system(size: 11, weight: .semibold))
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 9))
@@ -2213,8 +2600,8 @@ struct ASRSettingsSheet: View {
                             }
                         }
                         .toggleStyle(.checkbox)
-                        
-                        Text("利用 macOS 原生的核心音频降噪与动态范围均化，消除低频噪音，极大提升嘈杂音频的识别精度。")
+
+                        Text(L10n.k("speech.vocal_enhance.desc", fallback: "利用 macOS 原生的核心音频降噪与动态范围均化，消除低频噪音，极大提升嘈杂音频的识别精度。"))
                             .font(.system(size: 9))
                             .foregroundStyle(.secondary)
                     }
@@ -2225,4 +2612,3 @@ struct ASRSettingsSheet: View {
         .frame(width: 380, height: 360)
     }
 }
-

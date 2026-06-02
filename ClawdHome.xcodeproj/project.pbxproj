@@ -37,7 +37,6 @@
 		1725D0DC4180EF0AF7DD345F /* OpenCLINetworkSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FE016D8935F7B2F5451DC0 /* OpenCLINetworkSupportTests.swift */; };
 		17E5D8B68FE1128317AAB824 /* HermesInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6385281719FDB35F18456F6 /* HermesInstaller.swift */; };
 		1824EF17F688509BB58B146C /* HermesCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2377E2C629645068605ED7E /* HermesCommand.swift */; };
-		18329CF61FAD49E5A91D0BCE /* AICommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EBC9D851C8A4C42A16F93B2 /* AICommand.swift */; };
 		18454F2283EC4E5E627584DE /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62AE0CAFA22F67436019A51 /* BackupModels.swift */; };
 		19D3252B659C8CE08911BEE8 /* OpenCLINetworkDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7E54CF4523B98949C64414 /* OpenCLINetworkDiagnostics.swift */; };
 		1A9602934F0304C7AA1905A6 /* FileInputAcceptFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC4D03808505276353A3AD2 /* FileInputAcceptFilter.swift */; };
@@ -76,6 +75,7 @@
 		3B5E95B51DE262D04BC56FBA /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE86644B5FC4578CCB9C6FF /* ConfigWriter.swift */; };
 		3B8D878C4D830AA5B9390BED /* ProviderKeyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */; };
 		3D7B3D66E56E6D32CFC39D1F /* NodeDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB4BFDC6320B7C035E22C884 /* NodeDownloader.swift */; };
+		3EA53B3DD2834F5C175884A3 /* AIChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9A6675C696F7CF84E12C694 /* AIChatView.swift */; };
 		3F36B15D834EADEBC6CAB876 /* TerminalControlSequence.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2AB7F0ED50DF0DEC5820E5C /* TerminalControlSequence.swift */; };
 		41526F31288D5BF4B5D5E8FC /* UserPasswordSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60647F2C674DA123E7DA59A /* UserPasswordSheet.swift */; };
 		41948DEC934C2D8278F0EB80 /* BrowserAccountManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF8BBAC6A6AC388EF29FA64 /* BrowserAccountManager.swift */; };
@@ -114,6 +114,7 @@
 		5C18744A625AA256F6209249 /* HermesWebViewCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B602547DF8E4759034B0623C /* HermesWebViewCoordinatorTests.swift */; };
 		5C24D821B52B296FB1663DF8 /* ModelPrioritySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED27F46F57A2556B2A4A6512 /* ModelPrioritySheet.swift */; };
 		5C4286A2BA6C2A17C2E8D16A /* ApplyCredentialSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BF8C6365FBBA9CA2C07D90 /* ApplyCredentialSheet.swift */; };
+		5C8B7EAF43B39BDC4F8264D6 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = F5F9A21C1AF768A0220A5B00 /* MarkdownUI */; };
 		5DB799548F27F55987F9AB1F /* LocalModelDownloadPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECAE11116719CC7828122B76 /* LocalModelDownloadPlan.swift */; };
 		5F3A658D7E11C06F8F4F62D0 /* LocalAIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE120DDE4D844BEE2B6B27CB /* LocalAIModels.swift */; };
 		5FF1FC550784127BA01FA09D /* LocalLLMManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9DBC78DA4D1FFD0EB50D466 /* LocalLLMManager.swift */; };
@@ -130,6 +131,7 @@
 		6B2141CEF3983B1A8B1BE729 /* PromptMemoryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48678A8853E661D98169A602 /* PromptMemoryViews.swift */; };
 		6B6B8E332776101B198630AC /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 806D35D06FA4AFEDDAA912AD /* L10n.swift */; };
 		6CDF19DC03F44F36A80E3AD7 /* PromptLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB9CA89FBC9C8542073AE403 /* PromptLibraryStore.swift */; };
+		6D06A582253F30D38062A047 /* BackupViewStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27652BAE19420C33329F22EF /* BackupViewStateTests.swift */; };
 		6D32F3636220EFA100E00EA8 /* GatewayChannelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD59CE8ED9E05145D8207B3D /* GatewayChannelStore.swift */; };
 		6DE0CBAF951D1278E9972543 /* HelperImpl+BrowserAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 397BF349AA548AE5115CAD7F /* HelperImpl+BrowserAccount.swift */; };
 		6E8C4678124BD866C8C20445 /* HealthCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CB22903A652976B892FA384 /* HealthCheck.swift */; };
@@ -205,6 +207,7 @@
 		B40C28F7294947CF7866D229 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 7BD8CB032E8F003382616537 /* HuggingFace */; };
 		B4186F49E2F4E5365DA22652 /* VaultManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20AA8CD71AB761800F6128E /* VaultManager.swift */; };
 		B45B188B70EB3363A5969F16 /* DirectProviderConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB4CB51EC92B102C97A3DAF4 /* DirectProviderConfig.swift */; };
+		B46405B443BBF64B0FF74D06 /* AICommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24C0C8208E7A6EBEB9CAF941 /* AICommand.swift */; };
 		B57160D717A6898E887EADDD /* CloneClawModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */; };
 		B81D3332811AFA345F523E3D /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E5226083EF9356F8C51363 /* AppLogger.swift */; };
 		BA9C929DE8C18C4762AC9E21 /* TerminalControlSequence.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2AB7F0ED50DF0DEC5820E5C /* TerminalControlSequence.swift */; };
@@ -343,7 +346,9 @@
 		21010714E9E3C485F8F95B10 /* ModelDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDetailView.swift; sourceTree = "<group>"; };
 		21D5AE60DA0449BC16B42DAA /* FallbackManagerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackManagerSheet.swift; sourceTree = "<group>"; };
 		226544013116B0A691E3CB60 /* PromptMemoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptMemoryModels.swift; sourceTree = "<group>"; };
+		24C0C8208E7A6EBEB9CAF941 /* AICommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AICommand.swift; sourceTree = "<group>"; };
 		26146AAD44960591291B75E9 /* SpeechModelAdvisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechModelAdvisor.swift; sourceTree = "<group>"; };
+		27652BAE19420C33329F22EF /* BackupViewStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupViewStateTests.swift; sourceTree = "<group>"; };
 		287C8C8C9920E754BBF4920C /* ShrimpTerminalSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrimpTerminalSession.swift; sourceTree = "<group>"; };
 		2BD15AFBF24DE05D57194904 /* Charts.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Charts.framework; path = System/Library/Frameworks/Charts.framework; sourceTree = SDKROOT; };
 		2DAF9A2EC9326CBAEEBAC8F4 /* ShrimpPoolLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrimpPoolLogicTests.swift; sourceTree = "<group>"; };
@@ -361,7 +366,6 @@
 		38A912F0A5514717350027B5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		397BF349AA548AE5115CAD7F /* HelperImpl+BrowserAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+BrowserAccount.swift"; sourceTree = "<group>"; };
 		3CB94382EC6E3A371992B65B /* LocalLLMDownloadPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMDownloadPlanTests.swift; sourceTree = "<group>"; };
-		3EBC9D851C8A4C42A16F93B2 /* AICommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AICommand.swift; sourceTree = "<group>"; };
 		3F177240AE99ADC3F3D2AD8F /* roles.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = roles.html; sourceTree = "<group>"; };
 		40305CC98880248434C11684 /* FeishuChannelOnboardingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeishuChannelOnboardingSheet.swift; sourceTree = "<group>"; };
 		41AF5BD2C3AB3FF4937565B2 /* ProviderKeyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderKeyConfig.swift; sourceTree = "<group>"; };
@@ -504,6 +508,7 @@
 		C82D2957B3849E370E6D64F1 /* HelperImpl+UserGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+UserGateway.swift"; sourceTree = "<group>"; };
 		C8BA2DC681D56F1CCDFB39F5 /* ClawdHomeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClawdHomeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8CA7E043030EBA6AECA81CC /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = SystemConfiguration.framework; sourceTree = "<group>"; };
+		C9A6675C696F7CF84E12C694 /* AIChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIChatView.swift; sourceTree = "<group>"; };
 		C9D840800176C46190E9991E /* UnixHTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnixHTTPClient.swift; sourceTree = "<group>"; };
 		CAA3C56D1FE192B7799A3FDC /* GatewayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayManager.swift; sourceTree = "<group>"; };
 		CBA67BDCB519CC9C77AD83CC /* GeneratedVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedVersion.swift; sourceTree = "<group>"; };
@@ -570,6 +575,7 @@
 				8DF359DE93EFFFFA2E49695F /* Charts.framework in Frameworks */,
 				96C93E87A53551D90828E5D1 /* SwiftTerm in Frameworks */,
 				B40C28F7294947CF7866D229 /* HuggingFace in Frameworks */,
+				5C8B7EAF43B39BDC4F8264D6 /* MarkdownUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -693,7 +699,7 @@
 		68742DCC279A67E0D783172C /* Commands */ = {
 			isa = PBXGroup;
 			children = (
-				3EBC9D851C8A4C42A16F93B2 /* AICommand.swift */,
+				24C0C8208E7A6EBEB9CAF941 /* AICommand.swift */,
 				88D218BB20FD6CDE3C8F6D5F /* ChatCommand.swift */,
 				09AC66C79FE1B7EABAA7A9EE /* ConfigCommand.swift */,
 				4D1FC0407326B7C36C904EC2 /* ExecCommand.swift */,
@@ -788,6 +794,7 @@
 		A5247BA585B7FDC8E0140EE6 /* ClawdHomeAppXCTests */ = {
 			isa = PBXGroup;
 			children = (
+				27652BAE19420C33329F22EF /* BackupViewStateTests.swift */,
 				0BBCFE68A68EC98233B63635 /* GatewayHubPureTests.swift */,
 				5CE9AA6083143C136DE0FA54 /* HermesTeamWizardTests.swift */,
 				B602547DF8E4759034B0623C /* HermesWebViewCoordinatorTests.swift */,
@@ -914,6 +921,7 @@
 				4A4D0168443D77B00A4092E7 /* AddUserSheet.swift */,
 				5ECF5E624B00E077920548F8 /* AdoptTeamSheet.swift */,
 				DC0DC69D82EDF1233E53C335 /* AgentModelEditSheet.swift */,
+				C9A6675C696F7CF84E12C694 /* AIChatView.swift */,
 				1936AA347B3957C607B88773 /* AILabView.swift */,
 				0DFA0D3288E6276A9630CE4B /* AppLockScreen.swift */,
 				50BF8C6365FBBA9CA2C07D90 /* ApplyCredentialSheet.swift */,
@@ -1083,6 +1091,7 @@
 			packageProductDependencies = (
 				C825A0B24BA99AE396353C83 /* SwiftTerm */,
 				7BD8CB032E8F003382616537 /* HuggingFace */,
+				F5F9A21C1AF768A0220A5B00 /* MarkdownUI */,
 			);
 			productName = ClawdHome;
 			productReference = F7D8BDF74255B3A14CF069B0 /* ClawdHome.app */;
@@ -1095,7 +1104,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2600;
+				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					28071483B3C812F008318E5F = {
 						DevelopmentTeam = "";
@@ -1122,6 +1131,7 @@
 			packageReferences = (
 				74F355130984997690AD4FDF /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 				0770EEB9BDCC55A796C83C36 /* XCRemoteSwiftPackageReference "swift-huggingface" */,
+				559E8B6FB4156CD150C98624 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -1249,6 +1259,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6D06A582253F30D38062A047 /* BackupViewStateTests.swift in Sources */,
 				C9CCE88EF05F0D46D0A2087C /* GatewayHubPureTests.swift in Sources */,
 				F79BAA313A9D92AD5AA63033 /* HermesTeamWizardTests.swift in Sources */,
 				5C18744A625AA256F6209249 /* HermesWebViewCoordinatorTests.swift in Sources */,
@@ -1263,6 +1274,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3EA53B3DD2834F5C175884A3 /* AIChatView.swift in Sources */,
 				DFF6D9534DA4C03A269C2278 /* AILabView.swift in Sources */,
 				D23EBBF179753EEFDD97C0B2 /* AddBotSheet.swift in Sources */,
 				BD0432723571AEC02E2938BF /* AddProviderModelSheet.swift in Sources */,
@@ -1423,10 +1435,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B46405B443BBF64B0FF74D06 /* AICommand.swift in Sources */,
 				EF130B9EF81C9F5788618250 /* AppUpdateState.swift in Sources */,
 				1D89B835DEDF080130A04031 /* BackupModels.swift in Sources */,
 				33EEEC7848F25E6176D19E8B /* BrowserAccountModels.swift in Sources */,
-				18329CF61FAD49E5A91D0BCE /* AICommand.swift in Sources */,
 				F13F8D9CE464C91C4DF946C0 /* CLIHelperClient.swift in Sources */,
 				CA751AF8D61283E7E3107E20 /* ChatCommand.swift in Sources */,
 				4607AB86E302C700777C3DEA /* CloneClawModels.swift in Sources */,
@@ -1949,6 +1961,14 @@
 				minimumVersion = 0.9.0;
 			};
 		};
+		559E8B6FB4156CD150C98624 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
 		74F355130984997690AD4FDF /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
@@ -1969,6 +1989,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 74F355130984997690AD4FDF /* XCRemoteSwiftPackageReference "SwiftTerm" */;
 			productName = SwiftTerm;
+		};
+		F5F9A21C1AF768A0220A5B00 /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 559E8B6FB4156CD150C98624 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

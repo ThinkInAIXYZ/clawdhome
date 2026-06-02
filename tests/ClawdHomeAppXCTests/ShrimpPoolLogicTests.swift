@@ -6,6 +6,21 @@ import XCTest
 
 final class ShrimpPoolLogicTests: XCTestCase {
 
+    func testBackupPayloadPolicyIncludesHermesAndClawdHomeWithoutOpenClaw() {
+        let payloads = BackupPayloadPolicy.payloads(existingRelativePaths: [".clawdhome", ".hermes"])
+
+        XCTAssertEqual(payloads.map(\.relativePath), [".clawdhome", ".hermes"])
+        XCTAssertFalse(payloads.map(\.relativePath).contains(".openclaw"))
+        XCTAssertTrue(payloads[0].excludes.contains("tools"))
+    }
+
+    func testBackupFilenamePolicyParsesHyphenatedShrimpUsername() {
+        XCTAssertEqual(
+            BackupFilenamePolicy.username(fromShrimpFilename: "shrimp-client-alpha-2026-06-02T171530.tar.gz"),
+            "client-alpha"
+        )
+    }
+
     func testMoveUsernameOrderMatchesDropEnteredSemantics() {
         XCTAssertEqual(
             ShrimpPool.movedUsernames(["alice", "bob", "charlie"], moving: "alice", to: "bob"),

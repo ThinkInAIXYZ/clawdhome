@@ -74,7 +74,8 @@ struct VaultFilesView: View {
                     icon: "🦞",
                     iconColor: .blue,
                     badge: vaultBadge(for: user.username),
-                    isMigrating: migratingUsernames.contains(user.username)
+                    isMigrating: migratingUsernames.contains(user.username),
+                    user: user
                 ) {
                     Task { await openVault(username: user.username) }
                 }
@@ -86,7 +87,8 @@ struct VaultFilesView: View {
                 icon: "🌐",
                 iconColor: .green,
                 badge: publicBadge,
-                isMigrating: false
+                isMigrating: false,
+                user: nil
             ) {
                 Task { await openPublicFolder() }
             }
@@ -207,6 +209,7 @@ private struct VaultCard: View {
     let iconColor: Color
     let badge: String?
     let isMigrating: Bool
+    let user: ManagedUser?
     let onTap: () -> Void
 
     @State private var isHovered = false
@@ -214,23 +217,27 @@ private struct VaultCard: View {
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 8) {
-                ZStack {
-                    Image(systemName: "folder.fill")
-                        .font(.system(size: 40))
-                        .foregroundStyle(iconColor.opacity(0.7))
-                    Text(icon)
-                        .font(.system(size: 18))
-                        .offset(y: -2)
+                if let user = user {
+                    ShrimpAvatarView(claw: user, size: 44)
+                        .frame(height: 50)
+                } else {
+                    ZStack {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 40))
+                            .foregroundStyle(iconColor.opacity(0.7))
+                        Text(icon)
+                            .font(.system(size: 18))
+                            .offset(y: -2)
+                    }
+                    .frame(height: 50)
                 }
-                .frame(height: 50)
 
                 if isMigrating {
                     ProgressView()
                         .controlSize(.small)
                 } else {
-                    // 状态指示点
-                    Circle()
-                        .fill(Color.green.opacity(0.8))
+                    // 状态指示点占位，保证多卡片文字对齐
+                    Color.clear
                         .frame(width: 6, height: 6)
                 }
 

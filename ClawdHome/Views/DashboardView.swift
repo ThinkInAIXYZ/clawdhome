@@ -166,18 +166,23 @@ struct MachineStatsGrid: View {
                     }
                 }
 
-                // 2. 内存 RAM 卡片 (进度条)
-                let memUsed = stats?.memUsedMB ?? 0
-                let memTotal = max(stats?.memTotalMB ?? 1, 1)
-                let memPercent = Double(memUsed) / Double(memTotal)
+                // 2. 内存 RAM 卡片 (折线)
+                let memSamples = history.map { Double($0.memUsedMB) / max(Double($0.memTotalMB), 1.0) * 100.0 }
                 let memValue = stats.map { String(format: "%.0f/%.0f GB", $0.memUsedMB / 1024, $0.memTotalMB / 1024) } ?? "—"
-                MiniProgressCard(
+                MiniChartCard(
                     title: L10n.k("common.resource.memory", fallback: "内存 (RAM)"),
                     value: memValue,
-                    percent: memPercent,
                     icon: "memorychip",
-                    theme: .purple
+                    theme: .purple,
+                    samples: Array(memSamples.suffix(kSmallCardPoints)),
+                    range: 0...100
                 )
+                .opacity(expanded == "RAM" ? 0.5 : 1)
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        expanded = expanded == "RAM" ? nil : "RAM"
+                    }
+                }
 
                 // 3. 网络带宽卡片 (进度条)
                 let totalNetBps = currentNetIn + currentNetOut
@@ -249,6 +254,13 @@ struct MachineStatsGrid: View {
             value: stats.map { String(format: "%.0f%%", $0.cpuPercent) } ?? "—",
             icon: "cpu", theme: .blue,
             samples: history.map { $0.cpuPercent },
+            range: 0...100
+        ))
+        result.append(CardData(
+            title: "RAM",
+            value: stats.map { String(format: "%.0f/%.0f GB", $0.memUsedMB / 1024, $0.memTotalMB / 1024) } ?? "—",
+            icon: "memorychip", theme: .purple,
+            samples: history.map { Double($0.memUsedMB) / max(Double($0.memTotalMB), 1.0) * 100.0 },
             range: 0...100
         ))
         if stats?.gpuPercent != nil || history.contains(where: { $0.gpuPercent != nil }) {

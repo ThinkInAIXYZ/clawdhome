@@ -7,6 +7,9 @@ packages:
   swift-huggingface:
     url: https://github.com/huggingface/swift-huggingface.git
     from: "0.9.0"
+  swift-markdown-ui:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    from: "2.0.0"
 
 options:
   minimumXcodeVersion: "16.0"
@@ -20,6 +23,10 @@ schemes:
     build:
       targets:
         ClawdHome: [run, test, profile, analyze, archive]
+  ClawdHomeHelper:
+    build:
+      targets:
+        ClawdHomeHelper: [run, test, profile, analyze, archive]
   ClawdHomeAppTests:
     build:
       targets:
@@ -59,6 +66,8 @@ targets:
       - package: SwiftTerm
       - package: swift-huggingface
         product: HuggingFace
+      - package: swift-markdown-ui
+        product: MarkdownUI
     postBuildScripts:
       - name: "Inject Git Build Number"
         script: |

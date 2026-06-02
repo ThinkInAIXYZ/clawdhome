@@ -399,11 +399,11 @@ struct OpenClawDetailView: View {
             .padding(.horizontal, detailSidebarShowsLabels ? 2 : 4)
             .frame(maxWidth: .infinity)
 
-            // OpenClaw logo
-            OpenClawLogoMark()
-                .frame(width: detailSidebarShowsLabels ? 48 : 32, height: detailSidebarShowsLabels ? 48 : 32)
+            // OpenClaw logo / Shrimp Avatar
+            ShrimpAvatarView(claw: user, size: detailSidebarShowsLabels ? 48 : 32, isEditable: true)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 4)
+
 
             // Agent 选择器
             if detailSidebarShowsLabels {
