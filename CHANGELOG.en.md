@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.11.1] - 2026-06-04
+
+# New Features
+
+- Brand new AI Lab speech transcription experience with transcription, refinement, history, export/save, progress stages, and real-time speed display.
+- Digital avatars added to the speech transcription view, with new team and persona avatar assets.
+- AI chat now integrates with global model accounts and supports image input.
+- Local model downloader UI introduced; model pool and prompt memory improvements.
+- New Hermes Web UI view and manager.
+
+# Improvements & Fixes
+
+- Native macOS vocal isolation and noise suppression support via AVAudioEngine; ASR hallucination fix by aligning offline audio rendering format.
+- UI polish for dashboard, user list, settings, backup, permissions, and file manager.
+- Browser permission improvement: managed browser launch no longer requires host accessibility permission.
+
+
 ## [1.11.0] - 2026-06-03
 
 # New Features
