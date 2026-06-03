@@ -97,7 +97,15 @@ targets:
       - name: "Embed Speech Tool into App Bundle"
         script: |
           /bin/bash "${SRCROOT}/scripts/build-speech-tool.sh"
-        basedOnDependencyAnalysis: false
+        basedOnDependencyAnalysis: true
+        inputFiles:
+          - $(SRCROOT)/ClawdHomeSpeech/Package.swift
+          - $(SRCROOT)/ClawdHomeSpeech/Package.resolved
+          - $(SRCROOT)/ClawdHomeSpeech/main.swift
+          - $(SRCROOT)/scripts/build-speech-tool.sh
+        outputFiles:
+          - $(CODESIGNING_FOLDER_PATH)/Contents/Library/Executables/ClawdHomeSpeech
+          - $(CODESIGNING_FOLDER_PATH)/Contents/Library/Executables/mlx.metallib
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.clawdhome.mac
@@ -113,7 +121,7 @@ targets:
       properties:
         CFBundleName: ClawdHome
         CFBundleDisplayName: ClawdHome
-        CFBundleShortVersionString: "1.9.0"
+        CFBundleShortVersionString: "1.11.0"
         CFBundleIconFile: AppIcon.icns
         NSHumanReadableDescription: OpenClaw 家庭管理器
         NSAppleEventsUsageDescription: ClawdHome 需要控制 Chrome 完成浏览器自动化与授权回调。

@@ -347,13 +347,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Series 1: Claymorphic Digital Assistants"
+            "value": "Series 2: Claymorphic Digital Assistants"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "系列一：微立体数字助手"
+            "value": "系列二：微立体数字助手"
           }
         }
       }
@@ -364,13 +364,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Series 2: Professional Agent Personas"
+            "value": "Series 3: Professional Agent Personas"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "系列二：高级职能数字生命"
+            "value": "系列三：高级职能数字生命"
           }
         }
       }
@@ -381,13 +381,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Series 3: Corporate Roles & Executives"
+            "value": "Series 1: Corporate Roles & Executives"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "系列三：企业高管与专家团队"
+            "value": "系列一：企业高管与专家团队"
           }
         }
       }
@@ -66161,13 +66161,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Download or place models in the local model library below, then configure them in LLM Models."
+            "value": "Recommend downloading Qwen2.5 7B model (run `omlx download mlx-community/Qwen2.5-7B-Instruct-4bit` in Terminal), and configuring it in \"LLM Models\"."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在下方“本地模型库”中下载或放入模型；然后直接在“LLM 模型”设置中登录配置本地模型即可。"
+            "value": "推荐下载 Qwen2.5 7B 模型（在终端运行 `omlx download mlx-community/Qwen2.5-7B-Instruct-4bit`），然后在“LLM 模型”设置中配置并使用即可。"
           }
         }
       }
@@ -66406,6 +66406,125 @@
           "stringUnit": {
             "state": "translated",
             "value": "打开目录"
+          }
+        }
+      }
+    },
+    "speech.checking_availability": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking speech engine availability..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在检测语音识别引擎可用性..."
+          }
+        }
+      }
+    },
+    "speech.unsupported.btn_back": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to AI Lab"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "返回 AI 实验室"
+          }
+        }
+      }
+    },
+    "speech.unsupported.bundle_req": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires built-in app ASR components ready"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要 App 内建 ASR 组件就绪"
+          }
+        }
+      }
+    },
+    "speech.unsupported.cpu_req": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires Apple Silicon (M1/M2/M3/M4, etc.) chip"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要 Apple Silicon (M1/M2/M3/M4 等) 芯片设备"
+          }
+        }
+      }
+    },
+    "speech.unsupported.os_req": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires macOS 15 Sequoia or higher"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要 macOS 15 Sequoia 或更高版本操作系统"
+          }
+        }
+      }
+    },
+    "speech.unsupported.requirements": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hardware & System Requirements:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "硬件与系统要求："
+          }
+        }
+      }
+    },
+    "speech.unsupported.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speech Translation is temporarily unavailable"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前设备暂不支持语音转文字"
           }
         }
       }

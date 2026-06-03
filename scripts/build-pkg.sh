@@ -381,6 +381,8 @@ if launchctl print "system/${HELPER_LABEL}" &>/dev/null 2>&1; then
   launchctl bootout "system/${HELPER_LABEL}" 2>/dev/null || true
 fi
 sleep 1
+# 删除旧 app bundle，避免 Installer 降级安装时保留较新的 bundle 版本。
+rm -rf "/Applications/${APP_NAME}.app"
 exit 0
 PREINSTALL
 

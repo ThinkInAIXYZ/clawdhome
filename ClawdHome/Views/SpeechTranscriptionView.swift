@@ -73,6 +73,8 @@ struct SpeechTranscriptionView: View {
     @AppStorage("custom_hf_endpoint") private var customHFEndpoint = ""
     @AppStorage("hf_token_preference") private var hfTokenPreference = ""
 
+    // 状态就绪检测标记，防止在进入界面的一瞬间闪烁不可用提示
+    @State private var isChecking = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,16 +86,31 @@ struct SpeechTranscriptionView: View {
 
             Divider()
 
-            GeometryReader { proxy in
-                v1WorkspaceLayout
-                    .padding(20)
-                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            if isChecking {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .scaleEffect(1.0)
+                    Text(L10n.k("speech.checking_availability", fallback: "正在检测语音识别引擎可用性..."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if service.availability.isAvailable {
+                GeometryReader { proxy in
+                    v1WorkspaceLayout
+                        .padding(20)
+                        .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+                }
+            } else {
+                unavailablePlaceholderView
             }
         }
         .navigationTitle(L10n.k("speech.title", fallback: "语音转文字"))
         .task {
+            isChecking = true
             editedRawText = service.currentTranscript
             await refreshService()
+            isChecking = false
         }
         .onChange(of: service.currentTranscript) { _, newValue in
             editedRawText = newValue
@@ -245,16 +262,16 @@ struct SpeechTranscriptionView: View {
     private var v1QueueDropZoneCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             // ASR 引擎模型选择微卡片 (局部芯片样式)
-            if service.availability.isAvailable {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Label(L10n.k("speech.model", fallback: "模型选择"), systemImage: "cpu")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Label(L10n.k("speech.model", fallback: "模型选择"), systemImage: "cpu")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.secondary)
 
-                        Spacer()
+                    Spacer()
 
-                        // 精美紧凑的就绪标志
+                    // 精美紧凑的就绪与不可用状态标志
+                    if service.availability.isAvailable {
                         if !service.isPreparingModel && service.isSelectedModelDownloaded {
                             HStack(spacing: 4) {
                                 Image(systemName: "checkmark.shield.fill")
@@ -266,71 +283,90 @@ struct SpeechTranscriptionView: View {
                                     .foregroundStyle(.green)
                             }
                         }
-                    }
-
-                    HStack(spacing: 8) {
-                        Picker("", selection: $service.selectedModelID) {
-                            ForEach(curatedSpeechModels) { model in
-                                Text(model.displayName).tag(model.id)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-
-                        // 未下载状态迷你下载按钮
-                        if !service.isPreparingModel && !service.isSelectedModelDownloaded {
-                            Button {
-                                Task { await service.prepareSelectedModel() }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "arrow.down.circle")
-                                    Text(L10n.k("speech.download", fallback: "下载"))
-                                }
+                    } else {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.orange)
+                            Text(L10n.k("speech.unavailable", fallback: "不可用"))
                                 .font(.system(size: 10, weight: .bold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.12))
-                                .foregroundColor(.blue)
-                                .cornerRadius(5)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(service.isPreparingModel || service.isTranscribing)
+                                .foregroundStyle(.orange)
                         }
-                    }
-
-                    // 正在准备模型时的微型进度条与百分比
-                    if service.isPreparingModel {
-                        HStack(spacing: 8) {
-                            ProgressView(value: service.preparationProgressFraction)
-                                .progressViewStyle(.linear)
-
-                            Text(service.preparationProgressPercentText)
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundStyle(.blue)
-
-                            Button {
-                                service.cancelModelPreparation()
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.top, 2)
                     }
                 }
-                .padding(10)
-                .background(Color.primary.opacity(0.02))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.primary.opacity(0.04), lineWidth: 1)
-                )
 
-                Divider()
-                    .opacity(0.4)
+                HStack(spacing: 8) {
+                    Picker("", selection: $service.selectedModelID) {
+                        ForEach(curatedSpeechModels) { model in
+                            Text(model.displayName).tag(model.id)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .disabled(service.isPreparingModel || service.isTranscribing)
+
+                    // 未下载状态迷你下载按钮
+                    if !service.isPreparingModel && !service.isSelectedModelDownloaded {
+                        Button {
+                            Task { await service.prepareSelectedModel() }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.down.circle")
+                                Text(L10n.k("speech.download", fallback: "下载"))
+                            }
+                            .font(.system(size: 10, weight: .bold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(service.availability.isAvailable ? Color.blue.opacity(0.12) : Color.primary.opacity(0.04))
+                            .foregroundColor(service.availability.isAvailable ? .blue : .secondary)
+                            .cornerRadius(5)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!service.availability.isAvailable || service.isPreparingModel || service.isTranscribing)
+                    }
+                }
+
+                // 正在准备模型时的微型进度条与百分比
+                if service.isPreparingModel {
+                    HStack(spacing: 8) {
+                        ProgressView(value: service.preparationProgressFraction)
+                            .progressViewStyle(.linear)
+
+                        Text(service.preparationProgressPercentText)
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.blue)
+
+                        Button {
+                            service.cancelModelPreparation()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 2)
+                }
+
+                // 如果不可用，显示具体原因提示，帮助排查
+                if !service.availability.isAvailable {
+                    Text(service.availability.detail)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .padding(.top, 2)
+                }
             }
+            .padding(10)
+            .background(Color.primary.opacity(0.02))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(service.availability.isAvailable ? Color.primary.opacity(0.04) : Color.orange.opacity(0.15), lineWidth: 1)
+            )
+
+            Divider()
+                .opacity(0.4)
 
             // 标题栏
             HStack {
@@ -1608,6 +1644,86 @@ struct SpeechTranscriptionView: View {
         let llmStatus = await helperClient.getLocalLLMStatus()
         await service.refresh(localAIServiceRunning: llmStatus.isRunning)
     }
+
+    private var unavailablePlaceholderView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            ZStack {
+                Circle()
+                    .fill(Color.orange.opacity(0.08))
+                    .frame(width: 80, height: 80)
+                
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundStyle(.orange)
+            }
+            
+            VStack(spacing: 8) {
+                Text(L10n.k("speech.unsupported.title", fallback: "当前设备暂不支持语音转文字"))
+                    .font(.title3)
+                    .fontWeight(.bold)
+                
+                Text(service.availability.detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
+            
+            // 系统要求配置说明
+            VStack(alignment: .leading, spacing: 10) {
+                Text(L10n.k("speech.unsupported.requirements", fallback: "硬件与系统要求："))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.primary)
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "cpu")
+                            .frame(width: 16)
+                        Text(L10n.k("speech.unsupported.cpu_req", fallback: "需要 Apple Silicon (M1/M2/M3/M4 等) 芯片设备"))
+                    }
+                    HStack(spacing: 6) {
+                        Image(systemName: "macbook")
+                            .frame(width: 16)
+                        Text(L10n.k("speech.unsupported.os_req", fallback: "需要 macOS 15 Sequoia 或更高版本操作系统"))
+                    }
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.stack.3d.up.fill")
+                            .frame(width: 16)
+                        Text(L10n.k("speech.unsupported.bundle_req", fallback: "需要 App 内建 ASR 组件就绪"))
+                    }
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+            }
+            .padding(16)
+            .background(Color.primary.opacity(0.02))
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.primary.opacity(0.04), lineWidth: 0.5)
+            )
+            
+            Button {
+                if let onBack {
+                    onBack()
+                }
+            } label: {
+                Text(L10n.k("speech.unsupported.btn_back", fallback: "返回 AI 实验室"))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 8)
+                    .background(Color.blue)
+                    .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 }
 
 // MARK: - 智能实时声波模拟组件
@@ -2145,6 +2261,7 @@ struct AISpeechRefineSheet: View {
 
         refineTask = Task {
             let startTime = Date()
+            var rawRefinedBuffer = ""
             do {
                 let stream = service.refineTranscriptStream(
                     text: service.currentTranscript,
@@ -2158,22 +2275,21 @@ struct AISpeechRefineSheet: View {
                     // 随时检测任务取消，支持秒级强力打断
                     try Task.checkCancellation()
 
+                    rawRefinedBuffer += chunk
+                    let displayText = SpeechTranscriptionService.refinementDisplayText(
+                        from: rawRefinedBuffer,
+                        isFinal: false
+                    )
+
                     await MainActor.run {
-                        if self.refinedText.isEmpty {
-                            // 移除首个 chunk 开头的所有换行和空白字符
-                            let cleaned = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !cleaned.isEmpty {
-                                self.refinedText += cleaned
-                            }
-                        } else {
-                            self.refinedText += chunk
-                        }
+                        self.refinedText = displayText
                     }
                 }
 
+                let finalText = SpeechTranscriptionService.refinementDisplayText(from: rawRefinedBuffer)
                 await MainActor.run {
                     self.refineDuration = Date().timeIntervalSince(startTime)
-                    self.refinedText = self.refinedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.refinedText = finalText
                     self.isRefining = false
                 }
             } catch is CancellationError {

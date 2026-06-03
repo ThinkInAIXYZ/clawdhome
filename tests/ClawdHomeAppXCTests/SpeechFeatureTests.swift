@@ -4,6 +4,75 @@ import XCTest
 final class SpeechFeatureTests: XCTestCase {
     private let gibibyte: UInt64 = 1024 * 1024 * 1024
 
+    func testRefineOutputDropsInstructionAnalysisBeforeMarkdownTitle() {
+        let leakedOutput = """
+        1. **Analyze the Input and Instructions**:
+           * **Role**: Extremely professional ASR text refinement and proper noun correction expert.
+           * **Task**: Apply the selected mode: [原稿智能净化] (Raw Draft Intelligent Purification).
+
+        # 安利生反馈
+
+        今天我们刚刚沟通了一下。
+        """
+
+        XCTAssertEqual(
+            SpeechTranscriptionService.refinementDisplayText(from: leakedOutput),
+            "# 安利生反馈\n\n今天我们刚刚沟通了一下。"
+        )
+    }
+
+    func testRefineOutputSuppressesOnlyInstructionAnalysisWhileStreaming() {
+        let leakedOutput = """
+        1. **Analyze the Input and Instructions**:
+           * **Role**: Extremely professional ASR text refinement and proper noun correction expert.
+           * **Rules for [原稿智能净化]**:
+        """
+
+        XCTAssertEqual(
+            SpeechTranscriptionService.refinementDisplayText(from: leakedOutput, isFinal: false),
+            ""
+        )
+    }
+
+    func testBailianQwenRefineRequestDisablesThinking() {
+        let options = SpeechTranscriptionService.refinementOpenAIRequestOptions(
+            providerPrefix: "bailian",
+            modelId: "bailian/qwen3.6-plus"
+        )
+
+        XCTAssertEqual(options["enable_thinking"] as? Bool, false)
+    }
+
+    func testOpenRouterRefineRequestExcludesReasoningTokens() {
+        let options = SpeechTranscriptionService.refinementOpenAIRequestOptions(
+            providerPrefix: "openrouter",
+            modelId: "openrouter/deepseek/deepseek-r1"
+        )
+        let reasoning = options["reasoning"] as? [String: Any]
+
+        XCTAssertEqual(reasoning?["exclude"] as? Bool, true)
+        XCTAssertEqual(reasoning?["effort"] as? String, "none")
+    }
+
+    func testCustomRefineRequestDoesNotAddOmlxThinkingOptions() {
+        let options = SpeechTranscriptionService.refinementOpenAIRequestOptions(
+            providerPrefix: "custom",
+            modelId: "custom/Qwopus3.6-35B-A3B-v1-oQ4"
+        )
+
+        XCTAssertFalse(options.keys.contains("thinking_budget"))
+    }
+
+    func testGeminiFlashRefineRequestDisablesThinkingBudget() {
+        let generationConfig = SpeechTranscriptionService.refinementGeminiGenerationConfig(
+            modelId: "gemini-2.5-flash"
+        )
+        let thinkingConfig = generationConfig["thinkingConfig"] as? [String: Any]
+
+        XCTAssertEqual(generationConfig["maxOutputTokens"] as? Int, 4096)
+        XCTAssertEqual(thinkingConfig?["thinkingBudget"] as? Int, 0)
+    }
+
     func testSpeechModelAdvisorRecommendations() {
         let supportedOS = OperatingSystemVersion(majorVersion: 15, minorVersion: 0, patchVersion: 0)
         let oldOS = OperatingSystemVersion(majorVersion: 14, minorVersion: 6, patchVersion: 0)

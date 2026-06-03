@@ -2501,9 +2501,22 @@ struct AvatarSelectorSheet: View {
                     }
                     .buttonStyle(.plain)
                     
-                    // 方案一：微立体数字助手
+                    // 方案一：企业高管与专家团队
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(L10n.k("avatar.selector.series_clay", fallback: "系列一：微立体数字助手"))
+                        Text(L10n.k("avatar.selector.series_corp", fallback: "系列一：企业高管与专家团队"))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.secondary)
+                        
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                            ForEach(corpAvatars, id: \.0) { avatar in
+                                builtInAvatarCard(name: avatar.0, label: avatar.1)
+                            }
+                        }
+                    }
+                    
+                    // 方案二：微立体数字助手
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L10n.k("avatar.selector.series_clay", fallback: "系列二：微立体数字助手"))
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.secondary)
                         
@@ -2514,27 +2527,14 @@ struct AvatarSelectorSheet: View {
                         }
                     }
                     
-                    // 方案二：高级职能数字生命
+                    // 方案三：高级职能数字生命
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(L10n.k("avatar.selector.series_role", fallback: "系列二：高级职能数字生命"))
+                        Text(L10n.k("avatar.selector.series_role", fallback: "系列三：高级职能数字生命"))
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.secondary)
                         
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                             ForEach(roleAvatars, id: \.0) { avatar in
-                                builtInAvatarCard(name: avatar.0, label: avatar.1)
-                            }
-                        }
-                    }
-                    
-                    // 方案三：企业高管与专家团队
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(L10n.k("avatar.selector.series_corp", fallback: "系列三：企业高管与专家团队"))
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.secondary)
-                        
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                            ForEach(corpAvatars, id: \.0) { avatar in
                                 builtInAvatarCard(name: avatar.0, label: avatar.1)
                             }
                         }

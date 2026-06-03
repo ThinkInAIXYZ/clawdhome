@@ -29,7 +29,8 @@ WEBSITE_REPO ?= deepjerry-ai/clawdhome_website
 
 help:
 	@echo "可用目标："
-	@echo "  build            Debug 构建（构建时自动递增本地 Build 号，并包含 Speech 和 CLI 构建）"
+	@echo "  build            Debug 构建（默认跳过 Speech，构建 App + CLI；需要 Speech 时先运行 make build-speech）"
+	@echo "                   调试时也可用 CLAWDHOME_BUILD_SPEECH_IN_DEBUG=1 make build 显式启用 Speech"
 	@echo "  build-cli        Debug 构建 CLI（仅 CLI，不含 App/Helper）"
 	@echo "  build-speech     构建独立 ClawdHomeSpeech ASR 语音识别程序（输出到 build/Executables）"
 	@echo "  run-cli          构建并运行 CLI（传参: make run-cli ARGS='shrimp list'）"
@@ -104,6 +105,7 @@ changelog:
 	@bash scripts/changelog.sh --stdout
 
 test-release-scripts:
+	@bash tests/build_pkg_scripts_test.sh
 	@bash tests/release_scripts_test.sh
 
 bump-build:
@@ -126,6 +128,7 @@ build: bump-build
 		-configuration Debug \
 		CLAWDHOME_MARKETING_VERSION_OVERRIDE="$$MARKETING_VERSION" \
 		CLAWDHOME_BUILD_NUMBER_OVERRIDE="$$BUILD_NO" \
+		CLAWDHOME_BUILD_SPEECH_IN_DEBUG="$(CLAWDHOME_BUILD_SPEECH_IN_DEBUG)" \
 		MARKETING_VERSION="$$MARKETING_VERSION" \
 		CURRENT_PROJECT_VERSION="$$BUILD_NO" \
 		INFOPLIST_KEY_CFBundleShortVersionString="$$MARKETING_VERSION" \

@@ -77,6 +77,27 @@ compute_build_fingerprint() {
   ) | /usr/bin/shasum | /usr/bin/awk '{print $1}'
 }
 
+CONFIGURATION_LOWER="$(echo "${CONFIGURATION}" | tr '[:upper:]' '[:lower:]')"
+case "${CONFIGURATION_LOWER}" in
+  release) ;;
+  *) CONFIGURATION_LOWER="debug" ;;
+esac
+
+should_build_speech_in_debug() {
+  case "${CLAWDHOME_BUILD_SPEECH_IN_DEBUG:-}" in
+    1|true|TRUE|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if [ "${IS_XCODE_BUILD}" = true ] \
+  && [ "${CONFIGURATION_LOWER}" = "debug" ] \
+  && ! should_build_speech_in_debug; then
+  echo "⏭ skip speech tool build in Debug (set CLAWDHOME_BUILD_SPEECH_IN_DEBUG=1 to enable)"
+  cleanup_tool
+  exit 0
+fi
+
 # 仅在 Apple Silicon 主机上构建；Intel 构建显式不包含该能力。
 if [ "$(uname -m)" != "arm64" ]; then
   echo "⏭ skip speech tool embed (host is not Apple Silicon)"
@@ -99,12 +120,6 @@ if [ "${IS_XCODE_BUILD}" = true ]; then
     exit 0
   fi
 fi
-
-CONFIGURATION_LOWER="$(echo "${CONFIGURATION}" | tr '[:upper:]' '[:lower:]')"
-case "${CONFIGURATION_LOWER}" in
-  release) ;;
-  *) CONFIGURATION_LOWER="debug" ;;
-esac
 
 PACKAGE_PATH="${SRCROOT}/ClawdHomeSpeech"
 SCRATCH_PATH="${DERIVED_FILE_DIR}/ClawdHomeSpeech.build"

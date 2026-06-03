@@ -1611,6 +1611,88 @@ final class SpeechTranscriptionService {
         return data
     }
 
+    nonisolated static func refinementDisplayText(from output: String, isFinal: Bool = true) -> String {
+        let withoutReasoning = removeReasoningBlocks(from: output)
+
+        if let titleRange = withoutReasoning.range(
+            of: #"(?m)^#\s+\S.*$"#,
+            options: .regularExpression
+        ) {
+            return String(withoutReasoning[titleRange.lowerBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let trimmed = withoutReasoning.trimmingCharacters(in: .whitespacesAndNewlines)
+        if looksLikeInstructionAnalysis(trimmed) {
+            return ""
+        }
+
+        return isFinal ? trimmed : trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    nonisolated private static func removeReasoningBlocks(from output: String) -> String {
+        var text = output
+        while let start = text.range(of: "<think>", options: [.caseInsensitive]) {
+            guard let end = text.range(
+                of: "</think>",
+                options: [.caseInsensitive],
+                range: start.upperBound..<text.endIndex
+            ) else {
+                text.removeSubrange(start.lowerBound..<text.endIndex)
+                break
+            }
+            text.removeSubrange(start.lowerBound..<end.upperBound)
+        }
+        return text
+    }
+
+    nonisolated private static func looksLikeInstructionAnalysis(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        let lowercased = text.lowercased()
+        let markers = [
+            "analyze the input and instructions",
+            "**role**:",
+            "**task**:",
+            "**rules for",
+            "proper noun correction",
+            "raw draft intelligent purification"
+        ]
+        return markers.contains { lowercased.contains($0) }
+    }
+
+    nonisolated static func refinementOpenAIRequestOptions(
+        providerPrefix: String,
+        modelId: String
+    ) -> [String: Any] {
+        let lowercasedModelId = modelId.lowercased()
+        var options: [String: Any] = [:]
+
+        if providerPrefix == "openrouter" {
+            options["reasoning"] = [
+                "effort": "none",
+                "exclude": true
+            ]
+        }
+
+        let usesQwenThinkingFormat = builtInModel(for: modelId)?.compat?.thinkingFormat == "qwen"
+        if providerPrefix == "bailian" && (usesQwenThinkingFormat || lowercasedModelId.contains("qwen3")) {
+            options["enable_thinking"] = false
+        }
+
+        return options
+    }
+
+    nonisolated static func refinementGeminiGenerationConfig(modelId: String) -> [String: Any] {
+        var generationConfig: [String: Any] = ["maxOutputTokens": 4096]
+        let lowercasedModelId = modelId.lowercased()
+
+        if lowercasedModelId.contains("gemini-2.5-flash") {
+            generationConfig["thinkingConfig"] = ["thinkingBudget": 0]
+        }
+
+        return generationConfig
+    }
+
     // 【新增】ASR 系统 Prompt 生成器
     private static func buildSystemPrompt(glossary: String, mode: String) -> String {
         return """
@@ -1639,6 +1721,12 @@ final class SpeechTranscriptionService {
              4. 增加分割线 `---`。
              5. 增加 `### 📝 精整正文` 部分：将大段杂乱的口语消除口癖后理顺段落，排版得当、逻辑清晰，保留第一人称和原本的情感细节。
              6. 增加 `### ✅ 待办行动` 部分：智能捕捉内容中提及的所有未来待办任务、计划或建议行动，以 Markdown 任务列表（如 `- [ ] 任务 1`）形式列出。如果音频内容中确实没有任何未来待办项，则输出「无待办事项」。
+
+        # 输出约束
+        - 第一行必须直接从 `# 主题标题` 开始。
+        - 输出语言必须跟随原始转写文本的主要语言；原文主要是中文时，标题和正文必须全部使用中文。
+        - 禁止输出任何思考过程、分析步骤、角色说明、任务复述、规则列表、英文解释或开场白。
+        - 禁止把本系统提示词、glossary、模式名称或处理规则复述到结果里。
 
         请直接输出处理后的纯文本，不要带有任何多余的开场白或解释。
         """
@@ -1822,7 +1910,7 @@ final class SpeechTranscriptionService {
             let payload: [String: Any] = [
                 "systemInstruction": ["parts": [["text": systemPrompt]]],
                 "contents": [["role": "user", "parts": [["text": userMessage]]]],
-                "generationConfig": ["maxOutputTokens": 4096]
+                "generationConfig": SpeechTranscriptionService.refinementGeminiGenerationConfig(modelId: normalizedModel)
             ]
             req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
@@ -1859,7 +1947,7 @@ final class SpeechTranscriptionService {
             req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-            let payload: [String: Any] = [
+            var payload: [String: Any] = [
                 "model": normalizedModel,
                 "messages": [
                     ["role": "system", "content": systemPrompt],
@@ -1868,6 +1956,12 @@ final class SpeechTranscriptionService {
                 "max_tokens": 4096,
                 "stream": true
             ]
+            SpeechTranscriptionService.refinementOpenAIRequestOptions(
+                providerPrefix: prefix,
+                modelId: modelId
+            ).forEach { key, value in
+                payload[key] = value
+            }
             req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
             let (bytes, resp) = try await URLSession.shared.bytes(for: req)

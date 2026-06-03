@@ -1202,18 +1202,23 @@
 		};
 		884361A2AC35839A936F5338 /* Embed Speech Tool into App Bundle */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/ClawdHomeSpeech/Package.swift",
+				"$(SRCROOT)/ClawdHomeSpeech/Package.resolved",
+				"$(SRCROOT)/ClawdHomeSpeech/main.swift",
+				"$(SRCROOT)/scripts/build-speech-tool.sh",
 			);
 			name = "Embed Speech Tool into App Bundle";
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(CODESIGNING_FOLDER_PATH)/Contents/Library/Executables/ClawdHomeSpeech",
+				"$(CODESIGNING_FOLDER_PATH)/Contents/Library/Executables/mlx.metallib",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
