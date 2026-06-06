@@ -27,6 +27,45 @@ cleanup_tool() {
   fi
 }
 
+speech_sign_identity() {
+  local identity
+  for identity in \
+    "${CLAWDHOME_SPEECH_SIGN_IDENTITY:-}" \
+    "${EXPANDED_CODE_SIGN_IDENTITY_NAME:-}" \
+    "${EXPANDED_CODE_SIGN_IDENTITY:-}" \
+    "${CODE_SIGN_IDENTITY:-}"; do
+    if [ -n "${identity}" ] && [ "${identity}" != "-" ]; then
+      printf '%s' "${identity}"
+      return 0
+    fi
+  done
+}
+
+should_sign_embedded_tool() {
+  [ "${IS_XCODE_BUILD}" = true ] || return 1
+  [ "${CONFIGURATION_LOWER}" = "release" ] || return 1
+  [ "${CODE_SIGNING_ALLOWED:-YES}" != "NO" ] || return 1
+  [ -n "$(speech_sign_identity)" ] || return 1
+}
+
+sign_embedded_tool_if_needed() {
+  should_sign_embedded_tool || return 0
+
+  if [ ! -f "${DEST_TOOL}" ]; then
+    echo "error: speech tool signing requested but executable is missing: ${DEST_TOOL}" >&2
+    exit 1
+  fi
+
+  local identity
+  identity="$(speech_sign_identity)"
+  echo "▶︎ signing bundled speech tool"
+  /usr/bin/codesign --force \
+    --sign "${identity}" \
+    --timestamp \
+    --options runtime \
+    "${DEST_TOOL}"
+}
+
 patch_mlx_fence_kernel_if_needed() {
   local fence_path="${SCRATCH_PATH}/${MLX_FENCE_RELATIVE_PATH}"
   [ -f "${fence_path}" ] || return 0
@@ -94,7 +133,18 @@ if [ "${IS_XCODE_BUILD}" = true ] \
   && [ "${CONFIGURATION_LOWER}" = "debug" ] \
   && ! should_build_speech_in_debug; then
   echo "⏭ skip speech tool build in Debug (set CLAWDHOME_BUILD_SPEECH_IN_DEBUG=1 to enable)"
-  cleanup_tool
+
+  # 若 build/ 目录下已有预编译好的工具，且 App Bundle 中缺失，则复制过来以供 Debug 使用，不再直接清理
+  SRC_TOOL="${SRCROOT}/build/Executables/ClawdHomeSpeech"
+  SRC_METALLIB="${SRCROOT}/build/Executables/mlx.metallib"
+  if [ -f "${SRC_TOOL}" ] && [ -f "${SRC_METALLIB}" ] && [ ! -f "${DEST_TOOL}" ]; then
+    echo "▶︎ copying pre-built speech tool from build/Executables to app bundle"
+    mkdir -p "${DEST_DIR}"
+    cp "${SRC_TOOL}" "${DEST_TOOL}"
+    cp "${SRC_METALLIB}" "${DEST_METALLIB}"
+    chmod +x "${DEST_TOOL}"
+    sign_embedded_tool_if_needed
+  fi
   exit 0
 fi
 
@@ -140,10 +190,36 @@ if [ -f "${STAMP_PATH}" ] \
   && [ -f "${DEST_METALLIB}" ] \
   && [ "$(/bin/cat "${STAMP_PATH}")" = "${FINGERPRINT}" ]; then
   echo "⏭ skip speech tool build (inputs unchanged)"
+  sign_embedded_tool_if_needed
   exit 0
 fi
 
 echo "▶︎ building bundled speech tool (${CONFIGURATION_LOWER})"
+
+# 获取编译时的版本号与 Build 号，动态生成 GeneratedVersion.swift
+BUILD_NUM="${CLAWDHOME_BUILD_NUMBER_OVERRIDE:-${CURRENT_PROJECT_VERSION:-}}"
+if [ -z "$BUILD_NUM" ]; then
+  BUILD_NUM=$(git -C "${SRCROOT}" rev-list --count HEAD 2>/dev/null || echo 0)
+fi
+MARKETING_VER="${CLAWDHOME_MARKETING_VERSION_OVERRIDE:-${MARKETING_VERSION:-}}"
+if [ -z "$MARKETING_VER" ]; then
+  MARKETING_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "${SRCROOT}/ClawdHome/Info.plist" 2>/dev/null || true)
+fi
+if [ -n "$MARKETING_VER" ] && [ -n "$BUILD_NUM" ]; then
+  SPEECH_VER="${MARKETING_VER} (${BUILD_NUM})"
+elif [ -n "$MARKETING_VER" ]; then
+  SPEECH_VER="${MARKETING_VER}"
+else
+  SPEECH_VER="${BUILD_NUM}"
+fi
+
+BUILD_TIME=$(date "+%Y-%m-%d %H:%M:%S")
+
+OUT_SPEECH_VER="${SRCROOT}/ClawdHomeSpeech/GeneratedVersion.swift"
+echo "// Auto-generated — do not edit" > "${OUT_SPEECH_VER}"
+echo "let kSpeechVersion = \"${SPEECH_VER}\"" >> "${OUT_SPEECH_VER}"
+echo "let kSpeechBuildTime = \"${BUILD_TIME}\"" >> "${OUT_SPEECH_VER}"
+
 patch_mlx_fence_kernel_if_needed
 
 /usr/bin/xcrun --sdk macosx swift build \
@@ -209,5 +285,7 @@ find "${SCRATCH_PATH}/${CONFIGURATION_LOWER}" -maxdepth 1 \( -name "*.resources"
   echo "▶︎ copying built resources: $(basename "${src_res}")"
   cp -R "${src_res}" "${DEST_DIR}/"
 done
+
+sign_embedded_tool_if_needed
 
 printf '%s' "${FINGERPRINT}" > "${STAMP_PATH}"

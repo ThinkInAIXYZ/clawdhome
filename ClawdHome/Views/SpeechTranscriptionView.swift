@@ -45,7 +45,7 @@ struct SpeechTranscriptionView: View {
     // 【新增】内容展现维度与预览格式切换定义
     enum ContentDimension: String, CaseIterable, Identifiable {
         case raw = "粗稿原文"
-        case refined = "AI 智能精装稿"
+        case refined = "AI 智能总结"
         case srt = "实时字幕"
 
         var id: String { rawValue }
@@ -1376,7 +1376,7 @@ struct SpeechTranscriptionView: View {
             HStack(spacing: 4) {
                 Image(systemName: "sparkles")
                     .foregroundStyle(.purple)
-                Text(service.selectedHistoryRecord?.refinedText != nil ? "重新润色" : "AI 润色")
+                Text(service.selectedHistoryRecord?.refinedText != nil ? "重新总结" : "AI 总结")
             }
             .font(.system(size: 11, weight: .bold))
             .padding(.horizontal, 8)
@@ -1424,7 +1424,7 @@ struct SpeechTranscriptionView: View {
         }
         .buttonStyle(.plain)
         .disabled(service.currentTranscript.isEmpty)
-        .help(service.selectedHistoryRecord?.refinedText != nil ? "重新润色" : "AI 智能润色")
+        .help(service.selectedHistoryRecord?.refinedText != nil ? "重新总结" : "AI 智能总结")
     }
 
     private var copyButton: some View {
@@ -1868,7 +1868,7 @@ struct AISpeechRefineSheet: View {
         VStack(spacing: 0) {
             // 头部标题栏
             HStack {
-                Label(showCompareView ? "AI 智能润色结果对比" : "AI 智能精整与专名润色", systemImage: "sparkles")
+                Label(showCompareView ? "AI 智能总结结果对比" : "AI 智能总结与提炼", systemImage: "sparkles")
                     .font(.headline)
                     .foregroundStyle(
                         LinearGradient(

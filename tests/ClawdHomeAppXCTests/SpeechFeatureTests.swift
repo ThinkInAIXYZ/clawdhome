@@ -455,11 +455,11 @@ final class SpeechFeatureTests: XCTestCase {
         defer { service.stopObsidianWatcher() }
         service.currentTranscript = "原稿内容"
 
-        XCTAssertTrue(service.applyRefinedTextToCurrentRecord("AI 精装内容"))
+        XCTAssertTrue(service.applyRefinedTextToCurrentRecord("AI 总结内容"))
 
         XCTAssertEqual(service.currentTranscript, "原稿内容")
         XCTAssertEqual(service.currentHistoryRecord?.transcriptText, "原稿内容")
-        XCTAssertEqual(service.currentHistoryRecord?.refinedText, "AI 精装内容")
+        XCTAssertEqual(service.currentHistoryRecord?.refinedText, "AI 总结内容")
     }
 
     @MainActor
@@ -494,7 +494,7 @@ final class SpeechFeatureTests: XCTestCase {
         let refined = """
         # 产品路线复盘
 
-        AI 精装正文内容。
+        AI 总结正文内容。
         """
         XCTAssertTrue(service.applyRefinedTextToCurrentRecord(refined))
 
@@ -516,7 +516,7 @@ final class SpeechFeatureTests: XCTestCase {
             modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
             languageHintOrDetectedLanguage: nil,
             transcriptText: "原稿内容",
-            refinedText: "# 产品路线复盘\n\nAI 精装正文内容。",
+            refinedText: "# 产品路线复盘\n\nAI 总结正文内容。",
             refinedTitle: "产品路线复盘",
             elapsedSeconds: 2,
             status: .completed,

@@ -59,6 +59,7 @@ final class SpeechTranscriptionService {
         let ok: Bool
         let command: String
         let message: String
+        let version: String?
         let supportedModelIDs: [String]
     }
 
@@ -84,6 +85,7 @@ final class SpeechTranscriptionService {
 
     private(set) var history: [SpeechHistoryRecord] = []
     private(set) var availability: SpeechToolAvailability
+    private(set) var bundledToolVersion: String = "—"
     private(set) var recommendation: SpeechModelRecommendation
     private(set) var isTranscribing = false
     private(set) var isPreparingModel = false
@@ -853,7 +855,7 @@ final class SpeechTranscriptionService {
         if let refined = record.refinedText, !refined.isEmpty {
             mdContent += """
 
-            ## ✨ AI 智能精装版
+            ## ✨ AI 智能总结
             \(refined)
 
             """
@@ -953,7 +955,7 @@ final class SpeechTranscriptionService {
         if let refined = record.refinedText, !refined.isEmpty {
             mdContent += """
 
-            ## ✨ AI 智能精装版
+            ## ✨ AI 智能总结
             \(refined)
 
             """
@@ -1051,6 +1053,26 @@ final class SpeechTranscriptionService {
     private func refreshRecommendation(localAIServiceRunning: Bool) {
         let supportedAvailability = detectAvailability()
         availability = supportedAvailability
+
+        let path = bundledToolURL().path
+        let modDateText = bundledToolBuildTime
+
+        if supportedAvailability.isAvailable {
+            Task {
+                do {
+                    let response = try await probeTool()
+                    self.bundledToolVersion = response.version ?? "—"
+                    print("ASR Tool Probe: success. Version: \(self.bundledToolVersion), Modified: \(modDateText), Path: \(path)")
+                } catch {
+                    self.bundledToolVersion = "—"
+                    print("ASR Tool Probe: failed. Error: \(error.localizedDescription), Modified: \(modDateText), Path: \(path)")
+                }
+            }
+        } else {
+            self.bundledToolVersion = "—"
+            print("ASR Tool Probe: skip. Reason: \(supportedAvailability.reason.rawValue), Detail: \(supportedAvailability.detail), Path: \(path)")
+        }
+
         recommendation = SpeechModelAdvisor.recommend(
             for: .init(
                 isAppleSilicon: isAppleSilicon(),
@@ -1369,6 +1391,19 @@ final class SpeechTranscriptionService {
             .appendingPathComponent("Library", isDirectory: true)
             .appendingPathComponent("Executables", isDirectory: true)
             .appendingPathComponent("ClawdHomeSpeech", isDirectory: false)
+    }
+
+    var bundledToolBuildTime: String {
+        let path = bundledToolURL().path
+        guard fileManager.fileExists(atPath: path),
+              let attrs = try? fileManager.attributesOfItem(atPath: path),
+              let modDate = attrs[.modificationDate] as? Date else {
+            return L10n.k("speech.bundled_tool.missing", fallback: "未就绪")
+        }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        return formatter.string(from: modDate)
     }
 
     private func suggestedExportFileName(for record: SpeechHistoryRecord, ext: String) -> String {

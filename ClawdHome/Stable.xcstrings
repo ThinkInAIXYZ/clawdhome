@@ -574,7 +574,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "开启后，录音的转写原稿、AI 智能精装版（若有）及音频文件将自动保存至 Obsidian Vault。音频文件默认存放于附件目录下。"
+            "value": "开启后，录音的转写原稿、AI 智能总结版（若有）及音频文件将自动保存至 Obsidian Vault。音频文件默认存放于附件目录下。"
           }
         }
       }
@@ -1061,13 +1061,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Save AI Draft"
+            "value": "Save AI Summary"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存到 AI 精装版"
+            "value": "保存到 AI 总结版"
           }
         }
       }
@@ -1129,13 +1129,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "AI Draft"
+            "value": "AI Summary"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "AI 智能精装版"
+            "value": "AI 智能总结版"
           }
         }
       }
@@ -1180,13 +1180,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "✨ AI Draft"
+            "value": "✨ AI Summary"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "✨ AI 精装稿"
+            "value": "✨ AI 总结"
           }
         }
       }
@@ -1197,13 +1197,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "✨ Fine"
+            "value": "✨ Summary"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "✨ 精装"
+            "value": "✨ 总结"
           }
         }
       }
@@ -1282,13 +1282,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copy AI Draft"
+            "value": "Copy AI Summary"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "复制 AI 智能精装版"
+            "value": "复制 AI 智能总结版"
           }
         }
       }
@@ -1605,13 +1605,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copy AI Draft"
+            "value": "Copy AI Summary"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "仅复制精装版"
+            "value": "仅复制总结版"
           }
         }
       }
@@ -1656,13 +1656,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remove filler words, clean up punctuation, extract notes or meeting minutes, and keep the original alongside the AI-polished version."
+            "value": "Remove filler words, clean up punctuation, extract notes or meeting minutes, and keep the original alongside the AI-summary version."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "一键消除口癖语气词，智能理顺断句，提取会议纪要、随记便签，保留原笔记的同时保留精装润色版。"
+            "value": "一键消除口癖语气词，智能理顺断句，提炼会议纪要、随记便签，保留原笔记的同时保留智能总结版。"
           }
         }
       }
@@ -1673,13 +1673,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "✨ AI polish not started"
+            "value": "✨ AI summary not started"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "✨ 尚未进行 AI 智能精整与专名润色"
+            "value": "✨ 尚未进行 AI 智能总结与提炼"
           }
         }
       }
@@ -1832,7 +1832,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "润色重塑模式"
+            "value": "总结重塑模式"
           }
         }
       }
@@ -1860,13 +1860,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start Polish"
+            "value": "Start Summary & Refine"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "开始智能精整与专名润色"
+            "value": "开始智能总结与提炼"
           }
         }
       }
@@ -4362,13 +4362,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "将音频或录音转为文字，支持多语言识别与 AI 智能润色，一键生成会议纪要"
+            "value": "将音频或录音转为文字，支持多语言识别与 AI 智能总结，一键生成会议纪要"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "將音訊或錄音轉為文字，支援多語言識別與 AI 智能潤色，一鍵生成會議紀要"
+            "value": "將音訊或錄音轉為文字，支援多語言識別與 AI 智能總結，一鍵生成會議紀要"
           }
         }
       }
@@ -66610,6 +66610,108 @@
           "stringUnit": {
             "state": "translated",
             "value": "请先在「账户管理」中添加账户并勾选需要启用的模型。"
+          }
+        }
+      }
+    },
+    "views.settings_view.asr_service": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speech-to-Text Service"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音转文字服务"
+          }
+        }
+      }
+    },
+    "views.settings_view.asr_available": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已就绪"
+          }
+        }
+      }
+    },
+    "views.settings_view.asr_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Ready"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未就绪"
+          }
+        }
+      }
+    },
+    "views.settings_view.asr_build_time": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool Build Time"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工具编译时间"
+          }
+        }
+      }
+    },
+    "speech.bundled_tool.missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Ready"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未就绪"
+          }
+        }
+      }
+    },
+    "views.settings_view.asr_version": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool Version"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工具版本"
           }
         }
       }

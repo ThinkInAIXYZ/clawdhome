@@ -62,6 +62,8 @@ private struct GeneralSettingsTab: View {
     @State private var proxyError: String? = nil
     @State private var proxyProgressText: String? = nil
     @State private var proxyExpanded = false
+    @State private var isAccessibilityExpanded = false
+    @State private var isChromeAutomationExpanded = false
 
     private enum ProxyScheme: String, CaseIterable, Identifiable {
         case http
@@ -92,14 +94,29 @@ private struct GeneralSettingsTab: View {
                             .font(.body)
                         Spacer()
                         permissionTag(for: hostPermissionCenter.accessibilityStatus)
+
+                        if hostPermissionCenter.accessibilityStatus != .granted {
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .rotationEffect(.degrees(isAccessibilityExpanded ? 90 : 0))
+                        }
                     }
-                    
-                    if hostPermissionCenter.accessibilityStatus != .granted {
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if hostPermissionCenter.accessibilityStatus != .granted {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isAccessibilityExpanded.toggle()
+                            }
+                        }
+                    }
+
+                    if hostPermissionCenter.accessibilityStatus != .granted && isAccessibilityExpanded {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(L10n.k("host_permission.prompt.custom.accessibility.step2", fallback: "将下方 ClawdHome 图标直接拖拽到系统偏好设置右侧「辅助功能」列表中"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            
+
                             HStack(spacing: 16) {
                                 Button(action: {
                                     hostPermissionCenter.requestAccessibilityPermission()
@@ -110,11 +127,11 @@ private struct GeneralSettingsTab: View {
                                     }
                                 }
                                 .buttonStyle(.bordered)
-                                
+
                                 Spacer()
-                                
+
                                 DragAppIconView()
-                                
+
                                 Spacer()
                             }
                             .padding(.top, 4)
@@ -129,7 +146,7 @@ private struct GeneralSettingsTab: View {
                     }
                 }
                 .padding(.vertical, 4)
-                
+
                 // Chrome 自动化卡片
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -143,14 +160,29 @@ private struct GeneralSettingsTab: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+
+                        if hostPermissionCenter.chromeInstalled && hostPermissionCenter.chromeAutomationStatus != .granted {
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .rotationEffect(.degrees(isChromeAutomationExpanded ? 90 : 0))
+                        }
                     }
-                    
-                    if hostPermissionCenter.chromeInstalled && hostPermissionCenter.chromeAutomationStatus != .granted {
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if hostPermissionCenter.chromeInstalled && hostPermissionCenter.chromeAutomationStatus != .granted {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isChromeAutomationExpanded.toggle()
+                            }
+                        }
+                    }
+
+                    if hostPermissionCenter.chromeInstalled && hostPermissionCenter.chromeAutomationStatus != .granted && isChromeAutomationExpanded {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(L10n.k("host_permission.prompt.custom.automation.step2", fallback: "在系统偏好设置右侧「自动化」列表中展开 ClawdHome 并勾选「Google Chrome」"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            
+
                             HStack(spacing: 16) {
                                 Button(action: {
                                     hostPermissionCenter.requestChromeAutomationPermission()
@@ -161,11 +193,11 @@ private struct GeneralSettingsTab: View {
                                     }
                                 }
                                 .buttonStyle(.bordered)
-                                
+
                                 Spacer()
-                                
+
                                 AutomationGuideView()
-                                
+
                                 Spacer()
                             }
                             .padding(.top, 4)
@@ -180,14 +212,14 @@ private struct GeneralSettingsTab: View {
                     }
                 }
                 .padding(.vertical, 4)
-                
+
                 HStack {
                     Text(L10n.k("settings.permissions.hint", fallback: "用于浏览器自动化与授权回调。若缺失权限，相关功能会失败。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    
+
                     Spacer()
-                    
+
                     Button(action: {
                         hostPermissionCenter.refresh()
                     }) {
@@ -219,7 +251,7 @@ private struct GeneralSettingsTab: View {
                     Text(L10n.k("settings.speech_transcription.hf_endpoint.mirror", fallback: "HF 镜像站 (hf-mirror.com)")).tag("https://hf-mirror.com")
                     Text(L10n.k("settings.speech_transcription.hf_endpoint.custom", fallback: "自定义…")).tag("custom")
                 }
-                
+
                 if hfEndpointPreference == "custom" {
                     TextField(
                         L10n.k("settings.speech_transcription.hf_endpoint.custom_url", fallback: "自定义端点 URL"),
@@ -239,7 +271,7 @@ private struct GeneralSettingsTab: View {
 
             Section(L10n.k("settings.obsidian.section", fallback: "Obsidian 联动")) {
                 Toggle(L10n.k("settings.obsidian.enabled", fallback: "自动同步到 Obsidian Vault"), isOn: $obsidianEnabled)
-                
+
                 if obsidianEnabled {
                     HStack {
                         Text(L10n.k("settings.obsidian.vault_path", fallback: "Obsidian Vault 路径"))
@@ -259,14 +291,14 @@ private struct GeneralSettingsTab: View {
                             chooseObsidianVaultPath()
                         }
                     }
-                    
+
                     TextField(
                         L10n.k("settings.obsidian.inbox", fallback: "Inbox 目录"),
                         text: $obsidianInbox
                     )
                     .textFieldStyle(.roundedBorder)
                     .disableAutocorrection(true)
-                    
+
                     TextField(
                         L10n.k("settings.obsidian.attachments", fallback: "附件目录"),
                         text: $obsidianAttachments
@@ -274,8 +306,8 @@ private struct GeneralSettingsTab: View {
                     .textFieldStyle(.roundedBorder)
                     .disableAutocorrection(true)
                 }
-                
-                Text(L10n.k("settings.obsidian.hint", fallback: "开启后，录音的转写原稿、AI 智能精装版（若有）及音频文件将自动保存至 Obsidian Vault。音频文件默认存放于附件目录下。"))
+
+                Text(L10n.k("settings.obsidian.hint", fallback: "开启后，录音的转写原稿、AI 智能总结版（若有）及音频文件将自动保存至 Obsidian Vault。音频文件默认存放于附件目录下。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -348,9 +380,9 @@ private struct GeneralSettingsTab: View {
                                 Text(L10n.k("views.settings_view.load_system_proxy", fallback: "读取系统代理"))
                             }
                         }
-                        
+
                         Spacer()
-                        
+
                         Button {
                             Task { await applyProxyToAllUsers() }
                         } label: {
@@ -1406,6 +1438,38 @@ private struct AboutTab: View {
                 .padding(4)
             }
 
+            GroupBox(L10n.k("views.settings_view.asr_service", fallback: "语音转文字服务")) {
+                let asrService = SpeechTranscriptionService.shared
+                let isAvailable = asrService.availability.isAvailable
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Circle()
+                            .fill(isAvailable ? Color.green : Color.red)
+                            .frame(width: 10, height: 10)
+                        Text(isAvailable
+                             ? L10n.k("views.settings_view.asr_available", fallback: "已就绪")
+                             : L10n.k("views.settings_view.asr_unavailable", fallback: "未就绪"))
+                        Spacer()
+                    }
+
+                    LabeledContent(L10n.k("views.settings_view.asr_version", fallback: "工具版本"), value: asrService.bundledToolVersion)
+                    LabeledContent(L10n.k("views.settings_view.asr_build_time", fallback: "工具编译时间"), value: asrService.bundledToolBuildTime)
+
+                    if !isAvailable, !asrService.availability.detail.isEmpty {
+                        Divider()
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                            Text(asrService.availability.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(4)
+            }
+
             Link(destination: URL(string: "https://clawdhome.app")!) {
                 HStack(spacing: 4) {
                     Image(systemName: "globe")
@@ -1529,13 +1593,13 @@ struct CacheManagementWindow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
-            
+
             if overview != nil {
                 metricsDashboard
             }
-            
+
             Divider()
-            
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(overview?.caches ?? []) { cache in
@@ -1544,7 +1608,7 @@ struct CacheManagementWindow: View {
                 }
                 .padding(.vertical, 2)
             }
-            
+
             footer
         }
         .padding(18)
@@ -1611,7 +1675,7 @@ struct CacheManagementWindow: View {
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(Color.primary.opacity(0.06), lineWidth: 1)
             )
-            
+
             // 总文件数指标卡
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.k("settings.cache.total_files", fallback: "总文件数量"))
@@ -1631,13 +1695,13 @@ struct CacheManagementWindow: View {
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(Color.primary.opacity(0.06), lineWidth: 1)
             )
-            
+
             // 一键清理全局控制
             VStack(alignment: .trailing, spacing: 4) {
                 Text(L10n.k("settings.cache.global_cleanup", fallback: "全局清理"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                
+
                 Button(role: .destructive) {
                     Task { await clearCache("all") }
                 } label: {
@@ -1727,7 +1791,7 @@ struct CacheManagementWindow: View {
     @ViewBuilder
     private func cacheRow(_ cache: SharedCacheItemStats) -> some View {
         let theme = cacheTheme(for: cache.id)
-        
+
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 // 专属渐变发光徽标
@@ -1747,12 +1811,12 @@ struct CacheManagementWindow: View {
                         RoundedRectangle(cornerRadius: 10)
                             .stroke(LinearGradient(colors: theme.colors.map { $0.opacity(0.3) }, startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
                     )
-                
+
                 VStack(alignment: .leading, spacing: 3) {
                     Text(localizedCacheName(cache))
                         .font(.headline)
                         .foregroundStyle(.primary)
-                    
+
                     HStack(spacing: 6) {
                         Text(cache.path)
                             .font(.system(.caption, design: .monospaced))
@@ -1760,7 +1824,7 @@ struct CacheManagementWindow: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .textSelection(.enabled)
-                        
+
                         Button {
                             let pb = NSPasteboard.general
                             pb.clearContents()
@@ -1774,9 +1838,9 @@ struct CacheManagementWindow: View {
                         .help(L10n.k("common.action.copy_path", fallback: "复制路径"))
                     }
                 }
-                
+
                 Spacer()
-                
+
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(formatBytes(cache.totalBytes))
                         .font(.system(.title3, design: .rounded).bold())
@@ -1788,12 +1852,12 @@ struct CacheManagementWindow: View {
                         .monospacedDigit()
                 }
             }
-            
+
             // 子分类数据分布
             if !cache.breakdown.isEmpty {
                 VStack(spacing: 8) {
                     segmentedProgressBar(for: cache, colors: theme.colors)
-                    
+
                     // 横向流式 Breakdown 标记排版
                     HStack(spacing: 12) {
                         ForEach(Array(cache.breakdown.enumerated()), id: \.element.label) { index, item in
@@ -1815,7 +1879,7 @@ struct CacheManagementWindow: View {
                     .padding(.top, 2)
                 }
             }
-            
+
             // 卡片层面的动作交互与局部状态气泡
             HStack {
                 HStack(spacing: 8) {
@@ -1842,7 +1906,7 @@ struct CacheManagementWindow: View {
                         .buttonStyle(.plain)
                         .disabled(isBusy)
                     }
-                    
+
                     if cache.supportsClear {
                         Button {
                             Task { await clearCache(cache.id) }
@@ -1867,9 +1931,9 @@ struct CacheManagementWindow: View {
                         .disabled(isBusy)
                     }
                 }
-                
+
                 Spacer()
-                
+
                 // 成功/失败微型通知气泡
                 if let message = messageByID[cache.id], !message.isEmpty {
                     Label(message, systemImage: "checkmark.circle.fill")
@@ -1880,7 +1944,7 @@ struct CacheManagementWindow: View {
                         .background(Color.green.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
-                
+
                 if let error = errorByID[cache.id], !error.isEmpty {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
@@ -1911,7 +1975,7 @@ struct CacheManagementWindow: View {
                 Spacer()
             }
             .padding(.top, 4)
-            
+
             if let globalMessage, !globalMessage.isEmpty {
                 Label(globalMessage, systemImage: "checkmark.circle.fill")
                     .font(.caption)

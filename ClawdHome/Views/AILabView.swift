@@ -24,7 +24,7 @@ private struct AITool: Identifiable {
 private let aiTools: [AITool] = [
     AITool(
         name: L10n.k("auto.ailab_view.speech_to_text", fallback: "语音转文字"),
-        description: L10n.k("auto.ailab_view.file_language", fallback: "将音频或录音转为文字，支持多语言识别与 AI 智能润色，一键生成会议纪要"),
+        description: L10n.k("auto.ailab_view.file_language", fallback: "将音频或录音转为文字，支持多语言识别与 AI 智能总结，一键生成会议纪要"),
         icon: "waveform.and.mic",
         theme: .blue,
         status: .ready,

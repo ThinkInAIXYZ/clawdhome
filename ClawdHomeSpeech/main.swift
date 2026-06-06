@@ -17,8 +17,8 @@ private enum ANSI {
 }
 
 private enum BuildInfo {
-    static let version = "1.1.291"
-    static let buildTime = "2026-05-25 22:26:04"
+    static let version = kSpeechVersion
+    static let buildTime = kSpeechBuildTime
 }
 
 private enum SpeechToolError: LocalizedError {
@@ -45,6 +45,7 @@ private struct ProbeResponse: Codable {
     let ok: Bool
     let command: String
     let message: String
+    let version: String
     let supportedModelIDs: [String]
 }
 
@@ -128,7 +129,6 @@ private final class DownloadProgressState: @unchecked Sendable {
     }
 }
 
-@main
 struct ClawdHomeSpeechMain {
     static func main() async {
         // 双模判定：若无参数，或参数非静默机器对接指令，则完美滑入极客终端控制台
@@ -802,6 +802,7 @@ struct ClawdHomeSpeechMain {
                 ok: true,
                 command: "probe",
                 message: "speech tool available",
+                version: BuildInfo.version,
                 supportedModelIDs: ["qwen3-asr-1.7b-8bit", "qwen3-asr-0.6b"]
             ))
         case "prepare-model":
@@ -1133,3 +1134,5 @@ private struct TranscribeSegment {
     let endTime: Double
     let text: String
 }
+
+await ClawdHomeSpeechMain.main()
