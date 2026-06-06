@@ -35,7 +35,7 @@ ClawdHome 的 GitHub Actions 发布流程分两段：
 可选 secrets：
 
 - `RELEASE_BOT_TOKEN`：如果主仓库分支保护不允许 `GITHUB_TOKEN` push release commit/tag，配置一个有写权限的 PAT。
-- `WEBSITE_REPO_TOKEN`：如果需要由 workflow 给网站仓库创建 changelog/download PR，配置一个对网站仓库有写权限的 PAT。
+- `WEBSITE_REPO_TOKEN`：如果需要由 workflow 给网站仓库创建 version/changelog PR，配置一个对网站仓库有写权限的 PAT。
 
 可选 variables：
 
@@ -131,7 +131,20 @@ make notes-rename FROM=1.11.2 TO=1.11.3
 
 ## 网站发布
 
-`publish_website=true` 时，workflow 会 checkout 网站仓库到 `_website`，调用现有 `release_publish.sh` 创建网站 changelog/download PR。
+`publish_website=true` 时，workflow 会 checkout 网站仓库到 `_website`，调用现有 `release_publish.sh` 创建网站 version/changelog PR。
+
+安装包不再复制到网站仓库。正式安装包只上传到 GitHub Release，网站 `api/version.json` 的下载地址直接指向对应的 GitHub Release asset，例如：
+
+```text
+https://github.com/deepjerry-ai/clawdhome/releases/download/v1.12.0/ClawdHome-1.12.0-arm64.pkg
+https://github.com/deepjerry-ai/clawdhome/releases/download/v1.12.0/ClawdHome-1.12.0-x64.pkg
+```
+
+网站 PR 只包含：
+
+- `api/version.json`
+- `CHANGELOG.zh-CN.md`
+- `CHANGELOG.en.md`
 
 由于网站 PR 合并和部署通常发生在主 app release 之后，CI 中会设置：
 

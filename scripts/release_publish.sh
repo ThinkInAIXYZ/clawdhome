@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# release_publish.sh — 发布：version.json 同步 → push → GitHub Release → website PR
+# release_publish.sh — 发布：push → GitHub Release → website version.json/changelog PR
 #
 # 用法：
 #   bash scripts/release_publish.sh [--version 1.10.0] [--dry-run] [--skip-push]
@@ -151,7 +151,7 @@ if [ "$DRY_RUN" = true ]; then
   echo "  2. gh release create v${NEXT_VERSION} (附带 arm64 + x64 pkg)"
   if [ -f "$API_VERSION_JSON" ]; then
     echo "  3. 同步 api/version.json → v${NEXT_VERSION}"
-    echo "     download_url → https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}-arm64.pkg"
+    echo "     download_url → https://github.com/deepjerry-ai/clawdhome/releases/download/v${NEXT_VERSION}/ClawdHome-${NEXT_VERSION}-arm64.pkg"
   fi
   if [ -d "$WEBSITE_DIR" ]; then
     echo "  4. 写入 website CHANGELOG.zh-CN.md / CHANGELOG.en.md"
@@ -192,8 +192,8 @@ fi
 if [ -f "$API_VERSION_JSON" ]; then
   log "同步 version.json..."
 
-  DOWNLOAD_URL="https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}-arm64.pkg"
-  DOWNLOAD_URL_X64="https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}-x64.pkg"
+  DOWNLOAD_URL="https://github.com/deepjerry-ai/clawdhome/releases/download/v${NEXT_VERSION}/ClawdHome-${NEXT_VERSION}-arm64.pkg"
+  DOWNLOAD_URL_X64="https://github.com/deepjerry-ai/clawdhome/releases/download/v${NEXT_VERSION}/ClawdHome-${NEXT_VERSION}-x64.pkg"
 
   TMP_JSON=$(mktemp)
   /usr/bin/python3 - "$API_VERSION_JSON" "$TMP_JSON" "$NEXT_VERSION" \
@@ -217,24 +217,6 @@ PY
   ok "version.json 已同步 → v${NEXT_VERSION}"
 else
   warn "未找到 $API_VERSION_JSON，跳过 version.json 同步"
-fi
-
-# ── 复制 pkg 到 website/download ──────────────────────────────────────────────
-
-if [ -d "$WEBSITE_DIR" ]; then
-  WEBSITE_DOWNLOAD_DIR="$WEBSITE_DIR/download"
-  mkdir -p "$WEBSITE_DOWNLOAD_DIR"
-  cp -f "$PKG_ARM64" "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}-arm64.pkg"
-  cp -f "$PKG_X64"   "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}-x64.pkg"
-  cp -f "$PKG_ARM64" "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}.pkg"
-  cp -f "$PKG_ARM64" "$WEBSITE_DOWNLOAD_DIR/ClawdHome-latest.pkg"
-  cp -f "$PKG_X64"   "$WEBSITE_DOWNLOAD_DIR/ClawdHome-latest-x64.pkg"
-  chmod 644 "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}-arm64.pkg" \
-            "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}-x64.pkg" \
-            "$WEBSITE_DOWNLOAD_DIR/ClawdHome-${NEXT_VERSION}.pkg" \
-            "$WEBSITE_DOWNLOAD_DIR/ClawdHome-latest.pkg" \
-            "$WEBSITE_DOWNLOAD_DIR/ClawdHome-latest-x64.pkg"
-  ok "pkg 已复制到 website/download"
 fi
 
 # ── website CHANGELOG + PR ────────────────────────────────────────────────────
@@ -270,8 +252,8 @@ fi
 if [ "$SKIP_PUSH" = false ] && [ "$SKIP_ONLINE_VERIFY" != true ]; then
   log "发布后 URL 检查..."
   VERSION_JSON_URL="https://clawdhome.app/api/version.json"
-  REMOTE_ARM64_URL="https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}-arm64.pkg"
-  REMOTE_X64_URL="https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}-x64.pkg"
+  REMOTE_ARM64_URL="https://github.com/deepjerry-ai/clawdhome/releases/download/v${NEXT_VERSION}/ClawdHome-${NEXT_VERSION}-arm64.pkg"
+  REMOTE_X64_URL="https://github.com/deepjerry-ai/clawdhome/releases/download/v${NEXT_VERSION}/ClawdHome-${NEXT_VERSION}-x64.pkg"
   VERIFY_FAILED=0
 
   check_url_ok "$VERSION_JSON_URL" || VERIFY_FAILED=1

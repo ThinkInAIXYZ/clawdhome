@@ -23,4 +23,14 @@ echo "$PROMPT" | grep -q "newly added files/assets" \
 echo "$PROMPT" | grep -q "File status since" \
   || fail "release notes prompt must include file status context"
 
+grep -q 'https://github.com/deepjerry-ai/clawdhome/releases/download/v${NEXT_VERSION}/ClawdHome-${NEXT_VERSION}-arm64.pkg' scripts/release_publish.sh \
+  || fail "release publish must point website version.json arm64 URL at GitHub Release assets"
+
+grep -q 'https://github.com/deepjerry-ai/clawdhome/releases/download/v${NEXT_VERSION}/ClawdHome-${NEXT_VERSION}-x64.pkg' scripts/release_publish.sh \
+  || fail "release publish must point website version.json x64 URL at GitHub Release assets"
+
+if grep -q 'download/\*.pkg' scripts/release_website_pr.sh || grep -q 'WEBSITE_DOWNLOAD_DIR' scripts/release_publish.sh; then
+  fail "website release PR must not stage or copy pkg files into the website repository"
+fi
+
 echo "✅ release script tests passed"

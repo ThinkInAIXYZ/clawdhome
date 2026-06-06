@@ -13,7 +13,7 @@ on:
         default: true
         type: boolean
       publish_website:
-        description: "Create website changelog/download PR"
+        description: "Create website version/changelog PR"
         required: true
         default: false
         type: boolean

@@ -474,7 +474,7 @@ ok "安装包已生成：$PKG_OUTPUT"
 
 if [ "$SYNC_API_VERSION" = true ] && [ -f "$API_VERSION_JSON" ]; then
   log "同步 $API_VERSION_JSON 版本号 -> $FULL_VERSION"
-  DOWNLOAD_URL="https://clawdhome.app/download/${PKG_NAME}"
+  DOWNLOAD_URL="https://github.com/deepjerry-ai/clawdhome/releases/download/v${FULL_VERSION}/${PKG_NAME}"
   TMP_API_JSON="$(mktemp)"
   awk -v v="$FULL_VERSION" -v dl="$DOWNLOAD_URL" '
     {

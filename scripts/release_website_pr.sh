@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# release_website_pr.sh — 更新 website CHANGELOG 并开 PR
+# release_website_pr.sh — 更新 website version.json / CHANGELOG 并开 PR
 #
 # 用法：
 #   bash scripts/release_website_pr.sh \
@@ -13,7 +13,7 @@
 #   1. fetch origin/main
 #   2. 创建 release/v{VERSION} 分支（已存在则重置）
 #   3. 写入 CHANGELOG.zh-CN.md / CHANGELOG.en.md（从 release-notes/ 直接取）
-#   4. git add 上述文件 + api/version.json + download/*.pkg（若有变动）
+#   4. git add 上述文件 + api/version.json（若有变动）
 #   5. commit + push + gh pr create
 #   6. 若无 remote / --skip-push：仅本地 commit，输出手动操作提示
 # 兼容 macOS bash 3.2，零外部依赖。
@@ -198,13 +198,6 @@ if git -C "$WEBSITE_DIR" diff --quiet HEAD -- api/version.json 2>/dev/null || \
 else
   git -C "$WEBSITE_DIR" add api/version.json 2>/dev/null || true
 fi
-
-# download/*.pkg（大文件，只加本版本新包）
-for pkg_file in "$WEBSITE_DIR/download/ClawdHome-${VERSION}"*.pkg \
-                "$WEBSITE_DIR/download/ClawdHome-latest.pkg" \
-                "$WEBSITE_DIR/download/ClawdHome-latest-x64.pkg"; do
-  [ -f "$pkg_file" ] && git -C "$WEBSITE_DIR" add "$pkg_file" 2>/dev/null || true
-done
 
 git -C "$WEBSITE_DIR" commit -m "chore(release): sync v${VERSION} changelog"
 ok "website commit 完成"
