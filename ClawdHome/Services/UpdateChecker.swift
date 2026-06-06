@@ -33,8 +33,10 @@ final class UpdateChecker {
 
     var appLatestVersion: String? = nil
     var appDownloadURL: URL? = nil
-    /// 更新说明（从 API 获取，中文优先）
+    /// 更新说明（按 App 当前语言从 API 中英文内容选择）
     var appReleaseNotes: String? = nil
+    private var appReleaseNotesCN: String? = nil
+    private var appReleaseNotesEN: String? = nil
     /// 最低要求版本（低于此版本强制升级）
     var appMinVersion: String? = nil
     /// 下载进度：nil=空闲，0.0–1.0=下载中，1.0=完成
@@ -58,6 +60,7 @@ final class UpdateChecker {
     private static let udKeyAppVersion      = "appUpdate.version"
     private static let udKeyAppDownloadURL  = "appUpdate.downloadURL"
     private static let udKeyAppReleaseNotes = "appUpdate.releaseNotes"
+    private static let udKeyAppReleaseNotesEN = "appUpdate.releaseNotes.en"
     private static let udKeyAppMinVersion   = "appUpdate.minVersion"
     private static let appApiURL            = "https://clawdhome.app/api/version.json"
     private let appCacheInterval: TimeInterval = 24 * 3600
@@ -75,7 +78,12 @@ final class UpdateChecker {
         if let dl = UserDefaults.standard.string(forKey: Self.udKeyAppDownloadURL) {
             appDownloadURL = URL(string: dl)
         }
-        appReleaseNotes = UserDefaults.standard.string(forKey: Self.udKeyAppReleaseNotes)
+        appReleaseNotesCN = UserDefaults.standard.string(forKey: Self.udKeyAppReleaseNotes)
+        appReleaseNotesEN = UserDefaults.standard.string(forKey: Self.udKeyAppReleaseNotesEN)
+        appReleaseNotes = AppUpdateState(
+            releaseNotes: appReleaseNotesCN,
+            releaseNotesEN: appReleaseNotesEN
+        ).localizedReleaseNotes(languageIdentifier: Self.releaseNotesLanguageIdentifier())
         appMinVersion   = UserDefaults.standard.string(forKey: Self.udKeyAppMinVersion)
     }
 
@@ -182,7 +190,8 @@ final class UpdateChecker {
                 AppUpdateState(
                     latestVersion: json["version"] as? String,
                     downloadURL: json["download_url"] as? String,
-                    releaseNotes: json["release_notes"] as? String ?? json["release_notes_en"] as? String,
+                    releaseNotes: json["release_notes"] as? String,
+                    releaseNotesEN: json["release_notes_en"] as? String,
                     minimumVersion: json["min_version"] as? String,
                     lastSuccessfulCheckAt: Date().timeIntervalSinceReferenceDate,
                     lastHeartbeatAt: nil,
@@ -206,6 +215,13 @@ final class UpdateChecker {
         await checkAppIfNeeded()
     }
 
+    func localizedAppReleaseNotes(languageIdentifier: String) -> String? {
+        AppUpdateState(
+            releaseNotes: appReleaseNotesCN,
+            releaseNotesEN: appReleaseNotesEN
+        ).localizedReleaseNotes(languageIdentifier: languageIdentifier)
+    }
+
     private func applyAppUpdateState(_ state: AppUpdateState) {
         appLatestVersion = state.latestVersion
         UserDefaults.standard.set(state.latestVersion, forKey: Self.udKeyAppVersion)
@@ -219,12 +235,25 @@ final class UpdateChecker {
         }
 
         if let releaseNotes = state.releaseNotes {
-            appReleaseNotes = releaseNotes
+            appReleaseNotesCN = releaseNotes
             UserDefaults.standard.set(releaseNotes, forKey: Self.udKeyAppReleaseNotes)
         } else {
-            appReleaseNotes = nil
+            appReleaseNotesCN = nil
             UserDefaults.standard.removeObject(forKey: Self.udKeyAppReleaseNotes)
         }
+
+        if let releaseNotesEN = state.releaseNotesEN {
+            appReleaseNotesEN = releaseNotesEN
+            UserDefaults.standard.set(releaseNotesEN, forKey: Self.udKeyAppReleaseNotesEN)
+        } else {
+            appReleaseNotesEN = nil
+            UserDefaults.standard.removeObject(forKey: Self.udKeyAppReleaseNotesEN)
+        }
+
+        appReleaseNotes = AppUpdateState(
+            releaseNotes: appReleaseNotesCN,
+            releaseNotesEN: appReleaseNotesEN
+        ).localizedReleaseNotes(languageIdentifier: Self.releaseNotesLanguageIdentifier())
 
         if let minimumVersion = state.minimumVersion {
             appMinVersion = minimumVersion
@@ -380,6 +409,18 @@ final class UpdateChecker {
         let cpu = Self.cpuModel().replacingOccurrences(of: ";", with: ",")
         let clientID = Self.readClientID()
         return "id=\(clientID); app=\(appVersion); lang=\(language); os=\(Self.systemVersionString()); arch=\(Self.cpuArchitecture()); cpu=\(cpu); ram=\(Self.physicalMemoryString())"
+    }
+
+    private static func releaseNotesLanguageIdentifier() -> String {
+        let selected = UserDefaults.standard.string(forKey: "appLanguage") ?? AppLanguage.system.rawValue
+        switch AppLanguage(rawValue: selected) ?? .system {
+        case .english:
+            return "en"
+        case .chineseSimplified:
+            return "zh-Hans"
+        case .system:
+            return preferredSystemLanguage()
+        }
     }
 
     /// 读取 helper 写入的持久 UUID（只读，644 权限，app 可访问）

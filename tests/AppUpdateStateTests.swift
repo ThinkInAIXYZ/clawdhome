@@ -19,6 +19,21 @@ struct AppUpdateStateTests {
         expect(decoded.downloadURL == "https://example.com/app.pkg", "should decode download URL")
         expect(decoded.minimumVersion == "1.4.0", "should decode minimum version")
         expect(decoded.source == "helper", "should decode source")
+
+        let bilingualJSON = """
+        {"releaseNotes":"中文更新","releaseNotesEN":"English notes","source":"helper"}
+        """
+        let bilingual = try! JSONDecoder().decode(AppUpdateState.self, from: Data(bilingualJSON.utf8))
+        expect(bilingual.localizedReleaseNotes(languageIdentifier: "zh-Hans") == "中文更新", "should prefer Chinese release notes for Chinese language")
+        expect(bilingual.localizedReleaseNotes(languageIdentifier: "en-US") == "English notes", "should prefer English release notes for English language")
+        expect(bilingual.localizedReleaseNotes(languageIdentifier: "fr-FR") == "English notes", "should prefer English release notes for non-Chinese languages")
+
+        let chineseOnlyJSON = """
+        {"releaseNotes":"只有中文","source":"helper"}
+        """
+        let chineseOnly = try! JSONDecoder().decode(AppUpdateState.self, from: Data(chineseOnlyJSON.utf8))
+        expect(chineseOnly.localizedReleaseNotes(languageIdentifier: "en-US") == "只有中文", "should fall back to Chinese notes when English notes are missing")
+
         print("App update state tests passed.")
     }
 }

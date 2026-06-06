@@ -2,6 +2,7 @@
 // 侧边栏底部的 App 更新提示横幅 + 更新详情 Sheet
 
 import AppKit
+import MarkdownUI
 import SwiftUI
 
 // MARK: - 侧边栏横幅
@@ -77,6 +78,7 @@ struct AppUpdateBanner: View {
 struct AppUpdateSheet: View {
     @Environment(UpdateChecker.self) private var updater
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -109,22 +111,16 @@ struct AppUpdateSheet: View {
                 .padding(.bottom, 12)
 
             // 更新说明
-            if let notes = updater.appReleaseNotes {
+            if let notes = updater.localizedAppReleaseNotes(languageIdentifier: locale.identifier) {
                 Text(L10n.k("auto.app_update_banner.release_notes", fallback: "更新内容"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 6)
                 ScrollView {
-                    Group {
-                        if let markdownNotes = parseMarkdownNotes(notes) {
-                            Text(markdownNotes)
-                        } else {
-                            Text(notes)
-                        }
-                    }
-                    .font(.callout)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
+                    Markdown(normalizedReleaseNotes(notes))
+                        .markdownTheme(.gitHub)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
                 }
                 .frame(maxHeight: 180)
                 .padding(.bottom, 16)
@@ -221,14 +217,9 @@ struct AppUpdateSheet: View {
         }
     }
 
-    private func parseMarkdownNotes(_ notes: String) -> AttributedString? {
-        do {
-            return try AttributedString(
-                markdown: notes,
-                options: .init(interpretedSyntax: .full)
-            )
-        } catch {
-            return nil
-        }
+    private func normalizedReleaseNotes(_ notes: String) -> String {
+        notes
+            .replacingOccurrences(of: "\\n", with: "\n")
+            .replacingOccurrences(of: "\\t", with: "\t")
     }
 }

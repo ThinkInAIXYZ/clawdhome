@@ -60,7 +60,8 @@ final class AppUpdateHeartbeatService {
             var state = previous ?? AppUpdateState(source: "helper")
             state.latestVersion = json["version"] as? String
             state.downloadURL = json["download_url"] as? String
-            state.releaseNotes = json["release_notes"] as? String ?? json["release_notes_en"] as? String
+            state.releaseNotes = json["release_notes"] as? String
+            state.releaseNotesEN = json["release_notes_en"] as? String
             state.minimumVersion = json["min_version"] as? String
             state.lastSuccessfulCheckAt = now
             state.lastHeartbeatAt = now
