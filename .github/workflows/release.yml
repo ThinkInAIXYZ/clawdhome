@@ -28,7 +28,7 @@ concurrency:
 jobs:
   release:
     name: Build, notarize, and publish
-    runs-on: macos-15
+    runs-on: macos-26
     environment: APPLE_TEAM_ID
     timeout-minutes: 120
 

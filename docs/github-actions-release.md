@@ -48,6 +48,8 @@ ClawdHome 的 GitHub Actions 发布流程分两段：
 
 `Release` workflow 已绑定 `environment: APPLE_TEAM_ID`。这样正式发布前 GitHub 会要求人工批准。
 
+`Release` workflow 使用 `macos-26` runner，并在构建前输出 `xcodebuild -version`，确保正式发布使用 GitHub macOS 26 镜像提供的 Xcode 26 工具链。
+
 ## 证书和密钥准备
 
 从 Keychain Access 导出两个 `.p12`：
