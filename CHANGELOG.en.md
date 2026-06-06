@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.12.0] - 2026-06-06
+
+# Highlights
+
+- New Hermes Web UI view and manager for easier Hermes status review and management.
+- AI Lab now includes a full speech transcription experience with transcription, editing, history, export/save, progress stages, and real-time speed display.
+- Shrimp Pool instances across OpenClaw and Hermes now include digital avatars, with new team and persona avatar assets for clearer instance recognition and management.
+- AI chat now uses global model accounts and supports image input.
+- Model management now includes a local model downloader, plus upgrades to the global model pool and prompt memory.
+
+# Improvements
+
+- Speech transcription now supports native macOS vocal isolation and noise suppression, and fixes repeated ASR hallucinations in some audio scenarios.
+- The dashboard now shows whole-machine network throughput trends with live inbound and outbound rates.
+- Speech transcription settings now show bundled ASR tool diagnostics, including availability, version, build time, and failure details.
+- Settings permission guidance is quieter, with Accessibility and Chrome Automation instructions expanded only when needed.
+- Dashboard, user list, settings, backup, permissions, and file manager UI polish continues.
+- Managed browser launch no longer requires host Accessibility permission.
+
+
 ## [1.11.1] - 2026-06-04
 
 # New Features
