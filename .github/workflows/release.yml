@@ -101,6 +101,60 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Release target: v$VERSION"
 
+      - name: Validate release credentials
+        shell: bash
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APP_CERT_P12_BASE64: ${{ secrets.APP_CERT_P12_BASE64 }}
+          APP_CERT_PASSWORD: ${{ secrets.APP_CERT_PASSWORD }}
+          PKG_CERT_P12_BASE64: ${{ secrets.PKG_CERT_P12_BASE64 }}
+          PKG_CERT_PASSWORD: ${{ secrets.PKG_CERT_PASSWORD }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_APP_SPECIFIC_PASSWORD: ${{ secrets.NOTARY_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          missing=0
+          require_secret() {
+            local name="$1"
+            eval "local value=\${$name:-}"
+            if [ -z "$value" ]; then
+              echo "Missing required release secret: $name" >&2
+              missing=1
+            fi
+          }
+
+          require_secret APPLE_TEAM_ID
+          require_secret APP_SIGN_IDENTITY
+          require_secret PKG_SIGN_IDENTITY
+          require_secret KEYCHAIN_PASSWORD
+          require_secret APP_CERT_P12_BASE64
+          require_secret APP_CERT_PASSWORD
+          require_secret PKG_CERT_P12_BASE64
+          require_secret PKG_CERT_PASSWORD
+
+          if [ "${{ inputs.notarize }}" = "true" ]; then
+            if [ -n "${ASC_KEY_P8_BASE64:-}" ] || [ -n "${ASC_KEY_ID:-}" ] || [ -n "${ASC_ISSUER_ID:-}" ]; then
+              require_secret ASC_KEY_P8_BASE64
+              require_secret ASC_KEY_ID
+              require_secret ASC_ISSUER_ID
+            elif [ -n "${NOTARY_APPLE_ID:-}" ] || [ -n "${NOTARY_APP_SPECIFIC_PASSWORD:-}" ]; then
+              require_secret NOTARY_APPLE_ID
+              require_secret NOTARY_APP_SPECIFIC_PASSWORD
+            else
+              echo "Missing notarization credentials: set ASC_KEY_P8_BASE64 + ASC_KEY_ID + ASC_ISSUER_ID, or NOTARY_APPLE_ID + NOTARY_APP_SPECIFIC_PASSWORD." >&2
+              missing=1
+            fi
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            echo "Configure these under GitHub Settings -> Environments -> release -> Environment secrets, or repository Actions secrets if this workflow is not using an environment." >&2
+            exit 1
+          fi
+
       - name: Import Developer ID certificates
         shell: bash
         env:
@@ -118,6 +172,14 @@ jobs:
 
           printf '%s' "$APP_CERT_P12_BASE64" | base64 --decode > app.p12
           printf '%s' "$PKG_CERT_P12_BASE64" | base64 --decode > pkg.p12
+          if [ ! -s app.p12 ]; then
+            echo "APP_CERT_P12_BASE64 did not decode to a non-empty .p12 file." >&2
+            exit 1
+          fi
+          if [ ! -s pkg.p12 ]; then
+            echo "PKG_CERT_P12_BASE64 did not decode to a non-empty .p12 file." >&2
+            exit 1
+          fi
 
           security import app.p12 -k build.keychain -P "$APP_CERT_PASSWORD" -T /usr/bin/codesign
           security import pkg.p12 -k build.keychain -P "$PKG_CERT_PASSWORD" -T /usr/bin/productsign
