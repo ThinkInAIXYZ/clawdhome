@@ -9,6 +9,8 @@ struct MachineStats: Codable {
     var diskUsedGB: Double
     var diskTotalGB: Double
     var cpuTempCelsius: Double?   // nil = 无法读取
+    var netRateInBps: Double?     // 瞬时入站速率 (bytes/sec)
+    var netRateOutBps: Double?    // 瞬时出站速率 (bytes/sec)
 }
 
 struct ShrimpNetStats: Codable {

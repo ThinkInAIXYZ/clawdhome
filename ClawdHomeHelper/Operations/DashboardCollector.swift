@@ -57,6 +57,14 @@ final class DashboardCollector {
     /// 上一帧各 UID 的进程 CPU 时间（用于差分计算 CPU%）
     private var prevProcCPU: [uid_t: (timeNs: UInt64, date: Date)] = [:]
 
+    /// 上一帧整机网络累计字节
+    private var prevSysNet: (ibytes: UInt32, obytes: UInt32) = (0, 0)
+    /// 上一帧整机网络采集时间
+    private var prevSysNetTime: Date = Date()
+    /// EMA 平滑后的整机入站/出站速率
+    private var smoothedSysRateIn: Double = 0
+    private var smoothedSysRateOut: Double = 0
+
     /// 网络连接采集器：使用 sysctl ConnectionCollector（稳定路径）
     /// NStatCollector（NetworkStatistics.framework 私有 API）在 macOS 26.3 上
     /// 因 NWStatisticsManager queryAllCounts: 内部 null pointer 崩溃，暂时禁用。
@@ -177,6 +185,10 @@ final class DashboardCollector {
         smoothedRateOut.removeAll(keepingCapacity: false)
         prevProcCPU.removeAll(keepingCapacity: false)
         networkCollector.reset()
+        prevSysNet = (0, 0)
+        prevSysNetTime = Date()
+        smoothedSysRateIn = 0
+        smoothedSysRateOut = 0
     }
 
     private func runOnMainSync(_ work: @escaping () -> Void) {
@@ -206,6 +218,8 @@ final class DashboardCollector {
         snapshot.machine.memTotalMB = memTotal
         snapshot.machine.diskUsedGB = diskUsed
         snapshot.machine.diskTotalGB = diskTotal
+        snapshot.machine.netRateInBps = 0
+        snapshot.machine.netRateOutBps = 0
         lock.unlock()
     }
 
@@ -220,6 +234,29 @@ final class DashboardCollector {
         let gpu = readGPUPercent()
         let (memUsed, memTotal) = readMemoryMB()
         let (diskUsed, diskTotal) = readDiskGB()
+
+        // ── 机器网络指标 ────────────────────────────────────────────────
+        let curSysNet = readSystemNetBytes()
+        let sysInDelta: UInt32
+        let sysOutDelta: UInt32
+        if prevSysNet.ibytes == 0 && prevSysNet.obytes == 0 {
+            sysInDelta = 0
+            sysOutDelta = 0
+        } else {
+            sysInDelta = curSysNet.ibytes &- prevSysNet.ibytes
+            sysOutDelta = curSysNet.obytes &- prevSysNet.obytes
+        }
+        prevSysNet = curSysNet
+
+        let interval = max(0.1, now.timeIntervalSince(prevSysNetTime))
+        prevSysNetTime = now
+
+        let rawSysRateIn = Double(sysInDelta) / interval
+        let rawSysRateOut = Double(sysOutDelta) / interval
+
+        let alpha = 0.3
+        smoothedSysRateIn = smoothedSysRateIn * (1 - alpha) + rawSysRateIn * alpha
+        smoothedSysRateOut = smoothedSysRateOut * (1 - alpha) + rawSysRateOut * alpha
 
         // ── 进程指标：内存 + CPU（同步，微秒级，不依赖 nettop）─────────────
         // 使用 proc_listpids + proc_pid_rusage，涵盖所有子进程
@@ -248,6 +285,8 @@ final class DashboardCollector {
         snapshot.machine.memTotalMB  = memTotal
         snapshot.machine.diskUsedGB  = diskUsed
         snapshot.machine.diskTotalGB = diskTotal
+        snapshot.machine.netRateInBps  = smoothedSysRateIn
+        snapshot.machine.netRateOutBps = smoothedSysRateOut
         // isRunning 由 userRefreshTimer（launchctl）负责维护，collectFast 只更新资源指标
         for i in snapshot.shrimps.indices {
             let uname = snapshot.shrimps[i].username
@@ -324,6 +363,37 @@ final class DashboardCollector {
             }
         }
         lock.unlock()
+    }
+
+    // MARK: - 系统网络流量统计
+
+    /// 使用 getifaddrs 统计本机物理网卡的累计出入站字节（排除 loopback 和其他虚拟网卡）
+    private func readSystemNetBytes() -> (ibytes: UInt32, obytes: UInt32) {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr else { return (0, 0) }
+        defer { freeifaddrs(ifaddr) }
+
+        var totalIn: UInt32 = 0
+        var totalOut: UInt32 = 0
+
+        var ptr: UnsafeMutablePointer<ifaddrs>? = firstAddr
+        while ptr != nil {
+            if let interface = ptr?.pointee {
+                let name = String(cString: interface.ifa_name)
+                // 排除 loopback 网卡，lo0 等
+                if !name.hasPrefix("lo"),
+                   let addr = interface.ifa_addr,
+                   addr.pointee.sa_family == UInt8(AF_LINK) {
+                    if let dataPtr = interface.ifa_data {
+                        let data = dataPtr.assumingMemoryBound(to: if_data.self)
+                        totalIn &+= data.pointee.ifi_ibytes
+                        totalOut &+= data.pointee.ifi_obytes
+                    }
+                }
+            }
+            ptr = ptr?.pointee.ifa_next
+        }
+        return (totalIn, totalOut)
     }
 
     // MARK: - CPU 使用率
@@ -609,7 +679,8 @@ final class DashboardCollector {
         DashboardSnapshot(
             machine: MachineStats(
                 cpuPercent: 0, gpuPercent: nil, memUsedMB: 0, memTotalMB: 0,
-                diskUsedGB: 0, diskTotalGB: 0, cpuTempCelsius: nil),
+                diskUsedGB: 0, diskTotalGB: 0, cpuTempCelsius: nil,
+                netRateInBps: 0, netRateOutBps: 0),
             shrimps: [],
             totalShrimpCount: 0,
             runningShrimpCount: 0

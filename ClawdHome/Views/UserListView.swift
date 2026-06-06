@@ -1676,7 +1676,7 @@ private struct ClawCard: View {
                         .help(claw.freezeWarning ?? "")
                 } else if claw.isFrozen {
                     let mode = claw.freezeMode ?? .normal
-                    Label(mode.statusLabel, systemImage: freezeSymbol(mode))
+                    Label("\(claw.runtimeDisplayName) · \(mode.statusLabel)", systemImage: freezeSymbol(mode))
                         .foregroundStyle(freezeColor(mode))
                 } else if let step = claw.initStep {
                     Text(step).foregroundStyle(.blue)

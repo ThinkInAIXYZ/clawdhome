@@ -346,7 +346,7 @@ final class ShrimpPool {
         snapshot = s
         snapshotVersion &+= 1
         updateMachineHistory(s.machine)
-        updateNetHistory(s.shrimps)
+        updateNetHistory(s.machine, s.shrimps)
         // 将每用户资源数据合并进 ManagedUser（其他视图直接读 user 资源字段）
         for shrimp in s.shrimps {
             guard let user = users.first(where: { $0.username == shrimp.username }) else { continue }
@@ -362,8 +362,8 @@ final class ShrimpPool {
             hiddenMachineBuffer.removeFirst(hiddenMachineBuffer.count - Self.kHistoryMax)
         }
 
-        let totalIn  = shrimps.reduce(0.0) { $0 + $1.netRateInBps }
-        let totalOut = shrimps.reduce(0.0) { $0 + $1.netRateOutBps }
+        let totalIn  = machine.netRateInBps ?? shrimps.reduce(0.0) { $0 + $1.netRateInBps }
+        let totalOut = machine.netRateOutBps ?? shrimps.reduce(0.0) { $0 + $1.netRateOutBps }
         hiddenNetBuffer.append((totalIn, totalOut))
         if hiddenNetBuffer.count > Self.kHistoryMax {
             hiddenNetBuffer.removeFirst(hiddenNetBuffer.count - Self.kHistoryMax)
@@ -401,9 +401,9 @@ final class ShrimpPool {
         }
     }
 
-    private func updateNetHistory(_ shrimps: [ShrimpNetStats]) {
-        let totalIn  = shrimps.reduce(0.0) { $0 + $1.netRateInBps }
-        let totalOut = shrimps.reduce(0.0) { $0 + $1.netRateOutBps }
+    private func updateNetHistory(_ machine: MachineStats, _ shrimps: [ShrimpNetStats]) {
+        let totalIn  = machine.netRateInBps ?? shrimps.reduce(0.0) { $0 + $1.netRateInBps }
+        let totalOut = machine.netRateOutBps ?? shrimps.reduce(0.0) { $0 + $1.netRateOutBps }
         if netRateHistory.isEmpty {
             netRateHistory = Array(repeating: (totalIn, totalOut), count: 5)
         } else {

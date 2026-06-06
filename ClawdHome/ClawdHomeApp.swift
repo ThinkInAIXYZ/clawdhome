@@ -34,6 +34,15 @@ struct ClawdHomeApp: App {
     @State private var maintenanceWindowRegistry = MaintenanceWindowRegistry()
     @State private var promptLibraryStore = PromptLibraryStore()
     @AppStorage("appLanguage") private var appLanguageRaw = AppLanguage.system.rawValue
+    @AppStorage("colorSchemePreference") private var colorSchemePreference = 0
+
+    private var preferredColorScheme: ColorScheme? {
+        switch colorSchemePreference {
+        case 1: return .light
+        case 2: return .dark
+        default: return nil
+        }
+    }
 
     init() {
         // 强制忽略上次会话窗口恢复，确保每次启动从全新窗口开始
@@ -60,6 +69,7 @@ struct ClawdHomeApp: App {
                 .environment(maintenanceWindowRegistry)
                 .environment(promptLibraryStore)
                 .environment(\.locale, appLanguage.locale)
+                .preferredColorScheme(preferredColorScheme)
                 .task { await maintainConnection() }
                 .task { await updater.runOpenclawAutoCheckLoop() }
                 .task { await updater.refreshAppUpdateState(helperClient: helperClient) }
@@ -107,6 +117,7 @@ struct ClawdHomeApp: App {
                     .environment(promptLibraryStore)
                     .environment(\.locale, appLanguage.locale)
                     .background(ClawDetailWindowPositioner())
+                    .preferredColorScheme(preferredColorScheme)
             }
         }
         .windowStyle(.titleBar)
@@ -128,6 +139,7 @@ struct ClawdHomeApp: App {
                     .environment(maintenanceWindowRegistry)
                     .environment(\.locale, appLanguage.locale)
                     .background(UserInitWizardWindowPositioner())
+                    .preferredColorScheme(preferredColorScheme)
             }
         }
         .windowStyle(.titleBar)
@@ -145,6 +157,7 @@ struct ClawdHomeApp: App {
                 .environment(lockStore)
                 .environment(maintenanceWindowRegistry)
                 .environment(\.locale, appLanguage.locale)
+                .preferredColorScheme(preferredColorScheme)
         }
         .windowStyle(.titleBar)
         .windowResizability(.automatic)
@@ -156,6 +169,7 @@ struct ClawdHomeApp: App {
                 .environment(shrimpPool)
                 .environment(maintenanceWindowRegistry)
                 .environment(\.locale, appLanguage.locale)
+                .preferredColorScheme(preferredColorScheme)
         }
         .windowStyle(.titleBar)
         .windowResizability(.automatic)
@@ -167,6 +181,7 @@ struct ClawdHomeApp: App {
                 .environment(shrimpPool)
                 .environment(maintenanceWindowRegistry)
                 .environment(\.locale, appLanguage.locale)
+                .preferredColorScheme(preferredColorScheme)
         }
         .windowStyle(.titleBar)
         .windowResizability(.automatic)
@@ -178,6 +193,7 @@ struct ClawdHomeApp: App {
                 .environment(shrimpPool)
                 .environment(maintenanceWindowRegistry)
                 .environment(\.locale, appLanguage.locale)
+                .preferredColorScheme(preferredColorScheme)
         }
         .windowStyle(.titleBar)
         .windowResizability(.automatic)
@@ -189,6 +205,7 @@ struct ClawdHomeApp: App {
                     .environment(helperClient)
                     .environment(shrimpPool)
                     .environment(\.locale, appLanguage.locale)
+                    .preferredColorScheme(preferredColorScheme)
             }
         }
         .windowStyle(.titleBar)
@@ -199,6 +216,7 @@ struct ClawdHomeApp: App {
             CacheManagementWindow()
                 .environment(helperClient)
                 .environment(\.locale, appLanguage.locale)
+                .preferredColorScheme(preferredColorScheme)
         }
         .windowStyle(.titleBar)
         .windowResizability(.automatic)

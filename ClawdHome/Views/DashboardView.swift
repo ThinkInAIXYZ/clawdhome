@@ -120,7 +120,7 @@ struct MachineStatsGrid: View {
 
     private var currentNetIn:  Double { shrimps.reduce(0.0) { $0 + $1.netRateInBps } }
     private var currentNetOut: Double { shrimps.reduce(0.0) { $0 + $1.netRateOutBps } }
-    
+
     private var netTotalSamples: [Double] {
         netRateHistory.map { $0.inBps + $0.outBps }
     }
@@ -166,39 +166,7 @@ struct MachineStatsGrid: View {
                     }
                 }
 
-                // 2. 内存 RAM 卡片 (折线)
-                let memSamples = history.map { Double($0.memUsedMB) / max(Double($0.memTotalMB), 1.0) * 100.0 }
-                let memValue = stats.map { String(format: "%.0f/%.0f GB", $0.memUsedMB / 1024, $0.memTotalMB / 1024) } ?? "—"
-                MiniChartCard(
-                    title: L10n.k("common.resource.memory", fallback: "内存 (RAM)"),
-                    value: memValue,
-                    icon: "memorychip",
-                    theme: .purple,
-                    samples: Array(memSamples.suffix(kSmallCardPoints)),
-                    range: 0...100
-                )
-                .opacity(expanded == "RAM" ? 0.5 : 1)
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        expanded = expanded == "RAM" ? nil : "RAM"
-                    }
-                }
-
-                // 3. 网络带宽卡片 (进度条)
-                let totalNetBps = currentNetIn + currentNetOut
-                let netPercent = min(totalNetBps / 12500000.0, 1.0)
-                let netValue = "↓ \(FormatUtils.formatBps(currentNetIn))"
-                let netValue2 = "↑ \(FormatUtils.formatBps(currentNetOut))"
-                MiniProgressCard(
-                    title: L10n.k("common.resource.network", fallback: "网络带宽"),
-                    value: netValue,
-                    value2: netValue2,
-                    percent: netPercent,
-                    icon: "arrow.up.arrow.down",
-                    theme: .blue
-                )
-
-                // 4. GPU 卡片 (折线)
+                // 2. GPU 卡片 (折线)
                 let gpuSamples = history.compactMap { $0.gpuPercent }
                 let gpuValue = stats?.gpuPercent.map { String(format: "%.0f%%", $0) } ?? "0%"
                 MiniChartCard(
@@ -213,6 +181,46 @@ struct MachineStatsGrid: View {
                 .onTapGesture {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         expanded = expanded == "GPU" ? nil : "GPU"
+                    }
+                }
+
+                // 3. 网络带宽卡片 (折线)
+                let totalNetIn = stats?.netRateInBps ?? currentNetIn
+                let totalNetOut = stats?.netRateOutBps ?? currentNetOut
+                let netValue = "↓ \(FormatUtils.formatBps(totalNetIn))"
+                let netValue2 = "↑ \(FormatUtils.formatBps(totalNetOut))"
+                MiniChartCard(
+                    title: L10n.k("common.resource.network", fallback: "网络带宽"),
+                    value: netValue,
+                    value2: netValue2,
+                    icon: "arrow.up.arrow.down",
+                    theme: .blue,
+                    samples: Array(netTotalSamples.suffix(kSmallCardPoints)),
+                    range: netRange
+                )
+                .opacity(expanded == L10n.k("common.resource.network", fallback: "网络带宽") ? 0.5 : 1)
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        let term = L10n.k("common.resource.network", fallback: "网络带宽")
+                        expanded = expanded == term ? nil : term
+                    }
+                }
+
+                // 4. 内存 RAM 卡片 (折线)
+                let memSamples = history.map { Double($0.memUsedMB) / max(Double($0.memTotalMB), 1.0) * 100.0 }
+                let memValue = stats.map { String(format: "%.0f/%.0f GB", $0.memUsedMB / 1024, $0.memTotalMB / 1024) } ?? "—"
+                MiniChartCard(
+                    title: L10n.k("common.resource.memory", fallback: "内存 (RAM)"),
+                    value: memValue,
+                    icon: "memorychip",
+                    theme: .purple,
+                    samples: Array(memSamples.suffix(kSmallCardPoints)),
+                    range: 0...100
+                )
+                .opacity(expanded == "RAM" ? 0.5 : 1)
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        expanded = expanded == "RAM" ? nil : "RAM"
                     }
                 }
 
@@ -256,13 +264,6 @@ struct MachineStatsGrid: View {
             samples: history.map { $0.cpuPercent },
             range: 0...100
         ))
-        result.append(CardData(
-            title: "RAM",
-            value: stats.map { String(format: "%.0f/%.0f GB", $0.memUsedMB / 1024, $0.memTotalMB / 1024) } ?? "—",
-            icon: "memorychip", theme: .purple,
-            samples: history.map { Double($0.memUsedMB) / max(Double($0.memTotalMB), 1.0) * 100.0 },
-            range: 0...100
-        ))
         if stats?.gpuPercent != nil || history.contains(where: { $0.gpuPercent != nil }) {
             result.append(CardData(
                 title: "GPU",
@@ -272,6 +273,26 @@ struct MachineStatsGrid: View {
                 range: 0...100
             ))
         }
+        result.append(CardData(
+            title: "RAM",
+            value: stats.map { String(format: "%.0f/%.0f GB", $0.memUsedMB / 1024, $0.memTotalMB / 1024) } ?? "—",
+            icon: "memorychip", theme: .purple,
+            samples: history.map { Double($0.memUsedMB) / max(Double($0.memTotalMB), 1.0) * 100.0 },
+            range: 0...100
+        ))
+
+        let totalNetIn = stats?.netRateInBps ?? currentNetIn
+        let totalNetOut = stats?.netRateOutBps ?? currentNetOut
+        let netValue = "↓ \(FormatUtils.formatBps(totalNetIn))"
+        let netValue2 = "↑ \(FormatUtils.formatBps(totalNetOut))"
+        result.append(CardData(
+            title: L10n.k("common.resource.network", fallback: "网络带宽"),
+            value: netValue,
+            value2: netValue2,
+            icon: "arrow.up.arrow.down", theme: .blue,
+            samples: netTotalSamples,
+            range: netRange
+        ))
         return result
     }
 }
@@ -281,11 +302,12 @@ struct MachineStatsGrid: View {
 struct MiniChartCard: View {
     let title: String
     let value: String
+    var value2: String? = nil
     let icon: String
     let theme: DesignSystem.GradientTheme
     let samples: [Double]
     let range: ClosedRange<Double>
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top) {
@@ -298,21 +320,28 @@ struct MiniChartCard: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(theme.gradient)
                 }
-                
+
                 Spacer()
-                
+
                 // 大字数值
-                Text(value)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(theme.gradient)
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(value)
+                        .font(.system(size: value2 != nil ? 13 : 18, weight: .bold, design: .rounded))
+                        .foregroundStyle(theme.gradient)
+                    if let value2 {
+                        Text(value2)
+                            .font(.system(size: 9, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            
+
             Text(title)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
-            
+
             Spacer(minLength: 0)
-            
+
             // 饱满折线图
             if !samples.isEmpty {
                 MiniSparkline(samples: samples, range: range, color: theme.mainColor, maxPoints: kSmallCardPoints)
@@ -338,7 +367,7 @@ struct MiniProgressCard: View {
     let percent: Double
     let icon: String
     let theme: DesignSystem.GradientTheme
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top) {
@@ -351,9 +380,9 @@ struct MiniProgressCard: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(theme.gradient)
                 }
-                
+
                 Spacer()
-                
+
                 // 大字数值
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(value)
@@ -365,20 +394,20 @@ struct MiniProgressCard: View {
                     }
                 }
             }
-            
+
             Text(title)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
-            
+
             Spacer(minLength: 0)
-            
+
             // 发光进度条
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(Color.secondary.opacity(0.12))
                         .frame(height: 6)
-                    
+
                     RoundedRectangle(cornerRadius: 3)
                         .fill(theme.gradient)
                         .frame(width: max(0, min(geo.size.width * CGFloat(percent), geo.size.width)), height: 6)
@@ -485,7 +514,7 @@ struct MiniSparkline: View {
                 .foregroundStyle(color)
                 .lineStyle(StrokeStyle(lineWidth: 2.0)) // 稍微加粗，显示效果更佳
                 .interpolationMethod(.linear)
-                
+
                 AreaMark(
                     x: .value("t", s.id),
                     y: .value("v", s.value)
@@ -564,7 +593,7 @@ struct ShrimpNetworkSection: View {
     private var totalCPU: Double { activeShrimps.compactMap(\.cpuPercent).reduce(0, +) }
     private var totalMemMB: Double { activeShrimps.compactMap(\.memRssMB).reduce(0, +) }
     private var totalStorage: Int64 { shrimps.reduce(0) { $0 + max(0, $1.openclawDirBytes) } }
-    
+
     private var avgStorageLabel: String {
         guard total > 0 else { return "—" }
         return FormatUtils.formatBytes(totalStorage / Int64(total))
@@ -607,7 +636,7 @@ struct ShrimpNetworkSection: View {
                     ShrimpStatusPill(title: L10n.k("dashboard.shrimp_status.starting", fallback: "启动中"), value: "\(startingCount)", tint: .yellow)
                     ShrimpStatusPill(title: L10n.k("dashboard.shrimp_status.anomaly", fallback: "异常"), value: "\(zombieCount)", tint: zombieCount > 0 ? .red : .secondary)
                 }
-                
+
                 // 2. 极致打磨的聚合大卡片 (3列网格，高度与硬件概览卡片104一致，极其对称)
                 LazyVGrid(columns: [
                     GridItem(.flexible(), spacing: 14),
@@ -622,7 +651,7 @@ struct ShrimpNetworkSection: View {
                         icon: "cpu",
                         theme: .blue
                     )
-                    
+
                     // 内存汇总
                     DashboardAggregateCard(
                         title: L10n.k("dashboard.card.memory_summary", fallback: "🧠 内存汇总"),
@@ -631,7 +660,7 @@ struct ShrimpNetworkSection: View {
                         icon: "brain.head.profile",
                         theme: .purple
                     )
-                    
+
                     // 存储占用
                     DashboardAggregateCard(
                         title: L10n.k("dashboard.card.storage_usage", fallback: "💾 存储占用"),
@@ -662,7 +691,7 @@ private struct ShrimpStatusPill: View {
                 Circle()
                     .fill(tint)
                     .frame(width: 6, height: 6)
-                
+
                 if tint != .secondary {
                     Circle()
                         .stroke(tint, lineWidth: 2)
@@ -681,7 +710,7 @@ private struct ShrimpStatusPill: View {
                     }
                 }
             }
-            
+
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
@@ -727,7 +756,7 @@ struct DashboardAggregateCard: View {
                 .rotationEffect(.degrees(-12))
                 .offset(x: 18, y: 18)
                 .clipped()
-            
+
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.system(size: 11, weight: .semibold))
@@ -773,7 +802,7 @@ struct DashboardSplitRow: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.primary)
                     .padding(.bottom, 4)
-                
+
                 if topStorageShrimps.isEmpty {
                     VStack(spacing: 6) {
                         Text("📁")
@@ -797,13 +826,13 @@ struct DashboardSplitRow: View {
                                         .font(.system(size: 12, weight: .bold))
                                         .foregroundStyle(DesignSystem.GradientTheme.blue.gradient)
                                 }
-                                
+
                                 Text("@\(shrimp.username)")
                                     .font(.system(size: 12, weight: .bold, design: .monospaced))
                                     .foregroundStyle(.primary)
-                                
+
                                 Spacer()
-                                
+
                                 Text(FormatUtils.formatBytes(shrimp.openclawDirBytes))
                                     .font(.system(size: 12, design: .monospaced))
                                     .foregroundStyle(.secondary)
@@ -827,7 +856,7 @@ struct DashboardSplitRow: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.primary)
                     .padding(.bottom, 4)
-                
+
                 VStack(spacing: 0) {
                     // 数据总量
                     AssetRow(
@@ -836,7 +865,7 @@ struct DashboardSplitRow: View {
                         value: "\(FormatUtils.formatBytes(totalStorage)) (\(shrimps.count) \(dynamicText(zh: "只虾", en: "shrimps")))",
                         theme: .blue
                     )
-                    
+
                     // 家目录总量
                     if totalHomeBytes > 0 {
                         AssetRow(
@@ -846,7 +875,7 @@ struct DashboardSplitRow: View {
                             theme: .teal
                         )
                     }
-                    
+
                     // 记忆总量
                     AssetRow(
                         icon: "brain.head.profile",
@@ -897,13 +926,13 @@ struct AssetRow: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(theme.gradient)
             }
-            
+
             Text(label)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.primary)
-            
+
             Spacer()
-            
+
             Text(value)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -920,13 +949,13 @@ struct AssetRow: View {
 
 struct SystemStatusCard: View {
     @Environment(HelperClient.self) private var helperClient
-    
+
     // 动态获取 macOS 物理系统版本
     private var osVersionString: String {
         let os = ProcessInfo.processInfo.operatingSystemVersion
         return "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
     }
-    
+
     // 动态获取真实芯片/CPU型号
     private var chipModel: String {
         var size = 0
@@ -942,7 +971,7 @@ struct SystemStatusCard: View {
                             .trimmingCharacters(in: .whitespacesAndNewlines)
             }
         }
-        
+
         // 兜底路径获取 Apple Silicon
         var modelSize = 0
         sysctlbyname("hw.model", nil, &modelSize, nil, 0)
@@ -957,7 +986,7 @@ struct SystemStatusCard: View {
         }
         return "Apple Silicon"
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top) {
@@ -970,9 +999,9 @@ struct SystemStatusCard: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(DesignSystem.GradientTheme.teal.gradient)
                 }
-                
+
                 Spacer()
-                
+
                 // 2. 右侧动态大字硬件型号
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(chipModel)
@@ -984,20 +1013,20 @@ struct SystemStatusCard: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            
+
             // 3. 卡片标题
             Text(dynamicText(zh: "系统运行状态", en: "System Status"))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
-            
+
             Spacer(minLength: 0)
-            
+
             // 4. XPC 守护进程联接状态呼吸灯
             HStack(spacing: 5) {
                 Circle()
                     .fill(helperClient.isConnected ? Color.green : Color.red)
                     .frame(width: 5, height: 5)
-                
+
                 Text(helperClient.isConnected
                      ? dynamicText(zh: "XPC 守护: 已联接", en: "XPC Helper: Active")
                      : dynamicText(zh: "XPC 守护: 未运行", en: "XPC Helper: Inactive"))
@@ -1005,14 +1034,14 @@ struct SystemStatusCard: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.bottom, 2)
-            
+
             // 5. XPC 核心安全通道状态发光水平线
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(Color.secondary.opacity(0.12))
                         .frame(height: 6)
-                    
+
                     RoundedRectangle(cornerRadius: 3)
                         .fill(helperClient.isConnected ? DesignSystem.GradientTheme.teal.gradient : LinearGradient(colors: [.red, .orange], startPoint: .leading, endPoint: .trailing))
                         .frame(width: helperClient.isConnected ? geo.size.width : 0, height: 6)
