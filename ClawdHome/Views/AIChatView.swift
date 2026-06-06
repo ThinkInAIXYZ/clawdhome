@@ -265,253 +265,11 @@ struct AIChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // 1. 顶部条 (Header)
-            ZStack {
-                HStack(spacing: 12) {
-                    Button(action: onBack) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 14, weight: .bold))
-                            Text(L10n.k("auto.ailab_view.back", fallback: "返回实验室"))
-                                .font(.system(size: 13, weight: .medium))
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(colorScheme == .dark ? Color.white.opacity(0.04) : Color.black.opacity(0.035))
-                        .cornerRadius(8)
-                    }
-                    .buttonStyle(.plain)
-
-                    // 新建会话按钮
-                    Button(action: { viewModel.clearChat() }) {
-                        Image(systemName: "square.and.pencil")
-                            .font(.system(size: 14, weight: .medium))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                            .background(colorScheme == .dark ? Color.white.opacity(0.04) : Color.black.opacity(0.035))
-                            .cornerRadius(8)
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.k("auto.ailab_view.new_chat", fallback: "新建会话"))
-
-                    Spacer()
-                }
-                
-                // 居中标题
-                Text(L10n.k("auto.ailab_view.pure_chat", fallback: "智能对话助手"))
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.primary)
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 14)
-            .background(colorScheme == .dark ? Color.black.opacity(0.12) : Color(nsColor: .windowBackgroundColor).opacity(0.9))
-            
+            headerView
             Divider()
                 .background(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
-
-            // 2. 聊天消息区
-            if viewModel.messages.isEmpty && !viewModel.isSending {
-                // 欢迎空状态
-                WelcomeEmptyState(onSelectPrompt: { prompt in
-                    viewModel.inputText = prompt
-                })
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
-                            ForEach(viewModel.messages) { message in
-                                ChatBubble(
-                                    message: message,
-                                    onCopy: message.sender == .assistant ? {
-                                        viewModel.copyMessageToClipboard(message.text)
-                                    } : nil,
-                                    onRegenerate: message.sender == .assistant ? {
-                                        if let option = viewModel.selectedOption {
-                                            Task { await viewModel.regenerateLastResponse(option: option) }
-                                        }
-                                    } : nil
-                                )
-                            }
-                            
-                            // 思考中动画指示器
-                            if viewModel.isSending {
-                                ThinkingBubble()
-                                    .id("thinking-indicator")
-                                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                            }
-                        }
-                        .padding(24)
-                    }
-                    .onChange(of: viewModel.messages.count) { _, _ in
-                        if let lastId = viewModel.messages.last?.id {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
-                        }
-                    }
-                    .onChange(of: viewModel.isSending) { _, newValue in
-                        withAnimation(.easeOut(duration: 0.25)) {
-                            if newValue {
-                                proxy.scrollTo("thinking-indicator", anchor: .bottom)
-                            } else if let lastId = viewModel.messages.last?.id {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 3. 底部输入与预览托盘区
-            VStack(spacing: 0) {
-                // 上传图片后的预览槽 (Preview Tray)
-                if let selectedImage = viewModel.selectedImage {
-                    HStack(spacing: 12) {
-                        ZStack(alignment: .topTrailing) {
-                            Image(nsImage: selectedImage)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 60, height: 60)
-                                .cornerRadius(8)
-                                .clipped()
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
-                                )
-                            
-                            Button(action: viewModel.clearSelectedImage) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.red)
-                                    .background(Circle().fill(Color.white))
-                            }
-                            .buttonStyle(.plain)
-                            .offset(x: 6, y: -6)
-                        }
-                        .padding(.vertical, 10)
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, 24)
-                    .background(colorScheme == .dark ? Color.white.opacity(0.02) : Color.black.opacity(0.015))
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-
-                Divider()
-                    .background(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
-
-                // 模型快速切换条 (Model Switcher)
-                HStack {
-                    Menu {
-                        ForEach(allOptions, id: \.self) { option in
-                            Button(action: {
-                                viewModel.selectedOption = option
-                            }) {
-                                HStack {
-                                    Text(option.displayName)
-                                    if viewModel.selectedOption == option {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 11))
-                                .foregroundColor(.blue)
-                            Text(viewModel.selectedOption?.displayName ?? L10n.k("auto.ailab_view.choose_model", fallback: "选择模型"))
-                                .font(.system(size: 12, weight: .medium))
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.system(size: 9))
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.045))
-                        .cornerRadius(6)
-                        .contentShape(Rectangle())
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .onChange(of: viewModel.selectedOption) { _, _ in
-                        viewModel.clearChat()
-                    }
-                    
-                    Spacer()
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 10)
-                .padding(.bottom, 2)
-
-                // 输入条
-                HStack(spacing: 14) {
-                    // 图片选择按钮 (🖼️)
-                    Button(action: viewModel.selectImage) {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 17))
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.k("auto.ailab_view.add_photo", fallback: "添加本地图片进行分析"))
-
-                    // 输入文本框
-                    TextField(L10n.k("auto.ailab_view.chat_placeholder", fallback: "给 AI 助手发送消息... (回车发送)"), text: $viewModel.inputText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14))
-                        .onSubmit {
-                            if let option = viewModel.selectedOption {
-                                Task {
-                                    await viewModel.sendMessage(option: option)
-                                }
-                            }
-                        }
-                        .disabled(viewModel.isSending)
-
-                    // 语音输入按钮模拟 (🎙️)
-                    Button(action: {
-                        viewModel.inputText = L10n.k("auto.ailab_view.voice_demo", fallback: "帮我看看这张代码截图有什么性能隐患？")
-                    }) {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.k("auto.ailab_view.voice_input", fallback: "语音输入转译"))
-
-                    if viewModel.isSending {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Button(action: {
-                            if let option = viewModel.selectedOption {
-                                Task {
-                                    await viewModel.sendMessage(option: option)
-                                }
-                            }
-                        }) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundStyle(Color.blue.gradient)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(colorScheme == .dark ? Color.white.opacity(0.03) : Color(nsColor: .textBackgroundColor))
-                .cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.08), lineWidth: 1)
-                )
-                .shadow(color: colorScheme == .dark ? Color.clear : Color.black.opacity(0.015), radius: 4, x: 0, y: 1.5)
-                .padding(20)
-            }
-            .background(
-                colorScheme == .dark
-                    ? Color.black.opacity(0.08)
-                    : Color(nsColor: .windowBackgroundColor).opacity(0.85)
-            )
+            messageArea
+            composerView
         }
         .background(colorScheme == .dark ? Color(nsColor: .underPageBackgroundColor) : Color(nsColor: .windowBackgroundColor))
         .onAppear {
@@ -533,6 +291,274 @@ struct AIChatView: View {
                     viewModel.selectedOption = first
                 }
                 viewModel.clearChat()
+            }
+        }
+    }
+
+    private var headerView: some View {
+        ZStack {
+            HStack(spacing: 12) {
+                Button(action: onBack) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .bold))
+                        Text(L10n.k("auto.ailab_view.back", fallback: "返回实验室"))
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(colorScheme == .dark ? Color.white.opacity(0.04) : Color.black.opacity(0.035))
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+
+                Button(action: { viewModel.clearChat() }) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 14, weight: .medium))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(colorScheme == .dark ? Color.white.opacity(0.04) : Color.black.opacity(0.035))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .help(L10n.k("auto.ailab_view.new_chat", fallback: "新建会话"))
+
+                Spacer()
+            }
+
+            Text(L10n.k("auto.ailab_view.pure_chat", fallback: "智能对话助手"))
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+        .background(colorScheme == .dark ? Color.black.opacity(0.12) : Color(nsColor: .windowBackgroundColor).opacity(0.9))
+    }
+
+    @ViewBuilder
+    private var messageArea: some View {
+        if viewModel.messages.isEmpty && !viewModel.isSending {
+            WelcomeEmptyState { prompt in
+                viewModel.inputText = prompt
+            }
+        } else {
+            messageScrollView
+        }
+    }
+
+    private var messageScrollView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ForEach(viewModel.messages) { message in
+                        ChatBubble(
+                            message: message,
+                            onCopy: copyAction(for: message),
+                            onRegenerate: regenerateAction(for: message)
+                        )
+                    }
+
+                    if viewModel.isSending {
+                        ThinkingBubble()
+                            .id("thinking-indicator")
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    }
+                }
+                .padding(24)
+            }
+            .onChange(of: viewModel.messages.count) { _, _ in
+                if let lastId = viewModel.messages.last?.id {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(lastId, anchor: .bottom)
+                    }
+                }
+            }
+            .onChange(of: viewModel.isSending) { _, newValue in
+                withAnimation(.easeOut(duration: 0.25)) {
+                    if newValue {
+                        proxy.scrollTo("thinking-indicator", anchor: .bottom)
+                    } else if let lastId = viewModel.messages.last?.id {
+                        proxy.scrollTo(lastId, anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+
+    private func copyAction(for message: ChatMessage) -> (() -> Void)? {
+        guard message.sender == .assistant else { return nil }
+        return { viewModel.copyMessageToClipboard(message.text) }
+    }
+
+    private func regenerateAction(for message: ChatMessage) -> (() -> Void)? {
+        guard message.sender == .assistant else { return nil }
+        return {
+            if let option = viewModel.selectedOption {
+                Task { await viewModel.regenerateLastResponse(option: option) }
+            }
+        }
+    }
+
+    private var composerView: some View {
+        VStack(spacing: 0) {
+            selectedImagePreview
+
+            Divider()
+                .background(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
+
+            modelSwitcher
+            inputBar
+        }
+        .background(
+            colorScheme == .dark
+                ? Color.black.opacity(0.08)
+                : Color(nsColor: .windowBackgroundColor).opacity(0.85)
+        )
+    }
+
+    @ViewBuilder
+    private var selectedImagePreview: some View {
+        if let selectedImage = viewModel.selectedImage {
+            HStack(spacing: 12) {
+                ZStack(alignment: .topTrailing) {
+                    Image(nsImage: selectedImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 60, height: 60)
+                        .cornerRadius(8)
+                        .clipped()
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
+                        )
+
+                    Button(action: viewModel.clearSelectedImage) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.red)
+                            .background(Circle().fill(Color.white))
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: 6, y: -6)
+                }
+                .padding(.vertical, 10)
+
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .background(colorScheme == .dark ? Color.white.opacity(0.02) : Color.black.opacity(0.015))
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private var modelSwitcher: some View {
+        HStack {
+            Menu {
+                ForEach(allOptions, id: \.self) { option in
+                    Button(action: {
+                        viewModel.selectedOption = option
+                    }) {
+                        HStack {
+                            Text(option.displayName)
+                            if viewModel.selectedOption == option {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                modelSwitcherLabel
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .onChange(of: viewModel.selectedOption) { _, _ in
+                viewModel.clearChat()
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+    }
+
+    private var modelSwitcherLabel: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 11))
+                .foregroundColor(.blue)
+            Text(viewModel.selectedOption?.displayName ?? L10n.k("auto.ailab_view.choose_model", fallback: "选择模型"))
+                .font(.system(size: 12, weight: .medium))
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 9))
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.045))
+        .cornerRadius(6)
+        .contentShape(Rectangle())
+    }
+
+    private var inputBar: some View {
+        HStack(spacing: 14) {
+            Button(action: viewModel.selectImage) {
+                Image(systemName: "photo.on.rectangle.angled")
+                    .font(.system(size: 17))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(L10n.k("auto.ailab_view.add_photo", fallback: "添加本地图片进行分析"))
+
+            TextField(L10n.k("auto.ailab_view.chat_placeholder", fallback: "给 AI 助手发送消息... (回车发送)"), text: $viewModel.inputText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+                .onSubmit(sendCurrentMessage)
+                .disabled(viewModel.isSending)
+
+            Button(action: {
+                viewModel.inputText = L10n.k("auto.ailab_view.voice_demo", fallback: "帮我看看这张代码截图有什么性能隐患？")
+            }) {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(L10n.k("auto.ailab_view.voice_input", fallback: "语音输入转译"))
+
+            sendControl
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(colorScheme == .dark ? Color.white.opacity(0.03) : Color(nsColor: .textBackgroundColor))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: colorScheme == .dark ? Color.clear : Color.black.opacity(0.015), radius: 4, x: 0, y: 1.5)
+        .padding(20)
+    }
+
+    @ViewBuilder
+    private var sendControl: some View {
+        if viewModel.isSending {
+            ProgressView()
+                .controlSize(.small)
+        } else {
+            Button(action: sendCurrentMessage) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(Color.blue.gradient)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func sendCurrentMessage() {
+        if let option = viewModel.selectedOption {
+            Task {
+                await viewModel.sendMessage(option: option)
             }
         }
     }

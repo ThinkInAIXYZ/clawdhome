@@ -260,112 +260,7 @@ struct LLMManagerTab: View {
             } else {
                 List {
                     ForEach(activeModels) { item in
-                        HStack(spacing: 12) {
-                            // A. 六点手柄提示拖拽
-                            Image(systemName: "line.3.horizontal")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                                .frame(width: 20)
-                            
-                            // B. 服务商渐变徽章
-                            let cardTheme: DesignSystem.GradientTheme = {
-                                switch item.provider.providerGroupId.lowercased() {
-                                case "kimi": return .emerald
-                                case "openai": return .teal
-                                case "anthropic": return .purple
-                                case "qiniu": return .orange
-                                case "custom": return .blue
-                                default: return .blue
-                                }
-                            }()
-                            
-                            let iconName: String = {
-                                switch item.provider.providerGroupId.lowercased() {
-                                case "kimi": return "bolt.shield.fill"
-                                case "openai": return "cpu.fill"
-                                case "anthropic": return "brain.head.profile"
-                                case "qiniu": return "cloud.fill"
-                                case "custom": return "gearshape.2.fill"
-                                default: return "cpu"
-                                }
-                            }()
-                            
-                            ZStack {
-                                Circle()
-                                    .fill(cardTheme.mainColor.opacity(0.1))
-                                    .frame(width: 28, height: 28)
-                                Image(systemName: iconName)
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(cardTheme.mainColor)
-                            }
-                            
-                            // C. 模型和别名
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(item.modelId)
-                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(.primary)
-                                
-                                Text(item.provider.displayNameWithAlias)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                            }
-                            
-                            Spacer()
-                            
-                            // D. 默认星标徽章
-                            if item.isDefault {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "star.fill")
-                                        .font(.system(size: 9))
-                                        .foregroundStyle(Color.orange)
-                                    Text(L10n.k("views.model_manager.llmmanager_tab.system_default", fallback: "系统默认"))
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(Color.orange)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3.5)
-                                .background(Color.orange.opacity(0.12))
-                                .cornerRadius(6)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color.orange.opacity(0.24), lineWidth: 0.7)
-                                )
-                            } else {
-                                Button {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                        modelStore.setDefaultModel(key: item.id)
-                                    }
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "star")
-                                            .font(.system(size: 9))
-                                        Text(L10n.k("views.model_manager.llmmanager_tab.set_as_default", fallback: "设为默认"))
-                                            .font(.system(size: 10))
-                                    }
-                                    .foregroundColor(.secondary)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3.5)
-                                    .background(Color.white.opacity(0.04))
-                                    .cornerRadius(6)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color.white.opacity(0.06), lineWidth: 0.7)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 12)
-                        .background(Color.secondary.opacity(colorScheme == .dark ? 0.03 : 0.02))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(item.isDefault ? Color.orange.opacity(0.2) : Color.primary.opacity(0.04), lineWidth: 1)
-                        )
-                        .listRowInsets(EdgeInsets(top: 4, leading: 24, bottom: 4, trailing: 24))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                        activeModelRow(item)
                     }
                     .onMove { indices, newOffset in
                         modelStore.moveActiveModel(from: indices, to: newOffset)
@@ -375,6 +270,131 @@ struct LLMManagerTab: View {
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
             }
+        }
+    }
+
+    private func activeModelRow(_ item: ActiveModelEntry) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 20)
+
+            providerBadge(for: item.provider.providerGroupId)
+            activeModelTitle(item)
+            Spacer()
+            defaultModelControl(for: item)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .background(Color.secondary.opacity(colorScheme == .dark ? 0.03 : 0.02))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(item.isDefault ? Color.orange.opacity(0.2) : Color.primary.opacity(0.04), lineWidth: 1)
+        )
+        .listRowInsets(EdgeInsets(top: 4, leading: 24, bottom: 4, trailing: 24))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+    }
+
+    private func providerBadge(for providerGroupId: String) -> some View {
+        let theme = providerTheme(for: providerGroupId)
+
+        return ZStack {
+            Circle()
+                .fill(theme.mainColor.opacity(0.1))
+                .frame(width: 28, height: 28)
+            Image(systemName: providerIconName(for: providerGroupId))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(theme.mainColor)
+        }
+    }
+
+    private func activeModelTitle(_ item: ActiveModelEntry) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(item.modelId)
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .foregroundStyle(.primary)
+
+            Text(item.provider.displayNameWithAlias)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func defaultModelControl(for item: ActiveModelEntry) -> some View {
+        if item.isDefault {
+            defaultModelBadge
+        } else {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    modelStore.setDefaultModel(key: item.id)
+                }
+            } label: {
+                setDefaultLabel
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var defaultModelBadge: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 9))
+                .foregroundStyle(Color.orange)
+            Text(L10n.k("views.model_manager.llmmanager_tab.system_default", fallback: "系统默认"))
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color.orange)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3.5)
+        .background(Color.orange.opacity(0.12))
+        .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.orange.opacity(0.24), lineWidth: 0.7)
+        )
+    }
+
+    private var setDefaultLabel: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "star")
+                .font(.system(size: 9))
+            Text(L10n.k("views.model_manager.llmmanager_tab.set_as_default", fallback: "设为默认"))
+                .font(.system(size: 10))
+        }
+        .foregroundColor(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3.5)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.white.opacity(0.06), lineWidth: 0.7)
+        )
+    }
+
+    private func providerTheme(for providerGroupId: String) -> DesignSystem.GradientTheme {
+        switch providerGroupId.lowercased() {
+        case "kimi": return .emerald
+        case "openai": return .teal
+        case "anthropic": return .purple
+        case "qiniu": return .orange
+        case "custom": return .blue
+        default: return .blue
+        }
+    }
+
+    private func providerIconName(for providerGroupId: String) -> String {
+        switch providerGroupId.lowercased() {
+        case "kimi": return "bolt.shield.fill"
+        case "openai": return "cpu.fill"
+        case "anthropic": return "brain.head.profile"
+        case "qiniu": return "cloud.fill"
+        case "custom": return "gearshape.2.fill"
+        default: return "cpu"
         }
     }
 
