@@ -355,7 +355,7 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
         return kinfo.kp_eproc.e_ucred.cr_uid
     }
 
-    /// 用 getgrouplist() 检查 UID 是否属于 admin 组（gid 80），纯 libc 调用
+    /// 检查 UID 是否属于 admin 组（gid 80），纯 libc 调用
     private static func isAdminUID(_ uid: uid_t) -> Bool {
         let now = Date()
         adminCacheLock.lock()
@@ -367,10 +367,20 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
 
         let adminGID: gid_t = 80
         guard let pw = getpwuid(uid) else { return false }
-        var groups = [gid_t](repeating: 0, count: 64)
-        var count = Int32(groups.count)
-        getgrouplist(pw.pointee.pw_name, Int32(bitPattern: pw.pointee.pw_gid), &groups, &count)
-        let isAdmin = groups.prefix(Int(count)).contains(adminGID)
+        let username = String(cString: pw.pointee.pw_name)
+        let isPrimaryAdmin = pw.pointee.pw_gid == adminGID
+        let isListedAdmin: Bool = {
+            guard let group = getgrgid(adminGID) else { return false }
+            var index = 0
+            while let member = group.pointee.gr_mem?[index] {
+                if String(cString: member) == username {
+                    return true
+                }
+                index += 1
+            }
+            return false
+        }()
+        let isAdmin = isPrimaryAdmin || isListedAdmin
         adminCacheLock.lock()
         adminUIDCache[uid] = (isAdmin, now.addingTimeInterval(adminCacheTTL))
         adminCacheLock.unlock()
