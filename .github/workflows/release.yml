@@ -85,8 +85,19 @@ jobs:
             echo "Requested version v$VERSION does not match scripts/semver.sh result v$COMPUTED_VERSION" >&2
             exit 1
           fi
-          test -f "release-notes/v${VERSION}.zh.md"
-          test -f "release-notes/v${VERSION}.en.md"
+          missing=0
+          for notes_file in \
+            "release-notes/v${VERSION}.zh.md" \
+            "release-notes/v${VERSION}.en.md"; do
+            if [ ! -f "$notes_file" ]; then
+              echo "Missing confirmed release notes: $notes_file" >&2
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Run the Draft Release Notes workflow first, merge the notes PR, then rerun Release." >&2
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Release target: v$VERSION"
 
