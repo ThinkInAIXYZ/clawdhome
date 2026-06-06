@@ -43,10 +43,10 @@ ClawdHome 的 GitHub Actions 发布流程分两段：
 
 建议配置 GitHub Environment：
 
-- 新建 environment：`release`
+- 新建 environment：`APPLE_TEAM_ID`
 - 给 environment 增加 required reviewers
 
-`Release` workflow 已绑定 `environment: release`。这样正式发布前 GitHub 会要求人工批准。
+`Release` workflow 已绑定 `environment: APPLE_TEAM_ID`。这样正式发布前 GitHub 会要求人工批准。
 
 ## 证书和密钥准备
 
