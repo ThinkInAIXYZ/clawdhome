@@ -1,0 +1,73 @@
+name: Draft Release Notes
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional version override, without leading v"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: draft-release-notes
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    name: Draft release notes PR
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMPUTED_VERSION="$(bash scripts/semver.sh)"
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="$COMPUTED_VERSION"
+          fi
+          VERSION="${VERSION#v}"
+          if [ "$VERSION" != "$COMPUTED_VERSION" ]; then
+            echo "Requested version v$VERSION does not match scripts/semver.sh result v$COMPUTED_VERSION" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release notes target: v$VERSION"
+
+      - name: Generate editable notes skeleton
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/release_notes_draft.sh \
+            --version "${{ steps.version.outputs.version }}" \
+            --no-open \
+            --no-claude
+
+      - name: Create release notes PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: release-notes/v${{ steps.version.outputs.version }}
+          delete-branch: true
+          commit-message: "chore(release): draft notes for v${{ steps.version.outputs.version }}"
+          title: "Release notes for v${{ steps.version.outputs.version }}"
+          body: |
+            请确认并编辑这两个文件：
+
+            - `release-notes/v${{ steps.version.outputs.version }}.zh.md`
+            - `release-notes/v${{ steps.version.outputs.version }}.en.md`
+
+            合并此 PR 后，再手动运行 `Release` workflow。
+          add-paths: |
+            release-notes/v${{ steps.version.outputs.version }}.zh.md
+            release-notes/v${{ steps.version.outputs.version }}.en.md

@@ -20,6 +20,7 @@ WEBSITE_REPO="${WEBSITE_REPO:-deepjerry-ai/clawdhome_website}"
 API_VERSION_JSON="$WEBSITE_DIR/api/version.json"
 NOTES_DIR="${NOTES_DIR:-$REPO_ROOT/release-notes}"
 VERSION_FILE="$REPO_ROOT/dist/.release-version"
+SKIP_ONLINE_VERIFY="${SKIP_ONLINE_VERIFY:-false}"
 
 DRY_RUN=false
 SKIP_PUSH=false
@@ -266,7 +267,7 @@ fi
 
 # ── 发布后可访问性检查 ───────────────────────────────────────────────────────
 
-if [ "$SKIP_PUSH" = false ]; then
+if [ "$SKIP_PUSH" = false ] && [ "$SKIP_ONLINE_VERIFY" != true ]; then
   log "发布后 URL 检查..."
   VERSION_JSON_URL="https://clawdhome.app/api/version.json"
   REMOTE_ARM64_URL="https://clawdhome.app/download/ClawdHome-${NEXT_VERSION}-arm64.pkg"
@@ -306,6 +307,8 @@ if [ "$SKIP_PUSH" = false ]; then
   if [ "$VERIFY_FAILED" -ne 0 ]; then
     fail "发布后校验失败：请检查 version.json / 下载链接 / 文件大小"
   fi
+elif [ "$SKIP_PUSH" = false ]; then
+  warn "跳过发布后 URL 检查（SKIP_ONLINE_VERIFY=true）"
 fi
 
 # ── 完成摘要 ──────────────────────────────────────────────────────────────────

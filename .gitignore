@@ -57,8 +57,10 @@ scripts/test_cli_init.local.env
 .githooks/pre-commit
 .gstack/
 .worktrees/
+_website/
 .build-version
 .build-version.lock
+ClawdHomeSpeech/GeneratedVersion.swift
 ClawdHomeSpeech/.build/
 
 # Apple 签名 / 公证密钥材料（不提交）

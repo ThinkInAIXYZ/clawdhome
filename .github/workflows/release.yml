@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional version override, without leading v"
+        required: false
+        type: string
+      notarize:
+        description: "Submit packages to Apple notarization"
+        required: true
+        default: true
+        type: boolean
+      publish_website:
+        description: "Create website changelog/download PR"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, notarize, and publish
+    runs-on: macos-15
+    environment: release
+    timeout-minutes: 120
+
+    env:
+      NOTARY_PROFILE: clawdhome-release
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_SIGN_IDENTITY: ${{ secrets.APP_SIGN_IDENTITY }}
+      PKG_SIGN_IDENTITY: ${{ secrets.PKG_SIGN_IDENTITY }}
+      WEBSITE_DIR: ${{ github.workspace }}/_website
+      WEBSITE_REPO: ${{ vars.WEBSITE_REPO || 'deepjerry-ai/clawdhome_website' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_BOT_TOKEN || github.token }}
+
+      - name: Checkout website repository
+        if: ${{ inputs.publish_website }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.WEBSITE_REPO || 'deepjerry-ai/clawdhome_website' }}
+          path: _website
+          fetch-depth: 0
+          token: ${{ secrets.WEBSITE_REPO_TOKEN || secrets.RELEASE_BOT_TOKEN || github.token }}
+
+      - name: Select Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Configure git author
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve version and check confirmed release notes
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMPUTED_VERSION="$(bash scripts/semver.sh)"
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="$COMPUTED_VERSION"
+          fi
+          VERSION="${VERSION#v}"
+          if [ "$VERSION" != "$COMPUTED_VERSION" ]; then
+            echo "Requested version v$VERSION does not match scripts/semver.sh result v$COMPUTED_VERSION" >&2
+            exit 1
+          fi
+          test -f "release-notes/v${VERSION}.zh.md"
+          test -f "release-notes/v${VERSION}.en.md"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release target: v$VERSION"
+
+      - name: Import Developer ID certificates
+        shell: bash
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APP_CERT_P12_BASE64: ${{ secrets.APP_CERT_P12_BASE64 }}
+          APP_CERT_PASSWORD: ${{ secrets.APP_CERT_PASSWORD }}
+          PKG_CERT_P12_BASE64: ${{ secrets.PKG_CERT_P12_BASE64 }}
+          PKG_CERT_PASSWORD: ${{ secrets.PKG_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+
+          printf '%s' "$APP_CERT_P12_BASE64" | base64 --decode > app.p12
+          printf '%s' "$PKG_CERT_P12_BASE64" | base64 --decode > pkg.p12
+
+          security import app.p12 -k build.keychain -P "$APP_CERT_PASSWORD" -T /usr/bin/codesign
+          security import pkg.p12 -k build.keychain -P "$PKG_CERT_PASSWORD" -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+
+      - name: Configure Apple notarization profile
+        if: ${{ inputs.notarize }}
+        shell: bash
+        env:
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_APP_SPECIFIC_PASSWORD: ${{ secrets.NOTARY_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ASC_KEY_P8_BASE64:-}" ] && [ -n "${ASC_KEY_ID:-}" ]; then
+            mkdir -p private_keys
+            printf '%s' "$ASC_KEY_P8_BASE64" | base64 --decode > "private_keys/AuthKey_${ASC_KEY_ID}.p8"
+            xcrun notarytool store-credentials "$NOTARY_PROFILE" \
+              --key "private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+              --key-id "$ASC_KEY_ID" \
+              --issuer "$ASC_ISSUER_ID"
+          elif [ -n "${NOTARY_APPLE_ID:-}" ] && [ -n "${NOTARY_APP_SPECIFIC_PASSWORD:-}" ]; then
+            xcrun notarytool store-credentials "$NOTARY_PROFILE" \
+              --apple-id "$NOTARY_APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$NOTARY_APP_SPECIFIC_PASSWORD"
+          else
+            echo "Missing notarization credentials. Provide ASC_KEY_* secrets or NOTARY_APPLE_ID + NOTARY_APP_SPECIFIC_PASSWORD." >&2
+            exit 1
+          fi
+
+      - name: Run release script checks
+        shell: bash
+        run: make test-release-scripts
+
+      - name: Prepare release commit and tag
+        shell: bash
+        run: make release-prepare
+
+      - name: Build signed packages
+        shell: bash
+        env:
+          NOTARIZE: ${{ inputs.notarize && 'true' || 'false' }}
+        run: make release-build
+
+      - name: Upload packages as workflow artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: clawdhome-v${{ steps.version.outputs.version }}-packages
+          path: |
+            dist/*.pkg
+            build/logs/*.log
+          if-no-files-found: warn
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.WEBSITE_REPO_TOKEN || secrets.RELEASE_BOT_TOKEN || github.token }}
+          SKIP_ONLINE_VERIFY: true
+        run: make release-publish
