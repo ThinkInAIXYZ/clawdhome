@@ -217,6 +217,18 @@ jobs:
         shell: bash
         run: make test-release-scripts
 
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+            ~/Library/Caches/org.swift.swiftpm
+            build/ClawdHomeSpeech.build/checkouts
+            build/ClawdHomeSpeech.build/repositories
+          key: ${{ runner.os }}-swiftpm-${{ hashFiles('ClawdHome.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'ClawdHomeSpeech/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-swiftpm-
+
       - name: Prepare release commit and tag
         shell: bash
         run: make release-prepare

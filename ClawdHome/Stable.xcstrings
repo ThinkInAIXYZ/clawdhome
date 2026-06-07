@@ -66393,6 +66393,125 @@
         }
       }
     },
+    "speech.obsidian.sync_success": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synced Successfully"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步成功"
+          }
+        }
+      }
+    },
+    "speech.obsidian.sync_success.ok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确定"
+          }
+        }
+      }
+    },
+    "speech.obsidian.sync_success.reveal_in_finder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show in Finder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Finder 中显示"
+          }
+        }
+      }
+    },
+    "speech.obsidian.sync_success_detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Successfully synced to Obsidian Vault:\n%@\n\nFile name:\n%@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已成功同步至 Obsidian Vault 目录：\n%@\n\n文件名称：\n%@"
+          }
+        }
+      }
+    },
+    "speech.obsidian.sync_tooltip.disabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian sync is disabled, please enable it in Settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未启用 Obsidian 同步，请前往设置开启"
+          }
+        }
+      }
+    },
+    "speech.obsidian.sync_tooltip.path": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync to: %@\nClick to manually sync current record"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步至目录：%@\n点击将当前记录手动同步至此目录"
+          }
+        }
+      }
+    },
+    "speech.obsidian.sync_tooltip.path_empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obsidian Vault path is not configured. Please set it in Settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未配置 Obsidian Vault 路径，请前往设置配置"
+          }
+        }
+      }
+    },
     "speech.open_directory": {
       "extractionState": "manual",
       "localizations": {

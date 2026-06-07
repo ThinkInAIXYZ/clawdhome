@@ -323,6 +323,7 @@ struct SpeechTranscriptionView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(!service.availability.isAvailable || service.isPreparingModel || service.isTranscribing)
+                        .fixedSize(horizontal: true, vertical: false)
                     }
                 }
 
@@ -897,12 +898,12 @@ struct SpeechTranscriptionView: View {
                     Spacer(minLength: 6)
 
                     Picker("", selection: $selectedContentTab) {
-                        Text(L10n.k("speech.content.tab.raw.short", fallback: "📝 原稿")).tag(ContentDimension.raw)
-                        Text(L10n.k("speech.content.tab.refined.short", fallback: "✨ 精装")).tag(ContentDimension.refined)
-                        Text(L10n.k("speech.content.tab.srt.short", fallback: "🎬 字幕")).tag(ContentDimension.srt)
+                        Text(L10n.k("speech.content.tab.raw", fallback: "📝 粗稿原文")).tag(ContentDimension.raw)
+                        Text(L10n.k("speech.content.tab.refined", fallback: "✨ AI 精装稿")).tag(ContentDimension.refined)
+                        Text(L10n.k("speech.content.tab.srt", fallback: "🎬 实时字幕")).tag(ContentDimension.srt)
                     }
                     .pickerStyle(.segmented)
-                    .frame(width: 200)
+                    .frame(width: 300)
 
                     Spacer(minLength: 6)
 
@@ -938,9 +939,9 @@ struct SpeechTranscriptionView: View {
                 VStack(spacing: 6) {
                     HStack(spacing: 4) {
                         Picker("", selection: $selectedContentTab) {
-                            Text(L10n.k("speech.content.tab.raw.short", fallback: "📝 原稿")).tag(ContentDimension.raw)
-                            Text(L10n.k("speech.content.tab.refined.short", fallback: "✨ 精装")).tag(ContentDimension.refined)
-                            Text(L10n.k("speech.content.tab.srt.short", fallback: "🎬 字幕")).tag(ContentDimension.srt)
+                            Text(L10n.k("speech.content.tab.raw", fallback: "📝 粗稿原文")).tag(ContentDimension.raw)
+                            Text(L10n.k("speech.content.tab.refined", fallback: "✨ AI 精装稿")).tag(ContentDimension.refined)
+                            Text(L10n.k("speech.content.tab.srt", fallback: "🎬 实时字幕")).tag(ContentDimension.srt)
                         }
                         .pickerStyle(.segmented)
 
@@ -1408,22 +1409,23 @@ struct SpeechTranscriptionView: View {
     }
 
     private var refineIconButton: some View {
-        Button {
+        let isDisabled = service.currentTranscript.isEmpty
+        return Button {
             showRefineSheet = true
         } label: {
             Image(systemName: "sparkles")
-                .foregroundStyle(.purple)
+                .foregroundStyle(isDisabled ? Color.secondary : .purple)
                 .font(.system(size: 11, weight: .bold))
                 .frame(width: 24, height: 24)
-                .background(Color.purple.opacity(0.08))
+                .background(isDisabled ? Color.primary.opacity(0.03) : Color.purple.opacity(0.08))
                 .cornerRadius(6)
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.purple.opacity(0.2), lineWidth: 0.5)
+                        .stroke(isDisabled ? Color.primary.opacity(0.04) : Color.purple.opacity(0.2), lineWidth: 0.5)
                 )
         }
         .buttonStyle(.plain)
-        .disabled(service.currentTranscript.isEmpty)
+        .disabled(isDisabled)
         .help(service.selectedHistoryRecord?.refinedText != nil ? "重新总结" : "AI 智能总结")
     }
 
@@ -1493,6 +1495,19 @@ struct SpeechTranscriptionView: View {
         .help(didCopied ? "已复制" : "复制当前内容")
     }
 
+    private var obsidianSyncTooltip: String {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: "obsidian_enabled") else {
+            return L10n.k("speech.obsidian.sync_tooltip.disabled", fallback: "未启用 Obsidian 同步，请前往设置开启")
+        }
+        guard let vaultPath = defaults.string(forKey: "obsidian_vault_path"), !vaultPath.isEmpty else {
+            return L10n.k("speech.obsidian.sync_tooltip.path_empty", fallback: "未配置 Obsidian Vault 路径，请前往设置配置")
+        }
+        let inbox = defaults.string(forKey: "obsidian_inbox") ?? "Inbox"
+        let syncPath = URL(fileURLWithPath: vaultPath).appendingPathComponent(inbox).path
+        return L10n.f("speech.obsidian.sync_tooltip.path", fallback: "同步至目录：%@\n点击将当前记录手动同步至此目录", syncPath)
+    }
+
     private var obsidianSyncButton: some View {
         Button {
             triggerObsidianSync()
@@ -1523,10 +1538,12 @@ struct SpeechTranscriptionView: View {
         }
         .buttonStyle(.plain)
         .disabled(currentWordCount == 0 || isSyncingObsidian)
+        .help(obsidianSyncTooltip)
     }
 
     private var obsidianSyncIconButton: some View {
-        Button {
+        let isDisabled = currentWordCount == 0 || isSyncingObsidian
+        return Button {
             triggerObsidianSync()
         } label: {
             if isSyncingObsidian {
@@ -1535,20 +1552,20 @@ struct SpeechTranscriptionView: View {
                     .frame(width: 24, height: 24)
             } else {
                 Image(systemName: didSyncObsidian ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath.doc.on.doc")
-                    .foregroundStyle(didSyncObsidian ? .green : .purple)
+                    .foregroundStyle(isDisabled ? Color.secondary : (didSyncObsidian ? .green : .purple))
                     .font(.system(size: 10))
                     .frame(width: 24, height: 24)
-                    .background(didSyncObsidian ? Color.green.opacity(0.08) : Color.purple.opacity(0.05))
+                    .background(isDisabled ? Color.primary.opacity(0.03) : (didSyncObsidian ? Color.green.opacity(0.08) : Color.purple.opacity(0.05)))
                     .cornerRadius(6)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(didSyncObsidian ? Color.green.opacity(0.2) : Color.purple.opacity(0.12), lineWidth: 0.5)
+                            .stroke(isDisabled ? Color.primary.opacity(0.04) : (didSyncObsidian ? Color.green.opacity(0.2) : Color.purple.opacity(0.12)), lineWidth: 0.5)
                     )
             }
         }
         .buttonStyle(.plain)
-        .disabled(currentWordCount == 0 || isSyncingObsidian)
-        .help(didSyncObsidian ? L10n.k("speech.obsidian.synced", fallback: "已同步") : L10n.k("speech.obsidian.sync", fallback: "同步至 Obsidian"))
+        .disabled(isDisabled)
+        .help(obsidianSyncTooltip)
     }
 
     private func triggerObsidianSync() {
@@ -1567,6 +1584,27 @@ struct SpeechTranscriptionView: View {
                     isSyncingObsidian = false
                     if success {
                         didSyncObsidian = true
+                    }
+                }
+
+                if success {
+                    let defaults = UserDefaults.standard
+                    let vaultPath = defaults.string(forKey: "obsidian_vault_path") ?? ""
+                    let inbox = defaults.string(forKey: "obsidian_inbox") ?? "Inbox"
+                    let syncPath = URL(fileURLWithPath: vaultPath).appendingPathComponent(inbox).path
+                    let noteFileName = SpeechTranscriptionService.obsidianASRNoteFileName(for: record)
+                    let fileURL = URL(fileURLWithPath: syncPath).appendingPathComponent(noteFileName)
+
+                    let alert = NSAlert()
+                    alert.messageText = L10n.k("speech.obsidian.sync_success", fallback: "同步成功")
+                    alert.informativeText = L10n.f("speech.obsidian.sync_success_detail", fallback: "已成功同步至 Obsidian Vault 目录：\n%@\n\n文件名称：\n%@", syncPath, noteFileName)
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: L10n.k("speech.obsidian.sync_success.ok", fallback: "确定"))
+                    alert.addButton(withTitle: L10n.k("speech.obsidian.sync_success.reveal_in_finder", fallback: "在 Finder 中显示"))
+                    
+                    let response = alert.runModal()
+                    if response == .alertSecondButtonReturn {
+                        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                     }
                 }
 

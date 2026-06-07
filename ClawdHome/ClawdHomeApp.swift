@@ -100,6 +100,7 @@ struct ClawdHomeApp: App {
                 }
                 .keyboardShortcut("1", modifiers: .command)
             }
+            TextEditingCommands()
         }
 
         // 龙虾详情独立窗口：每个 username 唯一，重复触发时置前
