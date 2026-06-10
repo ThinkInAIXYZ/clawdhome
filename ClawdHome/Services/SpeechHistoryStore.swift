@@ -201,9 +201,11 @@ final class SpeechHistoryStore {
         try? item.transcriptText.write(to: txtURL, atomically: true, encoding: .utf8)
 
         // 【新增】保存 AI 智能精装稿到 _refined.txt 物理文件
+        let refinedURL = detailFileURL(for: item.id, createdAt: item.createdAt, ext: "refined.txt")
         if let refined = item.refinedText, !refined.isEmpty {
-            let refinedURL = detailFileURL(for: item.id, createdAt: item.createdAt, ext: "refined.txt")
             try? refined.write(to: refinedURL, atomically: true, encoding: .utf8)
+        } else {
+            try? fileManager.removeItem(at: refinedURL)
         }
 
         // 3. 双发保存 —— (B) 自动分句估算时间戳并写入 .srt 字幕文件

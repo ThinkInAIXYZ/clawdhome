@@ -503,6 +503,105 @@ final class SpeechFeatureTests: XCTestCase {
         XCTAssertEqual(service.currentHistoryRecord?.transcriptText, "原稿内容")
     }
 
+    @MainActor
+    func testSavingRecordWithoutRefinedTextClearsPreviousRefinedPayload() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpeechClearRefinedTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let store = SpeechHistoryStore(fileURL: tempURL)
+        let recordID = UUID(uuidString: "00000000-0000-0000-0000-000000000447")!
+        let createdAt = Date(timeIntervalSince1970: 6789)
+        let initial = SpeechHistoryRecord(
+            id: recordID,
+            createdAt: createdAt,
+            sourceFilePath: "/tmp/refined-clear.wav",
+            sourceFileName: "refined-clear.wav",
+            sourceFileSizeBytes: 88,
+            durationSeconds: nil,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "第一版原稿",
+            refinedText: "旧精修稿",
+            refinedTitle: "旧标题",
+            elapsedSeconds: 2,
+            status: .completed,
+            errorSummary: nil
+        )
+        store.save(initial)
+
+        var updated = initial
+        updated.transcriptText = "重新转写后的原稿"
+        updated.refinedText = nil
+        updated.refinedTitle = nil
+        store.save(updated)
+
+        let reloaded = store.load().first { $0.id == recordID }
+        XCTAssertEqual(reloaded?.transcriptText, "重新转写后的原稿")
+        XCTAssertNil(reloaded?.refinedText)
+        XCTAssertNil(reloaded?.refinedTitle)
+    }
+
+    @MainActor
+    func testUpdatingRefinedTextByRecordIDDoesNotFollowCurrentSelection() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpeechApplyRefinedByIDTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let store = SpeechHistoryStore(fileURL: tempURL)
+        let firstID = UUID(uuidString: "00000000-0000-0000-0000-000000000448")!
+        let secondID = UUID(uuidString: "00000000-0000-0000-0000-000000000449")!
+        let first = SpeechHistoryRecord(
+            id: firstID,
+            createdAt: Date(timeIntervalSince1970: 7000),
+            sourceFilePath: "/tmp/first-refine.wav",
+            sourceFileName: "first-refine.wav",
+            sourceFileSizeBytes: 88,
+            durationSeconds: nil,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "第一条原文",
+            elapsedSeconds: 2,
+            status: .completed,
+            errorSummary: nil
+        )
+        let second = SpeechHistoryRecord(
+            id: secondID,
+            createdAt: Date(timeIntervalSince1970: 7100),
+            sourceFilePath: "/tmp/second-refine.wav",
+            sourceFileName: "second-refine.wav",
+            sourceFileSizeBytes: 99,
+            durationSeconds: nil,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "第二条原文",
+            elapsedSeconds: 3,
+            status: .completed,
+            errorSummary: nil
+        )
+        store.save(first)
+        store.save(second)
+
+        let service = SpeechTranscriptionService(historyStore: store)
+        defer { service.stopObsidianWatcher() }
+        service.selectedRecordID = firstID
+        service.selectedRecordID = secondID
+
+        XCTAssertTrue(service.updateRecordRefinedText(id: firstID, text: "# 第一条精修\n\n正文"))
+
+        let firstReloaded = service.history.first { $0.id == firstID }
+        let secondReloaded = service.history.first { $0.id == secondID }
+        XCTAssertEqual(firstReloaded?.refinedTitle, "第一条精修")
+        XCTAssertEqual(firstReloaded?.refinedText, "# 第一条精修\n\n正文")
+        XCTAssertNil(secondReloaded?.refinedText)
+    }
+
     func testObsidianNoteFileNameUsesRefinedTitleWhenAvailable() {
         let record = SpeechHistoryRecord(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000446")!,

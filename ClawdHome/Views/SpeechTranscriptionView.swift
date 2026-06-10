@@ -1255,19 +1255,23 @@ struct SpeechTranscriptionView: View {
 
     private func triggerSaveAction() {
         guard !isSaving else { return }
+        let targetTab = selectedContentTab
+        let targetRecordID = service.selectedRecordID
+        let rawTextToSave = editedRawText
+        let refinedTextToSave = editedRefinedText
         withAnimation(.easeInOut(duration: 0.2)) {
             isSaving = true
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            if selectedContentTab == .raw {
-                if service.selectedRecordID != nil {
-                    service.updateSelectedRecordTranscript(editedRawText)
+            if targetTab == .raw {
+                if let targetRecordID {
+                    service.updateRecordTranscript(id: targetRecordID, text: rawTextToSave)
                 } else {
-                    service.currentTranscript = editedRawText
+                    service.currentTranscript = rawTextToSave
                 }
-            } else if selectedContentTab == .refined {
-                service.updateSelectedRecordRefinedText(editedRefinedText)
+            } else if targetTab == .refined, let targetRecordID {
+                service.updateRecordRefinedText(id: targetRecordID, text: refinedTextToSave)
             }
 
             withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
@@ -1521,8 +1525,14 @@ struct SpeechTranscriptionView: View {
                     Image(systemName: didSyncObsidian ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath.doc.on.doc")
                         .foregroundStyle(didSyncObsidian ? .green : .purple)
                 }
-                Text(didSyncObsidian ? L10n.k("speech.obsidian.synced", fallback: "已同步") : L10n.k("speech.obsidian.sync", fallback: "同步至 Obsidian"))
-                    .foregroundStyle(didSyncObsidian ? .green : .primary)
+                ZStack {
+                    // 隐形占位，保持宽度恒定为长文本的宽度，避免 didSyncObsidian 改变时按钮总宽度变化导致 ViewThatFits 抖动切换布局
+                    Text(L10n.k("speech.obsidian.sync", fallback: "同步至 Obsidian"))
+                        .opacity(0)
+                    
+                    Text(didSyncObsidian ? L10n.k("speech.obsidian.synced", fallback: "已同步") : L10n.k("speech.obsidian.sync", fallback: "同步至 Obsidian"))
+                        .foregroundStyle(didSyncObsidian ? .green : .primary)
+                }
             }
             .font(.system(size: 11, weight: .medium))
             .padding(.horizontal, 8)
@@ -1889,6 +1899,8 @@ struct AISpeechRefineSheet: View {
     @State private var refineDuration: Double = 0
     @State private var errorMessage: String? = nil
     @State private var showCompareView = false
+    @State private var targetRecordID: UUID? = nil
+    @State private var sourceTranscript = ""
 
     @State private var copiedSuccess = false
 
@@ -1970,7 +1982,7 @@ struct AISpeechRefineSheet: View {
                             .padding(.leading, 4)
 
                             ZStack(alignment: .topLeading) {
-                                TextEditor(text: .constant(service.currentTranscript))
+                                TextEditor(text: .constant(sourceTranscript.isEmpty ? service.currentTranscript : sourceTranscript))
                                     .font(.system(size: 12, design: .monospaced))
                                     .lineSpacing(4)
                                     .scrollContentBackground(.hidden)
@@ -2096,7 +2108,13 @@ struct AISpeechRefineSheet: View {
                         } else {
                             // 生成完毕或已打断时，只写入 AI 精装版，避免覆盖原稿。
                             Button {
-                                if service.applyRefinedTextToCurrentRecord(refinedText) {
+                                let didSave: Bool
+                                if let targetRecordID {
+                                    didSave = service.updateRecordRefinedText(id: targetRecordID, text: refinedText)
+                                } else {
+                                    didSave = service.applyRefinedTextToCurrentRecord(refinedText)
+                                }
+                                if didSave {
                                     dismiss()
                                 }
                             } label: {
@@ -2108,7 +2126,7 @@ struct AISpeechRefineSheet: View {
                             .buttonStyle(.borderedProminent)
                             .controlSize(.regular)
                             .tint(.purple)
-                            .disabled(refinedText.isEmpty || service.currentHistoryRecord == nil)
+                            .disabled(refinedText.isEmpty || (targetRecordID == nil && service.currentHistoryRecord == nil))
                         }
                     }
                     .padding(.horizontal, 20)
@@ -2295,6 +2313,8 @@ struct AISpeechRefineSheet: View {
         refineDuration = 0
         errorMessage = nil
         refinedText = ""
+        sourceTranscript = service.currentTranscript
+        targetRecordID = service.currentHistoryRecord?.id
         showCompareView = true // 直接、优雅地平滑展开为双栏预览状态！
 
         refineTask = Task {
@@ -2302,7 +2322,7 @@ struct AISpeechRefineSheet: View {
             var rawRefinedBuffer = ""
             do {
                 let stream = service.refineTranscriptStream(
-                    text: service.currentTranscript,
+                    text: sourceTranscript,
                     provider: config.provider,
                     modelId: config.modelId,
                     glossary: glossary,

@@ -125,45 +125,60 @@ final class SpeechTranscriptionService {
     // 更新选中历史记录的原笔记内容并持久化
     func updateSelectedRecordTranscript(_ text: String) {
         guard let record = selectedHistoryRecord else { return }
-        var updated = record
-        updated.transcriptText = text
-        historyStore.save(updated)
-        self.syncToObsidian(record: updated)
-        // 重新从磁盘加载，同步内存列表状态，但保留选中状态
-        let prevSelected = selectedRecordID
-        history = historyStore.load()
-        selectedRecordID = prevSelected
+        updateRecordTranscript(id: record.id, text: text)
     }
 
     // 更新选中历史记录的 AI 润色精装内容并持久化
     func updateSelectedRecordRefinedText(_ text: String) {
         guard let record = selectedHistoryRecord else { return }
+        updateRecordRefinedText(id: record.id, text: text)
+    }
+
+    @discardableResult
+    func updateRecordTranscript(id: UUID, text: String) -> Bool {
+        guard let index = history.firstIndex(where: { $0.id == id }) else { return false }
+        var updated = history[index]
+        let refreshCurrentTranscript = selectedRecordID == id || (selectedRecordID == nil && currentHistoryRecord?.id == id)
+        updated.transcriptText = text
+        historyStore.save(updated)
+        self.syncToObsidian(record: updated)
+        reloadHistoryAfterRecordUpdate(targetID: id)
+        if refreshCurrentTranscript {
+            currentTranscript = text
+        }
+        return true
+    }
+
+    @discardableResult
+    func updateRecordRefinedText(id: UUID, text: String) -> Bool {
+        guard let index = history.firstIndex(where: { $0.id == id }) else { return false }
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        var updated = record
-        updated.refinedText = trimmedText
+        var updated = history[index]
+        updated.refinedText = trimmedText.isEmpty ? nil : trimmedText
         updated.refinedTitle = Self.refinedTitleFromFirstLine(trimmedText)
         updated.refinedSummary = nil
         updated.refinedTags = nil
         historyStore.save(updated)
         self.syncToObsidian(record: updated)
+        reloadHistoryAfterRecordUpdate(targetID: id)
+        return true
+    }
+
+    private func reloadHistoryAfterRecordUpdate(targetID: UUID) {
         let prevSelected = selectedRecordID
         history = historyStore.load()
-        selectedRecordID = prevSelected
+        if let prevSelected {
+            selectedRecordID = prevSelected
+        } else if currentHistoryRecord?.id == targetID {
+            currentTranscript = currentHistoryRecord?.transcriptText ?? currentTranscript
+        }
     }
 
     @discardableResult
     func applyRefinedTextToCurrentRecord(_ text: String) -> Bool {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty, var updated = currentHistoryRecord else { return false }
-        updated.refinedText = trimmedText
-        updated.refinedTitle = Self.refinedTitleFromFirstLine(trimmedText)
-        updated.refinedSummary = nil
-        updated.refinedTags = nil
-        historyStore.save(updated)
-        self.syncToObsidian(record: updated)
-        history = historyStore.load()
-        selectedRecordID = updated.id
-        return true
+        guard !trimmedText.isEmpty, let updated = currentHistoryRecord else { return false }
+        return updateRecordRefinedText(id: updated.id, text: trimmedText)
     }
 
     // 是否启用 macOS 原生 AI 人声降噪与增强预处理，默认开启 (方案 A)
