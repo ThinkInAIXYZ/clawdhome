@@ -112,6 +112,77 @@ struct SpeechHistoryStoreTests {
         store.delete(id: UUID())
         expect(store.load().count == 1, "delete of unknown id should be a no-op")
 
+        let refinedID = UUID(uuidString: "00000000-0000-0000-0000-000000000333")!
+        let duplicateID = UUID(uuidString: "00000000-0000-0000-0000-000000000444")!
+        let longAudioPath = tempRoot.appendingPathComponent("2026-06-14 16-12-14 Audio.m4a").path
+        let refinedRecord = SpeechHistoryRecord(
+            id: refinedID,
+            createdAt: Date(timeIntervalSince1970: 400),
+            sourceFilePath: longAudioPath,
+            sourceFileName: "2026-06-14 16-12-14 Audio.m4a",
+            sourceFileSizeBytes: 45_500_000,
+            durationSeconds: 5_924,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "第一版原稿",
+            refinedText: "# TGO-16-AI转型与教育焦虑\n\n精装版",
+            refinedTitle: "TGO-16-AI转型与教育焦虑",
+            elapsedSeconds: 6_700,
+            status: .completed,
+            errorSummary: nil,
+            vocalEnhanceEnabled: true
+        )
+        let duplicateRecord = SpeechHistoryRecord(
+            id: duplicateID,
+            createdAt: Date(timeIntervalSince1970: 500),
+            sourceFilePath: longAudioPath,
+            sourceFileName: "2026-06-14 16-12-14 Audio.m4a",
+            sourceFileSizeBytes: 45_500_000,
+            durationSeconds: 5_924,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "第二版原稿",
+            elapsedSeconds: 6_755,
+            status: .completed,
+            errorSummary: nil,
+            vocalEnhanceEnabled: true
+        )
+        store.save(refinedRecord)
+        let persistedDuplicate = store.save(duplicateRecord)
+
+        let mergedRecords = store.load()
+        let matching = mergedRecords.filter { $0.sourceFilePath == longAudioPath }
+        expect(persistedDuplicate.id == refinedID, "save should return the merged existing record id")
+        expect(persistedDuplicate.refinedTitle == "TGO-16-AI转型与教育焦虑", "save should return preserved refined title")
+        expect(persistedDuplicate.refinedText == "# TGO-16-AI转型与教育焦虑\n\n精装版", "save should return preserved refined text")
+        expect(matching.count == 1, "same source audio should merge instead of duplicating")
+        expect(matching.first?.id == refinedID, "merged source audio should keep the existing record id")
+        expect(matching.first?.transcriptText == "第二版原稿", "merged source audio should update the transcript")
+        expect(matching.first?.refinedTitle == "TGO-16-AI转型与教育焦虑", "merged source audio should keep refined title")
+        expect(matching.first?.refinedText == "# TGO-16-AI转型与教育焦虑\n\n精装版", "merged source audio should keep refined text")
+
+        let replacedPath = tempRoot.appendingPathComponent("replaced-audio.m4a").path
+        var replacedFirst = duplicateRecord
+        replacedFirst.id = UUID(uuidString: "00000000-0000-0000-0000-000000000555")!
+        replacedFirst.sourceFilePath = replacedPath
+        replacedFirst.sourceFileName = "replaced-audio.m4a"
+        replacedFirst.sourceFileSizeBytes = 1_000
+        replacedFirst.transcriptText = "旧音频"
+
+        var replacedSecond = replacedFirst
+        replacedSecond.id = UUID(uuidString: "00000000-0000-0000-0000-000000000556")!
+        replacedSecond.sourceFileSizeBytes = 2_000
+        replacedSecond.transcriptText = "新音频"
+
+        store.save(replacedFirst)
+        store.save(replacedSecond)
+        let replacedMatches = store.load().filter { $0.sourceFilePath == replacedPath }
+        expect(replacedMatches.count == 2, "same path with different file sizes should not merge")
+
         print("SpeechHistoryStore tests passed.")
     }
 }

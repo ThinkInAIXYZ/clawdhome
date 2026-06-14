@@ -4,6 +4,42 @@ import XCTest
 final class SpeechFeatureTests: XCTestCase {
     private let gibibyte: UInt64 = 1024 * 1024 * 1024
 
+    private struct ObsidianDefaultsSnapshot {
+        var enabled: Any?
+        var vaultPath: String?
+        var inbox: String?
+        var attachments: String?
+        var ignoredAudioKeys: Any?
+    }
+
+    private func snapshotObsidianDefaults() -> ObsidianDefaultsSnapshot {
+        let defaults = UserDefaults.standard
+        return ObsidianDefaultsSnapshot(
+            enabled: defaults.object(forKey: "obsidian_enabled"),
+            vaultPath: defaults.string(forKey: "obsidian_vault_path"),
+            inbox: defaults.string(forKey: "obsidian_inbox"),
+            attachments: defaults.string(forKey: "obsidian_attachments"),
+            ignoredAudioKeys: defaults.object(forKey: "speech_obsidian_ignored_audio_keys")
+        )
+    }
+
+    private func restoreObsidianDefaults(_ snapshot: ObsidianDefaultsSnapshot) {
+        let defaults = UserDefaults.standard
+        if let enabled = snapshot.enabled {
+            defaults.set(enabled, forKey: "obsidian_enabled")
+        } else {
+            defaults.removeObject(forKey: "obsidian_enabled")
+        }
+        defaults.set(snapshot.vaultPath, forKey: "obsidian_vault_path")
+        defaults.set(snapshot.inbox, forKey: "obsidian_inbox")
+        defaults.set(snapshot.attachments, forKey: "obsidian_attachments")
+        if let ignoredAudioKeys = snapshot.ignoredAudioKeys {
+            defaults.set(ignoredAudioKeys, forKey: "speech_obsidian_ignored_audio_keys")
+        } else {
+            defaults.removeObject(forKey: "speech_obsidian_ignored_audio_keys")
+        }
+    }
+
     func testRefineOutputDropsInstructionAnalysisBeforeMarkdownTitle() {
         let leakedOutput = """
         1. **Analyze the Input and Instructions**:
@@ -215,6 +251,67 @@ final class SpeechFeatureTests: XCTestCase {
         XCTAssertEqual(store.load().map(\.id), [first.id])
     }
 
+    func testSpeechHistoryStoreMergesSameSourceAudioInsteadOfDuplicating() throws {
+        let fm = FileManager.default
+        let tempRoot = fm.temporaryDirectory.appendingPathComponent(
+            "SpeechHistoryDedupTests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let storeURL = tempRoot.appendingPathComponent("speech-history.json")
+        defer { try? fm.removeItem(at: tempRoot) }
+
+        try fm.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+
+        let store = SpeechHistoryStore(fileURL: storeURL)
+        let sourcePath = "/tmp/2026-06-14 16-12-14 Audio.m4a"
+        let original = SpeechHistoryRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000901")!,
+            createdAt: Date(timeIntervalSince1970: 1_802_444_000),
+            sourceFilePath: sourcePath,
+            sourceFileName: "2026-06-14 16-12-14 Audio.m4a",
+            sourceFileSizeBytes: 45_500_000,
+            durationSeconds: 5_924,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "第一版原稿",
+            refinedText: "# TGO-16-AI转型与教育焦虑\n\n精装版",
+            refinedTitle: "TGO-16-AI转型与教育焦虑",
+            elapsedSeconds: 6_700,
+            status: .completed,
+            errorSummary: nil,
+            vocalEnhanceEnabled: true
+        )
+        let duplicateFromWatcher = SpeechHistoryRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000902")!,
+            createdAt: Date(timeIntervalSince1970: 1_802_444_300),
+            sourceFilePath: sourcePath,
+            sourceFileName: "2026-06-14 16-12-14 Audio.m4a",
+            sourceFileSizeBytes: 45_500_000,
+            durationSeconds: 5_924,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "第二版原稿",
+            elapsedSeconds: 6_755,
+            status: .completed,
+            errorSummary: nil,
+            vocalEnhanceEnabled: true
+        )
+
+        store.save(original)
+        store.save(duplicateFromWatcher)
+
+        let loaded = store.load()
+        XCTAssertEqual(loaded.count, 1)
+        XCTAssertEqual(loaded.first?.id, original.id)
+        XCTAssertEqual(loaded.first?.transcriptText, "第二版原稿")
+        XCTAssertEqual(loaded.first?.refinedTitle, "TGO-16-AI转型与教育焦虑")
+        XCTAssertEqual(loaded.first?.refinedText, "# TGO-16-AI转型与教育焦虑\n\n精装版")
+    }
+
     @MainActor
     func testSpeechExportFormatting() {
         let tempURL = FileManager.default.temporaryDirectory
@@ -286,7 +383,8 @@ final class SpeechFeatureTests: XCTestCase {
         defaults.set("Inbox", forKey: "obsidian_inbox")
         defaults.set("Inbox/attachments", forKey: "obsidian_attachments")
 
-        let service = SpeechTranscriptionService(historyStore: SpeechHistoryStore(fileURL: storeURL))
+        let store = SpeechHistoryStore(fileURL: storeURL)
+        let service = SpeechTranscriptionService(historyStore: store)
         defer { service.stopObsidianWatcher() }
         let record = SpeechHistoryRecord(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000555")!,
@@ -318,6 +416,141 @@ final class SpeechFeatureTests: XCTestCase {
                 name != sourceAudioURL.lastPathComponent && name.hasSuffix(sourceAudioURL.lastPathComponent)
             }
         )
+    }
+
+    @MainActor
+    func testObsidianSyncRemovesPreviousASRNoteWhenRefinedTitleChanges() throws {
+        let fm = FileManager.default
+        let tempRoot = fm.temporaryDirectory.appendingPathComponent(
+            "SpeechObsidianStaleNoteTests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let vaultURL = tempRoot.appendingPathComponent("Vault", isDirectory: true)
+        let inboxURL = vaultURL.appendingPathComponent("Inbox", isDirectory: true)
+        let attachmentsURL = vaultURL.appendingPathComponent("Inbox/attachments", isDirectory: true)
+        let sourceAudioURL = attachmentsURL.appendingPathComponent("2026-06-14 16-12-14 Audio.m4a")
+        let storeURL = tempRoot.appendingPathComponent("speech-history.json")
+        defer { try? fm.removeItem(at: tempRoot) }
+
+        try fm.createDirectory(at: attachmentsURL, withIntermediateDirectories: true)
+        try Data("audio".utf8).write(to: sourceAudioURL, options: .atomic)
+
+        let oldDefaults = snapshotObsidianDefaults()
+        defer { restoreObsidianDefaults(oldDefaults) }
+        UserDefaults.standard.set(false, forKey: "obsidian_enabled")
+        UserDefaults.standard.set(vaultURL.path, forKey: "obsidian_vault_path")
+        UserDefaults.standard.set("Inbox", forKey: "obsidian_inbox")
+        UserDefaults.standard.set("Inbox/attachments", forKey: "obsidian_attachments")
+
+        let store = SpeechHistoryStore(fileURL: storeURL)
+        let service = SpeechTranscriptionService(historyStore: store)
+        defer { service.stopObsidianWatcher() }
+
+        var record = SpeechHistoryRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000903")!,
+            createdAt: Date(timeIntervalSince1970: 1_802_444_334),
+            sourceFilePath: sourceAudioURL.path,
+            sourceFileName: sourceAudioURL.lastPathComponent,
+            sourceFileSizeBytes: 5,
+            durationSeconds: 5_924,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "原稿",
+            elapsedSeconds: 6_755,
+            status: .completed,
+            errorSummary: nil
+        )
+
+        XCTAssertTrue(try service.manualSyncToObsidian(record: record))
+        let oldNote = inboxURL.appendingPathComponent(SpeechTranscriptionService.obsidianASRNoteFileName(for: record))
+        XCTAssertTrue(fm.fileExists(atPath: oldNote.path))
+
+        record.refinedText = "# TGO-16-AI转型与教育焦虑\n\n精装版"
+        record.refinedTitle = "TGO-16-AI转型与教育焦虑"
+        XCTAssertTrue(try service.manualSyncToObsidian(record: record))
+
+        let newNote = inboxURL.appendingPathComponent(SpeechTranscriptionService.obsidianASRNoteFileName(for: record))
+        XCTAssertTrue(fm.fileExists(atPath: newNote.path))
+        XCTAssertFalse(fm.fileExists(atPath: oldNote.path))
+
+        store.save(record)
+        let duplicateFromWatcher = SpeechHistoryRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000913")!,
+            createdAt: Date(timeIntervalSince1970: 1_802_444_500),
+            sourceFilePath: sourceAudioURL.path,
+            sourceFileName: sourceAudioURL.lastPathComponent,
+            sourceFileSizeBytes: 5,
+            durationSeconds: 5_924,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "重复导入原稿",
+            elapsedSeconds: 6_800,
+            status: .completed,
+            errorSummary: nil
+        )
+
+        let persistedDuplicate = store.save(duplicateFromWatcher)
+        XCTAssertEqual(persistedDuplicate.id, record.id)
+        XCTAssertEqual(persistedDuplicate.refinedTitle, "TGO-16-AI转型与教育焦虑")
+        XCTAssertTrue(try service.manualSyncToObsidian(record: persistedDuplicate))
+
+        let syncedContent = try String(contentsOf: newNote, encoding: .utf8)
+        XCTAssertTrue(syncedContent.contains("# TGO-16-AI转型与教育焦虑"))
+        XCTAssertFalse(fm.fileExists(atPath: oldNote.path))
+    }
+
+    @MainActor
+    func testDeletingObsidianCapturedHistorySuppressesImmediateReimport() throws {
+        let fm = FileManager.default
+        let tempRoot = fm.temporaryDirectory.appendingPathComponent(
+            "SpeechObsidianDeleteSuppressTests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let vaultURL = tempRoot.appendingPathComponent("Vault", isDirectory: true)
+        let attachmentsURL = vaultURL.appendingPathComponent("Inbox/attachments", isDirectory: true)
+        let sourceAudioURL = attachmentsURL.appendingPathComponent("2026-06-14 16-12-14 Audio.m4a")
+        let storeURL = tempRoot.appendingPathComponent("speech-history.json")
+        defer { try? fm.removeItem(at: tempRoot) }
+
+        try fm.createDirectory(at: attachmentsURL, withIntermediateDirectories: true)
+        try Data("audio".utf8).write(to: sourceAudioURL, options: .atomic)
+
+        let oldDefaults = snapshotObsidianDefaults()
+        defer { restoreObsidianDefaults(oldDefaults) }
+        UserDefaults.standard.set(vaultURL.path, forKey: "obsidian_vault_path")
+        UserDefaults.standard.set("Inbox/attachments", forKey: "obsidian_attachments")
+
+        let store = SpeechHistoryStore(fileURL: storeURL)
+        let record = SpeechHistoryRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000904")!,
+            createdAt: Date(timeIntervalSince1970: 1_802_444_334),
+            sourceFilePath: sourceAudioURL.path,
+            sourceFileName: sourceAudioURL.lastPathComponent,
+            sourceFileSizeBytes: 5,
+            durationSeconds: 5_924,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "原稿",
+            elapsedSeconds: 6_755,
+            status: .completed,
+            errorSummary: nil
+        )
+        store.save(record)
+
+        let service = SpeechTranscriptionService(historyStore: store)
+        defer { service.stopObsidianWatcher() }
+        XCTAssertFalse(service.shouldAutoImportObsidianAudio(sourceAudioURL, attachmentsURL: attachmentsURL))
+
+        service.deleteHistoryRecord(id: record.id)
+
+        XCTAssertTrue(service.history.isEmpty)
+        XCTAssertFalse(service.shouldAutoImportObsidianAudio(sourceAudioURL, attachmentsURL: attachmentsURL))
     }
 
     @MainActor
@@ -654,6 +887,65 @@ final class SpeechFeatureTests: XCTestCase {
         XCTAssertEqual(firstReloaded?.refinedTitle, "第一条精修")
         XCTAssertEqual(firstReloaded?.refinedText, "# 第一条精修\n\n正文")
         XCTAssertNil(secondReloaded?.refinedText)
+    }
+
+    @MainActor
+    func testCurrentHistoryRecordPrefersSelectedQueueSourceOverMatchingTranscript() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpeechCurrentRecordSourceTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let store = SpeechHistoryStore(fileURL: tempURL)
+        let firstID = UUID(uuidString: "00000000-0000-0000-0000-000000000450")!
+        let secondID = UUID(uuidString: "00000000-0000-0000-0000-000000000451")!
+        let firstURL = URL(fileURLWithPath: "/tmp/same-transcript-first.m4a")
+        let secondURL = URL(fileURLWithPath: "/tmp/same-transcript-second.m4a")
+        let first = SpeechHistoryRecord(
+            id: firstID,
+            createdAt: Date(timeIntervalSince1970: 7200),
+            sourceFilePath: firstURL.path,
+            sourceFileName: firstURL.lastPathComponent,
+            sourceFileSizeBytes: 10,
+            durationSeconds: nil,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "相同转写内容",
+            elapsedSeconds: 2,
+            status: .completed,
+            errorSummary: nil
+        )
+        let second = SpeechHistoryRecord(
+            id: secondID,
+            createdAt: Date(timeIntervalSince1970: 7300),
+            sourceFilePath: secondURL.path,
+            sourceFileName: secondURL.lastPathComponent,
+            sourceFileSizeBytes: 10,
+            durationSeconds: nil,
+            engineID: "qwen3-asr",
+            modelID: .qwen3ASR17B8Bit,
+            modelDisplayName: "Qwen3-ASR 1.7B 8-bit",
+            languageHintOrDetectedLanguage: nil,
+            transcriptText: "相同转写内容",
+            elapsedSeconds: 3,
+            status: .completed,
+            errorSummary: nil
+        )
+        store.save(first)
+        store.save(second)
+
+        let service = SpeechTranscriptionService(historyStore: store)
+        defer { service.stopObsidianWatcher() }
+        service.enqueueFiles([firstURL])
+        service.currentTranscript = "相同转写内容"
+
+        XCTAssertEqual(service.currentHistoryRecord?.id, firstID)
+        XCTAssertTrue(service.applyRefinedTextToCurrentRecord("# 第一条音频润色\n\n正文"))
+
+        let reloaded = service.history
+        XCTAssertEqual(reloaded.first { $0.id == firstID }?.refinedTitle, "第一条音频润色")
+        XCTAssertNil(reloaded.first { $0.id == secondID }?.refinedTitle)
     }
 
     func testObsidianNoteFileNameUsesRefinedTitleWhenAvailable() {

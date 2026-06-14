@@ -188,7 +188,24 @@ final class SpeechHistoryStore {
     }
 
     // 保存：常数级 O(1) 物理双写 TXT + SRT 机制
-    func save(_ item: SpeechHistoryRecord) {
+    @discardableResult
+    func save(_ item: SpeechHistoryRecord) -> SpeechHistoryRecord {
+        var metadatas = loadMetadataList()
+        var itemToPersist = item
+
+        if !metadatas.contains(where: { $0.id == item.id }),
+           let duplicate = metadatas.first(where: { sameSourceAudio($0, item) }) {
+            let refinedURL = detailFileURL(for: duplicate.id, createdAt: duplicate.createdAt, ext: "refined.txt")
+            let existingRefinedText = try? String(contentsOf: refinedURL, encoding: .utf8)
+
+            itemToPersist.id = duplicate.id
+            itemToPersist.createdAt = duplicate.createdAt
+            itemToPersist.refinedText = item.refinedText ?? existingRefinedText
+            itemToPersist.refinedTitle = item.refinedTitle ?? duplicate.refinedTitle
+            itemToPersist.refinedSummary = item.refinedSummary ?? duplicate.refinedSummary
+            itemToPersist.refinedTags = item.refinedTags ?? duplicate.refinedTags
+        }
+
         // 1. 确保目录环境存在
         try? fileManager.createDirectory(
             at: detailsDirectory,
@@ -197,53 +214,73 @@ final class SpeechHistoryStore {
         )
 
         // 2. 双发保存 —— (A) 直接写入 UTF-8 纯文本 .txt 文件
-        let txtURL = detailFileURL(for: item.id, createdAt: item.createdAt, ext: "txt")
-        try? item.transcriptText.write(to: txtURL, atomically: true, encoding: .utf8)
+        let txtURL = detailFileURL(for: itemToPersist.id, createdAt: itemToPersist.createdAt, ext: "txt")
+        try? itemToPersist.transcriptText.write(to: txtURL, atomically: true, encoding: .utf8)
 
         // 【新增】保存 AI 智能精装稿到 _refined.txt 物理文件
-        let refinedURL = detailFileURL(for: item.id, createdAt: item.createdAt, ext: "refined.txt")
-        if let refined = item.refinedText, !refined.isEmpty {
+        let refinedURL = detailFileURL(for: itemToPersist.id, createdAt: itemToPersist.createdAt, ext: "refined.txt")
+        if let refined = itemToPersist.refinedText, !refined.isEmpty {
             try? refined.write(to: refinedURL, atomically: true, encoding: .utf8)
         } else {
             try? fileManager.removeItem(at: refinedURL)
         }
 
         // 3. 双发保存 —— (B) 自动分句估算时间戳并写入 .srt 字幕文件
-        let duration = item.durationSeconds ?? (Double(item.transcriptText.count) * 0.25)
-        let srtContent = Self.generateSRT(from: item.transcriptText, duration: duration)
-        let srtURL = detailFileURL(for: item.id, createdAt: item.createdAt, ext: "srt")
+        let duration = itemToPersist.durationSeconds ?? (Double(itemToPersist.transcriptText.count) * 0.25)
+        let srtContent = Self.generateSRT(from: itemToPersist.transcriptText, duration: duration)
+        let srtURL = detailFileURL(for: itemToPersist.id, createdAt: itemToPersist.createdAt, ext: "srt")
         try? srtContent.write(to: srtURL, atomically: true, encoding: .utf8)
 
         // 4. 抽取新生成的轻量元数据信息
         let newMeta = SpeechHistoryMetadata(
-            id: item.id,
-            createdAt: item.createdAt,
-            sourceFilePath: item.sourceFilePath,
-            sourceFileName: item.sourceFileName,
-            sourceFileSizeBytes: item.sourceFileSizeBytes,
-            durationSeconds: item.durationSeconds,
-            engineID: item.engineID,
-            modelID: item.modelID,
-            modelDisplayName: modelDisplayName(for: item.modelID),
-            languageHintOrDetectedLanguage: item.languageHintOrDetectedLanguage,
-            elapsedSeconds: item.elapsedSeconds,
-            status: item.status,
-            errorSummary: item.errorSummary,
-            refinedTitle: item.refinedTitle,
-            refinedSummary: item.refinedSummary,
-            refinedTags: item.refinedTags,
-            vocalEnhanceEnabled: item.vocalEnhanceEnabled
+            id: itemToPersist.id,
+            createdAt: itemToPersist.createdAt,
+            sourceFilePath: itemToPersist.sourceFilePath,
+            sourceFileName: itemToPersist.sourceFileName,
+            sourceFileSizeBytes: itemToPersist.sourceFileSizeBytes,
+            durationSeconds: itemToPersist.durationSeconds,
+            engineID: itemToPersist.engineID,
+            modelID: itemToPersist.modelID,
+            modelDisplayName: modelDisplayName(for: itemToPersist.modelID),
+            languageHintOrDetectedLanguage: itemToPersist.languageHintOrDetectedLanguage,
+            elapsedSeconds: itemToPersist.elapsedSeconds,
+            status: itemToPersist.status,
+            errorSummary: itemToPersist.errorSummary,
+            refinedTitle: itemToPersist.refinedTitle,
+            refinedSummary: itemToPersist.refinedSummary,
+            refinedTags: itemToPersist.refinedTags,
+            vocalEnhanceEnabled: itemToPersist.vocalEnhanceEnabled
         )
 
         // 5. 更新元数据索引列表
-        var metadatas = loadMetadataList()
-        if let index = metadatas.firstIndex(where: { $0.id == item.id }) {
+        if let index = metadatas.firstIndex(where: { $0.id == itemToPersist.id }) {
             metadatas[index] = newMeta
         } else {
             metadatas.append(newMeta)
         }
 
         writeMetadata(metadatas)
+        return itemToPersist
+    }
+
+    private func sameSourceAudio(_ meta: SpeechHistoryMetadata, _ item: SpeechHistoryRecord) -> Bool {
+        if meta.sourceFilePath == item.sourceFilePath {
+            if meta.sourceFileSizeBytes > 0, item.sourceFileSizeBytes > 0 {
+                return meta.sourceFileSizeBytes == item.sourceFileSizeBytes
+            }
+            return true
+        }
+
+        let existingName = meta.sourceFileName
+        let incomingName = item.sourceFileName
+        let namesMatch = existingName == incomingName
+            || existingName.hasSuffix(incomingName)
+            || incomingName.hasSuffix(existingName)
+        guard namesMatch else { return false }
+
+        return meta.sourceFileSizeBytes > 0
+            && item.sourceFileSizeBytes > 0
+            && meta.sourceFileSizeBytes == item.sourceFileSizeBytes
     }
 
     private func modelDisplayName(for modelID: SpeechModelID) -> String {

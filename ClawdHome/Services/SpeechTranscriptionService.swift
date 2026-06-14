@@ -7,6 +7,8 @@ import Observation
 @Observable
 @MainActor
 final class SpeechTranscriptionService {
+    private static let obsidianIgnoredAudioKeysDefaultsKey = "speech_obsidian_ignored_audio_keys"
+
     private final class ToolStderrMonitor: @unchecked Sendable {
         private let lock = NSLock()
         private var stderrBuffer = Data()
@@ -49,6 +51,28 @@ final class SpeechTranscriptionService {
             if let trailingEvent {
                 onProgress?(trailingEvent)
             }
+            return snapshot
+        }
+    }
+
+    private final class LockedDataBuffer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var buffer = Data()
+
+        func append(_ data: Data) {
+            guard !data.isEmpty else { return }
+            lock.lock()
+            buffer.append(data)
+            lock.unlock()
+        }
+
+        func appendAndSnapshot(_ data: Data) -> Data {
+            lock.lock()
+            if !data.isEmpty {
+                buffer.append(data)
+            }
+            let snapshot = buffer
+            lock.unlock()
             return snapshot
         }
     }
@@ -270,22 +294,8 @@ final class SpeechTranscriptionService {
             let audioExtensions = ["m4a", "wav", "mp3", "caf", "aac"]
             let audioFiles = files.filter { audioExtensions.contains($0.pathExtension.lowercased()) }
 
-            var newAudiosToEnqueue: [URL] = []
-            for fileURL in audioFiles {
-                let fileName = fileURL.lastPathComponent
-
-                // 检查是否已经存在于 ClawdHome 的 ASR 历史记录中（或者正在队列中处理）
-                let alreadyProcessed = history.contains { record in
-                    record.sourceFileName == fileName ||
-                    fileName.hasSuffix(record.sourceFileName) ||
-                    record.sourceFileName.hasSuffix(fileName)
-                }
-
-                let alreadyInQueue = queue.contains { $0.fileURL.lastPathComponent == fileName }
-
-                if !alreadyProcessed && !alreadyInQueue {
-                    newAudiosToEnqueue.append(fileURL)
-                }
+            let newAudiosToEnqueue = audioFiles.filter {
+                shouldAutoImportObsidianAudio($0, attachmentsURL: attachmentsURL)
             }
 
             guard !newAudiosToEnqueue.isEmpty else { return }
@@ -540,8 +550,8 @@ final class SpeechTranscriptionService {
                     errorSummary: nil,
                     vocalEnhanceEnabled: nextItem.isVocalEnhanced
                 ) {
-                    historyStore.save(record)
-                    self.syncToObsidian(record: record)
+                    let persistedRecord = historyStore.save(record)
+                    self.syncToObsidian(record: persistedRecord)
                 }
             } catch {
                 if let tempEnhancedURL {
@@ -669,8 +679,85 @@ final class SpeechTranscriptionService {
     }
 
     func deleteHistoryRecord(id: UUID) {
+        if let record = history.first(where: { $0.id == id }) {
+            markObsidianAudioIgnoredIfNeeded(for: record)
+        }
         historyStore.delete(id: id)
         history = historyStore.load()
+    }
+
+    func shouldAutoImportObsidianAudio(_ fileURL: URL, attachmentsURL: URL) -> Bool {
+        guard !isObsidianAudioIgnored(fileURL) else { return false }
+        guard !history.contains(where: { obsidianAudio(fileURL, matches: $0) }) else { return false }
+        guard !queue.contains(where: { queueItem in
+            let itemURL = queueItem.fileURL
+            return itemURL.standardizedFileURL.path == fileURL.standardizedFileURL.path
+                || itemURL.lastPathComponent == fileURL.lastPathComponent
+        }) else {
+            return false
+        }
+        return Self.sourceAudioIsAlreadyInAttachments(fileURL, attachmentsURL: attachmentsURL)
+    }
+
+    private func markObsidianAudioIgnoredIfNeeded(for record: SpeechHistoryRecord) {
+        let defaults = UserDefaults.standard
+        guard let vaultPath = defaults.string(forKey: "obsidian_vault_path"), !vaultPath.isEmpty else { return }
+        let attachmentsSubdir = defaults.string(forKey: "obsidian_attachments") ?? "Inbox/attachments"
+        let attachmentsURL = URL(fileURLWithPath: vaultPath).appendingPathComponent(attachmentsSubdir)
+        let sourceURL = URL(fileURLWithPath: record.sourceFilePath)
+        guard Self.sourceAudioIsAlreadyInAttachments(sourceURL, attachmentsURL: attachmentsURL) else { return }
+        guard let key = obsidianAudioIdentityKey(for: sourceURL) else { return }
+
+        var keys = Set(defaults.stringArray(forKey: Self.obsidianIgnoredAudioKeysDefaultsKey) ?? [])
+        keys.insert(key)
+        defaults.set(Array(keys).sorted(), forKey: Self.obsidianIgnoredAudioKeysDefaultsKey)
+    }
+
+    private func isObsidianAudioIgnored(_ fileURL: URL) -> Bool {
+        guard let key = obsidianAudioIdentityKey(for: fileURL) else { return false }
+        let keys = Set(UserDefaults.standard.stringArray(forKey: Self.obsidianIgnoredAudioKeysDefaultsKey) ?? [])
+        return keys.contains(key)
+    }
+
+    private func obsidianAudio(_ fileURL: URL, matches record: SpeechHistoryRecord) -> Bool {
+        let path = fileURL.standardizedFileURL.path
+        if URL(fileURLWithPath: record.sourceFilePath).standardizedFileURL.path == path {
+            if record.sourceFileSizeBytes > 0,
+               let fileSize = fileSizeBytes(at: fileURL),
+               fileSize > 0 {
+                return record.sourceFileSizeBytes == fileSize
+            }
+            return true
+        }
+
+        let fileName = fileURL.lastPathComponent
+        let namesMatch = record.sourceFileName == fileName
+            || fileName.hasSuffix(record.sourceFileName)
+            || record.sourceFileName.hasSuffix(fileName)
+        guard namesMatch else { return false }
+
+        if record.sourceFileSizeBytes > 0,
+           let fileSize = fileSizeBytes(at: fileURL),
+           fileSize > 0 {
+            return record.sourceFileSizeBytes == fileSize
+        }
+
+        return true
+    }
+
+    private func obsidianAudioIdentityKey(for fileURL: URL) -> String? {
+        let path = fileURL.standardizedFileURL.path
+        guard let attributes = try? fileManager.attributesOfItem(atPath: path) else {
+            return path
+        }
+        let size = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+        let modifiedAt = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        return "\(path)|\(size)|\(Int(modifiedAt))"
+    }
+
+    private func fileSizeBytes(at url: URL) -> Int64? {
+        let attributes = try? fileManager.attributesOfItem(atPath: url.path)
+        return (attributes?[.size] as? NSNumber)?.int64Value
     }
 
     func openHistoryDirectory() {
@@ -717,6 +804,21 @@ final class SpeechTranscriptionService {
 
     nonisolated static func obsidianASRNoteFileName(for record: SpeechHistoryRecord) -> String {
         "\(obsidianASRNoteTitle(for: record)) clawdhome_asr.md"
+    }
+
+    private nonisolated static func obsidianASRNoteDatePrefix(for record: SpeechHistoryRecord) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
+        return formatter.string(from: record.createdAt)
+    }
+
+    private nonisolated static func obsidianASRNoteFilenamePrefix(for record: SpeechHistoryRecord) -> String {
+        let title = obsidianASRNoteTitle(for: record)
+        if let timestamp = leadingObsidianTimestamp(in: title) {
+            return "\(timestamp) "
+        }
+        return "\(obsidianASRNoteDatePrefix(for: record)) "
     }
 
     private nonisolated static func obsidianASRNoteTitle(for record: SpeechHistoryRecord) -> String {
@@ -872,6 +974,13 @@ final class SpeechTranscriptionService {
         let noteTitle = Self.obsidianASRNoteTitle(for: record)
         let noteFileName = Self.obsidianASRNoteFileName(for: record)
         let noteURL = inboxURL.appendingPathComponent(noteFileName)
+        removeStaleObsidianASRNotes(
+            for: record,
+            inboxURL: inboxURL,
+            keeping: noteURL,
+            targetAudioFileName: targetAudioFileName,
+            fileManager: fileManager
+        )
 
         let dateStringFormatter = DateFormatter()
         dateStringFormatter.dateStyle = .medium
@@ -972,6 +1081,13 @@ final class SpeechTranscriptionService {
         let noteTitle = Self.obsidianASRNoteTitle(for: record)
         let noteFileName = Self.obsidianASRNoteFileName(for: record)
         let noteURL = inboxURL.appendingPathComponent(noteFileName)
+        removeStaleObsidianASRNotes(
+            for: record,
+            inboxURL: inboxURL,
+            keeping: noteURL,
+            targetAudioFileName: targetAudioFileName,
+            fileManager: fileManager
+        )
 
         let dateStringFormatter = DateFormatter()
         dateStringFormatter.dateStyle = .medium
@@ -1012,11 +1128,66 @@ final class SpeechTranscriptionService {
         return true
     }
 
+    private func removeStaleObsidianASRNotes(
+        for record: SpeechHistoryRecord,
+        inboxURL: URL,
+        keeping noteURL: URL,
+        targetAudioFileName: String,
+        fileManager: FileManager
+    ) {
+        let prefix = Self.obsidianASRNoteFilenamePrefix(for: record)
+        guard let notes = try? fileManager.contentsOfDirectory(
+            at: inboxURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+
+        for candidate in notes {
+            guard candidate.standardizedFileURL.path != noteURL.standardizedFileURL.path else { continue }
+            let name = candidate.lastPathComponent
+            guard name.hasPrefix(prefix), name.hasSuffix(" clawdhome_asr.md") else { continue }
+            guard let content = try? String(contentsOf: candidate, encoding: .utf8) else { continue }
+            guard content.contains(targetAudioFileName) || content.contains(record.sourceFileName) else { continue }
+            try? fileManager.removeItem(at: candidate)
+        }
+    }
+
     var currentHistoryRecord: SpeechHistoryRecord? {
         if let selectedRecordID {
             return history.first(where: { $0.id == selectedRecordID })
         }
+        if let selectedQueueItem,
+           let record = historyRecord(matchingSource: selectedQueueItem.fileURL) {
+            return record
+        }
+        if let selectedFileURL,
+           let record = historyRecord(matchingSource: selectedFileURL) {
+            return record
+        }
         return history.first(where: { $0.transcriptText == currentTranscript && !$0.transcriptText.isEmpty })
+    }
+
+    private func historyRecord(matchingSource fileURL: URL) -> SpeechHistoryRecord? {
+        let path = fileURL.standardizedFileURL.path
+        let sourceSize = fileSizeBytes(at: fileURL) ?? 0
+        if let exact = history.first(where: {
+            URL(fileURLWithPath: $0.sourceFilePath).standardizedFileURL.path == path
+                && (sourceSize <= 0 || $0.sourceFileSizeBytes <= 0 || $0.sourceFileSizeBytes == sourceSize)
+        }) {
+            return exact
+        }
+
+        let fileName = fileURL.lastPathComponent
+        guard sourceSize > 0 else { return nil }
+
+        return history.first { record in
+            let namesMatch = record.sourceFileName == fileName
+                || fileName.hasSuffix(record.sourceFileName)
+                || record.sourceFileName.hasSuffix(fileName)
+            return namesMatch && record.sourceFileSizeBytes == sourceSize
+        }
     }
 
     var isSelectedModelDownloaded: Bool {
@@ -1268,15 +1439,10 @@ final class SpeechTranscriptionService {
 
         return try await withCheckedThrowingContinuation { continuation in
             let stderrMonitor = ToolStderrMonitor()
-
-            var stdoutAccumulated = Data()
-            let stdoutLock = NSLock()
+            let stdoutBuffer = LockedDataBuffer()
 
             output.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                stdoutLock.lock()
-                stdoutAccumulated.append(data)
-                stdoutLock.unlock()
+                stdoutBuffer.append(handle.availableData)
             }
 
             error.fileHandleForReading.readabilityHandler = { handle in
@@ -1293,10 +1459,7 @@ final class SpeechTranscriptionService {
                 let stdoutTail = output.fileHandleForReading.readDataToEndOfFile()
                 let stderrTail = error.fileHandleForReading.readDataToEndOfFile()
 
-                stdoutLock.lock()
-                stdoutAccumulated.append(stdoutTail)
-                let finalStdout = stdoutAccumulated
-                stdoutLock.unlock()
+                let finalStdout = stdoutBuffer.appendAndSnapshot(stdoutTail)
 
                 let stderrData = stderrMonitor.finish(with: stderrTail, onProgress: onProgress)
 
