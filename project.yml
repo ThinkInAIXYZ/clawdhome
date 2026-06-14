@@ -102,6 +102,8 @@ targets:
           - $(SRCROOT)/ClawdHomeSpeech/Package.swift
           - $(SRCROOT)/ClawdHomeSpeech/Package.resolved
           - $(SRCROOT)/ClawdHomeSpeech/main.swift
+          - $(SRCROOT)/ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/SpeechAudioChunkEnhancer.swift
+          - $(SRCROOT)/ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/StreamingAudioFileLoader.swift
           - $(SRCROOT)/scripts/build-speech-tool.sh
         outputFiles:
           - $(CODESIGNING_FOLDER_PATH)/Contents/Library/Executables/ClawdHomeSpeech

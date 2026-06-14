@@ -417,13 +417,18 @@ final class SpeechTranscriptionService {
             nextItem.stageProgress = 0
             nextItem.asrSpeed = nil
 
+            var audioSampleRate: Double?
+            var audioChannelCount: Int?
+
             // 异步提取音频文件时长以作速率计算的基准
             let asset = AVURLAsset(url: nextItem.fileURL)
             if let duration = try? await asset.load(.duration) {
                 nextItem.durationSeconds = duration.seconds
-            } else {
-                let audioFile = try? AVAudioFile(forReading: nextItem.fileURL)
-                if let audioFile {
+            }
+            if let audioFile = try? AVAudioFile(forReading: nextItem.fileURL) {
+                audioSampleRate = audioFile.processingFormat.sampleRate
+                audioChannelCount = Int(audioFile.processingFormat.channelCount)
+                if nextItem.durationSeconds <= 0 {
                     nextItem.durationSeconds = Double(audioFile.length) / audioFile.processingFormat.sampleRate
                 }
             }
@@ -433,8 +438,23 @@ final class SpeechTranscriptionService {
 
             var audioToTranscribe = nextItem.fileURL
             var tempEnhancedURL: URL? = nil
+            var useChunkVocalEnhance = false
 
-            if vocalEnhanceEnabled {
+            let enhancementDecision = SpeechAudioProcessingPolicy.vocalEnhancementDecision(
+                durationSeconds: nextItem.durationSeconds > 0 ? nextItem.durationSeconds : nil,
+                sampleRate: audioSampleRate,
+                channelCount: audioChannelCount,
+                availableDiskBytes: availableDiskBytes()
+            )
+            let enhancementMode = vocalEnhanceEnabled ? enhancementDecision.mode : .disabled
+            nextItem.isVocalEnhanced = enhancementMode != .disabled
+
+            if enhancementMode == .chunked {
+                useChunkVocalEnhance = true
+                nextItem.statusMessage = chunkVocalEnhancementMessage(for: enhancementDecision.reason)
+            }
+
+            if enhancementMode == .fullFile {
                 nextItem.stage = .enhancing
                 do {
                     // 执行原生降噪预处理：占用整体进度的前 10% 区间 (0% -> 10%)
@@ -448,6 +468,7 @@ final class SpeechTranscriptionService {
                     tempEnhancedURL = enhancedURL
                     audioToTranscribe = enhancedURL
                 } catch {
+                    nextItem.isVocalEnhanced = false
                     print("Vocal enhancement failed, fallback to original audio: \(error.localizedDescription)")
                 }
             }
@@ -458,13 +479,17 @@ final class SpeechTranscriptionService {
                 await MainActor.run {
                     nextItem.stage = .loadingModel
                     nextItem.stageProgress = 0.0
-                    nextItem.progressFraction = vocalEnhanceEnabled ? 0.1 : 0.0
+                    nextItem.progressFraction = nextItem.isVocalEnhanced ? 0.1 : 0.0
                     nextItem.statusMessage = "准备启动本地 ASR 智能转译..."
                 }
             }
 
             do {
-                let response = try await runTranscription(for: audioToTranscribe, modelID: selectedModelID)
+                let response = try await runTranscription(
+                    for: audioToTranscribe,
+                    modelID: selectedModelID,
+                    chunkVocalEnhance: useChunkVocalEnhance
+                )
 
                 let finalTranscript = response.transcript ?? ""
 
@@ -1146,16 +1171,23 @@ final class SpeechTranscriptionService {
         return try JSONDecoder().decode(ToolProbeResponse.self, from: data)
     }
 
-    private func runTranscription(for fileURL: URL, modelID: SpeechModelID) async throws -> ToolTranscribeResponse {
+    private func runTranscription(
+        for fileURL: URL,
+        modelID: SpeechModelID,
+        chunkVocalEnhance: Bool = false
+    ) async throws -> ToolTranscribeResponse {
         let cacheURL = cacheDirectory(for: modelID)
         try fileManager.createDirectory(at: cacheURL, withIntermediateDirectories: true)
 
-        let arguments = [
+        var arguments = [
             "transcribe",
             "--file", fileURL.path,
             "--model-id", modelID.rawValue,
             "--cache-dir", cacheURL.path
         ]
+        if chunkVocalEnhance {
+            arguments.append("--chunk-vocal-enhance")
+        }
         let data = try await runTool(
             arguments: arguments,
             onProgress: { [weak self] event in
@@ -1338,6 +1370,19 @@ final class SpeechTranscriptionService {
         curatedSpeechModels.first(where: { $0.id == modelID })?.displayName ?? modelID.rawValue
     }
 
+    private func chunkVocalEnhancementMessage(for reason: SpeechAudioVocalEnhancementSkipReason?) -> String {
+        switch reason {
+        case .audioTooLong:
+            return "音频较长，已启用分段降噪增强。"
+        case .tempFileTooLarge:
+            return "音频预处理临时文件较大，已启用分段降噪增强。"
+        case .lowDiskSpace:
+            return "磁盘空间不足以生成预处理文件，已启用分段降噪增强。"
+        case nil:
+            return "已启用分段降噪增强。"
+        }
+    }
+
     private func estimatedModelBytes(for modelID: SpeechModelID) -> Int64 {
         guard let descriptor = curatedSpeechModels.first(where: { $0.id == modelID }) else {
             return 0
@@ -1504,7 +1549,7 @@ final class SpeechTranscriptionService {
                 activeItem.stage = .loadingModel
                 activeItem.stageProgress = 0.0
                 activeItem.statusMessage = event.message
-                activeItem.progressFraction = vocalEnhanceEnabled ? 0.12 : 0.02
+                activeItem.progressFraction = activeItem.isVocalEnhanced ? 0.12 : 0.02
             }
             return
         }
@@ -1520,7 +1565,7 @@ final class SpeechTranscriptionService {
 
             // ASR 阶段，进度条从 10% (或 0%) 线性顺滑走到 100%
             let asrProgress = displayProgress
-            let base = vocalEnhanceEnabled ? 0.1 : 0.0
+            let base = activeItem.isVocalEnhanced ? 0.1 : 0.0
             let overallProgress = base + (asrProgress * (1.0 - base))
 
             activeItem.progressFraction = overallProgress

@@ -110,6 +110,8 @@ compute_build_fingerprint() {
       "ClawdHomeSpeech/Package.swift" \
       "ClawdHomeSpeech/Package.resolved" \
       "ClawdHomeSpeech/main.swift" \
+      "ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/SpeechAudioChunkEnhancer.swift" \
+      "ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/StreamingAudioFileLoader.swift" \
       "scripts/build-speech-tool.sh" \
       "project.yml" \
       "Makefile"

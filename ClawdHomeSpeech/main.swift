@@ -1,4 +1,4 @@
-import AudioCommon
+import ClawdHomeSpeechCore
 import Foundation
 import Qwen3ASR
 import Darwin // 引入 POSIX 系统级 setenv 等操作
@@ -491,10 +491,9 @@ struct ClawdHomeSpeechMain {
         let stepSamples = chunkSamples - overlapSamples        // 448000 samples/step
 
         do {
-            // 以模型实际需要的 16kHz 加载，避免多余采样点占用内存
-            let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: modelSampleRate)
-            let totalSamples = audio.count
-            let audioDurationSec = Double(totalSamples) / Double(modelSampleRate)
+            let audioInfo = try StreamingAudioFileLoader.info(from: audioURL, targetSampleRate: modelSampleRate)
+            let totalSamples = max(audioInfo.estimatedTotalSamples, 1)
+            let audioDurationSec = audioInfo.durationSeconds
 
             let isDownloaded = isModelDownloaded(at: cacheDir)
 
@@ -514,12 +513,20 @@ struct ClawdHomeSpeechMain {
                 fflush(stdout)
                 
                 let transcribeStart = CFAbsoluteTimeGetCurrent()
-                let transcript = model.transcribe(
-                    audio: audio,
-                    sampleRate: modelSampleRate,
-                    language: nil,
-                    maxTokens: 1024
-                ).trimmingCharacters(in: .whitespacesAndNewlines)
+                var transcript = ""
+                try StreamingAudioFileLoader.forEachChunk(
+                    from: audioURL,
+                    targetSampleRate: modelSampleRate,
+                    chunkSamples: chunkSamples,
+                    overlapSamples: overlapSamples
+                ) { chunk in
+                    transcript = model.transcribe(
+                        audio: chunk.samples,
+                        sampleRate: modelSampleRate,
+                        language: nil,
+                        maxTokens: 1024
+                    ).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
                 
                 let elapsed = CFAbsoluteTimeGetCurrent() - transcribeStart
                 let speedRatio = elapsed > 0 ? (audioDurationSec / elapsed) : 0.0
@@ -541,29 +548,30 @@ struct ClawdHomeSpeechMain {
                 fflush(stdout)
 
                 var segments: [TranscribeSegment] = []
-                var chunkIndex = 0
-                var offset = 0
+                var processedChunkCount = 0
                 let transcribeStart = CFAbsoluteTimeGetCurrent()
 
-                while offset < totalSamples {
-                    let end = min(offset + chunkSamples, totalSamples)
-                    let chunk = Array(audio[offset..<end])
-                    chunkIndex += 1
-
-                    let chunkStartSec = Double(offset) / Double(modelSampleRate)
-                    let chunkEndSec = Double(end) / Double(modelSampleRate)
-                    let progress = Int(Double(chunkIndex) / Double(totalChunks) * 100)
+                try StreamingAudioFileLoader.forEachChunk(
+                    from: audioURL,
+                    targetSampleRate: modelSampleRate,
+                    chunkSamples: chunkSamples,
+                    overlapSamples: overlapSamples
+                ) { chunk in
+                    processedChunkCount = chunk.index
+                    let chunkStartSec = chunk.startTime(sampleRate: modelSampleRate)
+                    let chunkEndSec = min(chunk.endTime(sampleRate: modelSampleRate), audioDurationSec)
+                    let progress = Int(Double(chunk.index) / Double(totalChunks) * 100)
                     let bar = String(repeating: "\u{2588}", count: progress / 5) + String(repeating: "\u{2591}", count: 20 - progress / 5)
                     
                     let elapsed = CFAbsoluteTimeGetCurrent() - transcribeStart
                     let speedRatio = elapsed > 0 ? (chunkEndSec / elapsed) : 0.0
                     let speedText = speedRatio > 0 ? String(format: "%.1fx", speedRatio) : "--.-x"
                     
-                    print("\(ANSI.clearLine)\(ANSI.green)[\(bar)] \(progress)%\(ANSI.reset) 块 \(chunkIndex)/\(totalChunks)  [\(String(format: "%.0f", chunkStartSec))s - \(String(format: "%.0f", chunkEndSec))s] · 速率: \(ANSI.yellow)\(speedText)\(ANSI.reset)", terminator: "")
+                    print("\(ANSI.clearLine)\(ANSI.green)[\(bar)] \(progress)%\(ANSI.reset) 块 \(chunk.index)/\(totalChunks)  [\(String(format: "%.0f", chunkStartSec))s - \(String(format: "%.0f", chunkEndSec))s] · 速率: \(ANSI.yellow)\(speedText)\(ANSI.reset)", terminator: "")
                     fflush(stdout)
 
                     let chunkText = model.transcribe(
-                        audio: chunk,
+                        audio: chunk.samples,
                         sampleRate: modelSampleRate,
                         language: nil,
                         maxTokens: 1024
@@ -571,16 +579,12 @@ struct ClawdHomeSpeechMain {
                     
                     if !chunkText.isEmpty {
                         segments.append(TranscribeSegment(
-                            index: chunkIndex,
+                            index: chunk.index,
                             startTime: chunkStartSec,
                             endTime: chunkEndSec,
                             text: chunkText
                         ))
                     }
-
-                    // 滑步前进（最后一块直接结束）
-                    if end >= totalSamples { break }
-                    offset += stepSamples
                 }
 
                 let elapsed = CFAbsoluteTimeGetCurrent() - transcribeStart
@@ -588,7 +592,7 @@ struct ClawdHomeSpeechMain {
                 let avgSpeedText = avgSpeedRatio > 0 ? String(format: "%.1fx", avgSpeedRatio) : "--.-x"
                 
                 let fullTranscript = segments.map { $0.text }.joined(separator: " ")
-                print("\n\(ANSI.green)✓ 转译圆满完成！共 \(chunkIndex) 块，耗时 \(String(format: "%.2f", elapsed)) 秒 (平均速率: \(avgSpeedText))\(ANSI.reset)\n")
+                print("\n\(ANSI.green)✓ 转译圆满完成！共 \(processedChunkCount) 块，耗时 \(String(format: "%.2f", elapsed)) 秒 (平均速率: \(avgSpeedText))\(ANSI.reset)\n")
                 print("\(ANSI.bold)=== 离线转译文本结果 ===\(ANSI.reset)")
                 print(fullTranscript.isEmpty ? "\(ANSI.dim)（无语音内容识别出）\(ANSI.reset)" : fullTranscript)
                 print("\(ANSI.bold)===========================\(ANSI.reset)\n")
@@ -860,6 +864,7 @@ struct ClawdHomeSpeechMain {
         let modelSpecifier = try value(for: "--model-id", in: arguments)
         let cacheDirectoryPath = try value(for: "--cache-dir", in: arguments)
         let language = optionalValue(for: "--language", in: arguments)
+        let chunkVocalEnhance = arguments.contains("--chunk-vocal-enhance")
 
         let audioURL = URL(fileURLWithPath: filePath)
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
@@ -880,7 +885,7 @@ struct ClawdHomeSpeechMain {
 
         // 模型标准采样率（Whisper 规范）
         let modelSampleRate = 16000
-        let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: modelSampleRate)
+        let audioInfo = try StreamingAudioFileLoader.info(from: audioURL, targetSampleRate: modelSampleRate)
 
         let isDownloaded = isModelDownloaded(at: cacheDirectory)
         let model = try await Qwen3ASRModel.fromPretrained(
@@ -904,9 +909,8 @@ struct ClawdHomeSpeechMain {
         // 滑动窗口参数：30 秒/块（模型训练窗口），2 秒重叠防止边界截断
         let chunkSamples = 30 * modelSampleRate     // 480000 samples
         let overlapSamples = 2 * modelSampleRate     // 32000 samples
-        let stepSamples = chunkSamples - overlapSamples
 
-        let totalSamples = audio.count
+        let totalSamples = max(audioInfo.estimatedTotalSamples, 1)
         let transcript: String
 
         if totalSamples <= chunkSamples {
@@ -919,12 +923,26 @@ struct ClawdHomeSpeechMain {
                     message: "正在提取声学特征进行转译..."
                 )
             )
-            transcript = model.transcribe(
-                audio: audio,
-                sampleRate: modelSampleRate,
-                language: language,
-                maxTokens: 1024
-            )
+            var singleTranscript = ""
+            try StreamingAudioFileLoader.forEachChunk(
+                from: audioURL,
+                targetSampleRate: modelSampleRate,
+                chunkSamples: chunkSamples,
+                overlapSamples: overlapSamples
+            ) { chunk in
+                let samples = try samplesForTranscription(
+                    from: chunk,
+                    sampleRate: modelSampleRate,
+                    chunkVocalEnhance: chunkVocalEnhance
+                )
+                singleTranscript = model.transcribe(
+                    audio: samples,
+                    sampleRate: modelSampleRate,
+                    language: language,
+                    maxTokens: 1024
+                )
+            }
+            transcript = singleTranscript
             try? writeProgress(
                 ProgressResponse(
                     kind: "progress",
@@ -937,8 +955,7 @@ struct ClawdHomeSpeechMain {
         } else {
             // 长音频：滑动窗口分块转译，逐块结果拼接
             var segments: [String] = []
-            var offset = 0
-            let audioDurationSec = Double(totalSamples) / Double(modelSampleRate)
+            let audioDurationSec = audioInfo.durationSeconds
             func progressMessage(fraction: Double, currentEndSec: Double, elapsed: Double) -> String {
                 let speedRatio = elapsed > 0 ? (currentEndSec / elapsed) : 0.0
                 if speedRatio > 0 {
@@ -948,12 +965,14 @@ struct ClawdHomeSpeechMain {
                 return String(format: "已转写 %.0f%%", fraction * 100)
             }
             
-            while offset < totalSamples {
-                let end = min(offset + chunkSamples, totalSamples)
-                let chunk = Array(audio[offset..<end])
-                
-                let progressFraction = Double(offset) / Double(totalSamples)
-                let currentEndSec = Double(offset) / Double(modelSampleRate)
+            try StreamingAudioFileLoader.forEachChunk(
+                from: audioURL,
+                targetSampleRate: modelSampleRate,
+                chunkSamples: chunkSamples,
+                overlapSamples: overlapSamples
+            ) { chunk in
+                let progressFraction = min(Double(chunk.startSample) / Double(totalSamples), 0.995)
+                let currentEndSec = min(chunk.startTime(sampleRate: modelSampleRate), audioDurationSec)
                 let elapsed = CFAbsoluteTimeGetCurrent() - start
                 let message = progressMessage(fraction: progressFraction, currentEndSec: currentEndSec, elapsed: elapsed)
                 
@@ -966,8 +985,13 @@ struct ClawdHomeSpeechMain {
                     )
                 )
                 
+                let samples = try samplesForTranscription(
+                    from: chunk,
+                    sampleRate: modelSampleRate,
+                    chunkVocalEnhance: chunkVocalEnhance
+                )
                 let chunkText = model.transcribe(
-                    audio: chunk,
+                    audio: samples,
                     sampleRate: modelSampleRate,
                     language: language,
                     maxTokens: 1024
@@ -975,8 +999,8 @@ struct ClawdHomeSpeechMain {
                 if !chunkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     segments.append(chunkText)
                 }
-                let completedFraction = Double(end) / Double(totalSamples)
-                let completedEndSec = Double(end) / Double(modelSampleRate)
+                let completedFraction = min(Double(chunk.endSample) / Double(totalSamples), 1.0)
+                let completedEndSec = min(chunk.endTime(sampleRate: modelSampleRate), audioDurationSec)
                 let completedElapsed = CFAbsoluteTimeGetCurrent() - start
                 let completedMessage = progressMessage(
                     fraction: completedFraction,
@@ -992,8 +1016,6 @@ struct ClawdHomeSpeechMain {
                         transcript: segments.isEmpty ? nil : segments.joined(separator: " ")
                     )
                 )
-                if end >= totalSamples { break }
-                offset += stepSamples
             }
             transcript = segments.joined(separator: " ")
         }
@@ -1009,6 +1031,17 @@ struct ClawdHomeSpeechMain {
             elapsedSeconds: elapsed,
             error: nil
         )
+    }
+
+    private static func samplesForTranscription(
+        from chunk: SpeechAudioChunk,
+        sampleRate: Int,
+        chunkVocalEnhance: Bool
+    ) throws -> [Float] {
+        guard chunkVocalEnhance else {
+            return chunk.samples
+        }
+        return try SpeechAudioChunkEnhancer.enhance(chunk.samples, sampleRate: sampleRate)
     }
 
     private static func resolveModelID(from specifier: String) -> String {

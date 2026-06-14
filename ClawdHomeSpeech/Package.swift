@@ -24,23 +24,37 @@ let package = Package(
             name: "ClawdHomeSpeech",
             targets: ["ClawdHomeSpeech"]
         ),
+        .library(
+            name: "ClawdHomeSpeechCore",
+            targets: ["ClawdHomeSpeechCore"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/soniqo/speech-swift.git", from: "0.0.15"),
     ],
     targets: [
+        .target(
+            name: "ClawdHomeSpeechCore",
+            path: "Sources/ClawdHomeSpeechCore"
+        ),
         .executableTarget(
             name: "ClawdHomeSpeech",
             dependencies: [
+                "ClawdHomeSpeechCore",
                 .product(name: "Qwen3ASR", package: "speech-swift"),
                 .product(name: "AudioCommon", package: "speech-swift"),
             ],
             path: ".",
-            exclude: ["Package.swift"],
+            exclude: ["Package.swift", "Sources", "Tests"],
             sources: ["main.swift", "GeneratedVersion.swift"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
+        ),
+        .testTarget(
+            name: "ClawdHomeSpeechCoreTests",
+            dependencies: ["ClawdHomeSpeechCore"],
+            path: "Tests/ClawdHomeSpeechCoreTests"
         ),
     ]
 )

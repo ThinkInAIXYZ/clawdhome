@@ -65,6 +65,7 @@
 		315C6CEC2A97C5D4E9AB211A /* LogViewerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9F9AD8700941AFBF1F34673 /* LogViewerSheet.swift */; };
 		32D9B81BFBF01C467C5EF953 /* ManagedUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77A62354E2723BF8150EDAF6 /* ManagedUser.swift */; };
 		33377A070BA5CD38AF3D570D /* ProcessManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6946296FDE26A0A2A7A8EC /* ProcessManager.swift */; };
+		33CE30B828C788002A3F09AD /* SpeechAudioProcessingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE946A73C61438CA83C57612 /* SpeechAudioProcessingPolicy.swift */; };
 		33EEEC7848F25E6176D19E8B /* BrowserAccountModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D033FFF56C00EB989EF8FD /* BrowserAccountModels.swift */; };
 		346939ADEDF99620B1967823 /* UserPasswordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFD718E7777280D5BC94DE0D /* UserPasswordStore.swift */; };
 		35293BE0C7E82BADEFB540F7 /* HealthCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CB22903A652976B892FA384 /* HealthCheck.swift */; };
@@ -523,6 +524,7 @@
 		DA495FBE50F338DEF7A55573 /* ConnectionCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionCollector.swift; sourceTree = "<group>"; };
 		DBF03DABAB9FAB6E33B46BDE /* VoiceLibraryTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceLibraryTab.swift; sourceTree = "<group>"; };
 		DC0DC69D82EDF1233E53C335 /* AgentModelEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentModelEditSheet.swift; sourceTree = "<group>"; };
+		DE946A73C61438CA83C57612 /* SpeechAudioProcessingPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechAudioProcessingPolicy.swift; sourceTree = "<group>"; };
 		DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserListView.swift; sourceTree = "<group>"; };
 		DFD718E7777280D5BC94DE0D /* UserPasswordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPasswordStore.swift; sourceTree = "<group>"; };
 		DFEA3246D788EC5F1AE06F4F /* OpenclawConfigSerializerV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenclawConfigSerializerV2.swift; sourceTree = "<group>"; };
@@ -639,6 +641,7 @@
 				AB9CA89FBC9C8542073AE403 /* PromptLibraryStore.swift */,
 				ABBB28C4048F9B2A39AE099C /* ProviderKeychainStore.swift */,
 				AF5F77D9351528C6DEEFC633 /* ShrimpPool.swift */,
+				DE946A73C61438CA83C57612 /* SpeechAudioProcessingPolicy.swift */,
 				79479208C4E512A6C5CB90FD /* SpeechHistoryStore.swift */,
 				26146AAD44960591291B75E9 /* SpeechModelAdvisor.swift */,
 				C7EE59CFB2C94CE54AA96F38 /* SpeechToolOutputParser.swift */,
@@ -1211,6 +1214,8 @@
 				"$(SRCROOT)/ClawdHomeSpeech/Package.swift",
 				"$(SRCROOT)/ClawdHomeSpeech/Package.resolved",
 				"$(SRCROOT)/ClawdHomeSpeech/main.swift",
+				"$(SRCROOT)/ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/SpeechAudioChunkEnhancer.swift",
+				"$(SRCROOT)/ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/StreamingAudioFileLoader.swift",
 				"$(SRCROOT)/scripts/build-speech-tool.sh",
 			);
 			name = "Embed Speech Tool into App Bundle";
@@ -1403,6 +1408,7 @@
 				FB7D971D2B9D0FD2554D23AE /* ShrimpTerminalConsole.swift in Sources */,
 				D6E0B1621438E54CF0FC23B1 /* ShrimpTerminalSession.swift in Sources */,
 				9E7081ED0038EE8867ADADD5 /* SkillsTabView.swift in Sources */,
+				33CE30B828C788002A3F09AD /* SpeechAudioProcessingPolicy.swift in Sources */,
 				683FE4575750E0FCAED09BBD /* SpeechHistoryStore.swift in Sources */,
 				681630BD590FD909762BB4AE /* SpeechModelAdvisor.swift in Sources */,
 				09949319D7306C4C88E68EEC /* SpeechToolOutputParser.swift in Sources */,

@@ -63,6 +63,32 @@ final class SpeechFeatureTests: XCTestCase {
         XCTAssertFalse(options.keys.contains("thinking_budget"))
     }
 
+    func testLongAudioUsesChunkedVocalEnhancementPreprocessing() {
+        let decision = SpeechAudioProcessingPolicy.vocalEnhancementDecision(
+            durationSeconds: 14_094,
+            sampleRate: 48_000,
+            channelCount: 1,
+            availableDiskBytes: 100 * gibibyte
+        )
+
+        XCTAssertTrue(decision.shouldEnhance)
+        XCTAssertEqual(decision.mode, .chunked)
+        XCTAssertEqual(decision.reason, .audioTooLong)
+    }
+
+    func testShortAudioKeepsFullFileVocalEnhancementPreprocessing() {
+        let decision = SpeechAudioProcessingPolicy.vocalEnhancementDecision(
+            durationSeconds: 300,
+            sampleRate: 48_000,
+            channelCount: 1,
+            availableDiskBytes: 100 * gibibyte
+        )
+
+        XCTAssertTrue(decision.shouldEnhance)
+        XCTAssertEqual(decision.mode, .fullFile)
+        XCTAssertNil(decision.reason)
+    }
+
     func testGeminiFlashRefineRequestDisablesThinkingBudget() {
         let generationConfig = SpeechTranscriptionService.refinementGeminiGenerationConfig(
             modelId: "gemini-2.5-flash"
@@ -424,6 +450,34 @@ final class SpeechFeatureTests: XCTestCase {
         XCTAssertLessThan(item.stageProgress, 1.0)
         XCTAssertLessThan(item.progressFraction, 1.0)
         XCTAssertEqual(item.transcriptText, "最终分块文本")
+    }
+
+    @MainActor
+    func testTranscriptionProgressUsesActualEnhancementStateForQueueItem() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpeechActualEnhancementProgressTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let service = SpeechTranscriptionService(historyStore: SpeechHistoryStore(fileURL: tempURL))
+        defer { service.stopObsidianWatcher() }
+        service.vocalEnhanceEnabled = true
+        service.enqueueFiles([URL(fileURLWithPath: "/tmp/long.m4a")])
+        let item = service.queue[0]
+        item.status = .transcribing
+        item.isVocalEnhanced = false
+        service.selectedQueueItem = item
+
+        service.applyTranscriptionProgress(
+            SpeechToolProgressEvent(
+                kind: "progress",
+                command: "transcribe",
+                fractionCompleted: 0.5,
+                message: "已转写 50%",
+                transcript: nil
+            )
+        )
+
+        XCTAssertEqual(item.progressFraction, 0.5, accuracy: 0.0001)
     }
 
     @MainActor
