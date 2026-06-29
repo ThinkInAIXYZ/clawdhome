@@ -6,6 +6,23 @@ struct SpeechToolProgressEvent: Codable, Equatable {
     let fractionCompleted: Double
     let message: String
     let transcript: String?
+    let transcriptDelta: String?
+
+    init(
+        kind: String,
+        command: String,
+        fractionCompleted: Double,
+        message: String,
+        transcript: String? = nil,
+        transcriptDelta: String? = nil
+    ) {
+        self.kind = kind
+        self.command = command
+        self.fractionCompleted = fractionCompleted
+        self.message = message
+        self.transcript = transcript
+        self.transcriptDelta = transcriptDelta
+    }
 }
 
 enum SpeechToolOutputParser {

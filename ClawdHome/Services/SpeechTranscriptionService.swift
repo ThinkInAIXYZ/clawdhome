@@ -1739,7 +1739,18 @@ final class SpeechTranscriptionService {
                 ? String(format: "ASR 智能转译中... %.0f%%", asrProgress * 100)
                 : progressMessage
 
-            if let transcript = event.transcript?.trimmingCharacters(in: .whitespacesAndNewlines),
+            if let transcriptDelta = event.transcriptDelta?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !transcriptDelta.isEmpty {
+                let updatedTranscript = Self.appendingTranscriptDelta(
+                    transcriptDelta,
+                    to: activeItem.transcriptText
+                )
+                activeItem.transcriptText = updatedTranscript
+
+                if selectedQueueItem?.id == activeItem.id {
+                    currentTranscript = updatedTranscript
+                }
+            } else if let transcript = event.transcript?.trimmingCharacters(in: .whitespacesAndNewlines),
                !transcript.isEmpty {
                 let filteredTranscript = transcript
                 activeItem.transcriptText = filteredTranscript
@@ -1782,7 +1793,11 @@ final class SpeechTranscriptionService {
         }
     }
 
-
+    private static func appendingTranscriptDelta(_ delta: String, to transcript: String) -> String {
+        let base = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else { return delta }
+        return "\(base) \(delta)"
+    }
 
     /// 【方案 A】利用 macOS 原生的 AVAudioEngine Manual Rendering 链条对输入音频进行极速高保真去噪和人声隔离增强
     private func enhanceVocal(inputURL: URL, onProgress: @escaping (Double) -> Void) async throws -> URL {

@@ -72,13 +72,22 @@ private struct ProgressResponse: Codable {
     let fractionCompleted: Double
     let message: String
     let transcript: String?
+    let transcriptDelta: String?
 
-    init(kind: String, command: String, fractionCompleted: Double, message: String, transcript: String? = nil) {
+    init(
+        kind: String,
+        command: String,
+        fractionCompleted: Double,
+        message: String,
+        transcript: String? = nil,
+        transcriptDelta: String? = nil
+    ) {
         self.kind = kind
         self.command = command
         self.fractionCompleted = fractionCompleted
         self.message = message
         self.transcript = transcript
+        self.transcriptDelta = transcriptDelta
     }
 }
 
@@ -943,13 +952,14 @@ struct ClawdHomeSpeechMain {
                 )
             }
             transcript = singleTranscript
+            let cleanedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             try? writeProgress(
                 ProgressResponse(
                     kind: "progress",
                     command: "transcribe",
                     fractionCompleted: 1.0,
                     message: "已完成 100%",
-                    transcript: transcript
+                    transcriptDelta: cleanedTranscript.isEmpty ? nil : cleanedTranscript
                 )
             )
         } else {
@@ -996,8 +1006,9 @@ struct ClawdHomeSpeechMain {
                     language: language,
                     maxTokens: 1024
                 )
-                if !chunkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    segments.append(chunkText)
+                let cleanedChunkText = chunkText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !cleanedChunkText.isEmpty {
+                    segments.append(cleanedChunkText)
                 }
                 let completedFraction = min(Double(chunk.endSample) / Double(totalSamples), 1.0)
                 let completedEndSec = min(chunk.endTime(sampleRate: modelSampleRate), audioDurationSec)
@@ -1013,7 +1024,7 @@ struct ClawdHomeSpeechMain {
                         command: "transcribe",
                         fractionCompleted: completedFraction,
                         message: completedMessage,
-                        transcript: segments.isEmpty ? nil : segments.joined(separator: " ")
+                        transcriptDelta: cleanedChunkText.isEmpty ? nil : cleanedChunkText
                     )
                 )
             }

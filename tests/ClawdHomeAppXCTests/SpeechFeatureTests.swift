@@ -572,12 +572,12 @@ final class SpeechFeatureTests: XCTestCase {
     }
 
     func testTranscriptionProgressEventDecodesPartialTranscript() {
-        let progressLine = #"{"command":"transcribe","fractionCompleted":0.5,"kind":"progress","message":"已转写 50%","transcript":"这是实时识别文本"}"#
+        let progressLine = #"{"command":"transcribe","fractionCompleted":0.5,"kind":"progress","message":"已转写 50%","transcriptDelta":"这是实时识别文本"}"#
 
         let progress = SpeechToolOutputParser.progressEvent(from: progressLine)
 
         XCTAssertEqual(progress?.message, "已转写 50%")
-        XCTAssertEqual(progress?.transcript, "这是实时识别文本")
+        XCTAssertEqual(progress?.transcriptDelta, "这是实时识别文本")
     }
 
     func testGeneratedSRTMergesShortCommaFragments() {
@@ -654,6 +654,45 @@ final class SpeechFeatureTests: XCTestCase {
         XCTAssertEqual(service.currentTranscript, "真正的 ASR 文本")
         XCTAssertEqual(item.transcriptText, "真正的 ASR 文本")
         XCTAssertEqual(item.statusMessage, "已转写 12%")
+    }
+
+    @MainActor
+    func testTranscriptionProgressAppendsTranscriptDelta() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpeechProgressTranscriptDeltaTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let service = SpeechTranscriptionService(historyStore: SpeechHistoryStore(fileURL: tempURL))
+        defer { service.stopObsidianWatcher() }
+        service.enqueueFiles([URL(fileURLWithPath: "/tmp/live.m4a")])
+        let item = service.queue[0]
+        item.status = .transcribing
+        service.selectedQueueItem = item
+
+        service.applyTranscriptionProgress(
+            SpeechToolProgressEvent(
+                kind: "progress",
+                command: "transcribe",
+                fractionCompleted: 0.25,
+                message: "已转写 25%",
+                transcript: nil,
+                transcriptDelta: "第一段"
+            )
+        )
+        service.applyTranscriptionProgress(
+            SpeechToolProgressEvent(
+                kind: "progress",
+                command: "transcribe",
+                fractionCompleted: 0.5,
+                message: "已转写 50%",
+                transcript: nil,
+                transcriptDelta: "第二段"
+            )
+        )
+
+        XCTAssertEqual(service.currentTranscript, "第一段 第二段")
+        XCTAssertEqual(item.transcriptText, "第一段 第二段")
+        XCTAssertEqual(item.statusMessage, "已转写 50%")
     }
 
     @MainActor
