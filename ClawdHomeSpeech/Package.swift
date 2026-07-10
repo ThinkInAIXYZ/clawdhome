@@ -31,16 +31,26 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/soniqo/speech-swift.git", from: "0.0.15"),
+        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.31.3"),
     ],
     targets: [
         .target(
             name: "ClawdHomeSpeechCore",
             path: "Sources/ClawdHomeSpeechCore"
         ),
+        .target(
+            name: "ClawdHomeSpeechRuntime",
+            dependencies: [
+                "ClawdHomeSpeechCore",
+                .product(name: "MLX", package: "mlx-swift"),
+            ],
+            path: "Sources/ClawdHomeSpeechRuntime"
+        ),
         .executableTarget(
             name: "ClawdHomeSpeech",
             dependencies: [
                 "ClawdHomeSpeechCore",
+                "ClawdHomeSpeechRuntime",
                 .product(name: "Qwen3ASR", package: "speech-swift"),
                 .product(name: "AudioCommon", package: "speech-swift"),
             ],
@@ -55,6 +65,11 @@ let package = Package(
             name: "ClawdHomeSpeechCoreTests",
             dependencies: ["ClawdHomeSpeechCore"],
             path: "Tests/ClawdHomeSpeechCoreTests"
+        ),
+        .testTarget(
+            name: "ClawdHomeSpeechRuntimeTests",
+            dependencies: ["ClawdHomeSpeechRuntime"],
+            path: "Tests/ClawdHomeSpeechRuntimeTests"
         ),
     ]
 )
