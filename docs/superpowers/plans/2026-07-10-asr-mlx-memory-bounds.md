@@ -391,9 +391,11 @@ Expected: controller tests pass, followed by all speech-package tests passing.
 - [ ] **Step 6: Commit the runtime controller**
 
 ```bash
-git add ClawdHomeSpeech/Package.swift ClawdHomeSpeech/Package.resolved ClawdHomeSpeech/Sources/ClawdHomeSpeechRuntime/SpeechMLXMemoryController.swift ClawdHomeSpeech/Tests/ClawdHomeSpeechRuntimeTests/SpeechMLXMemoryControllerTests.swift
+git add ClawdHomeSpeech/Package.swift ClawdHomeSpeech/Sources/ClawdHomeSpeechRuntime/SpeechMLXMemoryController.swift ClawdHomeSpeech/Tests/ClawdHomeSpeechRuntimeTests/SpeechMLXMemoryControllerTests.swift
 git commit -m "feat(speech): control MLX cache lifecycle"
 ```
+
+`ClawdHomeSpeech/Package.resolved` is intentionally git-ignored in this repository. Keep the local lockfile for reproducible verification, but do not force-add it.
 
 ---
 
