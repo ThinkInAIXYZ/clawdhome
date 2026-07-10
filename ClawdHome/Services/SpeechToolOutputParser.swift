@@ -7,6 +7,10 @@ struct SpeechToolProgressEvent: Codable, Equatable {
     let message: String
     let transcript: String?
     let transcriptDelta: String?
+    let mlxActiveMemoryBytes: Int?
+    let mlxCacheMemoryBytes: Int?
+    let mlxPeakMemoryBytes: Int?
+    let mlxCacheLimitBytes: Int?
 
     init(
         kind: String,
@@ -14,7 +18,11 @@ struct SpeechToolProgressEvent: Codable, Equatable {
         fractionCompleted: Double,
         message: String,
         transcript: String? = nil,
-        transcriptDelta: String? = nil
+        transcriptDelta: String? = nil,
+        mlxActiveMemoryBytes: Int? = nil,
+        mlxCacheMemoryBytes: Int? = nil,
+        mlxPeakMemoryBytes: Int? = nil,
+        mlxCacheLimitBytes: Int? = nil
     ) {
         self.kind = kind
         self.command = command
@@ -22,6 +30,10 @@ struct SpeechToolProgressEvent: Codable, Equatable {
         self.message = message
         self.transcript = transcript
         self.transcriptDelta = transcriptDelta
+        self.mlxActiveMemoryBytes = mlxActiveMemoryBytes
+        self.mlxCacheMemoryBytes = mlxCacheMemoryBytes
+        self.mlxPeakMemoryBytes = mlxPeakMemoryBytes
+        self.mlxCacheLimitBytes = mlxCacheLimitBytes
     }
 }
 

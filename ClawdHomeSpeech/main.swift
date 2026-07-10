@@ -66,31 +66,6 @@ private struct TranscribeResponse: Codable {
     let error: String?
 }
 
-private struct ProgressResponse: Codable {
-    let kind: String
-    let command: String
-    let fractionCompleted: Double
-    let message: String
-    let transcript: String?
-    let transcriptDelta: String?
-
-    init(
-        kind: String,
-        command: String,
-        fractionCompleted: Double,
-        message: String,
-        transcript: String? = nil,
-        transcriptDelta: String? = nil
-    ) {
-        self.kind = kind
-        self.command = command
-        self.fractionCompleted = fractionCompleted
-        self.message = message
-        self.transcript = transcript
-        self.transcriptDelta = transcriptDelta
-    }
-}
-
 // 线程安全高频插值下载进度状态监控类，保障高并发刷新下无 Data Race 且绝对原子安全
 private final class DownloadProgressState: @unchecked Sendable {
     private let lock = NSLock()
@@ -848,7 +823,7 @@ struct ClawdHomeSpeechMain {
             cacheDir: cacheDirectory,
             progressHandler: { progress, message in
                 try? writeProgress(
-                    ProgressResponse(
+                    SpeechToolProgressResponse(
                         kind: "progress",
                         command: "prepare-model",
                         fractionCompleted: progress,
@@ -903,7 +878,7 @@ struct ClawdHomeSpeechMain {
             offlineMode: isDownloaded,
             progressHandler: { progress, message in
                 try? writeProgress(
-                    ProgressResponse(
+                    SpeechToolProgressResponse(
                         kind: "progress",
                         command: "load-model",
                         fractionCompleted: progress,
@@ -925,7 +900,7 @@ struct ClawdHomeSpeechMain {
         if totalSamples <= chunkSamples {
             // 短音频：直接转译
             try? writeProgress(
-                ProgressResponse(
+                SpeechToolProgressResponse(
                     kind: "progress",
                     command: "transcribe",
                     fractionCompleted: 0.1,
@@ -954,7 +929,7 @@ struct ClawdHomeSpeechMain {
             transcript = singleTranscript
             let cleanedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             try? writeProgress(
-                ProgressResponse(
+                SpeechToolProgressResponse(
                     kind: "progress",
                     command: "transcribe",
                     fractionCompleted: 1.0,
@@ -987,7 +962,7 @@ struct ClawdHomeSpeechMain {
                 let message = progressMessage(fraction: progressFraction, currentEndSec: currentEndSec, elapsed: elapsed)
                 
                 try? writeProgress(
-                    ProgressResponse(
+                    SpeechToolProgressResponse(
                         kind: "progress",
                         command: "transcribe",
                         fractionCompleted: progressFraction,
@@ -1019,7 +994,7 @@ struct ClawdHomeSpeechMain {
                     elapsed: completedElapsed
                 )
                 try? writeProgress(
-                    ProgressResponse(
+                    SpeechToolProgressResponse(
                         kind: "progress",
                         command: "transcribe",
                         fractionCompleted: completedFraction,

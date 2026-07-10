@@ -580,6 +580,18 @@ final class SpeechFeatureTests: XCTestCase {
         XCTAssertEqual(progress?.transcriptDelta, "这是实时识别文本")
     }
 
+    func testTranscriptionProgressEventDecodesMLXMemoryTelemetry() {
+        let progressLine = #"{"command":"transcribe","fractionCompleted":0.5,"kind":"progress","message":"已转写 50%","transcriptDelta":"文本","mlxActiveMemoryBytes":11,"mlxCacheMemoryBytes":22,"mlxPeakMemoryBytes":33,"mlxCacheLimitBytes":44}"#
+
+        let progress = SpeechToolOutputParser.progressEvent(from: progressLine)
+
+        XCTAssertEqual(progress?.transcriptDelta, "文本")
+        XCTAssertEqual(progress?.mlxActiveMemoryBytes, 11)
+        XCTAssertEqual(progress?.mlxCacheMemoryBytes, 22)
+        XCTAssertEqual(progress?.mlxPeakMemoryBytes, 33)
+        XCTAssertEqual(progress?.mlxCacheLimitBytes, 44)
+    }
+
     func testGeneratedSRTMergesShortCommaFragments() {
         let srt = SpeechHistoryStore.generateSRT(
             from: "上次那个，上次配合，上次配合南剑波，让王果在群里给他支持一点，这样的怎么样，反正不太行吧，嗯，他是跟每单绑定的。",
