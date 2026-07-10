@@ -111,7 +111,10 @@ compute_build_fingerprint() {
       "ClawdHomeSpeech/Package.resolved" \
       "ClawdHomeSpeech/main.swift" \
       "ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/SpeechAudioChunkEnhancer.swift" \
+      "ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/SpeechInferenceMemoryPolicy.swift" \
+      "ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/SpeechToolProgressResponse.swift" \
       "ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/StreamingAudioFileLoader.swift" \
+      "ClawdHomeSpeech/Sources/ClawdHomeSpeechRuntime/SpeechMLXMemoryController.swift" \
       "scripts/build-speech-tool.sh" \
       "project.yml" \
       "Makefile"

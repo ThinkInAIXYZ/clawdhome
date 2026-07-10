@@ -1215,7 +1215,10 @@
 				"$(SRCROOT)/ClawdHomeSpeech/Package.resolved",
 				"$(SRCROOT)/ClawdHomeSpeech/main.swift",
 				"$(SRCROOT)/ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/SpeechAudioChunkEnhancer.swift",
+				"$(SRCROOT)/ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/SpeechInferenceMemoryPolicy.swift",
+				"$(SRCROOT)/ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/SpeechToolProgressResponse.swift",
 				"$(SRCROOT)/ClawdHomeSpeech/Sources/ClawdHomeSpeechCore/StreamingAudioFileLoader.swift",
+				"$(SRCROOT)/ClawdHomeSpeech/Sources/ClawdHomeSpeechRuntime/SpeechMLXMemoryController.swift",
 				"$(SRCROOT)/scripts/build-speech-tool.sh",
 			);
 			name = "Embed Speech Tool into App Bundle";

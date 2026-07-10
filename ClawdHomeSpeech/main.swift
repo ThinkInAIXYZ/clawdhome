@@ -1,4 +1,5 @@
 import ClawdHomeSpeechCore
+import ClawdHomeSpeechRuntime
 import Foundation
 import Qwen3ASR
 import Darwin // 引入 POSIX 系统级 setenv 等操作
@@ -114,6 +115,11 @@ private final class DownloadProgressState: @unchecked Sendable {
 }
 
 struct ClawdHomeSpeechMain {
+    // CLI 每个进程只串行执行一条命令路径，控制器不会被并发访问。
+    nonisolated(unsafe) private static let memoryController = SpeechMLXMemoryController(
+        physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory
+    )
+
     static func main() async {
         // 双模判定：若无参数，或参数非静默机器对接指令，则完美滑入极客终端控制台
         if CommandLine.arguments.count < 2 || !["probe", "prepare-model", "transcribe"].contains(CommandLine.arguments[1]) {
@@ -334,6 +340,8 @@ struct ClawdHomeSpeechMain {
         var isFirstCallback = true
         
         do {
+            _ = memoryController.configure()
+            defer { memoryController.reclaim() }
             _ = try await Qwen3ASRModel.fromPretrained(
                 modelId: resolved,
                 cacheDir: cacheDir,
@@ -360,6 +368,7 @@ struct ClawdHomeSpeechMain {
                     lastPhysicalBytes = currentPhysicalBytes
                 }
             )
+            _ = memoryController.reclaim()
             
             // 标记渲染线程结束并等待其退出
             state.finish()
@@ -485,11 +494,14 @@ struct ClawdHomeSpeechMain {
             print("\(ANSI.clearLine)\(ANSI.purple)⠙ 正在载入 MLX 推理模型...\(ANSI.reset)", terminator: "")
             fflush(stdout)
 
+            _ = memoryController.configure()
+            defer { memoryController.reclaim() }
             let model = try await Qwen3ASRModel.fromPretrained(
                 modelId: resolved,
                 cacheDir: cacheDir,
                 offlineMode: isDownloaded
             )
+            _ = memoryController.reclaim()
 
             // 短音频（≤ 30 秒）：直接转译，不分块
             if totalSamples <= chunkSamples {
@@ -504,12 +516,15 @@ struct ClawdHomeSpeechMain {
                     chunkSamples: chunkSamples,
                     overlapSamples: overlapSamples
                 ) { chunk in
-                    transcript = model.transcribe(
-                        audio: chunk.samples,
-                        sampleRate: modelSampleRate,
-                        language: nil,
-                        maxTokens: 1024
-                    ).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let inference = memoryController.runReclaiming {
+                        model.transcribe(
+                            audio: chunk.samples,
+                            sampleRate: modelSampleRate,
+                            language: nil,
+                            maxTokens: 1024
+                        )
+                    }
+                    transcript = inference.value.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
                 
                 let elapsed = CFAbsoluteTimeGetCurrent() - transcribeStart
@@ -554,12 +569,15 @@ struct ClawdHomeSpeechMain {
                     print("\(ANSI.clearLine)\(ANSI.green)[\(bar)] \(progress)%\(ANSI.reset) 块 \(chunk.index)/\(totalChunks)  [\(String(format: "%.0f", chunkStartSec))s - \(String(format: "%.0f", chunkEndSec))s] · 速率: \(ANSI.yellow)\(speedText)\(ANSI.reset)", terminator: "")
                     fflush(stdout)
 
-                    let chunkText = model.transcribe(
-                        audio: chunk.samples,
-                        sampleRate: modelSampleRate,
-                        language: nil,
-                        maxTokens: 1024
-                    ).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let inference = memoryController.runReclaiming {
+                        model.transcribe(
+                            audio: chunk.samples,
+                            sampleRate: modelSampleRate,
+                            language: nil,
+                            maxTokens: 1024
+                        )
+                    }
+                    let chunkText = inference.value.trimmingCharacters(in: .whitespacesAndNewlines)
                     
                     if !chunkText.isEmpty {
                         segments.append(TranscribeSegment(
@@ -818,6 +836,8 @@ struct ClawdHomeSpeechMain {
 
         let resolvedModelID = resolveModelID(from: modelSpecifier)
         let start = CFAbsoluteTimeGetCurrent()
+        _ = memoryController.configure()
+        defer { memoryController.reclaim() }
         _ = try await Qwen3ASRModel.fromPretrained(
             modelId: resolvedModelID,
             cacheDir: cacheDirectory,
@@ -831,6 +851,16 @@ struct ClawdHomeSpeechMain {
                     )
                 )
             }
+        )
+        let modelLoadMemory = memoryController.reclaim()
+        try? writeProgress(
+            SpeechToolProgressResponse(
+                kind: "progress",
+                command: "prepare-model",
+                fractionCompleted: 1.0,
+                message: "Ready",
+                memorySnapshot: modelLoadMemory
+            )
         )
         let elapsed = CFAbsoluteTimeGetCurrent() - start
 
@@ -872,6 +902,8 @@ struct ClawdHomeSpeechMain {
         let audioInfo = try StreamingAudioFileLoader.info(from: audioURL, targetSampleRate: modelSampleRate)
 
         let isDownloaded = isModelDownloaded(at: cacheDirectory)
+        _ = memoryController.configure()
+        defer { memoryController.reclaim() }
         let model = try await Qwen3ASRModel.fromPretrained(
             modelId: resolvedModelID,
             cacheDir: cacheDirectory,
@@ -886,6 +918,16 @@ struct ClawdHomeSpeechMain {
                     )
                 )
             }
+        )
+        let modelLoadMemory = memoryController.reclaim()
+        try? writeProgress(
+            SpeechToolProgressResponse(
+                kind: "progress",
+                command: "load-model",
+                fractionCompleted: 1.0,
+                message: "Ready",
+                memorySnapshot: modelLoadMemory
+            )
         )
 
         let start = CFAbsoluteTimeGetCurrent()
@@ -908,6 +950,7 @@ struct ClawdHomeSpeechMain {
                 )
             )
             var singleTranscript = ""
+            var lastMemorySnapshot: SpeechInferenceMemorySnapshot?
             try StreamingAudioFileLoader.forEachChunk(
                 from: audioURL,
                 targetSampleRate: modelSampleRate,
@@ -919,12 +962,16 @@ struct ClawdHomeSpeechMain {
                     sampleRate: modelSampleRate,
                     chunkVocalEnhance: chunkVocalEnhance
                 )
-                singleTranscript = model.transcribe(
-                    audio: samples,
-                    sampleRate: modelSampleRate,
-                    language: language,
-                    maxTokens: 1024
-                )
+                let inference = memoryController.runReclaiming {
+                    model.transcribe(
+                        audio: samples,
+                        sampleRate: modelSampleRate,
+                        language: language,
+                        maxTokens: 1024
+                    )
+                }
+                singleTranscript = inference.value
+                lastMemorySnapshot = inference.snapshot
             }
             transcript = singleTranscript
             let cleanedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -934,7 +981,8 @@ struct ClawdHomeSpeechMain {
                     command: "transcribe",
                     fractionCompleted: 1.0,
                     message: "已完成 100%",
-                    transcriptDelta: cleanedTranscript.isEmpty ? nil : cleanedTranscript
+                    transcriptDelta: cleanedTranscript.isEmpty ? nil : cleanedTranscript,
+                    memorySnapshot: lastMemorySnapshot
                 )
             )
         } else {
@@ -975,12 +1023,15 @@ struct ClawdHomeSpeechMain {
                     sampleRate: modelSampleRate,
                     chunkVocalEnhance: chunkVocalEnhance
                 )
-                let chunkText = model.transcribe(
-                    audio: samples,
-                    sampleRate: modelSampleRate,
-                    language: language,
-                    maxTokens: 1024
-                )
+                let inference = memoryController.runReclaiming {
+                    model.transcribe(
+                        audio: samples,
+                        sampleRate: modelSampleRate,
+                        language: language,
+                        maxTokens: 1024
+                    )
+                }
+                let chunkText = inference.value
                 let cleanedChunkText = chunkText.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !cleanedChunkText.isEmpty {
                     segments.append(cleanedChunkText)
@@ -999,7 +1050,8 @@ struct ClawdHomeSpeechMain {
                         command: "transcribe",
                         fractionCompleted: completedFraction,
                         message: completedMessage,
-                        transcriptDelta: cleanedChunkText.isEmpty ? nil : cleanedChunkText
+                        transcriptDelta: cleanedChunkText.isEmpty ? nil : cleanedChunkText,
+                        memorySnapshot: inference.snapshot
                     )
                 )
             }
