@@ -14,17 +14,21 @@ struct IsolatedNodeToolLookupTests {
             brewRoot: "/Users/intel_agent/.brew",
             executableName: "npm",
             cellarFormulaVersions: [
-                "node": ["24.1.0"],
+                "node": ["26.5.0"],
             ],
             libNodeEntries: [
-                "node-v24.0.0-darwin-arm64",
+                "node-v26.5.0-darwin-arm64",
                 "not-node",
             ]
         )
 
         expect(
-            candidates.contains("/Users/intel_agent/.brew/lib/nodejs/node-v24.0.0-darwin-arm64/bin/npm"),
-            "npm lookup should include lib/nodejs fallback candidates"
+            candidates.contains("/Users/intel_agent/.brew/opt/node@26/bin/npm"),
+            "npm lookup should include the Node.js 26 Homebrew opt candidate"
+        )
+        expect(
+            candidates.contains("/Users/intel_agent/.brew/lib/nodejs/node-v26.5.0-darwin-arm64/bin/npm"),
+            "npm lookup should include Node.js 26 lib/nodejs candidates"
         )
         expect(
             candidates.first == "/Users/intel_agent/.brew/bin/npm",

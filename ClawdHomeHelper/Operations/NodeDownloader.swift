@@ -8,7 +8,7 @@ import CryptoKit
 
 struct NodeDownloader {
 
-    static let nodeVersion = "v24.9.0"
+    static let nodeVersion = "v26.5.0"
 
     /// 持久缓存目录（root:wheel 0700，防止非 root 用户投毒）
     private static let cacheDir = "/var/lib/clawdhome/cache/nodejs"
@@ -320,8 +320,8 @@ struct NodeDownloader {
     }
 
     /// 兼容目录命名差异：
-    /// - node-v24.9.0-darwin-arm64（官方常见）
-    /// - node-24.9.0-darwin-arm64（部分镜像/打包差异）
+    /// - node-v26.5.0-darwin-arm64（官方常见）
+    /// - node-26.5.0-darwin-arm64（部分镜像/打包差异）
     private static func resolveExtractedDir(
         nodeVersion: String,
         archSuffix: String,

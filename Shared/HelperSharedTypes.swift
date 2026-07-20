@@ -269,6 +269,7 @@ enum IsolatedNodeToolLookup {
         var candidates = [
             "\(brewRoot)/bin/\(executableName)",
             "\(brewRoot)/opt/node/bin/\(executableName)",
+            "\(brewRoot)/opt/node@26/bin/\(executableName)",
             "\(brewRoot)/opt/node@24/bin/\(executableName)",
             "\(brewRoot)/opt/node@22/bin/\(executableName)",
             "\(brewRoot)/opt/node@20/bin/\(executableName)",

@@ -1523,12 +1523,15 @@ enum BrowserAccountManager {
         }
         let wrapperPath = "\(binDir)/npm"
         let fm = FileManager.default
-        let realCandidates = [
-            "/Users/\(username)/.brew/bin/npm",
-            "/Users/\(username)/.brew/lib/nodejs/node-v24.9.0-darwin-arm64/bin/npm",
-            "/Users/\(username)/.brew/lib/nodejs/node-v22.18.0-darwin-arm64/bin/npm",
-            "/Users/\(username)/.brew/lib/nodejs/node-v20.19.0-darwin-arm64/bin/npm",
-            "/Users/\(username)/.brew/lib/nodejs/node-v18.20.8-darwin-arm64/bin/npm",
+        let brewRoot = "/Users/\(username)/.brew"
+        let libNodeRoot = "\(brewRoot)/lib/nodejs"
+        let libNodeEntries = (try? fm.contentsOfDirectory(atPath: libNodeRoot)) ?? []
+        let realCandidates = IsolatedNodeToolLookup.candidateBinaryPaths(
+            brewRoot: brewRoot,
+            executableName: "npm",
+            cellarFormulaVersions: [:],
+            libNodeEntries: libNodeEntries
+        ) + [
             "/opt/homebrew/bin/npm",
             "/usr/local/bin/npm",
         ]
