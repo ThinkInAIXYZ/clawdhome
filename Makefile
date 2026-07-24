@@ -22,7 +22,7 @@ RELEASE_NOTES_AI ?= pi
 PI_PROVIDER ?= ta_omlx
 PI_MODEL ?= Qwopus3.6-35B-A3B-v1-oQ4
 
-.PHONY: help bump-build build build-cli build-speech build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-prepare release-build release-publish release-dry-run release-notes-draft notes-rename changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli test-cli-onboard-env test-cli-onboard-help test-cli-onboard test-cli-onboard-step test-cli-onboard-clean
+.PHONY: help bump-build build build-cli build-speech build-privacy-filter build-helper build-release install-helper uninstall-helper doctor-mode switch-release-test capture-incident pkg pkg-skip-build pkg-signed pkg-release sign-pkg notarize-pkg release release-prepare release-build release-publish release-dry-run release-notes-draft notes-rename changelog version-next install-hooks clean version i18n i18n-check test-release-scripts test-all test-fresh test-init test-checkpoint test-reset test-deploy test-clean run-cli test-cli test-cli-onboard-env test-cli-onboard-help test-cli-onboard test-cli-onboard-step test-cli-onboard-clean
 
 WEBSITE_DIR  ?= $(HOME)/Documents/GitHub/clawdhome_website
 WEBSITE_REPO ?= deepjerry-ai/clawdhome_website
@@ -33,6 +33,7 @@ help:
 	@echo "                   调试时也可用 CLAWDHOME_BUILD_SPEECH_IN_DEBUG=1 make build 显式启用 Speech"
 	@echo "  build-cli        Debug 构建 CLI（仅 CLI，不含 App/Helper）"
 	@echo "  build-speech     构建独立 ClawdHomeSpeech ASR 语音识别程序（输出到 build/Executables）"
+	@echo "  build-privacy-filter  构建独立 ClawdHomePrivacyFilter 内容脱敏程序（输出到 build/Executables）"
 	@echo "  run-cli          构建并运行 CLI（传参: make run-cli ARGS='shrimp list'）"
 	@echo "  test-cli         构建并运行 CLI 集成测试"
 	@echo "  test-cli-onboard-env   初始化本地测试配置文件（若不存在）"
@@ -118,6 +119,9 @@ bump-build:
 build-speech:
 	@SRCROOT="$(shell pwd)" CONFIGURATION=Release bash scripts/build-speech-tool.sh
 
+build-privacy-filter:
+	@SRCROOT="$(shell pwd)" CONFIGURATION=Release bash scripts/build-privacy-filter-tool.sh
+
 build: bump-build
 	@BUILD_NO=$$(BUILD_COUNTER_FILE="$(BUILD_COUNTER_FILE)" INITIAL_BUILD_NUMBER="$(INITIAL_BUILD_NUMBER)" bash "$(BUILD_COUNTER_SCRIPT)" reserve); \
 	MARKETING_VERSION=$$(bash scripts/semver.sh 2>/dev/null || $(PLIST) -c "Print CFBundleShortVersionString" $(INFO_PLIST)); \
@@ -129,6 +133,7 @@ build: bump-build
 		CLAWDHOME_MARKETING_VERSION_OVERRIDE="$$MARKETING_VERSION" \
 		CLAWDHOME_BUILD_NUMBER_OVERRIDE="$$BUILD_NO" \
 		CLAWDHOME_BUILD_SPEECH_IN_DEBUG="$(CLAWDHOME_BUILD_SPEECH_IN_DEBUG)" \
+		CLAWDHOME_BUILD_PRIVACY_FILTER_IN_DEBUG="$(CLAWDHOME_BUILD_PRIVACY_FILTER_IN_DEBUG)" \
 		MARKETING_VERSION="$$MARKETING_VERSION" \
 		CURRENT_PROJECT_VERSION="$$BUILD_NO" \
 		INFOPLIST_KEY_CFBundleShortVersionString="$$MARKETING_VERSION" \

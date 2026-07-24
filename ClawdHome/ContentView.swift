@@ -28,10 +28,6 @@ struct ContentView: View {
     @State private var navSelection: NavDestination? = .clawPool
     @State private var chromeInstallCheckCompleted = false
     @State private var isChromeInstalled = true
-    @State private var browserSessionPromptUsername: String?
-    @State private var browserSessionPromptSuppressed = false
-    @State private var browserSessionPromptCheckInFlight = false
-    @State private var hostPermissionPromptRequest: HostPermissionPromptRequest?
     // 0 = 跟随系统, 1 = 浅色, 2 = 深色
     @AppStorage("colorSchemePreference") private var colorSchemePreference: Int = 0
 
@@ -213,34 +209,6 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: helperClient.isConnected)
         .animation(.easeInOut(duration: 0.18), value: shouldShowChromeInstallHint)
-        .alert(
-            L10n.k("content_view.browser.init_session_title", fallback: "初始化浏览器 Session？"),
-            isPresented: Binding(
-                get: { browserSessionPromptUsername != nil },
-                set: { if !$0 { browserSessionPromptUsername = nil } }
-            ),
-            presenting: browserSessionPromptUsername
-        ) { username in
-            Button(L10n.k("content_view.browser.skip_init", fallback: "这次不初始化"), role: .cancel) {
-                browserSessionPromptSuppressed = true
-                browserSessionPromptUsername = nil
-            }
-            Button(L10n.k("content_view.browser.open_browser", fallback: "打开浏览器")) {
-                browserSessionPromptSuppressed = true
-                browserSessionPromptUsername = nil
-                Task { @MainActor in
-                    guard prepareBrowserAutomationAction(
-                        L10n.k("content_view.browser.open_browser", fallback: "打开浏览器")
-                    ) else {
-                        return
-                    }
-                    _ = try? await helperClient.openBrowserAccount(username: username)
-                }
-            }
-        } message: { username in
-            Text(L10n.f("content_view.browser.init_session_message", fallback: "检测到 %@ 的浏览器工具已安装，但还没有初始化 session。是否现在打开 Chrome 完成初始化？", username))
-        }
-        .hostPermissionPrompt($hostPermissionPromptRequest)
         .overlay {
             if lockStore.isLocked {
                 AppLockScreen()
@@ -266,75 +234,15 @@ struct ContentView: View {
             }
             hostPermissionCenter.refresh()
         }
-        .onChange(of: isChromeInstalled) { _, _ in
-            checkForBrowserSessionInitializationPrompt()
-        }
-        .onChange(of: pool.didFinishInitialUserLoad) { _, _ in
-            checkForBrowserSessionInitializationPrompt()
-        }
         .onChange(of: navSelection) { _, newValue in
             let visible = (newValue == .dashboard || newValue == nil)
             pool.setDashboardVisible(visible)
         }
     }
 
-    @MainActor
-    private func prepareBrowserAutomationAction(_ actionLabel: String) -> Bool {
-        hostPermissionCenter.refresh()
-        let missing = hostPermissionCenter.missingBrowserAutomationPermissions()
-        guard !missing.isEmpty else {
-            return true
-        }
-        hostPermissionPromptRequest = HostPermissionPromptRequest(
-            actionLabel: actionLabel,
-            missingPermissions: missing
-        )
-        return false
-    }
-
     private func refreshChromeInstallStatus() {
         isChromeInstalled = ChromeInstallDetector.isGoogleChromeInstalled()
         chromeInstallCheckCompleted = true
-        checkForBrowserSessionInitializationPrompt()
-    }
-
-    private func checkForBrowserSessionInitializationPrompt() {
-        guard chromeInstallCheckCompleted,
-              isChromeInstalled,
-              !browserSessionPromptSuppressed,
-              browserSessionPromptUsername == nil,
-              !browserSessionPromptCheckInFlight,
-              pool.didFinishInitialUserLoad,
-              !pool.users.isEmpty else {
-            return
-        }
-
-        browserSessionPromptCheckInFlight = true
-        let usernames = pool.users.map(\.username)
-        Task {
-            var candidate: String?
-            for username in usernames {
-                guard !Task.isCancelled else { return }
-                guard let status = await helperClient.getBrowserAccountStatus(username: username) else {
-                    continue
-                }
-                if status.toolInstalled && !status.sessionExists {
-                    candidate = username
-                    break
-                }
-            }
-
-            await MainActor.run {
-                browserSessionPromptCheckInFlight = false
-                guard let candidate,
-                      isChromeInstalled,
-                      !browserSessionPromptSuppressed,
-                      browserSessionPromptUsername == nil else {
-                    return
-                }
-                browserSessionPromptUsername = candidate
-            }
-        }
     }
 
 }

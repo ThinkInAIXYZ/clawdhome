@@ -9,6 +9,7 @@ private struct AITool: Identifiable {
     enum Route {
         case speech
         case chat
+        case privacy
         case unavailable
     }
 
@@ -62,6 +63,14 @@ private let aiTools: [AITool] = [
         status: .planned,
         route: .unavailable
     ),
+    AITool(
+        name: L10n.k("auto.ailab_view.privacy_filter", fallback: "内容脱敏"),
+        description: L10n.k("auto.ailab_view.privacy_filter_desc", fallback: "本地识别姓名、电话、邮箱、地址、账号、密钥等敏感信息，生成脱敏文本并展示差异对比"),
+        icon: "shield.checkerboard",
+        theme: .slate,
+        status: .ready,
+        route: .privacy
+    ),
 ]
 
 // MARK: - AI 实验室主视图
@@ -84,6 +93,13 @@ struct AILabView: View {
                 .transition(.opacity)
             } else if activeRoute == .chat {
                 AIChatView {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        activeRoute = nil
+                    }
+                }
+                .transition(.opacity)
+            } else if activeRoute == .privacy {
+                PrivacyFilterView {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         activeRoute = nil
                     }
@@ -136,6 +152,15 @@ struct AILabView: View {
                                     Button {
                                         withAnimation(.easeInOut(duration: 0.18)) {
                                             activeRoute = .chat
+                                        }
+                                    } label: {
+                                        AIToolCard(tool: tool)
+                                    }
+                                    .buttonStyle(.plain)
+                                case .privacy:
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.18)) {
+                                            activeRoute = .privacy
                                         }
                                     } label: {
                                         AIToolCard(tool: tool)

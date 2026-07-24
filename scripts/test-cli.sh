@@ -12,6 +12,7 @@ PASS=0
 FAIL=0
 SKIP=0
 FAILURES=()
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # ── 颜色 ──────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -148,6 +149,8 @@ assert_json_field "version --json 输出 JSON" "cli" "$CLI" version --json
 
 section "1.1 AI 能力命令"
 
+assert_ok "ASR CPU 架构降级判定" bash "$REPO_ROOT/tests/ASRPlatformDetectorTests.sh"
+
 FAKE_SPEECH_TOOL="$(mktemp)"
 FAKE_SPEECH_ARGS="$(mktemp)"
 FAKE_AUDIO_FILE="$(mktemp /tmp/clawdhome-cli-asr.XXXXXX.wav)"
@@ -162,7 +165,7 @@ case "$1" in
     printf '{"ok":true,"command":"prepare-model","modelID":"%s","elapsedSeconds":0.1,"error":null}\n' "$3"
     ;;
   transcribe)
-    printf '{"ok":true,"command":"transcribe","modelID":"qwen3-asr-0.6b","transcript":"hello transcript","elapsedSeconds":0.2,"error":null}\n'
+    printf '{"ok":true,"command":"transcribe","modelID":"qwen3-asr-0.6b","transcript":"hello transcript","segments":[{"index":1,"start":0.0,"end":20.0,"text":"hello"},{"index":2,"start":18.0,"end":35.5,"text":"transcript"}],"chunkSeconds":20,"elapsedSeconds":0.2,"error":null}\n'
     ;;
   *)
     printf '{"ok":false,"command":"%s","error":"unexpected command"}\n' "$1"
@@ -176,6 +179,48 @@ assert_json_field "ai asr doctor --json 输出 JSON" "ok" env CLAWDHOME_SPEECH_T
 assert_contains "ai asr pull 调用 prepare-model" "Qwen3-ASR 0.6B" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr pull qwen3-asr-0.6b
 assert_contains "ai asr transcribe 输出转译文本" "hello transcript" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr transcribe "$FAKE_AUDIO_FILE" --model qwen3-asr-0.6b
 assert_contains "Intel 上 ai asr 明确提示不支持" "requires Apple Silicon" env CLAWDHOME_CPU_ARCH_OVERRIDE=x86_64 CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr doctor
+
+# --format srt：渲染标准 SRT 字幕，含时间戳
+assert_contains "ai asr transcribe --format srt 输出 SRT 时间戳（第一块）" "00:00:00,000 -->" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr transcribe "$FAKE_AUDIO_FILE" --model qwen3-asr-0.6b --format srt
+assert_contains "ai asr transcribe --format srt 输出 SRT 时间戳（第二块）" "00:00:18,000 -->" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr transcribe "$FAKE_AUDIO_FILE" --model qwen3-asr-0.6b --format srt
+
+# --format json：透传工具原始 JSON，含 segments 字段
+assert_contains "ai asr transcribe --format json 输出含 segments" "\"segments\"" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr transcribe "$FAKE_AUDIO_FILE" --model qwen3-asr-0.6b --format json
+
+# 非法 --format / --chunk 显式报错退出
+assert_fail "ai asr transcribe --format xml 非法值应失败" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr transcribe "$FAKE_AUDIO_FILE" --format xml
+assert_fail "ai asr transcribe --chunk 3 越界应失败" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr transcribe "$FAKE_AUDIO_FILE" --chunk 3
+
+# --chunk 透传：CLI 的 --chunk 应转换为工具侧的 --chunk-seconds
+# 注意：assert_contains 内部用 grep 匹配期望字符串，期望值不能以 "--" 开头
+# （grep 会把它当成选项而非匹配模式），因此这里省略前导连字符只匹配 "chunk-seconds 20"。
+env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr transcribe "$FAKE_AUDIO_FILE" --model qwen3-asr-0.6b --chunk 20 >/dev/null 2>&1 || true
+assert_contains "ai asr transcribe --chunk 20 透传为 --chunk-seconds 20" "chunk-seconds 20" cat "$FAKE_SPEECH_ARGS"
+
+# 不可读音频文件：CLI 侧前置检查应给出明确中文报错，而非透传底层错误
+UNREADABLE_AUDIO_FILE="$(mktemp /tmp/clawdhome-cli-asr-noperm.XXXXXX.m4a)"
+chmod 000 "$UNREADABLE_AUDIO_FILE"
+assert_contains "ai asr transcribe 不可读文件明确报错" "无法读取音频文件" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_TOOL" CLAWDHOME_FAKE_SPEECH_ARGS="$FAKE_SPEECH_ARGS" "$CLI" ai asr transcribe "$UNREADABLE_AUDIO_FILE"
+chmod 644 "$UNREADABLE_AUDIO_FILE"
+rm -f "$UNREADABLE_AUDIO_FILE"
+
+# CLAWDHOME_SPEECH_TOOL 指向目录：应报"不是可执行的常规文件"而非执行目录得到 Permission denied
+FAKE_SPEECH_DIR="$(mktemp -d)"
+assert_contains "CLAWDHOME_SPEECH_TOOL 指向目录时明确报错" "不是可执行的常规文件" env CLAWDHOME_SPEECH_TOOL="$FAKE_SPEECH_DIR" "$CLI" ai asr transcribe "$FAKE_AUDIO_FILE"
+rmdir "$FAKE_SPEECH_DIR"
+
+# 工具失败透传：工具在 stdout 输出 {"ok":false,"error":...} 并非零退出时，
+# CLI 应把 stdout JSON 里的真实错误透传给用户，而不是笼统的"ASR 工具执行失败"
+FAKE_FAILING_TOOL="$(mktemp)"
+cat > "$FAKE_FAILING_TOOL" <<'EOF'
+#!/bin/bash
+printf '{"ok":false,"command":"transcribe","error":"fake inner failure","modelID":""}\n'
+exit 1
+EOF
+chmod +x "$FAKE_FAILING_TOOL"
+assert_contains "ai asr transcribe 工具失败时透传 stdout JSON 错误" "fake inner failure" env CLAWDHOME_SPEECH_TOOL="$FAKE_FAILING_TOOL" "$CLI" ai asr transcribe "$FAKE_AUDIO_FILE"
+rm -f "$FAKE_FAILING_TOOL"
+
 rm -f "$FAKE_SPEECH_TOOL" "$FAKE_SPEECH_ARGS" "$FAKE_AUDIO_FILE"
 
 # ── 2. ps ─────────────────────────────────────────────────

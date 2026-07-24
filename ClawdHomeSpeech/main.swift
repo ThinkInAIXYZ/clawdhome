@@ -26,7 +26,9 @@ private enum SpeechToolError: LocalizedError {
     case missingCommand
     case missingValue(String)
     case missingAudioFile(String)
+    case unreadableAudioFile(String)
     case invalidCacheDirectory(String)
+    case invalidChunkSeconds(String)
 
     var errorDescription: String? {
         switch self {
@@ -36,8 +38,14 @@ private enum SpeechToolError: LocalizedError {
             return "missing value for \(flag)"
         case .missingAudioFile(let path):
             return "audio file not found: \(path)"
+        case .unreadableAudioFile(let path):
+            // 区分"文件不存在"与"存在但无读取权限"，方便上层定位跨用户/受保护目录问题
+            return "audio file not readable (permission denied): \(path)"
         case .invalidCacheDirectory(let path):
             return "invalid cache directory: \(path)"
+        case .invalidChunkSeconds(let raw):
+            // --chunk-seconds 必须是 5...30 范围内的整数（模型训练窗口上限 30 秒）
+            return "invalid --chunk-seconds value: \(raw) (must be an integer in 5...30)"
         }
     }
 }
@@ -65,6 +73,16 @@ private struct TranscribeResponse: Codable {
     let transcript: String?
     let elapsedSeconds: Double?
     let error: String?
+    let segments: [TranscribeSegmentPayload]?
+    let chunkSeconds: Int?
+}
+
+// 无头 transcribe 命令输出的块级时间戳分段（滑动窗口分块边界推导，非词级时间戳）
+private struct TranscribeSegmentPayload: Codable {
+    let index: Int
+    let start: Double   // 秒
+    let end: Double     // 秒
+    let text: String
 }
 
 // 线程安全高频插值下载进度状态监控类，保障高并发刷新下无 Data Race 且绝对原子安全
@@ -137,7 +155,9 @@ struct ClawdHomeSpeechMain {
                 modelID: "",
                 transcript: nil,
                 elapsedSeconds: nil,
-                error: error.localizedDescription
+                error: error.localizedDescription,
+                segments: nil,
+                chunkSeconds: nil
             )
             try? writeJSON(fallback)
             exit(1)
@@ -880,9 +900,25 @@ struct ClawdHomeSpeechMain {
         let language = optionalValue(for: "--language", in: arguments)
         let chunkVocalEnhance = arguments.contains("--chunk-vocal-enhance")
 
+        // --chunk-seconds：转写分块长度（秒），默认 30，合法范围 5...30
+        let chunkSecondsRaw = optionalValue(for: "--chunk-seconds", in: arguments)
+        let chunkSeconds: Int
+        if let chunkSecondsRaw {
+            guard let parsed = Int(chunkSecondsRaw), (5...30).contains(parsed) else {
+                throw SpeechToolError.invalidChunkSeconds(chunkSecondsRaw)
+            }
+            chunkSeconds = parsed
+        } else {
+            chunkSeconds = 30
+        }
+
         let audioURL = URL(fileURLWithPath: filePath)
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
             throw SpeechToolError.missingAudioFile(audioURL.path)
+        }
+        // 存在但不可读（如跨用户权限、受保护目录），单独报错以便与"不存在"区分
+        guard FileManager.default.isReadableFile(atPath: audioURL.path) else {
+            throw SpeechToolError.unreadableAudioFile(audioURL.path)
         }
 
         let cacheDirectory = URL(fileURLWithPath: cacheDirectoryPath, isDirectory: true)
@@ -932,12 +968,13 @@ struct ClawdHomeSpeechMain {
 
         let start = CFAbsoluteTimeGetCurrent()
 
-        // 滑动窗口参数：30 秒/块（模型训练窗口），2 秒重叠防止边界截断
-        let chunkSamples = 30 * modelSampleRate     // 480000 samples
+        // 滑动窗口参数：chunkSeconds 秒/块（默认 30，模型训练窗口上限），2 秒重叠防止边界截断
+        let chunkSamples = chunkSeconds * modelSampleRate
         let overlapSamples = 2 * modelSampleRate     // 32000 samples
 
         let totalSamples = max(audioInfo.estimatedTotalSamples, 1)
         let transcript: String
+        let payloadSegments: [TranscribeSegmentPayload]
 
         if totalSamples <= chunkSamples {
             // 短音频：直接转译
@@ -950,6 +987,7 @@ struct ClawdHomeSpeechMain {
                 )
             )
             var singleTranscript = ""
+            var singleChunkIndex = 1
             var lastMemorySnapshot: SpeechInferenceMemorySnapshot?
             try StreamingAudioFileLoader.forEachChunk(
                 from: audioURL,
@@ -971,10 +1009,19 @@ struct ClawdHomeSpeechMain {
                     )
                 }
                 singleTranscript = inference.value
+                singleChunkIndex = chunk.index
                 lastMemorySnapshot = inference.snapshot
             }
             transcript = singleTranscript
             let cleanedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            payloadSegments = cleanedTranscript.isEmpty ? [] : [
+                TranscribeSegmentPayload(
+                    index: singleChunkIndex,
+                    start: 0,
+                    end: audioInfo.durationSeconds,
+                    text: cleanedTranscript
+                )
+            ]
             try? writeProgress(
                 SpeechToolProgressResponse(
                     kind: "progress",
@@ -986,8 +1033,8 @@ struct ClawdHomeSpeechMain {
                 )
             )
         } else {
-            // 长音频：滑动窗口分块转译，逐块结果拼接
-            var segments: [String] = []
+            // 长音频：滑动窗口分块转译，逐块结果拼接，同时记录每块的起止时间戳
+            var segments: [TranscribeSegmentPayload] = []
             let audioDurationSec = audioInfo.durationSeconds
             func progressMessage(fraction: Double, currentEndSec: Double, elapsed: Double) -> String {
                 let speedRatio = elapsed > 0 ? (currentEndSec / elapsed) : 0.0
@@ -1034,7 +1081,14 @@ struct ClawdHomeSpeechMain {
                 let chunkText = inference.value
                 let cleanedChunkText = chunkText.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !cleanedChunkText.isEmpty {
-                    segments.append(cleanedChunkText)
+                    segments.append(
+                        TranscribeSegmentPayload(
+                            index: chunk.index,
+                            start: chunk.startTime(sampleRate: modelSampleRate),
+                            end: min(chunk.endTime(sampleRate: modelSampleRate), audioDurationSec),
+                            text: cleanedChunkText
+                        )
+                    )
                 }
                 let completedFraction = min(Double(chunk.endSample) / Double(totalSamples), 1.0)
                 let completedEndSec = min(chunk.endTime(sampleRate: modelSampleRate), audioDurationSec)
@@ -1055,7 +1109,8 @@ struct ClawdHomeSpeechMain {
                     )
                 )
             }
-            transcript = segments.joined(separator: " ")
+            transcript = segments.map { $0.text }.joined(separator: " ")
+            payloadSegments = segments
         }
 
 
@@ -1067,7 +1122,9 @@ struct ClawdHomeSpeechMain {
             modelID: modelSpecifier,
             transcript: transcript,
             elapsedSeconds: elapsed,
-            error: nil
+            error: nil,
+            segments: payloadSegments,
+            chunkSeconds: chunkSeconds
         )
     }
 

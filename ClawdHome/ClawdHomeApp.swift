@@ -44,6 +44,15 @@ struct ClawdHomeApp: App {
         }
     }
 
+    private static var isRunningXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        || ProcessInfo.processInfo.arguments.contains { $0.contains("xctest") || $0.contains("XCTest") }
+    }
+
+    private static var isPrivacyFilterUISmokeMode: Bool {
+        ProcessInfo.processInfo.environment["CLAWDHOME_PRIVACY_FILTER_UI_SMOKE"] == "1"
+    }
+
     init() {
         // 强制忽略上次会话窗口恢复，确保每次启动从全新窗口开始
         UserDefaults.standard.set(true, forKey: "ApplePersistenceIgnoreState")
@@ -55,33 +64,43 @@ struct ClawdHomeApp: App {
     var body: some Scene {
         let appLanguage = AppLanguage(rawValue: appLanguageRaw) ?? .system
         WindowGroup(id: "main-window") {
-            ContentView()
-                .background(MainWindowActivationBridge())
-                .background(WindowIdentifierBinder(windowID: .main))
-                .environment(helperClient)
-                .environment(shrimpPool)
-                .environment(updater)
-                .environment(modelStore)
-                .environment(keychainStore)
-                .environment(gatewayHub)
-                .environment(lockStore)
-                .environment(hostPermissionCenter)
-                .environment(maintenanceWindowRegistry)
-                .environment(promptLibraryStore)
-                .environment(\.locale, appLanguage.locale)
-                .preferredColorScheme(preferredColorScheme)
-                .task { await maintainConnection() }
-                .task { await updater.runOpenclawAutoCheckLoop() }
-                .task { await updater.refreshAppUpdateState(helperClient: helperClient) }
-                .task { await MainActor.run { shrimpPool.start() } }
-                .onAppear { modelStore.load() }
-                .task {
-                    // 主界面稳定后延迟 2s 预热角色中心 WebView，用户无感知
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    await MainActor.run {
-                        RoleMarketWebViewCache.shared.preloadIfNeeded()
+            if Self.isPrivacyFilterUISmokeMode {
+                PrivacyFilterView {}
+                    .environment(\.locale, appLanguage.locale)
+                    .preferredColorScheme(preferredColorScheme)
+            } else if Self.isRunningXCTest {
+                // 单测宿主只需要装载 app binary。避免启动主界面副作用、WebView 预热和后台轮询导致 xcodebuild 收尾卡住。
+                Color.clear
+                    .frame(width: 1, height: 1)
+            } else {
+                ContentView()
+                    .background(MainWindowActivationBridge())
+                    .background(WindowIdentifierBinder(windowID: .main))
+                    .environment(helperClient)
+                    .environment(shrimpPool)
+                    .environment(updater)
+                    .environment(modelStore)
+                    .environment(keychainStore)
+                    .environment(gatewayHub)
+                    .environment(lockStore)
+                    .environment(hostPermissionCenter)
+                    .environment(maintenanceWindowRegistry)
+                    .environment(promptLibraryStore)
+                    .environment(\.locale, appLanguage.locale)
+                    .preferredColorScheme(preferredColorScheme)
+                    .task { await maintainConnection() }
+                    .task { await updater.runOpenclawAutoCheckLoop() }
+                    .task { await updater.refreshAppUpdateState(helperClient: helperClient) }
+                    .task { await MainActor.run { shrimpPool.start() } }
+                    .onAppear { modelStore.load() }
+                    .task {
+                        // 主界面稳定后延迟 2s 预热角色中心 WebView，用户无感知
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        await MainActor.run {
+                            RoleMarketWebViewCache.shared.preloadIfNeeded()
+                        }
                     }
-                }
+            }
         }
         .windowStyle(.titleBar)
         // .contentSize 会随 inspector 列宽变化不断触发窗口 resize，造成约束死循环崩溃

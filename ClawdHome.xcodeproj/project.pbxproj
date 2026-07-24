@@ -32,6 +32,7 @@
 		158C7070AC3F0CFB92058394 /* HostPermissionPromptPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5902231B8A3FAE94C0802F9 /* HostPermissionPromptPolicyTests.swift */; };
 		15908189FA6D0E6D5A51F417 /* IMAccountModelsV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46BB2187C1CBAE602D47A53E /* IMAccountModelsV2.swift */; };
 		161CF0DA6073064097C48EB7 /* GatewayProviderKeySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DDA04FF248DF6DFABA79529 /* GatewayProviderKeySheet.swift */; };
+		169C21D001F8FAF7B867D9FE /* ASRPlatformDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33C41EFC5FCBB1CDB8C9B3BB /* ASRPlatformDetector.swift */; };
 		16C806CD97F4A5FB8DD95D1C /* DashboardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7E5FF24A0246F866BFF996 /* DashboardModels.swift */; };
 		16C9C690FB4DCA5509D4FC87 /* CreateAgentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0600D2F59788F6F8E907084B /* CreateAgentSheet.swift */; };
 		1725D0DC4180EF0AF7DD345F /* OpenCLINetworkSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FE016D8935F7B2F5451DC0 /* OpenCLINetworkSupportTests.swift */; };
@@ -112,6 +113,7 @@
 		55CB96D5B61D248282E612F1 /* BackupManagerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB9584EDF129A0295EBB14A /* BackupManagerSheet.swift */; };
 		5A9570E544EE11988AAA01BC /* IMAccountModelsV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46BB2187C1CBAE602D47A53E /* IMAccountModelsV2.swift */; };
 		5AE2A7E5C2BDF08FCAC2DBE4 /* AppUpdateHeartbeatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335F70B73CF355F93B436AFA /* AppUpdateHeartbeatService.swift */; };
+		5B4F15DF15B6D256A34E83DD /* PrivacyFilterEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23934C669A364924F7FC9109 /* PrivacyFilterEngineTests.swift */; };
 		5C18744A625AA256F6209249 /* HermesWebViewCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B602547DF8E4759034B0623C /* HermesWebViewCoordinatorTests.swift */; };
 		5C24D821B52B296FB1663DF8 /* ModelPrioritySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED27F46F57A2556B2A4A6512 /* ModelPrioritySheet.swift */; };
 		5C4286A2BA6C2A17C2E8D16A /* ApplyCredentialSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BF8C6365FBBA9CA2C07D90 /* ApplyCredentialSheet.swift */; };
@@ -211,6 +213,7 @@
 		B46405B443BBF64B0FF74D06 /* AICommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24C0C8208E7A6EBEB9CAF941 /* AICommand.swift */; };
 		B57160D717A6898E887EADDD /* CloneClawModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14549EBE1DD1B11C0005938 /* CloneClawModels.swift */; };
 		B81D3332811AFA345F523E3D /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E5226083EF9356F8C51363 /* AppLogger.swift */; };
+		B8D2B89783C230E86C8ACBEF /* PrivacyFilterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E720DF352923D5905407E0A4 /* PrivacyFilterEngine.swift */; };
 		BA9C929DE8C18C4762AC9E21 /* TerminalControlSequence.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2AB7F0ED50DF0DEC5820E5C /* TerminalControlSequence.swift */; };
 		BB1B829AD74CEC55CAA80BF1 /* HermesDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CED3398200712E64635E9F4A /* HermesDetailView.swift */; };
 		BC5CEE02450C97178238E88A /* UserDirectoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1B997BD537C60950ED9DD3 /* UserDirectoryService.swift */; };
@@ -291,6 +294,7 @@
 		FC9E4F1ABDB750EFB88AFA36 /* UserDetailWindowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54777C27B432E10D49786DE9 /* UserDetailWindowLayout.swift */; };
 		FD7FF04B316FD5DFE140F7E4 /* BackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E6E607472BCCB5C61A50EA /* BackupView.swift */; };
 		FEEE2C606A086D0D191F1200 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 5D7D1F12DB908202E9E91105 /* AppIcon.icns */; };
+		FF227B38BB3382F24CFFD734 /* PrivacyFilterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CFACA0B7827DCF887EAA09D /* PrivacyFilterView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -347,6 +351,7 @@
 		21010714E9E3C485F8F95B10 /* ModelDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDetailView.swift; sourceTree = "<group>"; };
 		21D5AE60DA0449BC16B42DAA /* FallbackManagerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackManagerSheet.swift; sourceTree = "<group>"; };
 		226544013116B0A691E3CB60 /* PromptMemoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptMemoryModels.swift; sourceTree = "<group>"; };
+		23934C669A364924F7FC9109 /* PrivacyFilterEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyFilterEngineTests.swift; sourceTree = "<group>"; };
 		24C0C8208E7A6EBEB9CAF941 /* AICommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AICommand.swift; sourceTree = "<group>"; };
 		26146AAD44960591291B75E9 /* SpeechModelAdvisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechModelAdvisor.swift; sourceTree = "<group>"; };
 		27652BAE19420C33329F22EF /* BackupViewStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupViewStateTests.swift; sourceTree = "<group>"; };
@@ -359,6 +364,7 @@
 		335F70B73CF355F93B436AFA /* AppUpdateHeartbeatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateHeartbeatService.swift; sourceTree = "<group>"; };
 		339C3611ECC7586DDB587C8C /* HermesTeamWizard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesTeamWizard.swift; sourceTree = "<group>"; };
 		33B505153AFE9BDEFAF27F0D /* Output.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Output.swift; sourceTree = "<group>"; };
+		33C41EFC5FCBB1CDB8C9B3BB /* ASRPlatformDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASRPlatformDetector.swift; sourceTree = "<group>"; };
 		34938F121B712D4BEADB0796 /* UpdateCheckPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheckPolicy.swift; sourceTree = "<group>"; };
 		3551CFADD2A6045F6096E2DD /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		35BF64A33B0B8F2D56B654B5 /* DefaultToolsContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultToolsContent.swift; sourceTree = "<group>"; };
@@ -442,6 +448,7 @@
 		89D6CAF4FF1A5DD31BFE266E /* GlobalModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalModelStore.swift; sourceTree = "<group>"; };
 		89DB8110D061B70D84B4392F /* HelperImpl+Hermes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HelperImpl+Hermes.swift"; sourceTree = "<group>"; };
 		8B556AECE640AC260C25C05B /* ClawdHomeHelperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClawdHomeHelperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8CFACA0B7827DCF887EAA09D /* PrivacyFilterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyFilterView.swift; sourceTree = "<group>"; };
 		8E37D8B7B0C66ACFBDB383D1 /* MemoryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryTabView.swift; sourceTree = "<group>"; };
 		922B9F0332920FE79B0EF0B8 /* ModelConfigWizard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelConfigWizard.swift; sourceTree = "<group>"; };
 		92C771A1BDC0269B5AC9B8C6 /* HostPermissionBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostPermissionBanner.swift; sourceTree = "<group>"; };
@@ -528,6 +535,7 @@
 		DF539DBE2E88C7DD0784E8F6 /* UserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserListView.swift; sourceTree = "<group>"; };
 		DFD718E7777280D5BC94DE0D /* UserPasswordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPasswordStore.swift; sourceTree = "<group>"; };
 		DFEA3246D788EC5F1AE06F4F /* OpenclawConfigSerializerV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenclawConfigSerializerV2.swift; sourceTree = "<group>"; };
+		E720DF352923D5905407E0A4 /* PrivacyFilterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyFilterEngine.swift; sourceTree = "<group>"; };
 		E8D30C318D8605B241FB8378 /* IMAccountListEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IMAccountListEditor.swift; sourceTree = "<group>"; };
 		E9D81E7B672B2A82591FEF1B /* GatewayCronStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayCronStore.swift; sourceTree = "<group>"; };
 		E9F9AD8700941AFBF1F34673 /* LogViewerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerSheet.swift; sourceTree = "<group>"; };
@@ -638,6 +646,7 @@
 				6499789FC14381687CB547E1 /* IMBotProvisioner.swift */,
 				F9C1503C0DDE39FEBC660A05 /* LocalModelDownloader.swift */,
 				9363CE8F8DF377157FAE1D71 /* ModelPingService.swift */,
+				E720DF352923D5905407E0A4 /* PrivacyFilterEngine.swift */,
 				AB9CA89FBC9C8542073AE403 /* PromptLibraryStore.swift */,
 				ABBB28C4048F9B2A39AE099C /* ProviderKeychainStore.swift */,
 				AF5F77D9351528C6DEEFC633 /* ShrimpPool.swift */,
@@ -803,6 +812,7 @@
 				B602547DF8E4759034B0623C /* HermesWebViewCoordinatorTests.swift */,
 				A5902231B8A3FAE94C0802F9 /* HostPermissionPromptPolicyTests.swift */,
 				B0DFE630678B2D4F64020968 /* ManagedUserStateTests.swift */,
+				23934C669A364924F7FC9109 /* PrivacyFilterEngineTests.swift */,
 				2DAF9A2EC9326CBAEEBAC8F4 /* ShrimpPoolLogicTests.swift */,
 				D126F59DADF0F55B2B272430 /* SpeechFeatureTests.swift */,
 			);
@@ -962,6 +972,7 @@
 				54673332FA3CBD020381CD20 /* NetworkPolicyView.swift */,
 				8499A0606D3BE5C3E2920A7C /* OpenClawDetailView.swift */,
 				77787365CF9FCFC1BABE9B81 /* PersonaDefView.swift */,
+				8CFACA0B7827DCF887EAA09D /* PrivacyFilterView.swift */,
 				EFF0576AB6D5F27AC6E68E92 /* ProcessTabView.swift */,
 				48678A8853E661D98169A602 /* PromptMemoryViews.swift */,
 				6DACAEF3ABEDBC65F590466B /* QuickFileTransfer.swift */,
@@ -991,6 +1002,7 @@
 		FCBCEB99FF3DAFB768FCD9D4 /* ClawdHomeCLI */ = {
 			isa = PBXGroup;
 			children = (
+				33C41EFC5FCBB1CDB8C9B3BB /* ASRPlatformDetector.swift */,
 				FBDE77F357454890EF4F97AF /* CLIHelperClient.swift */,
 				3551CFADD2A6045F6096E2DD /* main.swift */,
 				68742DCC279A67E0D783172C /* Commands */,
@@ -1084,6 +1096,7 @@
 				1E11B3E365C4A88CB25B517A /* Inject Git Build Number */,
 				217CF341688DD108EF049819 /* Embed Helper into App Bundle */,
 				884361A2AC35839A936F5338 /* Embed Speech Tool into App Bundle */,
+				A52689BF87274CC697488D5D /* Embed Privacy Filter Tool into App Bundle */,
 			);
 			buildRules = (
 			);
@@ -1232,6 +1245,28 @@
 			shellPath = /bin/sh;
 			shellScript = "/bin/bash \"${SRCROOT}/scripts/build-speech-tool.sh\"\n";
 		};
+		A52689BF87274CC697488D5D /* Embed Privacy Filter Tool into App Bundle */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/ClawdHomePrivacyFilter/Package.swift",
+				"$(SRCROOT)/ClawdHomePrivacyFilter/main.swift",
+				"$(SRCROOT)/scripts/build-privacy-filter-tool.sh",
+			);
+			name = "Embed Privacy Filter Tool into App Bundle";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(CODESIGNING_FOLDER_PATH)/Contents/Library/Executables/ClawdHomePrivacyFilter",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/bash \"${SRCROOT}/scripts/build-privacy-filter-tool.sh\"\n";
+		};
 		A99DCFF1121F876C8AFAB831 /* Generate Helper Version */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -1278,6 +1313,7 @@
 				5C18744A625AA256F6209249 /* HermesWebViewCoordinatorTests.swift in Sources */,
 				158C7070AC3F0CFB92058394 /* HostPermissionPromptPolicyTests.swift in Sources */,
 				4C8CB1CCE51E04083065D234 /* ManagedUserStateTests.swift in Sources */,
+				5B4F15DF15B6D256A34E83DD /* PrivacyFilterEngineTests.swift in Sources */,
 				48FF00842914C2BCF38EE753 /* ShrimpPoolLogicTests.swift in Sources */,
 				88766C05E7B7C5A9833AF8CA /* SpeechFeatureTests.swift in Sources */,
 			);
@@ -1393,6 +1429,8 @@
 				A6667FA9E8B0C2C35B9BB6C0 /* OpenclawConfigSerializerV2.swift in Sources */,
 				8DA5C8174C08A39388CA8388 /* PersonaDefView.swift in Sources */,
 				0473E31023503AFC1874A775 /* PortAllocator.swift in Sources */,
+				B8D2B89783C230E86C8ACBEF /* PrivacyFilterEngine.swift in Sources */,
+				FF227B38BB3382F24CFFD734 /* PrivacyFilterView.swift in Sources */,
 				2B9BC8730AB3B78B208861BD /* ProcessModels.swift in Sources */,
 				9D0ACACEC481AC2EB8C42F2A /* ProcessTabView.swift in Sources */,
 				6CDF19DC03F44F36A80E3AD7 /* PromptLibraryStore.swift in Sources */,
@@ -1450,6 +1488,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B46405B443BBF64B0FF74D06 /* AICommand.swift in Sources */,
+				169C21D001F8FAF7B867D9FE /* ASRPlatformDetector.swift in Sources */,
 				EF130B9EF81C9F5788618250 /* AppUpdateState.swift in Sources */,
 				1D89B835DEDF080130A04031 /* BackupModels.swift in Sources */,
 				33EEEC7848F25E6176D19E8B /* BrowserAccountModels.swift in Sources */,

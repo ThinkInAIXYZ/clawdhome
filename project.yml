@@ -111,6 +111,16 @@ targets:
         outputFiles:
           - $(CODESIGNING_FOLDER_PATH)/Contents/Library/Executables/ClawdHomeSpeech
           - $(CODESIGNING_FOLDER_PATH)/Contents/Library/Executables/mlx.metallib
+      - name: "Embed Privacy Filter Tool into App Bundle"
+        script: |
+          /bin/bash "${SRCROOT}/scripts/build-privacy-filter-tool.sh"
+        basedOnDependencyAnalysis: true
+        inputFiles:
+          - $(SRCROOT)/ClawdHomePrivacyFilter/Package.swift
+          - $(SRCROOT)/ClawdHomePrivacyFilter/main.swift
+          - $(SRCROOT)/scripts/build-privacy-filter-tool.sh
+        outputFiles:
+          - $(CODESIGNING_FOLDER_PATH)/Contents/Library/Executables/ClawdHomePrivacyFilter
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.clawdhome.mac

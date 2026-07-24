@@ -62,6 +62,8 @@ _website/
 .build-version.lock
 ClawdHomeSpeech/GeneratedVersion.swift
 ClawdHomeSpeech/.build/
+ClawdHomePrivacyFilter/GeneratedVersion.swift
+ClawdHomePrivacyFilter/.build/
 
 # Apple 签名 / 公证密钥材料（不提交）
 *.p12
